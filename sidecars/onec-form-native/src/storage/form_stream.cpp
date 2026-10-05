@@ -2989,7 +2989,21 @@ struct DecodedMenu {
     std::vector<model::PictureAsset> assets;
 };
 
+void warn_incomplete_profile(
+    Diagnostics& warnings,
+    bool& reconstruction_complete,
+    std::uint64_t raw_id,
+    std::string_view path,
+    std::string_view kind) {
+    reconstruction_complete = false;
+    warnings.push_back({
+        "OOF1140", DiagnosticSeverity::warning, std::to_string(raw_id), std::string(path),
+        std::string(kind), {}, {},
+        std::string(kind) + " contains property data not represented in the named model; these properties cannot be reproduced."});
+}
+
 DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::string_view control_name,
+    Diagnostics& warnings, bool& reconstruction_complete,
                                std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0,
                                std::uint64_t default_item_id = 0) {
     require_list(menu, path);
@@ -3077,6 +3091,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 fail("OOF1114", std::string(path), "unique existing action reference", guid, "Menu action is dangling or shared");
             const auto& props = group.items[6 + 2 * i];
             require_arity(props, 16, path);
+            require_raw_constant(props.items[0], "8", child_path(path, 0));
+            require_raw_constant(props.items[6], owner, child_path(path, 6));
             model::CommandBarButton entry;
             entry.name = string_atom(props.items[1], path);
             if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
@@ -3140,8 +3156,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 });
             if (mismatch.first != normalized.items.end()) {
                 const auto index = static_cast<std::size_t>(mismatch.first - normalized.items.begin());
-                fail("OOF1114", child_path(path, index), "canonical menu item property",
-                    describe(normalized.items.at(index)), "Menu item property is unsupported");
+                warn_incomplete_profile(warnings, reconstruction_complete, id,
+                    child_path(path, index), "MenuAction");
             }
             const auto& action_record = actions.at(guid);
             const auto& action = *action_record.value;
@@ -3199,7 +3215,11 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                         std::to_string(client_interface_variant), "Client interface variant is unsupported");
             }
             const auto second_tail_slot = cursor;
-            require_raw_constant(take(), "0", child_path(action_path, second_tail_slot));
+            const auto second_tail_value = integer_atom<std::int32_t>(take(), child_path(action_path, second_tail_slot));
+            if (second_tail_value != 0) {
+                warn_incomplete_profile(warnings, reconstruction_complete, id,
+                    child_path(action_path, second_tail_slot), "MenuAction");
+            }
             require_arity(action, cursor, action_path);
             if (type == 1) {
                 ++submenu_count;
@@ -3771,7 +3791,8 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
 }
 
-DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context, model::ObjectId form_id) {
+DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context, model::ObjectId form_id,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3794,6 +3815,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
+    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
     const auto tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
     const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
@@ -3826,7 +3848,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if ((default_id == 0) != (default_owner == "9d0a2e40-b978-11d4-84b6-008048da06df") ||
         (default_id != 0 && (secondary || default_owner == null_uuid)))
         fail("OOF1122", properties_path, "consistent default Action reference on primary CommandBar", "inconsistent reference", "Unsupported DefaultButton context");
-    auto menu = decode_button_menu(properties.items[7], child_path(properties_path, 7), name,
+    auto menu = decode_button_menu(properties.items[7], child_path(properties_path, 7), name, warnings, reconstruction_complete,
         command_bar_root_marker, root_group_id, default_id);
 
     model::Form empty_form;
@@ -3904,7 +3926,8 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
 }
 
 
-DecodedControl decode_usual_group(const LV& record, std::string_view path, const GeometryContext& context) {
+DecodedControl decode_usual_group(const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3921,9 +3944,11 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     const auto& properties = info.items[1];
     const auto properties_path = child_path(info_path, 1);
     require_arity(properties, 5, properties_path);
+    require_raw_constant(properties.items[1], "8", child_path(properties_path, 1));
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
+    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
     const std::string caption = decoded_single_language_text(properties.items[2], child_path(properties_path, 2));
@@ -3932,8 +3957,9 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalized.items[0] = std::move(normalized_base);
     normalized.items[2] = encoded_localized(caption);
-    require_exact(normalized, canonical_usual_group_properties(enabled, caption, tool_tip).items[1],
-        properties_path, "UsualGroup contains an unsupported property or event variation");
+    if (list_stream::dump_compact(normalized) != list_stream::dump_compact(
+        canonical_usual_group_properties(enabled, caption, tool_tip).items[1]))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "UsualGroup");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -3956,7 +3982,8 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
-DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
+DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3976,9 +4003,11 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         fail("OOF1102", properties_path, "Button properties including MenuMode", describe(properties),
             "Button property record is too short");
     }
+    require_raw_constant(properties.items[1], "14", child_path(properties_path, 1));
     const auto& base = properties.items[0];
     const std::string base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
+    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base.items[12], child_path(base_path, 12));
@@ -3986,24 +4015,16 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
     const auto font = decode_control_font(base.items[4], child_path(base_path, 4));
-    const std::string observed_state = raw_atom(base.items[17], child_path(base_path, 17));
-    if (observed_state != "1" && observed_state != "2") {
-        fail(
-            "OOF1114",
-            child_path(base_path, 17),
-            "observed internal state 1 or 2",
-            observed_state,
-            "Button base record contains an unsupported property variation");
-    }
+    const auto observed_state_value = integer_atom<std::int32_t>(base.items[17], child_path(base_path, 17));
+    if (observed_state_value != 1 && observed_state_value != 2)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(base_path, 17), "Button");
     // Наблюдались 1 у нетронутой записи и 2 после изменения Button в Designer.
     // Это внутреннее состояние, его общая семантика не установлена.
     auto normalized_base = base;
     normalized_base.items[17] = raw("2");
-    require_exact(
-        normalized_base,
-        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font),
-        base_path,
-        "Button base record contains an unsupported property variation");
+    if (list_stream::dump_compact(normalized_base) != list_stream::dump_compact(
+        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, base_path, "Button");
     const std::string caption = decoded_single_language_text(
         properties.items[2],
         child_path(properties_path, 2));
@@ -4050,16 +4071,14 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         "{5,53232d71-06b1-4ec1-a94d-77fafadef407,0,1,0,1,"
         "{5,31946946-0a9b-40a2-95cf-82f200778341,0,0,0,{-1,0,{0}}}}");
     const auto control_state = integer_atom<unsigned>(normalized_properties.items.back(), properties_path);
-    if (control_state != 1 && control_state != 2) fail("OOF1114", properties_path,
-        "known internal control state", std::to_string(control_state), "Button control state is unsupported");
+    if (control_state != 1 && control_state != 2)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Button");
     normalized_properties.items.back() = raw("1");
-    require_exact(
-        normalized_properties,
+    if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
             picture_size, menu_mode, multi_line, tool_tip, border_color, button_text_color,
-            button_back_color, font, shortcut),
-        properties_path,
-        "Button payload contains an unsupported property variation");
+            button_back_color, font, shortcut)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Button");
 
     const auto click_handler = decode_button_event(info.items[2], child_path(info_path, 2));
 
@@ -4167,7 +4186,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     }
     DecodedMenu menu;
     if (menu_mode != 0) {
-        menu = decode_button_menu(properties.items[12], child_path(properties_path, 12), name);
+        menu = decode_button_menu(properties.items[12], child_path(properties_path, 12), name, warnings, reconstruction_complete);
         std::get<model::ButtonPayload>(control.payload).buttons = std::move(menu.entries);
     }
     return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
@@ -4176,7 +4195,8 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
 DecodedControl decode_picture_decoration(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4193,9 +4213,11 @@ DecodedControl decode_picture_decoration(
     const auto& picture_properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
     require_arity(picture_properties, 15, properties_path);
+    require_raw_constant(picture_properties.items[1], "20", child_path(properties_path, 1));
     const auto& base_properties = picture_properties.items[0];
     const std::string base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
+    require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
@@ -4209,11 +4231,9 @@ DecodedControl decode_picture_decoration(
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[4].items[2] = canonical_button_picture();
-    require_exact(
-        normalized_properties,
-        canonical_picture_properties(enabled, tool_tip),
-        properties_path,
-        "PictureDecoration base record differs from the supported default profile");
+    if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
+        canonical_picture_properties(enabled, tool_tip)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "PictureDecoration");
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
         "PictureDecoration events are unsupported");
 
@@ -4284,6 +4304,7 @@ DecodedControl decode_splitter(
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
+    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
     const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
@@ -4334,7 +4355,8 @@ DecodedControl decode_radio_button(
     const LV& record,
     std::string_view path,
     const AttributeRecord* linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4367,9 +4389,11 @@ DecodedControl decode_radio_button(
     const auto& properties = control_info.items[0];
     const auto properties_path = child_path(control_info_path, 0);
     require_arity(properties, 9, properties_path);
+    require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
+    require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
@@ -4389,8 +4413,9 @@ DecodedControl decode_radio_button(
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[2] = encoded_localized(caption);
     normalized_info.items[2].items[0] = std::move(normalized_properties);
-    require_exact(normalized_info, canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip), info_path,
-        "RadioButton contains a property, binding, event, or storage variation outside the observed basic profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
+        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "RadioButton");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -4638,11 +4663,8 @@ DecodedControl decode_label(
         caption, horizontal_align, enabled, tool_tip, border_color);
     if (list_stream::dump_compact(normalized_properties) !=
         list_stream::dump_compact(canonical_properties)) {
-        reconstruction_complete = false;
-        warnings.push_back({
-            "OOF1140", DiagnosticSeverity::warning, std::to_string(raw_id),
-            properties_path, "LabelDecoration", {}, {},
-            "LabelDecoration contains property data not represented in the named model; these properties cannot be reproduced."});
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
+            properties_path, "LabelDecoration");
     }
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
 
@@ -5492,7 +5514,8 @@ DecodedControl decode_list_box(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5517,6 +5540,7 @@ DecodedControl decode_list_box(
     require_arity(properties, 7, properties_path);
     const auto base_path = child_path(properties_path, 0);
     require_arity(properties.items[0], 21, base_path);
+    require_raw_constant(properties.items[0].items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(properties.items[0].items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         properties.items[0].items[12], child_path(base_path, 12));
@@ -5524,11 +5548,10 @@ DecodedControl decode_list_box(
     require_list(properties.items[1], flags_path);
     require_arity(properties.items[1], 38, flags_path);
     const auto read_only_code = integer_atom<std::uint32_t>(properties.items[1].items[1], child_path(flags_path, 1));
-    if (read_only_code != 100743712 && read_only_code != 100744736) {
-        fail("OOF1122", child_path(flags_path, 1), "observed ListBox ReadOnly state", std::to_string(read_only_code),
-            "ListBox ReadOnly record is outside the supported profile");
-    }
-    const bool read_only = read_only_code == 100743712;
+    if (read_only_code != 100743712 && read_only_code != 100744736)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(flags_path, 1), "ListBox");
+    const std::optional<bool> read_only = read_only_code == 100743712 ? std::optional<bool>{true} :
+        read_only_code == 100744736 ? std::optional<bool>{false} : std::nullopt;
     require_raw_constant(properties.items[2], "6", child_path(properties_path, 2));
     require_raw_constant(properties.items[3], "0", child_path(properties_path, 3));
     const bool show_picture = bool_atom(properties.items[4], child_path(properties_path, 4));
@@ -5539,9 +5562,9 @@ DecodedControl decode_list_box(
     normalized_info.items[1].items[1].items[1] = raw("100743712");
     normalized_info.items[1].items[4] = raw("0");
     normalized_info.items[1].items[5] = raw("0");
-    require_exact(normalized_info,
-        canonical_list_box_info(true, false, false, true, ""), info_path,
-        "ListBox contains a property outside the supported profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
+        canonical_list_box_info(true, false, false, true, "")))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "ListBox");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -5562,7 +5585,7 @@ DecodedControl decode_list_box(
     if (show_picture) control.properties().set_explicit(model::PropertyId::from_name("ShowPicture"), true);
     if (show_check_box) control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+    if (read_only == false) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -5571,7 +5594,8 @@ DecodedControl decode_check_box(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5594,9 +5618,11 @@ DecodedControl decode_check_box(
     const auto& properties = info_payload.items[0];
     const auto properties_path = child_path(payload_path, 0);
     require_arity(properties, 9, properties_path);
+    require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
+    require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
@@ -5606,11 +5632,9 @@ DecodedControl decode_check_box(
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[0].items[12] = encoded_localized(tool_tip);
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
-    require_exact(
-        normalized_info,
-        canonical_check_box_info(enabled, caption, tool_tip, &font),
-        info_path,
-        "CheckBox uses an unsupported property, event, or storage variation");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
+        canonical_check_box_info(enabled, caption, tool_tip, &font)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CheckBox");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -6518,7 +6542,8 @@ DecodedControl decode_input_field(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6546,9 +6571,16 @@ DecodedControl decode_input_field(
     const auto& payload = at(control_info, 0, control_info_path);
     const auto payload_path = child_path(control_info_path, 0);
     require_arity(payload, 46, payload_path);
+    require_raw_constant(payload.items[1], "31", child_path(payload_path, 1));
     const auto& base_info = at(payload, 0, payload_path);
     const auto base_info_path = child_path(payload_path, 0);
     require_arity(base_info, 21, base_info_path);
+    require_raw_constant(base_info.items[0], "19", child_path(base_info_path, 0));
+    const auto stored_length = integer_atom<std::uint32_t>(payload.items[14], child_path(payload_path, 14));
+    if (stored_length != control_type.entries.front().string.length) {
+        fail("OOF1114", info_path, "String length matching the named ValueType", {},
+            "InputField payload length differs from its named String type");
+    }
     const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_info.items[12], child_path(base_info_path, 12));
@@ -6572,11 +6604,9 @@ DecodedControl decode_input_field(
     const auto input_field_flags = decode_input_field_flags(info, info_path);
     const InputFieldTextValues text_values{tool_tip, format};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
-    require_exact(
-        info,
-        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values),
-        info_path,
-        "InputField uses an unsupported property, event, or storage variation");
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(
+        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -8593,14 +8623,14 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
                     if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context);
-                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
-                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id);
+                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context, warnings, reconstruction_complete);
+                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
-                        child = decode_usual_group(record, record_path, context);
+                        child = decode_usual_group(record, record_path, context, warnings, reconstruction_complete);
 
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::html_document_field).guid)
                         child = decode_html_document_field(record, record_path, context);
-                    else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
+                    else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::splitter).guid)
                         child = decode_splitter(record, record_path, context);
                     else if (guid == label_descriptor.guid)
@@ -8667,17 +8697,17 @@ Result<model::OrdinaryFormDocument> decode_document(
                                     model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                             }
                         } else if (radio_button_guid) {
-                            child = decode_radio_button(record, record_path, linked_attribute, context);
+                            child = decode_radio_button(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                         } else if (guid == input_descriptor.guid) {
-                            child = decode_input_field(record, record_path, *linked_attribute, context);
+                            child = decode_input_field(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == checkbox_descriptor.guid) {
-                            child = decode_check_box(record, record_path, *linked_attribute, context);
+                            child = decode_check_box(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == list_box_descriptor.guid) {
-                            child = decode_list_box(record, record_path, *linked_attribute, context);
+                            child = decode_list_box(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {

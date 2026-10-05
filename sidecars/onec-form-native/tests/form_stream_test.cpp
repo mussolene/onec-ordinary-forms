@@ -1061,7 +1061,19 @@ void test_usual_group_named_record_round_trip_and_rejections() {
         if (mutation == 3) record->items[5] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
         if (mutation == 4) record->items[2].items[1].items[0].items[0] = list_stream::ListValue::raw_atom("18");
         if (mutation == 5) record->items[2].items[1].items[4] = list_stream::ListValue::raw_atom("1");
-        expect(!form_stream::decode_document(invalid, "Main"), "unknown UsualGroup record variants must fail closed");
+        const auto varied = form_stream::decode_document(invalid, "Main");
+        if (mutation == 2 || mutation == 5) {
+            expect(varied.ok() && !varied.value().reconstruction_complete() &&
+                       !varied.diagnostics().empty() && varied.diagnostics().front().code == "OOF1140" &&
+                       varied.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
+                "valid unknown UsualGroup profile values must warn and preserve a partial named model");
+            expect(varied.value().collections().controls.size() == 2 &&
+                       varied.value().collections().controls[0].name == "DefaultGroup",
+                "known UsualGroup identity must survive an unknown profile value");
+        } else {
+            expect(!varied, "malformed UsualGroup structure and invalid known values must still fail, mutation " +
+                std::to_string(mutation));
+        }
     }
 
     model::Form nested_form;
@@ -1604,11 +1616,17 @@ void test_button_multiline_round_trip_and_validation() {
     auto invalid_unknown_slot = encoded.value();
     invalid_unknown_slot.items[1].items[2].items[2].items[1].items[2].items[1].items[5] =
         list_stream::ListValue::raw_atom("1");
-    expect_failure(
-        form_stream::decode_document(invalid_unknown_slot, "Main"),
-        "OOF1114",
-        "$/1/2/2/1/2/1",
-        "unsupported Button property slot 5 variation must be rejected");
+    const auto partial_unknown_slot = form_stream::decode_document(invalid_unknown_slot, "Main");
+    expect(partial_unknown_slot.ok() && !partial_unknown_slot.value().reconstruction_complete() &&
+               !partial_unknown_slot.diagnostics().empty() &&
+               partial_unknown_slot.diagnostics().front().code == "OOF1140" &&
+               partial_unknown_slot.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
+        "valid unknown Button property slot variation must warn and return a partial model");
+    const auto* partial_button = partial_unknown_slot.value().find_control(model::ObjectId{2});
+    expect(partial_button != nullptr && partial_button->properties().find(model::PropertyId::from_name("MultiLine")) != nullptr &&
+               std::get<bool>(partial_button->properties().find(
+                   model::PropertyId::from_name("MultiLine"))->value),
+        "known Button.MultiLine=true must survive unknown property slot variation");
 
     model::Form invalid_form;
     invalid_form.id = model::ObjectId{1};
@@ -2487,11 +2505,22 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
         "list-valued client interface variants must be rejected");
     auto wrong_second_tail = encoded.value();
     menu_at(wrong_second_tail).items[5].items[7] = list_stream::ListValue::raw_atom("2");
-    const auto rejected_second_tail = form_stream::decode_document(wrong_second_tail,
+    const auto partial_second_tail = form_stream::decode_document(wrong_second_tail,
         "WrongClientInterfaceVariantSecondTail");
-    expect(!rejected_second_tail && rejected_second_tail.diagnostics().front().code == "OOF1106" &&
-               rejected_second_tail.diagnostics().front().path == "$/1/2/2/1/2/1/12/5/7",
-        "second menu tail value must remain strict zero and report its exact record slot");
+    expect(partial_second_tail.ok() && !partial_second_tail.value().reconstruction_complete() &&
+               std::any_of(partial_second_tail.diagnostics().begin(), partial_second_tail.diagnostics().end(),
+                   [](const auto& diagnostic) {
+                       return diagnostic.code == "OOF1140" &&
+                           diagnostic.severity == oof::DiagnosticSeverity::warning &&
+                           diagnostic.path == "$/1/2/2/1/2/1/12/5/7";
+                   }),
+        "valid unknown second menu tail value must warn at its record slot and preserve the model");
+    const auto* partial_menu_button = partial_second_tail.value().find_control(model::ObjectId{2});
+    expect(partial_menu_button != nullptr && std::get<model::ButtonPayload>(partial_menu_button->payload).buttons.size() ==
+               std::get<model::ButtonPayload>(document.find_control(model::ObjectId{2})->payload).buttons.size(),
+        "known menu entries and client interface variants must survive an unknown second tail value");
+    const auto partial_menu_reencoded = form_stream::encode_document(partial_second_tail.value());
+    expect(partial_menu_reencoded.ok(), "partial menu profile must remain buildable through the primary writer");
 
     auto invalid_model = document.form();
     model::OrdinaryFormDocument invalid_document(std::move(invalid_model));
@@ -3682,6 +3711,69 @@ void test_label_partial_reconstruction_warning_and_build() {
         "$/1/2/2/1/2/1/0/0", "invalid Label structural header must remain a strict decode error");
 }
 
+void test_control_unknown_common_state_warning_and_build() {
+    const auto exercise = [](model::ControlKind kind, std::string name) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "UnknownControlState";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument seed(std::move(form));
+        model::ControlNode control{model::ObjectId{2}, name, model::ButtonPayload{}};
+        if (kind == model::ControlKind::picture_decoration) control.payload = model::PictureDecorationPayload{};
+        if (kind == model::ControlKind::check_box) {
+            control.payload = model::CheckBoxPayload{};
+            model::TypeDomainPatternValue boolean_type;
+            model::TypeDomainEntry boolean_entry;
+            boolean_entry.term = model::TypeDomainTerm::boolean;
+            boolean_type.entries.push_back(boolean_entry);
+            seed.add_attribute(model::Attribute{model::ObjectId{3}, "Flag", boolean_type});
+            control.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        }
+        if (kind == model::ControlKind::button || kind == model::ControlKind::check_box)
+            control.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Keep caption"));
+        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        seed.add_control(std::move(control));
+
+        auto stream = form_stream::encode_document(seed);
+        expect(stream.ok(), "canonical control fixture must encode before profile variation");
+        auto* record = find_record_with_guid(stream.value(), model::metamodel::descriptor_for(kind).guid);
+        expect(record != nullptr, "canonical fixture must contain the requested control");
+        auto& base_properties = kind == model::ControlKind::check_box
+            ? record->items[2].items[1].items[0].items[0]
+            : record->items[2].items[1].items[0];
+        base_properties.items[17] = list_stream::ListValue::raw_atom("3");
+
+        const auto decoded = form_stream::decode_document(stream.value(), "UnknownControlState");
+        expect(decoded.ok(), "unknown valid common state must produce a partial control with warning");
+        expect(!decoded.value().reconstruction_complete() && decoded.diagnostics().size() == 1 &&
+                   decoded.diagnostics().front().severity == oof::DiagnosticSeverity::warning &&
+                   decoded.diagnostics().front().code == "OOF1140",
+            "unknown common state must mark reconstruction incomplete and report OOF1140");
+        const auto* restored = decoded.value().find_control(model::ObjectId{2});
+        expect(restored != nullptr && restored->properties().find(model::PropertyId::from_name("Enabled")) != nullptr &&
+                   !std::get<bool>(restored->properties().find(model::PropertyId::from_name("Enabled"))->value),
+            "known Enabled=false must survive unknown common state");
+        if (kind == model::ControlKind::button || kind == model::ControlKind::check_box)
+            expect(restored->properties().find(model::PropertyId::from_name("Caption")) != nullptr &&
+                       std::get<std::string>(restored->properties().find(model::PropertyId::from_name("Caption"))->value) ==
+                           "Keep caption",
+                "known Caption must survive unknown common state");
+
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "partial control model must serialize to XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && !parsed.value().reconstruction_complete(),
+            "partial control XML must preserve reconstruction completeness");
+        const auto built = oof::save_form_bin(parsed.value());
+        expect(built.ok() && !built.value().empty(),
+            "partial control XML must remain buildable to Form.bin");
+    };
+
+    exercise(model::ControlKind::button, "Run");
+    exercise(model::ControlKind::picture_decoration, "Picture");
+    exercise(model::ControlKind::check_box, "FlagControl");
+}
+
 void test_label_decoration_observed_center_right_records() {
     const auto decode_observed = [](std::string_view record, std::string_view expected_member) {
         model::Form form;
@@ -4109,7 +4201,6 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
                list_stream::dump_compact(changed.value()),
         "PictureDecoration named properties must re-encode canonically");
 
-    constexpr std::string_view properties_path = "$/1/2/2/1/2/1";
     constexpr std::string_view tool_tip_path = "$/1/2/2/1/2/1/0/12";
     auto malformed = changed.value();
     mutable_picture_base(malformed).items[12] = list_stream::ListValue::raw_atom("malformed");
@@ -4124,14 +4215,18 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
 
     auto unsupported_leaf = implicit_default.value();
     mutable_picture_base(unsupported_leaf).items[5] = list_stream::ListValue::raw_atom("1");
-    expect_failure(form_stream::decode_document(unsupported_leaf, "PictureDecorationCodec"), "OOF1114",
-        properties_path, "non-default unimplemented PictureDecoration base data must fail closed");
+    const auto partial_picture = form_stream::decode_document(unsupported_leaf, "PictureDecorationCodec");
+    expect(partial_picture.ok() && !partial_picture.value().reconstruction_complete() &&
+               std::any_of(partial_picture.diagnostics().begin(), partial_picture.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_picture.value().find_control(model::ObjectId{2}) != nullptr,
+        "valid unknown PictureDecoration base property must warn and retain the named control");
 
     auto unsupported_picture_tail = implicit_default.value();
     unsupported_picture_tail.items[1].items[2].items[2].items[1].items[2].items[1].items[1] =
         list_stream::ListValue::raw_atom("19");
-    expect_failure(form_stream::decode_document(unsupported_picture_tail, "PictureDecorationCodec"), "OOF1114",
-        "$/1/2/2/1/2/1", "non-default unimplemented PictureDecoration tuple data must fail closed");
+    expect_failure(form_stream::decode_document(unsupported_picture_tail, "PictureDecorationCodec"), "OOF1106",
+        "$/1/2/2/1/2/1/1", "PictureDecoration properties version header must remain strict");
 
     auto picture_property_document = make_document(false, true, "");
     const_cast<model::ControlNode*>(picture_property_document.find_control(model::ObjectId{2}))
@@ -7009,20 +7104,33 @@ void test_button_label_input_field_round_trip() {
     auto unsupported_leaf = encoded.value();
     auto& input_record = unsupported_leaf.items[1].items[2].items[2].items[3];
     input_record.items[2].items[2].items[0].items[45] = list_stream::ListValue::raw_atom("9");
-    expect_failure(form_stream::decode_document(unsupported_leaf, "Main"), "OOF1114", "$/1/2/2/3/2",
-        "unknown InputField info leaf must fail closed");
+    const auto partial_input = form_stream::decode_document(unsupported_leaf, "Main");
+    expect(partial_input.ok() && !partial_input.value().reconstruction_complete() &&
+               std::any_of(partial_input.diagnostics().begin(), partial_input.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
+        "valid unknown InputField info leaf must warn and preserve a partial named model");
+    const auto* partial_input_control = partial_input.value().find_control(model::ObjectId{9});
+    expect(partial_input_control != nullptr && partial_input_control->data_path.has_value(),
+        "known InputField identity and DataPath must survive an unknown info leaf");
 
     auto malformed_text_edit = encoded.value();
     auto& payload = malformed_text_edit.items[1].items[2].items[2].items[3]
         .items[2].items[2].items[0];
     payload.items[12] = list_stream::ListValue::raw_atom("9");
-    expect_failure(form_stream::decode_document(malformed_text_edit, "Main"), "OOF1114", "$/1/2/2/3/2",
-        "unclassified TextEdit slot value must be rejected");
+    const auto partial_text_edit = form_stream::decode_document(malformed_text_edit, "Main");
+    expect(partial_text_edit.ok() && !partial_text_edit.value().reconstruction_complete() &&
+               std::any_of(partial_text_edit.diagnostics().begin(), partial_text_edit.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_text_edit.value().find_control(model::ObjectId{9})->data_path.has_value(),
+        "valid unknown InputField TextEdit slot must warn and preserve known DataPath");
     auto unsupported_text_edit_flag = encoded.value();
     unsupported_text_edit_flag.items[1].items[2].items[2].items[3]
         .items[2].items[2].items[0].items[12] = list_stream::ListValue::raw_atom("1");
-    expect_failure(form_stream::decode_document(unsupported_text_edit_flag, "Main"), "OOF1114",
-        "$/1/2/2/3/2", "non-default TextEdit slot value must be rejected");
+    const auto partial_text_edit_flag = form_stream::decode_document(unsupported_text_edit_flag, "Main");
+    expect(partial_text_edit_flag.ok() && !partial_text_edit_flag.value().reconstruction_complete() &&
+               std::any_of(partial_text_edit_flag.diagnostics().begin(), partial_text_edit_flag.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
+        "valid unknown InputField TextEdit flag must warn without rejecting the named model");
     expect_failure(form_stream::encode_document(make_input_document(
         10, true, false, false, false, false, false, {{"TextEdit", false}})),
         "OOF1122", "$/InputField", "unsupported explicit TextEdit=false must fail encoding");
@@ -10100,6 +10208,7 @@ int main() {
         test_button_then_label_decoration_round_trip();
         test_label_border_color_round_trip();
         test_label_partial_reconstruction_warning_and_build();
+        test_control_unknown_common_state_warning_and_build();
         test_label_decoration_observed_center_right_records();
         test_label_enabled_and_tooltip_round_trip();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
