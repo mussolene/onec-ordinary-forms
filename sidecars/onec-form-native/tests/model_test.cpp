@@ -1335,6 +1335,27 @@ void test_chart_number_lexical_validation() {
         "Chart model validation must reject non-decimal numeric values such as NaN");
 }
 
+void test_chart_summary_series_color_invariants() {
+    using namespace oof::model;
+    const auto validate = [](ColorValue color) {
+        Form form; form.id = ObjectId{1}; form.children.push_back(ControlRef{ObjectId{2}});
+        OrdinaryFormDocument document(std::move(form));
+        ChartPayload chart; chart.summary_series.color = std::move(color);
+        document.add_control(ControlNode{ObjectId{2}, "Chart", std::move(chart)});
+        return document.validate();
+    };
+    ColorValue color;
+    expect(validate(color).ok(), "default SummarySeries Color must validate");
+    color.kind = ColorKind::absolute; color.red = 153; color.green = 25; color.blue = 25;
+    expect(validate(color).ok(), "absolute SummarySeries Color must validate");
+    color.alpha = 254;
+    expect(!validate(color).ok(), "SummarySeries Color must reject transparency");
+    color.alpha = 255; color.style = QualifiedName{"Accent"};
+    expect(!validate(color).ok(), "SummarySeries Color must reject style payload");
+    color = ColorValue{}; color.red = 1;
+    expect(!validate(color).ok(), "automatic SummarySeries Color must reject explicit RGB");
+}
+
 void test_border_value_invariants() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
@@ -1423,6 +1444,7 @@ int main() {
         test_duplicate_bindings_rejected();
         test_page_position_invariants();
         test_chart_number_lexical_validation();
+        test_chart_summary_series_color_invariants();
         test_border_value_invariants();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';

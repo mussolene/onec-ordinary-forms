@@ -5214,7 +5214,14 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
         rows.insert(rows.end(), row.begin(), row.end());
     }
     append(std::move(rows));
-    append(canonical_chart_series_defaults());
+    auto summary_row = canonical_chart_series_defaults();
+    if (chart.summary_series.color.kind == model::ColorKind::absolute) {
+        summary_row[0] = encode_chart_color_property(chart.summary_series.color, "$/Chart/SummarySeries/Color");
+    } else if (chart.summary_series.color != model::ColorValue{}) {
+        fail("OOF1122", "$/Chart/SummarySeries/Color", "automatic or absolute opaque RGB color",
+            "unsupported ColorValue", "Chart SummarySeries Color is unsupported");
+    }
+    append(std::move(summary_row));
     info.push_back(raw("1"));
     info.push_back(raw(std::to_string(point_count)));
     for (std::size_t index = 0; index < point_count; ++index) {
@@ -5243,7 +5250,7 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
     for (const auto& point : chart.points) append({list({encode_chart_color_property(point.color, "$/Chart/Points/Color")})});
     for (std::size_t index = 0; index <= series_count; ++index) {
         const bool summary = index == series_count;
-        const auto style_color = summary ? list({raw("4"), raw("4"), list({raw("0")}), raw("4")}) : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
+        const auto style_color = summary ? encode_button_color(chart.summary_series.color, "$/Chart/SummarySeries/Color") : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
         const auto marker = summary ? 4u : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
         const auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
         append({style});
@@ -5399,6 +5406,23 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
         payload.series[series].color = color;
         payload.series[series].marker = marker;
     }
+    const auto summary_style_path = child_path(info_path, series_styles_start + series_size);
+    const auto& summary_style = at(info, series_styles_start + series_size, info_path);
+    require_arity(summary_style, 10, summary_style_path);
+    const auto summary_color = decode_button_color(summary_style.items[0], child_path(summary_style_path, 0));
+    if (summary_color.kind == model::ColorKind::absolute) {
+        const auto summary_row_offset = std::size_t{5} + series_size * 11;
+        const auto summary_row_path = child_path(info_path, summary_row_offset);
+        const auto resolved_color = decode_chart_color_property(at(info, summary_row_offset, info_path), summary_row_path);
+        if (chart_color_rgb(summary_color, child_path(summary_style_path, 0)) != chart_color_rgb(resolved_color, summary_row_path)) {
+            fail("OOF1115", summary_style_path, "SummarySeries Color matching resolved RGB", "mismatch",
+                "Chart SummarySeries Color differs from its resolved native RGB");
+        }
+    } else if (summary_color != model::ColorValue{}) {
+        fail("OOF1122", child_path(summary_style_path, 0), "automatic or absolute opaque RGB color",
+            "unsupported ColorValue", "Chart SummarySeries Color is unsupported");
+    }
+    payload.summary_series.color = summary_color;
     model::ControlNode control{model::ObjectId{id}, string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)), std::move(payload)};
     if (!title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), title);
     const auto expected_info = encode_chart_info(std::get<model::ChartPayload>(control.payload), title);

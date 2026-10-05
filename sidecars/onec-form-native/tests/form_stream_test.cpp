@@ -10159,6 +10159,57 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
         "Auto is a named Marker value at any Series ordinal; its resolved row cache is derived");
 }
 
+void test_chart_summary_series_color_roundtrip_and_guards() {
+    const auto make_xml = [](bool populated, bool absolute) {
+        return std::string(R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Summary"><Position><Height>64</Height><Width>110</Width></Position>)XML") +
+            (absolute ? R"XML(<SummarySeries><Color kind="absolute" red="153" green="25" blue="25"/></SummarySeries>)XML" : "") +
+            (populated ? R"XML(<Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="12"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" green="20"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>7</Number></ChartValue></Values>)XML" : "<Series/><Points/><Values/>") +
+            "</Chart></ChildItems></Form>";
+    };
+    for (const bool populated : {false, true}) {
+        for (const bool absolute : {false, true}) {
+            const auto parsed = source::parse_form_xml(make_xml(populated, absolute));
+            expect(parsed.ok(), "named SummarySeries Color fixture must parse");
+            const auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), "SummarySeries Color must encode for empty and populated charts");
+            const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+            expect(decoded.ok(), "SummarySeries Color must decode for empty and populated charts");
+            const auto& before = std::get<model::ChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload);
+            const auto& after = std::get<model::ChartPayload>(decoded.value().find_control(model::ObjectId{2})->payload);
+            expect(after.summary_series.color == before.summary_series.color &&
+                after.series.size() == before.series.size() && after.points.size() == before.points.size(),
+                "SummarySeries Color must preserve its automatic or absolute meaning without changing dimensions");
+            const auto reencoded = form_stream::encode_document(decoded.value());
+            expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+                "SummarySeries Color must rebuild from the named model without drift");
+            const auto xml_before = source::serialize_form_xml(parsed.value());
+            const auto xml_after = source::serialize_form_xml(decoded.value());
+            expect(xml_before.ok() && xml_after.ok() && xml_before.value() == xml_after.value(),
+                "SummarySeries named XML must remain stable through native storage");
+        }
+    }
+    const auto parsed = source::parse_form_xml(make_xml(false, true));
+    const auto encoded = form_stream::encode_document(parsed.value());
+    auto mismatch = encoded.value();
+    auto* record = find_chart_record(mismatch);
+    expect(record != nullptr, "SummarySeries mismatch fixture must expose Chart");
+    record->items[3].items[5].items[2].items[0] = list_stream::ListValue::raw_atom("0");
+    expect_failure(form_stream::decode_document(mismatch, "Main"), "OOF1115",
+        "$/1/2/2/1/3/164", "SummarySeries explicit Color and resolved RGB must agree");
+
+    const auto automatic = source::parse_form_xml(make_xml(false, false));
+    auto unknown_automatic_cache = form_stream::encode_document(automatic.value()).value();
+    record = find_chart_record(unknown_automatic_cache);
+    record->items[3].items[5].items[2].items[0] = list_stream::ListValue::raw_atom("1644953");
+    expect(!form_stream::decode_document(unknown_automatic_cache, "Main"),
+        "unproven automatic SummarySeries RGB must not become an implicit absolute Color");
+    auto unsupported_style = encoded.value();
+    record = find_chart_record(unsupported_style);
+    record->items[3].items[164].items[0] = list_stream::parse("{4,3,{-22},3}");
+    expect(!form_stream::decode_document(unsupported_style, "Main"),
+        "unproven SummarySeries style reference must remain unsupported");
+}
+
 void test_chart_empty_render_cache_normalization_and_guards() {
     constexpr std::string_view empty_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Empty"><Position><Height>64</Height><Width>110</Width></Position><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(empty_xml);
@@ -11178,6 +11229,7 @@ int main() {
         test_independent_tab_order_observed_geometry_and_guards();
         test_chart_value_tooltip_named_pair_and_xml_text();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
+        test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {

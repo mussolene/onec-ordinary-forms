@@ -2153,12 +2153,47 @@ void test_command_bar_border_xml_contract() {
     expect(!source::serialize_form_xml(document_with_border(invalid)).ok(), "writer must reject style Border without a reference");
 }
 
+void test_chart_summary_series_color_xml() {
+    const auto xml = [](std::string_view summary) {
+        return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Chart id=\"2\" name=\"Chart\"><Position/>") +
+            std::string(summary) + "<Series/><Points/><Values/></Chart></ChildItems></Form>";
+    };
+    auto parsed = source::parse_form_xml(xml("<SummarySeries><Color kind=\"absolute\" red=\"153\" green=\"25\" blue=\"25\"/></SummarySeries>"));
+    expect(parsed.ok(), "named SummarySeries Color must parse");
+    const auto& color = std::get<model::ChartPayload>(parsed.value().collections().controls.front().payload).summary_series.color;
+    expect(color.kind == model::ColorKind::absolute && color.red == 153 && color.green == 25 && color.blue == 25,
+        "SummarySeries Color must retain actual RGB");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<SummarySeries>") != std::string::npos,
+        "nondefault SummarySeries must serialize");
+    auto roundtrip = source::parse_form_xml(serialized.value());
+    expect(roundtrip.ok() && std::get<model::ChartPayload>(roundtrip.value().collections().controls.front().payload).summary_series.color == color,
+        "SummarySeries Color must roundtrip");
+    auto empty = source::parse_form_xml(xml("<SummarySeries/>"));
+    expect(empty.ok(), "empty SummarySeries must mean default automatic Color");
+    auto empty_serialized = source::serialize_form_xml(empty.value());
+    expect(empty_serialized.ok() && empty_serialized.value().find("<SummarySeries>") == std::string::npos,
+        "empty default SummarySeries must be omitted");
+    auto automatic = source::parse_form_xml(xml("<SummarySeries><Color kind=\"automatic\"/></SummarySeries>"));
+    expect(automatic.ok(), "automatic SummarySeries Color must parse");
+    auto omitted = source::serialize_form_xml(automatic.value());
+    expect(omitted.ok() && omitted.value().find("<SummarySeries>") == std::string::npos,
+        "default automatic SummarySeries must be omitted");
+    expect(!source::parse_form_xml(xml("<SummarySeries><Color kind=\"absolute\" alpha=\"1\"/></SummarySeries>")).ok(),
+        "SummarySeries Color must reject nonopaque RGB");
+    expect(!source::parse_form_xml(xml("<SummarySeries><Color kind=\"styleReference\" styleName=\"Accent\"/></SummarySeries>")).ok(),
+        "SummarySeries Color must reject unproven style references");
+    expect(!source::parse_form_xml(xml("<SummarySeries><Color kind=\"automatic\"/></SummarySeries><SummarySeries><Color kind=\"automatic\"/></SummarySeries>")).ok(),
+        "duplicate SummarySeries must fail");
+}
+
 }  // namespace
 
 int main() {
     try {
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
+        test_chart_summary_series_color_xml();
         test_complete_document_roundtrip();
         test_usual_group_named_xml_round_trip();
         test_root_page_tree_xml_roundtrip();

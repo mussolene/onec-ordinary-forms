@@ -662,7 +662,12 @@ struct ChartValue {
     std::string tooltip{};
 };
 
+struct ChartSummarySeries {
+    ColorValue color;
+};
+
 struct ChartPayload final : TypedControlPayload<ControlKind::chart> {
+    ChartSummarySeries summary_series;
     std::vector<ChartSeries> series;
     std::vector<ChartPoint> points;
     std::vector<ChartValue> values;

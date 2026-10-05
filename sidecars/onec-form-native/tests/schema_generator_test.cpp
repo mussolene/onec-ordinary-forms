@@ -844,9 +844,14 @@ void test_control_surfaces_and_property_order(
             const auto chart_properties = metamodel.properties_for(control.kind);
             std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
             properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
-                return property.api_name == "Series" || property.api_name == "Points";
+                return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries";
             }), properties.end());
             cursor = expect_property_sequence(properties, elements, cursor);
+            expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");
+            const auto summary_fields = direct_children(sequence_for_type(schema, "ChartSummarySeriesType"), "element");
+            expect(summary_fields.size() == 1 && attribute(summary_fields[0], "name") == "Color" &&
+                attribute(summary_fields[0], "type") == "ColorValueType" && attribute(summary_fields[0], "minOccurs") == "0" &&
+                attribute(summary_fields[0], "maxOccurs") == "1", "SummarySeries schema must expose optional default Color");
             expect_element_shape(elements[cursor++], "Series", "ChartSeriesCollectionType", "1", "1");
             expect_element_shape(elements[cursor++], "Points", "ChartPointCollectionType", "1", "1");
             expect_element_shape(elements[cursor++], "Values", "ChartValueCollectionType", "1", "1");
@@ -1127,6 +1132,14 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     expect_palette_properties(direct_child(form, "Properties"), metamodel.form_properties());
     expect_palette_events(direct_child(form, "Events"), metamodel.form_events());
 
+    xmlNodePtr summary = direct_child_with_attribute(palette, "NamedConcept", "name", "ChartSummarySeries");
+    expect(summary != nullptr && attribute(summary, "apiName") == "SummarySeries" &&
+        attribute(summary, "russianName") == "СводнаяСерия" &&
+        attribute(summary, "evidenceRefs").find("ev_418fc1414bc745bbbb90a22694e5cae1") != std::string::npos,
+        "SummarySeries palette must retain named API provenance");
+    const auto summary_properties = direct_children(direct_child(summary, "Properties"), "Property");
+    expect(summary_properties.size() == 1 && attribute(summary_properties[0], "apiName") == "Color" &&
+        attribute(summary_properties[0], "russianName") == "Цвет", "SummarySeries palette must expose proven Color only");
     xmlNodePtr command_button = direct_child_with_attribute(palette, "NamedConcept", "name", "CommandBarButton");
     xmlNodePtr command_button_properties = direct_child(command_button, "Properties");
     const auto command_properties = direct_children(command_button_properties, "Property");

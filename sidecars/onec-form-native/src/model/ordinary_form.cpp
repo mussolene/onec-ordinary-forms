@@ -1165,6 +1165,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
             } else if (chart->values.size() != chart->series.size() * chart->points.size()) {
                 invalid_chart("Chart Values must be a dense Series by Point matrix");
             }
+            const auto& summary_color = chart->summary_series.color;
+            if ((summary_color.kind != ColorKind::automatic && summary_color.kind != ColorKind::absolute) ||
+                summary_color.alpha != 255 || !std::holds_alternative<std::monostate>(summary_color.style) ||
+                (summary_color.kind == ColorKind::automatic &&
+                 (summary_color.red != 0 || summary_color.green != 0 || summary_color.blue != 0))) {
+                invalid_chart("Chart SummarySeries Color must be automatic or absolute opaque RGB");
+            }
             std::unordered_set<ObjectId, ObjectIdHash> series_ids;
             for (const auto& series : chart->series) {
                 if (!series.id || series.id.value() == 1 || !series_ids.insert(series.id).second) {

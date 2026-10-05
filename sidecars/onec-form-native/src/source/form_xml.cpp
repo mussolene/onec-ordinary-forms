@@ -1585,6 +1585,7 @@ private:
         };
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         bool position_seen = false;
+        bool chart_summary_series_seen = false;
         bool gantt_series_seen = false;
         bool gantt_points_seen = false;
         bool gantt_intervals_seen = false;
@@ -1593,7 +1594,17 @@ private:
         bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
-            if (descriptor->kind == model::ControlKind::chart &&
+            if (descriptor->kind == model::ControlKind::chart && name == "SummarySeries") {
+                if (chart_summary_series_seen) fail("OOF2003", child, id_text, name, "one SummarySeries", name, "Duplicate SummarySeries");
+                chart_summary_series_seen = true;
+                auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
+                bool color_seen = false;
+                for (xmlNodePtr field : element_children(child)) {
+                    if (node_name(field) != "Color" || color_seen) fail("OOF2003", field, id_text, node_name(field), "one Color", node_name(field), "Unknown or duplicate SummarySeries field");
+                    color_seen = true;
+                    summary.color = parse_color(field);
+                }
+            } else if (descriptor->kind == model::ControlKind::chart &&
                        (name == "Series" || name == "Points" || name == "Values")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
                 for (xmlNodePtr item : element_children(child)) {
@@ -3385,6 +3396,11 @@ private:
             write_gantt_data(*gantt);
         }
         if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
+            if (chart->summary_series.color != model::ColorValue{}) {
+                writer_.open("SummarySeries");
+                write_color("Color", chart->summary_series.color, id);
+                writer_.close("SummarySeries");
+            }
             writer_.open("Series");
             for (const auto& item : chart->series) {
                 writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
