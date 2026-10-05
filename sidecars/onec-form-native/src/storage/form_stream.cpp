@@ -952,6 +952,54 @@ model::FontValue decode_control_font(const LV& value, std::string_view path) {
     }
 }
 
+struct CommonControlBaseCapabilities {
+    bool font = false;
+    bool border_color = false;
+};
+
+struct CommonControlBaseFields {
+    bool enabled = true;
+    std::string tool_tip;
+    std::optional<model::FontValue> font;
+    std::optional<model::ColorValue> border_color;
+};
+
+CommonControlBaseFields decode_common_control_base(
+    const LV& base, std::string_view path, CommonControlBaseCapabilities capabilities) {
+    require_arity(base, 21, path);
+    require_raw_constant(base.items[0], "19", child_path(path, 0));
+    CommonControlBaseFields fields;
+    fields.enabled = bool_atom(base.items[1], child_path(path, 1));
+    fields.tool_tip = decoded_single_language_text(base.items[12], child_path(path, 12));
+    if (capabilities.font) fields.font = decode_control_font(base.items[4], child_path(path, 4));
+    if (capabilities.border_color) fields.border_color = decode_button_color(base.items[6], child_path(path, 6));
+    return fields;
+}
+
+void apply_common_control_base(
+    model::PropertySet& properties, const CommonControlBaseFields& fields) {
+    if (!fields.enabled) properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!fields.tool_tip.empty()) properties.set_explicit(model::PropertyId::from_name("ToolTip"), fields.tool_tip);
+    if (fields.font && *fields.font != model::FontValue{})
+        properties.set_explicit(model::PropertyId::from_name("Font"), *fields.font);
+    if (fields.border_color && *fields.border_color != button_color_default("BorderColor"))
+        properties.set_explicit(model::PropertyId::from_name("BorderColor"), *fields.border_color);
+}
+
+void encode_common_control_base(
+    LV& base, const CommonControlBaseFields& fields, std::string_view path) {
+    require_arity(base, 21, path);
+    require_raw_constant(base.items[0], "19", child_path(path, 0));
+    base.items[1] = raw(fields.enabled ? "1" : "0");
+    base.items[12] = encoded_localized(fields.tool_tip);
+    if (fields.font) {
+        base.items[4] = encode_control_font(*fields.font, std::string(path) + "/Font");
+    }
+    if (fields.border_color) {
+        base.items[6] = encode_button_color(*fields.border_color, std::string(path) + "/BorderColor");
+    }
+}
+
 model::FontValue explicit_control_font(const model::PropertySet& properties, std::string_view property_path) {
     const auto* entry = properties.find(model::PropertyId::from_name("Font"));
     if (entry == nullptr) return {};
@@ -994,16 +1042,17 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
     const model::ColorValue* border_color = nullptr,
     const model::ColorValue* button_text_color = nullptr,
     const model::ColorValue* button_back_color = nullptr,
-    const model::FontValue* font = nullptr, std::string_view font_path = "$/Button/Font") {
+    const model::FontValue* font = nullptr, std::string_view base_path = "$/Button") {
     auto value = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
         "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    value.items[1] = raw(enabled ? "1" : "0");
-    value.items[12] = encoded_localized(tool_tip);
-    if (font != nullptr) value.items[4] = encode_control_font(*font, font_path);
-    if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/Button/BorderColor");
+    encode_common_control_base(value,
+        CommonControlBaseFields{enabled, std::string(tool_tip),
+            font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
+            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
+        base_path);
     if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/Button/ButtonTextColor");
     if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/Button/ButtonBackColor");
     return value;
@@ -1018,10 +1067,11 @@ LV canonical_command_bar_base(bool enabled, std::string_view tool_tip,
                               const model::BorderValue* border = nullptr, bool transparent = false,
                               const model::ColorValue* button_back_color = nullptr) {
     auto value = parse_constant(R"OOF({19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}})OOF");
-    value.items[1] = raw(enabled ? "1" : "0");
+    encode_common_control_base(value,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt,
+            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
+        "$/CommandBar");
     value.items[5] = raw(transparent ? "1" : "0");
-    value.items[12] = encoded_localized(tool_tip);
-    if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/CommandBar/BorderColor");
     if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/CommandBar/ButtonTextColor");
     if (back_color != nullptr) value.items[2] = encode_button_color(*back_color, "$/CommandBar/BackColor");
     if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/CommandBar/ButtonBackColor");
@@ -1140,10 +1190,10 @@ LV canonical_splitter_properties(bool enabled, std::int32_t orientation, std::st
     if (!base.is_list || base.items.size() != 21) {
         throw std::logic_error("canonical Splitter base record is malformed");
     }
-    base.items[1] = raw(enabled ? "1" : "0");
-    base.items[12] = encoded_localized(tool_tip);
+    encode_common_control_base(base,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt, border_color},
+        "$/Splitter");
     base.items[2] = encode_button_color(back_color, "$/Splitter/BackColor");
-    base.items[6] = encode_button_color(border_color, "$/Splitter/BorderColor");
     return list({std::move(base), raw("2"), raw(std::to_string(orientation)), raw("0")});
 }
 
@@ -1255,7 +1305,8 @@ LV canonical_radio_button_info(
     });
 }
 
-LV canonical_control_base_properties(bool enabled, std::string_view tool_tip);
+LV canonical_control_base_properties(bool enabled, std::string_view tool_tip,
+    const model::ColorValue* border_color = nullptr, std::string_view control_path = "$/ProgressBar");
 
 LV canonical_choice_field_info(
     bool enabled,
@@ -1267,8 +1318,7 @@ LV canonical_choice_field_info(
     if (properties.items.size() != 46 || properties.items[0].items.size() != 21) {
         throw std::logic_error("canonical ChoiceField info profile is malformed");
     }
-    properties.items[0] = canonical_control_base_properties(enabled, tool_tip);
-    properties.items[0].items[6] = encode_button_color(border_color, "$/ChoiceField/BorderColor");
+    properties.items[0] = canonical_control_base_properties(enabled, tool_tip, &border_color, "$/ChoiceField");
     return list({raw("2"), std::move(properties), list({raw("0")})});
 }
 
@@ -1290,7 +1340,7 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
         raw("1"),
         list({
             list({
-                canonical_button_base(enabled, tool_tip, nullptr, nullptr, nullptr, font, "$/CheckBox/Font"),
+                canonical_button_base(enabled, tool_tip, nullptr, nullptr, nullptr, font, "$/CheckBox"),
                 raw("7"),
                 encoded_localized(caption),
                 raw("1"),
@@ -3944,11 +3994,10 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    require_arity(base, 21, base_path);
-    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
-    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
-    const auto tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
-    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
+    const auto& border_color = *common.border_color;
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
     const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
     const bool transparent = bool_atom(base.items[5], child_path(base_path, 5));
@@ -4042,10 +4091,8 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         control.properties().set_explicit(model::PropertyId::from_name("ButtonsAlignment"),
             model::EnumerationValue{"CommandBarButtonAlignment", std::string(members[buttons_alignment])});
     }
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    apply_common_control_base(control.properties(), common);
     if (!secondary) control.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
-    if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     if (button_text_color != button_color_default("ButtonTextColor"))
         control.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"), button_text_color);
     if (back_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
@@ -4136,15 +4183,13 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_raw_constant(properties.items[1], "14", child_path(properties_path, 1));
     const auto& base = properties.items[0];
     const std::string base_path = child_path(properties_path, 0);
-    require_arity(base, 21, base_path);
-    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
-    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base.items[12], child_path(base_path, 12));
-    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
+    const auto& border_color = *common.border_color;
     const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
-    const auto font = decode_control_font(base.items[4], child_path(base_path, 4));
+    const auto& font = *common.font;
     const auto observed_state_value = integer_atom<std::int32_t>(base.items[17], child_path(base_path, 17));
     if (observed_state_value != 1 && observed_state_value != 2)
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(base_path, 17), "Button");
@@ -4248,20 +4293,12 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
-    if (!tool_tip.empty()) {
-        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    }
-    if (border_color != button_color_default("BorderColor")) {
-        control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
-    }
+    apply_common_control_base(control.properties(), common);
     if (button_text_color != button_color_default("ButtonTextColor")) {
         control.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"), button_text_color);
     }
     if (button_back_color != button_color_default("ButtonBackColor")) {
         control.properties().set_explicit(model::PropertyId::from_name("ButtonBackColor"), button_back_color);
-    }
-    if (font != model::FontValue{}) {
-        control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
     }
     if (shortcut != model::ShortcutValue{}) {
         control.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
@@ -4305,9 +4342,6 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     }
     if (multi_line) {
         control.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
-    }
-    if (!enabled) {
-        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     }
     control.position = std::move(decoded_geometry.position);
     if (picture && picture->standard_name) {
@@ -4435,12 +4469,11 @@ DecodedControl decode_splitter(
     require_arity(properties, 4, properties_path);
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    require_arity(base, 21, base_path);
-    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
-    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
     const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
-    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
+    const auto& border_color = *common.border_color;
     const auto orientation_storage = integer_atom<std::int32_t>(properties.items[2], child_path(properties_path, 2));
     std::string orientation_member;
     if (orientation_storage == 2) orientation_member = "Auto";
@@ -4466,14 +4499,11 @@ DecodedControl decode_splitter(
         "Splitter cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::SplitterPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    apply_common_control_base(control.properties(), common);
     if (orientation_member != "Auto") control.properties().set_explicit(
         model::PropertyId::from_name("Orientation"), model::EnumerationValue{"Orientation", orientation_member});
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (back_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
         model::PropertyId::from_name("BackColor"), back_color);
-    if (border_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
-        model::PropertyId::from_name("BorderColor"), border_color);
     control.position = decoded_geometry.position;
     return {std::move(control), std::nullopt, decoded_geometry.incoming, std::nullopt, {}};
 }
@@ -5390,13 +5420,16 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
 }
 
-LV canonical_control_base_properties(bool enabled, std::string_view tool_tip) {
+LV canonical_control_base_properties(bool enabled, std::string_view tool_tip,
+    const model::ColorValue* border_color, std::string_view control_path) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
         "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
         "{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    properties.items[1] = raw(enabled ? "1" : "0");
-    properties.items[12] = encoded_localized(tool_tip);
+    encode_common_control_base(properties,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt,
+            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
+        control_path);
     return properties;
 }
 
@@ -5750,12 +5783,10 @@ DecodedControl decode_check_box(
     require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    require_arity(base_properties, 21, base_path);
-    require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_path, 12));
-    const auto font = decode_control_font(base_properties.items[4], child_path(base_path, 4));
+    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{true, false});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
+    const auto& font = *common.font;
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     auto normalized_info = info;
@@ -5783,12 +5814,8 @@ DecodedControl decode_check_box(
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CheckBox cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CheckBoxPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    apply_common_control_base(control.properties(), common);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    if (font != model::FontValue{}) {
-        control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
-    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -5820,12 +5847,10 @@ DecodedControl decode_choice_field(
     require_arity(info_properties, 46, info_properties_path);
     const auto& base_properties = info_properties.items[0];
     const auto base_path = child_path(info_properties_path, 0);
-    require_arity(base_properties, 21, base_path);
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
-    const auto border_color = decode_button_color(
-        base_properties.items[6], child_path(base_path, 6));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_path, 12));
+    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{false, true});
+    const bool enabled = common.enabled;
+    const auto& border_color = *common.border_color;
+    const auto& tool_tip = common.tool_tip;
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[6] =
         encode_button_color(border_color, child_path(base_path, 6));
@@ -5850,11 +5875,7 @@ DecodedControl decode_choice_field(
         "ChoiceField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ChoiceFieldPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    if (border_color != button_color_default("BorderColor")) {
-        control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
-    }
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    apply_common_control_base(control.properties(), common);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
