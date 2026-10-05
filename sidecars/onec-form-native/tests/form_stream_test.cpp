@@ -5290,6 +5290,82 @@ void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() 
                list_stream::dump_compact(ordered_encoded.value()),
         "inherited member decimal selection must round-trip without normalization or drift");
 
+    auto repeated_member_type = ordered;
+    auto* typed_member = const_cast<model::ControlNode*>(repeated_member_type.find_control(model::ObjectId{17}));
+    typed_member->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), signed_fractional_type);
+    const auto repeated_type_encoded = form_stream::encode_document(repeated_member_type);
+    expect(repeated_type_encoded.ok(), repeated_type_encoded ?
+        "group member with a repeated matching numeric ValueType must encode" :
+        repeated_type_encoded.diagnostics().front().path + ": " + repeated_type_encoded.diagnostics().front().message);
+    const auto repeated_type_decoded = form_stream::decode_document(
+        repeated_type_encoded.value(), "RadioGroupRepeatedMemberType");
+    expect(repeated_type_decoded.ok(), repeated_type_decoded ? "" :
+        repeated_type_decoded.diagnostics().front().path + ": " + repeated_type_decoded.diagnostics().front().message);
+    const auto* repeated_type_member = repeated_type_decoded.value().find_control(model::ObjectId{17});
+    const auto* repeated_type_entry = repeated_type_member == nullptr ? nullptr :
+        repeated_type_member->extension_properties.find(model::PropertyId::from_name("ValueType"));
+    expect(repeated_type_member && !repeated_type_member->data_path && repeated_type_entry &&
+               std::get<model::TypeDomainPatternValue>(repeated_type_entry->value) == signed_fractional_type,
+        "group member must preserve its matching named ValueType without its own DataPath");
+    const auto repeated_type_reencoded = form_stream::encode_document(repeated_type_decoded.value());
+    expect(repeated_type_reencoded.ok() && list_stream::dump_compact(repeated_type_reencoded.value()) ==
+               list_stream::dump_compact(repeated_type_encoded.value()),
+        "repeated member ValueType must survive a native stream cycle without drift");
+    const auto repeated_type_xml = source::serialize_form_xml(repeated_type_decoded.value());
+    expect(repeated_type_xml.ok(), "repeated member ValueType must serialize as public XML");
+    const auto repeated_type_xml_document = source::parse_form_xml(repeated_type_xml.value());
+    expect(repeated_type_xml_document.ok(), "repeated member ValueType XML must parse");
+    const auto* xml_typed_member = repeated_type_xml_document.value().find_control(model::ObjectId{17});
+    const auto* xml_member_type = xml_typed_member == nullptr ? nullptr :
+        xml_typed_member->extension_properties.find(model::PropertyId::from_name("ValueType"));
+    expect(xml_typed_member && !xml_typed_member->data_path && xml_member_type &&
+               std::get<model::TypeDomainPatternValue>(xml_member_type->value) == signed_fractional_type,
+        "public XML must preserve the member ValueType and keep its DataPath absent");
+    const auto repeated_type_xml_encoded = form_stream::encode_document(repeated_type_xml_document.value());
+    expect(repeated_type_xml_encoded.ok() && list_stream::dump_compact(repeated_type_xml_encoded.value()) ==
+               list_stream::dump_compact(repeated_type_encoded.value()),
+        "repeated member ValueType must survive XML and native stream reconstruction");
+
+    model::OrdinaryFormDocument unbound_standalone(make_form({model::ControlRef{model::ObjectId{50}}}));
+    model::ControlNode standalone{model::ObjectId{50}, "UnboundNumeric", model::RadioButtonPayload{}};
+    standalone.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), signed_fractional_type);
+    unbound_standalone.add_control(std::move(standalone));
+    expect_failure(form_stream::encode_document(unbound_standalone), "OOF1122", "$/Form/ChildItems/0",
+        "unbound standalone RadioButton must still reject a numeric ValueType");
+
+    model::OrdinaryFormDocument unbound_head(make_form({
+        model::ControlRef{model::ObjectId{60}}, model::ControlRef{model::ObjectId{61}}}));
+    model::ControlNode unbound_numeric_head{model::ObjectId{60}, "UnboundHead", model::RadioButtonPayload{}};
+    unbound_numeric_head.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    unbound_numeric_head.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), signed_fractional_type);
+    unbound_numeric_head.properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+        model::DecimalValue{"0"});
+    unbound_head.add_control(std::move(unbound_numeric_head));
+    model::ControlNode unbound_numeric_member{model::ObjectId{61}, "UnboundMember", model::RadioButtonPayload{}};
+    unbound_numeric_member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+        model::DecimalValue{"0"});
+    unbound_head.add_control(std::move(unbound_numeric_member));
+    expect_failure(form_stream::encode_document(unbound_head), "OOF1122", "$/Form/ChildItems",
+        "unbound numeric group head must remain rejected");
+
+    auto unbound_numeric_head_stream = ordered_encoded.value();
+    auto& unbound_head_record = unbound_numeric_head_stream.items[1].items[2].items[2].items[1];
+    unbound_head_record.items[2].items[1] = list_stream::parse(value_codec::encode_type_domain(signed_fractional_type));
+    unbound_head_record.items[4].items[5] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(unbound_numeric_head_stream, "UnboundNumericHead"),
+        "OOF1122", "$/Form/ChildItems/2",
+        "decoder must still reject an unlinked numeric TypeDomain on a group head");
+
+    auto mismatched_member_type = ordered;
+    model::TypeDomainEntry wrong_member_entry;
+    wrong_member_entry.term = model::TypeDomainTerm::numeric;
+    wrong_member_entry.numeric = {10, 3, false};
+    const model::TypeDomainPatternValue wrong_member_type{{wrong_member_entry}};
+    const_cast<model::ControlNode*>(mismatched_member_type.find_control(model::ObjectId{17}))
+        ->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), wrong_member_type);
+    expect_failure(form_stream::encode_document(mismatched_member_type), "OOF1122", "$/Form/ChildItems/2",
+        "group member with different numeric TypeDomain qualifiers must fail closed");
+
     auto reordered = ordered;
     auto reordered_form = reordered.form();
     std::swap(reordered_form.children[0], reordered_form.children[1]);

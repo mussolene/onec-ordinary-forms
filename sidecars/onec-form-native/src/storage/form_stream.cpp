@@ -4460,10 +4460,6 @@ DecodedControl decode_radio_button(
         fail("OOF1122", child_path(info_path, 1), "ValueType matching linked Attribute", describe(info.items[1]),
             "RadioButton ValueType differs from its linked Attribute type");
     }
-    if (linked_attribute == nullptr && !value_type.entries.empty()) {
-        fail("OOF1122", child_path(info_path, 1), "empty ValueType without DataPath", describe(info.items[1]),
-            "RadioButton numeric ValueType requires a linked Attribute");
-    }
     const auto& control_info = info.items[2];
     const auto control_info_path = child_path(info_path, 2);
     require_arity(control_info, 6, control_info_path);
@@ -4577,7 +4573,9 @@ void validate_radio_group(
             (has_numeric_effective_type
                 ? decimal_fits_numeric_qualifiers(member_selection->canonical, head_type->entries.front().numeric)
                 : value_codec::canonical_decimal(member_selection->canonical) == "0");
-        if (member.data_path || (member_type != nullptr && !member_type->entries.empty()) || !value_fits_effective_type) {
+        const bool member_type_is_supported = member_type == nullptr || member_type->entries.empty() ||
+            (has_numeric_effective_type && *member_type == *head_type);
+        if (member.data_path || !member_type_is_supported || !value_fits_effective_type) {
             fail("OOF1122", std::string(path), "group member with Pattern ValueType and SelectionValue fitting the group head type",
                 member.name, "RadioButton group member differs from the observed group value type");
         }
