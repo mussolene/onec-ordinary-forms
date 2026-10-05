@@ -8966,8 +8966,27 @@ void test_owned_panel_colors_and_repeated_background() {
     auto invalid = encoded.value();
     auto& owner = invalid.items[1].items[2].items[1].items[1];
     owner.items[owner.items.size() - 6] = list_stream::parse("{4,4,{0},4}");
-    expect(!form_stream::decode_document(invalid, "InconsistentBackground"),
-        "background copy must agree with the named BackColor rather than being normalized away");
+    const auto inconsistent_background = form_stream::decode_document(invalid, "InconsistentBackground");
+    expect(inconsistent_background.ok() && !inconsistent_background.value().reconstruction_complete() &&
+               std::any_of(inconsistent_background.diagnostics().begin(), inconsistent_background.diagnostics().end(),
+                   [](const auto& diagnostic) {
+                       return diagnostic.code == "OOF1140" &&
+                           diagnostic.severity == oof::DiagnosticSeverity::warning;
+                   }) &&
+               inconsistent_background.value().form().panel.properties.find(model::PropertyId::from_name("BackColor"))->value ==
+                   parsed.value().form().panel.properties.find(model::PropertyId::from_name("BackColor"))->value,
+        "inconsistent background copy must warn while retaining the named BackColor");
+    const auto rebuilt_background = form_stream::encode_document(inconsistent_background.value());
+    expect(rebuilt_background.ok() && list_stream::dump_compact(rebuilt_background.value()) == list_stream::dump_compact(encoded.value()),
+        "partial background model must rebuild the known named colors rather than preserve an unknown copy");
+    auto malformed_owner = encoded.value();
+    malformed_owner.items[1].items[2].items[1].items[1].items[0].items.pop_back();
+    expect(!form_stream::decode_document(malformed_owner, "TruncatedOwnerBase"),
+        "owner profile warning must not accept a truncated base record");
+    malformed_owner = encoded.value();
+    malformed_owner.items[1].items[2].items[1].items[1].items[0].items[0] = list_stream::ListValue::raw_atom("20");
+    expect(!form_stream::decode_document(malformed_owner, "UnknownOwnerVersion"),
+        "owner profile warning must not accept an unknown base version");
     auto invalid_form = parsed.value().form();
     model::ColorValue transparent{model::ColorKind::absolute, 11, 22, 33, 128, std::monostate{}};
     invalid_form.panel.properties.set_explicit(model::PropertyId::from_name("BorderColor"), transparent);
@@ -9064,6 +9083,9 @@ void test_recursive_panel_pages_keep_owner_geometry_separate() {
 
     model::ControlNode inner_panel{model::ObjectId{3}, "Inner", model::PanelPayload{}};
     inner_panel.children = {model::PageRef{model::ObjectId{41}}};
+    inner_panel.properties().set_explicit(model::PropertyId::from_name("BorderColor"),
+        model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.BorderColor"}});
     model::Page inner_page;
     inner_page.id = model::ObjectId{41};
     inner_page.name = "InnerPage";
@@ -9160,6 +9182,79 @@ void test_recursive_panel_pages_keep_owner_geometry_separate() {
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
         "two-level Panel graph must round-trip without storage drift");
+
+    auto unknown_owner_profile = encoded.value();
+    auto& profile_root_children = unknown_owner_profile.items[1].items[2].items[2];
+    auto* profile_inner_panel = find_record(find_record, profile_root_children, 3);
+    expect(profile_inner_panel != nullptr, "profile fixture must contain the nested Panel record");
+    auto& profile_owner_payload = profile_inner_panel->items.at(2).items.at(1);
+    expect(profile_owner_payload.items.at(0).items.size() > 17,
+        "nested Panel owner base must contain the tested profile slot");
+    profile_owner_payload.items.at(0).items.at(17) = list_stream::ListValue::raw_atom("3");
+    const auto partial_owner = form_stream::decode_document(unknown_owner_profile, "NestedPanels");
+    const auto* partial_outer = partial_owner ? partial_owner.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* partial_inner = partial_owner ? partial_owner.value().find_control(model::ObjectId{3}) : nullptr;
+    const auto* partial_input = partial_owner ? partial_owner.value().find_control(model::ObjectId{4}) : nullptr;
+    const auto decoded_outer_page = partial_owner ? std::ranges::find(partial_owner.value().collections().pages,
+        std::string{"OuterPage"}, &model::Page::name) : std::vector<model::Page>::const_iterator{};
+    const auto decoded_inner_page = partial_owner ? std::ranges::find(partial_owner.value().collections().pages,
+        std::string{"InnerPage"}, &model::Page::name) : std::vector<model::Page>::const_iterator{};
+    const auto* partial_inner_payload = partial_inner
+        ? std::get_if<model::PanelPayload>(&partial_inner->payload) : nullptr;
+    const auto* partial_border = partial_inner
+        ? partial_inner->properties().find(model::PropertyId::from_name("BorderColor")) : nullptr;
+    const auto* partial_border_value = partial_border
+        ? std::get_if<model::ColorValue>(&partial_border->value) : nullptr;
+    const auto* input_anchor = partial_input && !partial_input->position.bindings.anchors.empty()
+        ? &partial_input->position.bindings.anchors.front() : nullptr;
+    expect(partial_owner.ok() && !partial_owner.value().reconstruction_complete() &&
+               std::any_of(partial_owner.diagnostics().begin(), partial_owner.diagnostics().end(),
+                   [](const auto& diagnostic) {
+                       return diagnostic.code == "OOF1140" &&
+                           diagnostic.severity == oof::DiagnosticSeverity::warning;
+                   }) &&
+               partial_outer != nullptr && partial_outer->id == model::ObjectId{2} &&
+               partial_outer->children.size() == 1 &&
+               std::get_if<model::PageRef>(&partial_outer->children.front()) != nullptr &&
+               partial_outer->children.front() == decoded_outer->children.front() &&
+               partial_inner != nullptr && partial_inner->id == model::ObjectId{3} &&
+               partial_inner_payload != nullptr && partial_inner->name == "Inner" &&
+               partial_inner->children.size() == 1 &&
+               std::get_if<model::PageRef>(&partial_inner->children.front()) != nullptr &&
+               partial_inner->children.front() == decoded_inner->children.front() &&
+               decoded_outer_page != partial_owner.value().collections().pages.end() && decoded_outer_page->name == "OuterPage" &&
+               decoded_outer_page->children.size() == 2 &&
+               std::get_if<model::ControlRef>(&decoded_outer_page->children[0]) != nullptr &&
+               std::get<model::ControlRef>(decoded_outer_page->children[0]).id() == model::ObjectId{3} &&
+               decoded_inner_page != partial_owner.value().collections().pages.end() && decoded_inner_page->name == "InnerPage" &&
+               decoded_inner_page->children.size() == 2 &&
+               std::get_if<model::ControlRef>(&decoded_inner_page->children[0]) != nullptr &&
+               std::get<model::ControlRef>(decoded_inner_page->children[0]).id() == model::ObjectId{4} &&
+               std::get_if<model::ControlRef>(&decoded_inner_page->children[1]) != nullptr &&
+               std::get<model::ControlRef>(decoded_inner_page->children[1]).id() == model::ObjectId{5} &&
+               decoded_inner_page->position.value().left.value() == 5 && decoded_inner_page->position.value().top.value() == 7 &&
+               decoded_inner_page->position.value().width.value() == 300 && decoded_inner_page->position.value().height.value() == 200 &&
+               partial_border_value != nullptr && *partial_border_value == model::ColorValue{
+                   model::ColorKind::style_reference, 0, 0, 0, 255,
+                   model::QualifiedName{"StyleColors.BorderColor"}} &&
+               partial_input != nullptr && input_anchor != nullptr &&
+               input_anchor->target == model::ControlRef{model::ObjectId{3}},
+        "unknown nested Panel owner profile must warn and retain parent, Page, order, color, and child binding");
+    const auto partial_xml = source::serialize_form_xml(partial_owner.value());
+    expect(partial_xml.ok() && partial_xml.value().find("reconstructionComplete=\"false\"") != std::string::npos &&
+               partial_xml.value().find("InnerPage") != std::string::npos &&
+               partial_xml.value().find("StyleColors.BorderColor") != std::string::npos,
+        "partial nested Panel model must serialize known owner data into named XML");
+    const auto partial_parsed = source::parse_form_xml(partial_xml.value());
+    expect(partial_parsed.ok() && !partial_parsed.value().reconstruction_complete(),
+        "partial nested Panel XML must preserve its completeness state");
+    const auto partial_bin = oof::save_form_bin(partial_parsed.value());
+    expect(partial_bin.ok() && !partial_bin.value().empty() &&
+               std::any_of(partial_bin.diagnostics().begin(), partial_bin.diagnostics().end(),
+                   [](const auto& diagnostic) {
+                       return diagnostic.severity == oof::DiagnosticSeverity::warning;
+                   }),
+        "partial nested Panel XML must build Form.bin with an unsupported-property warning");
 
     auto moved_incoming = encoded.value();
     auto& moved_root_children = moved_incoming.items[1].items[2].items[2];

@@ -1899,6 +1899,12 @@ void require_allowed_properties(
     const model::PropertySet& properties,
     std::initializer_list<std::string_view> allowed,
     std::string_view path);
+void warn_incomplete_profile(
+    Diagnostics& warnings,
+    bool& reconstruction_complete,
+    std::uint64_t raw_id,
+    std::string_view path,
+    std::string_view kind);
 
 struct DecodedOwnerPages {
     std::vector<model::Page> pages;
@@ -1911,6 +1917,9 @@ DecodedOwnerPages decode_owner_pages(
     std::uint64_t& next_page_id,
     std::optional<model::ControlRef> owner,
     bool panel,
+    std::uint64_t owner_id,
+    Diagnostics& warnings,
+    bool& reconstruction_complete,
     std::string_view path) {
     require_arity(envelope, 3, path);
     require_exact(envelope.items[0], raw("1"), child_path(path, 0), "Owner page envelope marker is unsupported");
@@ -1950,11 +1959,13 @@ DecodedOwnerPages decode_owner_pages(
         canonical_root_panel_payload(8, 8, pages, owner);
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
+    require_arity(normalized, expected.items[1].items.size(), child_path(path, 1));
+    require_arity(normalized.items[0], expected.items[1].items[0].items.size(), child_path(child_path(path, 1), 0));
+    require_raw_constant(normalized.items[0].items[0], "19", child_path(child_path(child_path(path, 1), 0), 0));
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     model::PanelPayload decoded_panel;
     if (!auto_tab_order) decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
-    require_arity(normalized.items[0], expected.items[1].items[0].items.size(), child_path(child_path(path, 1), 0));
     for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
         {"BorderColor", 6}, {"TextColor", 3}, {"BackColor", 2}}}) {
         const auto color_path = child_path(child_path(child_path(path, 1), 0), slot);
@@ -1970,8 +1981,8 @@ DecodedOwnerPages decode_owner_pages(
     if (mismatch.first != normalized.items.end() || mismatch.second != expected.items[1].items.end()) {
         const auto index = static_cast<std::size_t>(mismatch.first - normalized.items.begin());
         const auto original_index = index < 2 ? index : index + incoming_end - 2;
-        fail("OOF1114", child_path(child_path(path, 1), original_index), "supported named owner property",
-            "changed owner property", "Owner page property contains an unsupported variation");
+        warn_incomplete_profile(warnings, reconstruction_complete, owner_id,
+            child_path(child_path(path, 1), original_index), panel ? "Panel" : "Form");
     }
     if (pages.size() > std::numeric_limits<std::uint64_t>::max() - next_page_id) {
         fail("OOF1122", std::string(path), "Page IDs within uint64 range", std::to_string(pages.size()),
@@ -2091,13 +2102,6 @@ struct DecodedAction {
     std::string handler;
     bool incomplete_profile = false;
 };
-
-void warn_incomplete_profile(
-    Diagnostics& warnings,
-    bool& reconstruction_complete,
-    std::uint64_t raw_id,
-    std::string_view path,
-    std::string_view kind);
 
 LV encode_action(std::string_view handler, ActionMetadataPolicy policy, std::string_view path) {
     if (handler.empty()) {
@@ -8464,7 +8468,8 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& root_panel_envelope = root_panel.items[1];
         require_arity(root_panel_envelope, 3, "$/1/2/1");
         std::uint64_t next_page_id = stored_max_id + 1;
-        auto root_owner = decode_owner_pages(root_panel_envelope, next_page_id, std::nullopt, false, "$/1/2/1");
+        auto root_owner = decode_owner_pages(root_panel_envelope, next_page_id, std::nullopt, false,
+            1, warnings, reconstruction_complete, "$/1/2/1");
         auto root_pages = std::move(root_owner.pages);
         const auto& root_incoming = root_owner.incoming;
         const model::LocalizedStringValue canonical_page_title{{{"ru", "Страница1"}}};
@@ -8763,7 +8768,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         require_raw_constant(info.items[5], "0", child_path(child_path(record_path, 4), 5));
                         const model::ControlRef panel_ref{model::ObjectId{raw_id}};
                         auto panel_owner = decode_owner_pages(at(record, 2, record_path), next_page_id, panel_ref, true,
-                            child_path(record_path, 2));
+                            raw_id, warnings, reconstruction_complete, child_path(record_path, 2));
                         model::ControlNode panel{panel_ref.id(), name, model::PanelPayload{}};
                         panel.position = std::move(geometry.position);
                         panel.payload = std::move(panel_owner.panel);
