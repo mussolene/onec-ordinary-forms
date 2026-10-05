@@ -3275,7 +3275,7 @@ LV canonical_default_pivot_chart_info() {
 
 DecodedControl decode_default_complex_control(
     const LV& record, std::string_view path, const GeometryContext& context,
-    model::ControlKind kind) {
+    model::ControlKind kind, Diagnostics& warnings, bool& reconstruction_complete) {
     const auto& descriptor = model::metamodel::descriptor_for(kind);
     const auto geometry_slot = control_geometry_slot(descriptor.guid);
     require_arity(record, geometry_slot + 3, path);
@@ -3284,16 +3284,23 @@ DecodedControl decode_default_complex_control(
     if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", child_path(path, 1), "positive int64 control ID", std::to_string(id), "Default complex control ID is invalid");
     if (kind == model::ControlKind::graphical_schema_field) {
-        require_exact(record.items[2], canonical_graphical_schema_field_info(), child_path(path, 2),
-            "GraphicalSchemaField contains nondefault properties or nonempty schema content");
+        require_arity(record.items[2], 6, child_path(path, 2));
+        require_arity(record.items[2].items[0], 21, child_path(child_path(path, 2), 0));
+        require_raw_constant(record.items[2].items[0].items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
+        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_graphical_schema_field_info()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GraphicalSchemaField");
     } else if (kind == model::ControlKind::pivot_chart) {
-        require_exact(record.items[2], canonical_default_pivot_chart_info(), child_path(path, 2),
-            "PivotChart contains nondefault diagram, source, role, or settings values");
+        require_arity(record.items[2], 13, child_path(path, 2));
+        require_raw_constant(record.items[2].items[0], "3", child_path(child_path(path, 2), 0));
+        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_default_pivot_chart_info()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "PivotChart");
     } else {
-        require_exact(record.items[2], canonical_geographical_schema_field_info(), child_path(path, 2),
-            "GeographicalSchemaField contains nondefault properties");
-        require_exact(record.items[3], canonical_geographical_schema(), child_path(path, 3),
-            "GeographicalSchemaField contains nondefault or nonempty schema content");
+        require_arity(record.items[2], 21, child_path(path, 2));
+        require_raw_constant(record.items[2].items[0], "19", child_path(child_path(path, 2), 0));
+        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_geographical_schema_field_info()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GeographicalSchemaField");
+        if (list_stream::dump_compact(record.items[3]) != list_stream::dump_compact(canonical_geographical_schema()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 3), "GeographicalSchemaField");
     }
     auto geometry = decode_geometry(record.items[geometry_slot], child_path(path, geometry_slot), context);
     const auto metadata_slot = geometry_slot + 1;
@@ -4284,7 +4291,8 @@ DecodedControl decode_picture_decoration(
 DecodedControl decode_splitter(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4322,9 +4330,9 @@ DecodedControl decode_splitter(
     else fail("OOF1114", child_path(properties_path, 2), "Orientation Auto(2), Vertical(0), or Horizontal(1)",
         std::to_string(orientation_storage), "Splitter orientation value is unsupported");
 
-    require_exact(properties,
-        canonical_splitter_properties(enabled, orientation_storage, tool_tip, border_color, back_color),
-        properties_path, "Splitter properties differ from the supported exact record");
+    if (list_stream::dump_compact(properties) != list_stream::dump_compact(
+        canonical_splitter_properties(enabled, orientation_storage, tool_tip, border_color, back_color)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Splitter");
     const auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
     const auto metadata_path = child_path(path, 4);
@@ -5350,7 +5358,8 @@ DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
     const GeometryContext& context,
-    const AttributeRecord* linked_attribute) {
+    const AttributeRecord* linked_attribute,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5376,6 +5385,7 @@ DecodedControl decode_progress_bar(
     const auto& properties = info_list.items[0];
     const auto properties_path = child_path(info_list_path, 0);
     require_arity(properties, 21, properties_path);
+    require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
     const std::string tool_tip = decoded_single_language_text(properties.items[12], child_path(properties_path, 12));
     const auto min_path = child_path(info_list_path, 2);
@@ -5392,8 +5402,8 @@ DecodedControl decode_progress_bar(
     normalized_info.items[2] = raw("0");
     normalized_info.items[3] = raw("100");
     normalized_info.items[4] = raw("1");
-    require_exact(normalized_info, canonical_progress_bar_info(true, ""), info_list_path,
-        "ProgressBar contains a property outside the supported profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_progress_bar_info(true, "")))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_list_path, "ProgressBar");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -5429,7 +5439,8 @@ DecodedControl decode_progress_bar(
 DecodedControl decode_track_bar(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5449,6 +5460,7 @@ DecodedControl decode_track_bar(
     const auto& properties = info_payload.items[0];
     const auto properties_path = child_path(payload_path, 0);
     require_arity(properties, 21, properties_path);
+    require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         properties.items[12], child_path(properties_path, 12));
@@ -5477,8 +5489,8 @@ DecodedControl decode_track_bar(
     normalized_info.items[1].items[2] = raw("0");
     normalized_info.items[1].items[3] = raw("100");
     normalized_info.items[1].items[4] = raw("1");
-    require_exact(normalized_info, canonical_track_bar_info(true, ""), info_path,
-        "TrackBar contains a property outside the supported profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_track_bar_info(true, "")))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "TrackBar");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -5724,7 +5736,8 @@ DecodedControl decode_choice_field(
 }
 
 DecodedControl decode_text_document_field(
-    const LV& record, std::string_view path, const GeometryContext& context) {
+    const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5735,11 +5748,12 @@ DecodedControl decode_text_document_field(
     require_arity(info, 7, child_path(path, 2));
     const auto& base = info.items[0];
     require_arity(base, 21, child_path(child_path(path, 2), 0));
+    require_raw_constant(base.items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
     const bool enabled = bool_atom(base.items[1], child_path(child_path(path, 2), 0) + "/1");
     const auto border_color = decode_button_color(base.items[6], child_path(child_path(path, 2), 0) + "/6");
     const auto font = decode_control_font(base.items[4], child_path(child_path(path, 2), 0) + "/4");
-    require_exact(info, canonical_text_document_field_info(enabled, border_color, font), child_path(path, 2),
-        "TextDocumentField contains an unsupported persisted property or record variant");
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_text_document_field_info(enabled, border_color, font)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(path, 2), "TextDocumentField");
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
     require_arity(metadata, 6, child_path(path, 4));
@@ -5760,7 +5774,8 @@ DecodedControl decode_text_document_field(
 DecodedControl decode_calendar_field(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5783,6 +5798,7 @@ DecodedControl decode_calendar_field(
     }
     const auto& base_properties = properties.items[0];
     require_arity(base_properties, 21, child_path(properties_path, 0));
+    require_raw_constant(base_properties.items[0], "19", child_path(child_path(properties_path, 0), 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(child_path(properties_path, 0), 1));
     require_arity(properties, 14, properties_path);
     const auto begin_path = child_path(properties_path, 5);
@@ -5795,11 +5811,8 @@ DecodedControl decode_calendar_field(
                 std::string("CalendarField BeginOfDisplayPeriod is invalid: ") + error.what());
         }
     }
-    require_exact(
-        info,
-        canonical_calendar_field_info(enabled, begin_atom),
-        info_path,
-        "CalendarField contains an unsupported property or storage variation");
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_calendar_field_info(enabled, begin_atom)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CalendarField");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -6237,7 +6250,8 @@ DecodedControl decode_dendrogram(
 DecodedControl decode_spreadsheet_document_field(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6498,10 +6512,8 @@ DecodedControl decode_spreadsheet_document_field(
         normalized_document_info.items.begin() + static_cast<std::ptrdiff_t>(input_domain_end),
         normalized_document_info.items.end());
     normalized_document_info.items = std::move(normalized_document_items);
-    require_exact(normalized_info, expected_info, info_path,
-        fresh_add_default
-            ? "SpreadsheetDocumentField fresh Add record contains an unsupported setting or storage variation"
-            : "SpreadsheetDocumentField contains an unsupported nondefault view setting or storage variation");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(expected_info))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "SpreadsheetDocumentField");
 
     auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -8632,10 +8644,11 @@ Result<model::OrdinaryFormDocument> decode_document(
                         child = decode_html_document_field(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::splitter).guid)
-                        child = decode_splitter(record, record_path, context);
+                        child = decode_splitter(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == label_descriptor.guid)
                         child = decode_label(record, record_path, context, warnings, reconstruction_complete);
-                    else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
+                    else if (guid == calendar_descriptor.guid)
+                        child = decode_calendar_field(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == dendrogram_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path),
                             child_path(record_path, 1));
@@ -8646,14 +8659,16 @@ Result<model::OrdinaryFormDocument> decode_document(
                         }
                         child = decode_dendrogram(record, record_path, context);
                     }
-                    else if (guid == spreadsheet_descriptor.guid) child = decode_spreadsheet_document_field(record, record_path, context);
-                    else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
+                    else if (guid == spreadsheet_descriptor.guid)
+                        child = decode_spreadsheet_document_field(record, record_path, context, warnings, reconstruction_complete);
+                    else if (guid == text_document_descriptor.guid)
+                        child = decode_text_document_field(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::pivot_chart).guid)
-                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::pivot_chart);
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::pivot_chart, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::graphical_schema_field).guid)
-                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::graphical_schema_field);
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::graphical_schema_field, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::geographical_schema_field).guid)
-                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::geographical_schema_field);
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::geographical_schema_field, warnings, reconstruction_complete);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid ||
@@ -8713,10 +8728,10 @@ Result<model::OrdinaryFormDocument> decode_document(
                         } else if (guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
                             child = decode_table(record, record_path, *linked_attribute, context);
                         } else {
-                            child = decode_progress_bar(record, record_path, context, linked_attribute);
+                            child = decode_progress_bar(record, record_path, context, linked_attribute, warnings, reconstruction_complete);
                         }
                     } else if (guid == track_bar_descriptor.guid) {
-                        child = decode_track_bar(record, record_path, context);
+                        child = decode_track_bar(record, record_path, context, warnings, reconstruction_complete);
                     } else if (guid == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) {
                         child = decode_gantt_chart(record, record_path, context);
                     } else if (guid == panel_descriptor.guid) {

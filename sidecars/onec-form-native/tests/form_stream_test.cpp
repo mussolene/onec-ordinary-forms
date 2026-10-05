@@ -4574,8 +4574,14 @@ void test_splitter_observed_record_and_named_codec() {
     auto unsupported_storage = defaults.value();
     mutable_splitter_record(unsupported_storage).items[2].items[1].items[0].items[5] =
         list_stream::ListValue::raw_atom("0");
-    expect_failure(form_stream::decode_document(unsupported_storage, "SplitterCodec"), "OOF1114",
-        "$/1/2/2/1/2/1", "non-default unimplemented Splitter base data must fail closed");
+    const auto partial_splitter = form_stream::decode_document(unsupported_storage, "SplitterCodec");
+    const auto* partial_splitter_control = partial_splitter ?
+        partial_splitter.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(partial_splitter.ok() && !partial_splitter.value().reconstruction_complete() &&
+               std::any_of(partial_splitter.diagnostics().begin(), partial_splitter.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_splitter_control != nullptr && partial_splitter_control->name == "SplitterProbe",
+        "valid unknown Splitter profile value must warn and preserve the named control");
 }
 
 void test_fresh_checkbox_stream_decode() {
@@ -5100,8 +5106,14 @@ void test_text_document_field_persisted_profile_and_rejections() {
     expect(text_doc_record != nullptr, "encoded TextDocumentField record must be discoverable in the stream");
     if (text_doc_record == nullptr) return;
     text_doc_record->items[2].items[1] = list_stream::ListValue::raw_atom("7");
-    expect_failure(form_stream::decode_document(changed, "TextDocumentForm"), "OOF1114",
-        "$/1/2/2/1/2", "unknown TextDocumentField record variant must fail closed");
+    const auto partial_text_document = form_stream::decode_document(changed, "TextDocumentForm");
+    const auto* partial_text_control = partial_text_document ?
+        partial_text_document.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(partial_text_document.ok() && !partial_text_document.value().reconstruction_complete() &&
+               std::any_of(partial_text_document.diagnostics().begin(), partial_text_document.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_text_control != nullptr && partial_text_control->kind() == model::ControlKind::text_document_field,
+        "valid unknown TextDocumentField profile value must warn and preserve its named control");
 
 }
 
@@ -5170,8 +5182,15 @@ void test_calendar_field_enabled_round_trip_and_rejections() {
     auto& changed_flag_properties = changed_flag_atom.items[1].items[2].items[2].items[2]
         .items[2].items[1].items[0];
     changed_flag_properties.items[13] = list_stream::ListValue::raw_atom("1");
-    expect_failure(form_stream::decode_document(changed_flag_atom, "CalendarForm"), "OOF1114",
-        "$/1/2/2/2/2", "unmapped CalendarField flag-like leaf variation must fail closed");
+    const auto partial_calendar = form_stream::decode_document(changed_flag_atom, "CalendarForm");
+    const auto* partial_calendar_control = partial_calendar ?
+        partial_calendar.value().find_control(model::ObjectId{3}) : nullptr;
+    expect(partial_calendar.ok() && !partial_calendar.value().reconstruction_complete() &&
+               std::any_of(partial_calendar.diagnostics().begin(), partial_calendar.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_calendar_control != nullptr && !std::get<bool>(partial_calendar_control->properties().find(
+                   model::PropertyId::from_name("Enabled"))->value),
+        "valid unknown CalendarField profile leaf must warn and preserve Enabled=false");
 }
 
 void test_calendar_field_begin_display_period() {
@@ -5415,10 +5434,13 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
     auto* unsupported_record = find_progress(find_progress, unsupported_leaf);
     unsupported_record->items[2].items[1].items[0].items[15] = list_stream::ListValue::raw_atom("1");
     const auto unsupported_decode = form_stream::decode_document(unsupported_leaf, "Progress");
-    expect(!unsupported_decode && unsupported_decode.diagnostics().front().code == "OOF1114",
-        unsupported_decode ? "unclassified ProgressBar leaf unexpectedly decoded" :
-            "unclassified ProgressBar leaf diagnostic was " + unsupported_decode.diagnostics().front().code +
-                " at " + unsupported_decode.diagnostics().front().path);
+    const auto* partial_progress = unsupported_decode ?
+        unsupported_decode.value().find_control(model::ObjectId{4}) : nullptr;
+    expect(unsupported_decode.ok() && !unsupported_decode.value().reconstruction_complete() &&
+               std::any_of(unsupported_decode.diagnostics().begin(), unsupported_decode.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_progress != nullptr && partial_progress->name == "ProgressResearch",
+        "valid unknown ProgressBar leaf must warn and preserve the named control");
 
     constexpr std::string_view data_path_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="numeric" length="10" precision="2" nonNegative="true"/></TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id="4" name="P"><DataPath attributeId="3"/><Position/></ProgressBar></ChildItems></Form>)OOF";
     const auto data_path = oof::source::parse_form_xml(data_path_xml);
@@ -6258,8 +6280,13 @@ void test_track_bar_observed_record_and_named_round_trip() {
     auto* unsupported_record = find_track_bar(find_track_bar, unsupported);
     unsupported_record->items[2].items[1].items[5] = list_stream::ListValue::raw_atom("11");
     const auto unsupported_decoded = form_stream::decode_document(unsupported, "TrackBarUnsupported");
-    expect(!unsupported_decoded && unsupported_decoded.diagnostics().front().code == "OOF1114",
-        "unmapped TrackBar marking/detail slot variation must be rejected");
+    const auto* partial_track_bar = unsupported_decoded ?
+        unsupported_decoded.value().find_control(model::ObjectId{4}) : nullptr;
+    expect(unsupported_decoded.ok() && !unsupported_decoded.value().reconstruction_complete() &&
+               std::any_of(unsupported_decoded.diagnostics().begin(), unsupported_decoded.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_track_bar != nullptr && partial_track_bar->name == "TrackBarResearch",
+        "valid unknown TrackBar marking/detail profile value must warn and preserve its name");
 
     for (const auto [path_slot, value, path] : {
              std::tuple<std::size_t, std::string_view, std::string_view>{2, "-1", "$/1/2/2/1/2/1/2"},
@@ -6826,8 +6853,12 @@ void test_calendar_field_observed_record_decode() {
     auto changed_events = stream.value();
     auto& events_slot = changed_events.items[1].items[2].items[2].items[2].items[2].items[2];
     events_slot = list_stream::parse("{1}");
-    expect_failure(form_stream::decode_document(changed_events, "ObservedCalendar"), "OOF1114",
-        "$/1/2/2/2/2", "unsupported observed CalendarField event variation must fail closed");
+    const auto partial_events = form_stream::decode_document(changed_events, "ObservedCalendar");
+    expect(partial_events.ok() && !partial_events.value().reconstruction_complete() &&
+               std::any_of(partial_events.diagnostics().begin(), partial_events.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_events.value().find_control(model::ObjectId{4}) != nullptr,
+        "valid unknown CalendarField event profile must warn and preserve its control");
 }
 
 void test_button_label_input_field_round_trip() {
@@ -7994,6 +8025,19 @@ void test_spreadsheet_document_field_round_trip() {
     expect(normalized_payload && normalized_payload->cells == std::vector<model::SpreadsheetDocumentCell>{{1, 1, "Текст", std::nullopt}},
         "independent normalized R1C1 record must decode to the same named cells as fresh Add");
 
+    const auto expect_partial_view_profile = [&](const list_stream::ListValue& changed,
+                                                  std::string_view explanation) {
+        const auto partial = form_stream::decode_document(changed, "Main");
+        const auto* partial_control = partial ? partial.value().find_control(model::ObjectId{9}) : nullptr;
+        const auto* partial_payload = partial_control == nullptr ? nullptr :
+            std::get_if<model::SpreadsheetDocumentFieldPayload>(&partial_control->payload);
+        expect(partial.ok() && !partial.value().reconstruction_complete() &&
+                   std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(),
+                       [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+                   partial_payload != nullptr && partial_payload->cells == restored->cells,
+            explanation);
+    };
+
     auto unsupported_row_flags = encoded.value();
     auto& field_record = unsupported_row_flags.items.at(1).items.at(2).items.at(2).items.at(1);
     auto& field_info = field_record.items.at(2).items.at(11);
@@ -8050,8 +8094,8 @@ void test_spreadsheet_document_field_round_trip() {
     auto unknown_document_tail = encoded.value();
     auto& unknown_tail_info = unknown_document_tail.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
     unknown_tail_info.items.at(57) = list_stream::ListValue::raw_atom("9");
-    expect(!form_stream::decode_document(unknown_document_tail, "Main").ok(),
-        "SpreadsheetDocumentField must reject an unknown non-table document-tail variation");
+    expect_partial_view_profile(unknown_document_tail,
+        "SpreadsheetDocumentField unknown document-tail profile value must warn and preserve known cells");
     auto excessive_typed_count = encoded.value();
     auto& excessive_typed_info = excessive_typed_count.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
     excessive_typed_info.items.at(82) = list_stream::ListValue::raw_atom("4294967295");
@@ -8066,24 +8110,24 @@ void test_spreadsheet_document_field_round_trip() {
     auto unsupported_area_marker = encoded.value();
     auto& marker_record = unsupported_area_marker.items.at(1).items.at(2).items.at(2).items.at(1);
     marker_record.items.at(2).items.at(14).items.at(24).items.at(0) = list_stream::ListValue::raw_atom("4");
-    expect(!form_stream::decode_document(unsupported_area_marker, "Main").ok(),
-        "SpreadsheetDocumentField must reject unknown nondefault view markers");
+    expect_partial_view_profile(unsupported_area_marker,
+        "SpreadsheetDocumentField unknown view marker must warn and preserve known cells");
     auto unsupported_columns_id = encoded.value();
     auto& columns_id_record = unsupported_columns_id.items.at(1).items.at(2).items.at(2).items.at(1);
     columns_id_record.items.at(2).items.at(14).items.at(24).items.at(5) =
         list_stream::ListValue::raw_atom("11111111-1111-1111-1111-111111111111");
-    expect(!form_stream::decode_document(unsupported_columns_id, "Main").ok(),
-        "SpreadsheetDocumentField must reject unsupported nonzero view columns IDs");
+    expect_partial_view_profile(unsupported_columns_id,
+        "SpreadsheetDocumentField unknown view columns ID must warn and preserve known cells");
     auto nondefault_view = encoded.value();
     auto& nondefault_record = nondefault_view.items.at(1).items.at(2).items.at(2).items.at(1);
     nondefault_record.items.at(2).items.at(14).items.at(1) = list_stream::ListValue::raw_atom("1");
-    expect(!form_stream::decode_document(nondefault_view, "Main").ok(),
-        "SpreadsheetDocumentField must reject nondefault persisted current-cell data");
+    expect_partial_view_profile(nondefault_view,
+        "SpreadsheetDocumentField unknown current-cell view data must warn and preserve known cells");
     auto unsupported_view_setting = encoded.value();
     auto& setting_record = unsupported_view_setting.items.at(1).items.at(2).items.at(2).items.at(1);
     setting_record.items.at(2).items.at(14).items.at(22) = list_stream::ListValue::raw_atom("1");
-    expect(!form_stream::decode_document(unsupported_view_setting, "Main").ok(),
-        "SpreadsheetDocumentField must reject view data outside the supported default envelope");
+    expect_partial_view_profile(unsupported_view_setting,
+        "SpreadsheetDocumentField unknown view setting must warn and preserve known cells");
     auto truncated_areas = encoded.value();
     auto& truncated_record = truncated_areas.items.at(1).items.at(2).items.at(2).items.at(1);
     truncated_record.items.at(2).items.at(14).items.pop_back();
@@ -10110,8 +10154,18 @@ void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
         auto& record = nondefault.items[1].items[2].items[2].items[record_index];
         if (record_index == 1) record.items[3].items[4] = list_stream::ListValue::raw_atom("1");
         else record.items[2].items[2].items[0].items[2] = list_stream::ListValue::raw_atom("1");
-        expect(!form_stream::decode_document(nondefault, "DefaultSchemas"),
-            "Unmodeled document contents must be rejected, never discarded or retained as raw data");
+        const auto partial_schema = form_stream::decode_document(nondefault, "DefaultSchemas");
+        const auto expected_id = record_index == 1 ? model::ObjectId{2} : model::ObjectId{19};
+        const auto expected_name = record_index == 1 ? "Map" : "Flow";
+        const auto* partial_schema_control = partial_schema ?
+            partial_schema.value().find_control(expected_id) : nullptr;
+        expect(partial_schema.ok() && !partial_schema.value().reconstruction_complete() &&
+                   std::any_of(partial_schema.diagnostics().begin(), partial_schema.diagnostics().end(),
+                       [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+                   partial_schema_control != nullptr && partial_schema_control->name == expected_name &&
+                   partial_schema_control->position.left.value() ==
+                       (record_index == 1 ? std::optional<std::int32_t>{170} : std::optional<std::int32_t>{10}),
+            "valid unknown schema profile content must warn and preserve identity and position");
         auto unknown_property = parsed.value();
         auto* control = const_cast<model::ControlNode*>(unknown_property.find_control(
             model::ObjectId{record_index == 1 ? 2u : 19u}));
@@ -10119,6 +10173,77 @@ void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
         expect(!form_stream::encode_document(unknown_property),
             "Unverified explicit property must not silently become a default");
     }
+}
+
+
+void test_partial_complex_and_spreadsheet_profiles_rebuild_from_xml() {
+    const auto check_partial_xml_build = [](const model::OrdinaryFormDocument& partial,
+                                            model::ObjectId control_id,
+                                            std::string_view control_name) {
+        const auto xml = source::serialize_form_xml(partial);
+        expect(xml.ok() && xml.value().find("reconstructionComplete=\"false\"") != std::string::npos,
+            "partial named model must serialize with reconstruction completeness metadata");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && !parsed.value().reconstruction_complete() && !parsed.diagnostics().empty() &&
+                   parsed.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
+            "partial XML must parse back with an incompleteness warning");
+        const auto* restored = parsed.value().find_control(control_id);
+        expect(restored != nullptr && restored->name == control_name,
+            "partial XML must retain the known control identity");
+        const auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), "partial XML model must remain encodable through the primary form writer");
+        const auto built = oof::save_form_bin(parsed.value());
+        expect(built.ok() && std::any_of(built.diagnostics().begin(), built.diagnostics().end(),
+                   [](const auto& diagnostic) {
+                       return diagnostic.severity == oof::DiagnosticSeverity::warning &&
+                           diagnostic.message.find("unsupported source properties were not restored") != std::string::npos;
+                   }),
+            "partial XML model must build Form.bin with the source-property warning");
+    };
+
+    const auto pivot_xml = source::parse_form_xml(R"XML(<Form id="1" name="PartialPivot" ordinaryFormVersion="2.1"><ChildItems>
+      <PivotChart id="77" name="Pivot"><Position><Top>25</Top><Height>140</Height><Left>40</Left><Width>200</Width></Position></PivotChart>
+    </ChildItems></Form>)XML");
+    expect(pivot_xml.ok(), "Pivot fixture must parse from named XML");
+    auto pivot_stream = form_stream::encode_document(pivot_xml.value());
+    expect(pivot_stream.ok(), "Pivot fixture must encode before profile mutation");
+    pivot_stream.value().items[1].items[2].items[2].items[1].items[2].items[2].items[3] =
+        list_stream::ListValue::raw_atom("99");
+    const auto partial_pivot = form_stream::decode_document(pivot_stream.value(), "PartialPivot");
+    const auto* pivot = partial_pivot ? partial_pivot.value().find_control(model::ObjectId{77}) : nullptr;
+    expect(partial_pivot.ok() && !partial_pivot.value().reconstruction_complete() &&
+               std::any_of(partial_pivot.diagnostics().begin(), partial_pivot.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               pivot != nullptr && pivot->position.left.value() == 40,
+        "unknown Pivot profile must warn while retaining known geometry");
+    check_partial_xml_build(partial_pivot.value(), model::ObjectId{77}, "Pivot");
+
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "PartialSheet";
+    form.children = {model::ControlRef{model::ObjectId{9}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode sheet{model::ObjectId{9}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(sheet.payload).cells = {
+        {1, 1, "Kept cell", std::nullopt}};
+    sheet.position.left.set(18);
+    document.add_control(std::move(sheet));
+    auto sheet_stream = form_stream::encode_document(document);
+    expect(sheet_stream.ok(), "SpreadsheetDocumentField fixture must encode before profile mutation");
+    sheet_stream.value().items[1].items[2].items[2].items[1].items[2].items[14].items[22] =
+        list_stream::ListValue::raw_atom("1");
+    const auto partial_sheet = form_stream::decode_document(sheet_stream.value(), "PartialSheet");
+    const auto* sheet_control = partial_sheet ? partial_sheet.value().find_control(model::ObjectId{9}) : nullptr;
+    const auto* sheet_payload = sheet_control == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&sheet_control->payload);
+    expect(partial_sheet.ok() && !partial_sheet.value().reconstruction_complete() &&
+               std::any_of(partial_sheet.diagnostics().begin(), partial_sheet.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               sheet_payload != nullptr && sheet_payload->cells ==
+                   std::vector<model::SpreadsheetDocumentCell>{{1, 1, "Kept cell", std::nullopt}} &&
+               sheet_control->position.left.value() == 18,
+        "unknown SpreadsheetDocumentField view profile must warn while retaining known cells and geometry");
+    check_partial_xml_build(partial_sheet.value(), model::ObjectId{9}, "Sheet");
 }
 
 
@@ -10147,12 +10272,25 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
     for (const auto slot : {3u, 4u, 5u, 6u, 7u, 8u, 9u, 12u}) {
         auto changed = encoded.value();
         changed.items[1].items[2].items[2].items[1].items[2].items[slot] = list_stream::ListValue::raw_atom("99");
-        expect(!form_stream::decode_document(changed, "DefaultPivot"), "Unsupported Pivot settings must fail explicitly");
+        const auto partial = form_stream::decode_document(changed, "DefaultPivot");
+        const auto* partial_pivot = partial ? partial.value().find_control(model::ObjectId{77}) : nullptr;
+        expect(partial.ok() && !partial.value().reconstruction_complete() &&
+                   std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(),
+                       [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+                   partial_pivot != nullptr && partial_pivot->name == "Pivot" &&
+                   partial_pivot->position.left.value() == 40,
+            "valid unknown Pivot profile data must warn and preserve identity and position");
     }
     auto changed_renderer = encoded.value();
     changed_renderer.items[1].items[2].items[2].items[1].items[2].items[1].items[2].items[4] = list_stream::ListValue::raw_atom("0");
-    expect(!form_stream::decode_document(changed_renderer, "DefaultPivot"),
-        "A changed renderer must not be erased or silently replaced by the factory default");
+    const auto partial_renderer = form_stream::decode_document(changed_renderer, "DefaultPivot");
+    const auto* partial_pivot = partial_renderer ?
+        partial_renderer.value().find_control(model::ObjectId{77}) : nullptr;
+    expect(partial_renderer.ok() && !partial_renderer.value().reconstruction_complete() &&
+               std::any_of(partial_renderer.diagnostics().begin(), partial_renderer.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
+               partial_pivot != nullptr && partial_pivot->name == "Pivot",
+        "changed Pivot renderer must warn and preserve the named Pivot control");
 }
 
 }  // namespace
@@ -10162,6 +10300,7 @@ int main() {
         test_data_processor_form_extension_named_round_trip_and_guards();
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
+        test_partial_complex_and_spreadsheet_profiles_rebuild_from_xml();
         test_command_bar_owner_pair_and_strict_profile();
         test_command_bar_five_named_properties_and_invalid_variants();
         test_command_bar_named_action_source_references();
