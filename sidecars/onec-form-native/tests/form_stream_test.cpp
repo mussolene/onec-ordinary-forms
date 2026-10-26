@@ -1355,7 +1355,7 @@ void test_usual_group_named_record_round_trip_and_rejections() {
         if (mutation == 4) record->items[2].items[1].items[0].items[0] = list_stream::ListValue::raw_atom("18");
         if (mutation == 5) record->items[2].items[1].items[4] = list_stream::ListValue::raw_atom("1");
         const auto varied = form_stream::decode_document(invalid, "Main");
-        if (mutation == 2 || mutation == 5) {
+        if (mutation == 5) {
             expect(varied.ok() && !varied.value().reconstruction_complete() &&
                        !varied.diagnostics().empty() && varied.diagnostics().front().code == "OOF1140" &&
                        varied.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
@@ -7572,7 +7572,7 @@ void test_calendar_field_scalar_properties() {
     auto unknown_neighbor = encoded.value();
     auto* unknown_record = find_record_with_guid(unknown_neighbor,
         model::metamodel::descriptor_for(model::ControlKind::calendar_field).guid);
-    unknown_record->items[2].items[1].items[9] = list_stream::ListValue::raw_atom("7");
+    unknown_record->items[2].items[1].items[13] = list_stream::ListValue::raw_atom("2");
     const auto partial = form_stream::decode_document(unknown_neighbor, "CalendarScalarsNeighbor");
     const auto* partial_calendar = partial ? partial.value().find_control(model::ObjectId{2}) : nullptr;
     const auto* partial_end = partial_calendar ? partial_calendar->properties().find(
@@ -7635,6 +7635,347 @@ void test_calendar_field_scalar_properties() {
     expect(!runtime_only && !runtime_only.diagnostics().empty() &&
                runtime_only.diagnostics().front().message.find("runtime-only") != std::string::npos,
         "CalendarField CurrentDate must fail explicitly when written into persisted Form.bin");
+}
+
+void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
+    struct BorderCase {
+        model::ControlKind kind;
+        std::string_view public_name;
+        bool style_default;
+        bool group_border;
+    };
+    constexpr std::array cases{
+        BorderCase{model::ControlKind::calendar_field, "CalendarField", true, false},
+        BorderCase{model::ControlKind::check_box, "CheckBox", false, false},
+        BorderCase{model::ControlKind::choice_field, "ChoiceField", true, false},
+        BorderCase{model::ControlKind::input_field, "InputField", true, false},
+        BorderCase{model::ControlKind::label_decoration, "LabelDecoration", false, false},
+        BorderCase{model::ControlKind::list_box, "ListBox", true, false},
+        BorderCase{model::ControlKind::picture_decoration, "PictureDecoration", false, false},
+        BorderCase{model::ControlKind::progress_bar, "ProgressBar", true, false},
+        BorderCase{model::ControlKind::radio_button, "RadioButton", false, false},
+        BorderCase{model::ControlKind::track_bar, "TrackBar", false, false},
+        BorderCase{model::ControlKind::usual_group, "UsualGroup", false, true},
+    };
+    const auto default_border = [](const BorderCase& test_case) {
+        if (test_case.group_border) {
+            model::BorderValue rounded;
+            rounded.border_type = model::ControlBorderType::rounded;
+            rounded.width = 1;
+            return rounded;
+        }
+        if (test_case.style_default) {
+            model::BorderValue style;
+            style.kind = model::BorderKind::style_reference;
+            style.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+            return style;
+        }
+        return model::BorderValue{};
+    };
+    const auto type_specific_xml = [](const BorderCase& test_case) -> std::string {
+        if (test_case.kind == model::ControlKind::check_box)
+            return R"XML(<Attributes><Attribute id="3" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes>)XML";
+        if (test_case.kind == model::ControlKind::input_field)
+            return R"XML(<Attributes><Attribute id="3" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes>)XML";
+        if (test_case.kind == model::ControlKind::list_box)
+            return R"XML(<Attributes><Attribute id="3" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes>)XML";
+        return {};
+    };
+    const auto xml_for = [&](const BorderCase& test_case, std::string_view border) {
+        std::string data_path;
+        if (test_case.kind == model::ControlKind::check_box ||
+            test_case.kind == model::ControlKind::input_field ||
+            test_case.kind == model::ControlKind::list_box)
+            data_path = R"XML(<DataPath attributeId="3"/>)XML";
+        std::string events;
+        std::string selection_mode;
+        if (test_case.kind == model::ControlKind::calendar_field ||
+            test_case.kind == model::ControlKind::check_box ||
+            test_case.kind == model::ControlKind::radio_button ||
+            test_case.kind == model::ControlKind::track_bar)
+            events = R"XML(<Events><OnChange id="4">HandleBorderChange</OnChange></Events>)XML";
+        if (test_case.kind == model::ControlKind::calendar_field)
+            selection_mode = R"XML(<SelectionMode type="DateSelectionMode" member="Multiple"/>)XML";
+        return std::string("<Form id=\"1\" name=\"NamedBorders\" ordinaryFormVersion=\"2.1\">") +
+            type_specific_xml(test_case) + "<ChildItems><" + std::string(test_case.public_name) +
+            " id=\"2\" name=\"Control\">" + data_path + "<Position/>" +
+            std::string(border) + selection_mode +
+            (test_case.kind == model::ControlKind::picture_decoration ? std::string{} :
+                std::string(R"XML(<BorderColor kind="absolute" red="17" green="83" blue="201"/>)XML")) + events +
+            "</" + std::string(test_case.public_name) + "></ChildItems></Form>";
+    };
+    const auto border_record = [](auto& encoded, const BorderCase& test_case) -> auto* {
+        auto* record = find_record_with_guid(encoded, model::metamodel::descriptor_for(test_case.kind).guid);
+        if (test_case.group_border) return &record->items[2].items[1].items[3];
+        auto* base = &record->items[2].items[1].items[0];
+        if (test_case.kind == model::ControlKind::check_box)
+            base = &record->items[2].items[1].items[0].items[0];
+        else if (test_case.kind == model::ControlKind::input_field ||
+                 test_case.kind == model::ControlKind::radio_button)
+            base = &record->items[2].items[2].items[0].items[0];
+        return &base->items[11];
+    };
+    const auto default_border_xml = [&](const BorderCase& test_case) {
+        if (test_case.group_border)
+            return std::string(R"XML(<Border kind="absolute" borderType="Rounded" width="1"/>)XML");
+        if (test_case.style_default)
+            return std::string(R"XML(<Border kind="styleReference" styleName="StyleBorders.ControlBorder"/>)XML");
+        return std::string(R"XML(<Border kind="absolute" borderType="WithoutBorder" width="0"/>)XML");
+    };
+    constexpr std::string_view standard_factory = "48312c09-257f-4b29-b280-284dd89efc1e";
+    constexpr std::string_view group_factory = "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2";
+    constexpr std::string_view single_two = "{3,0,{0},1,2,3,48312c09-257f-4b29-b280-284dd89efc1e}";
+    constexpr std::string_view group_single_two = "{3,0,{0},1,2,3,cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2}";
+    constexpr std::string_view control_border_style = "{3,1,{-18},0,0,0}";
+    for (const auto& test_case : cases) {
+        const auto absent = source::parse_form_xml(xml_for(test_case, {}));
+        expect(absent.ok(), std::string(test_case.public_name) + " Border default fixture must parse");
+        if (!absent) continue;
+        const auto key = model::OrdinaryFormDocument::ObjectKey{
+            model::ObjectCategory::control, model::ObjectId{2}};
+        const auto border_property = model::PropertyId::from_name("Border");
+        const auto read_default = absent.value().get_prop_val(key, border_property);
+        expect(read_default.status == model::PropertyReadStatus::proven_default && read_default.value &&
+                *read_default.value == model::PropertyValue{default_border(test_case)},
+            std::string(test_case.public_name) + " Border GetPropVal must return its proven typed default");
+        const auto default_encoded = form_stream::encode_document(absent.value());
+        expect(default_encoded.ok(), std::string(test_case.public_name) + " Border default must encode");
+        if (!default_encoded) continue;
+        const auto* encoded_default_border = border_record(default_encoded.value(), test_case);
+        expect(encoded_default_border != nullptr,
+            std::string(test_case.public_name) + " Border must occupy its observed owner slot");
+        if (test_case.group_border)
+            expect(list_stream::dump_compact(*encoded_default_border) ==
+                    "{3,0,{0},6,1,0,cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2}",
+                "UsualGroup default Rounded width 1 must retain creation state 0 and its owner factory");
+        if (test_case.style_default)
+            expect(list_stream::dump_compact(*encoded_default_border) == control_border_style,
+                std::string(test_case.public_name) + " style Border default must use the six-field native tuple");
+
+        const auto explicit_default = source::parse_form_xml(xml_for(test_case, default_border_xml(test_case)));
+        expect(explicit_default.ok(), std::string(test_case.public_name) + " explicit Border default must parse");
+        if (explicit_default) {
+            const auto explicit_encoded = form_stream::encode_document(explicit_default.value());
+            expect(explicit_encoded.ok() && list_stream::dump_compact(explicit_encoded.value()) ==
+                    list_stream::dump_compact(default_encoded.value()),
+                std::string(test_case.public_name) + " explicit Border default must normalize to canonical storage");
+        }
+
+        const auto single_xml = source::parse_form_xml(xml_for(test_case,
+            R"XML(<Border kind="absolute" borderType="Single" width="2"/>)XML"));
+        expect(single_xml.ok(), std::string(test_case.public_name) + " Single width 2 XML must parse");
+        if (!single_xml) continue;
+        const auto single_encoded = form_stream::encode_document(single_xml.value());
+        expect(single_encoded.ok(), std::string(test_case.public_name) + " Single width 2 must encode");
+        if (!single_encoded) continue;
+        const auto* single_record = border_record(single_encoded.value(), test_case);
+        expect(single_record && list_stream::dump_compact(*single_record) ==
+                (test_case.group_border ? group_single_two : single_two),
+            std::string(test_case.public_name) + " Single width 2 must use the owner-specific border slot and factory");
+        const auto single_decoded = form_stream::decode_document(single_encoded.value(), "NamedSingleBorder");
+        const auto* single_control = single_decoded ? single_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+        const auto* single_property = single_control ? single_control->properties().find(border_property) : nullptr;
+        if (test_case.kind == model::ControlKind::label_decoration) {
+            const bool no_unknown_profile_warning = single_decoded &&
+                std::none_of(single_decoded.diagnostics().begin(), single_decoded.diagnostics().end(),
+                    [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; });
+            expect(single_decoded.ok() && single_decoded.value().reconstruction_complete() &&
+                    no_unknown_profile_warning,
+                "LabelDecoration Border Single width 2 must decode completely without OOF1140");
+        }
+        model::BorderValue expected_single;
+        expected_single.border_type = model::ControlBorderType::single;
+        expected_single.width = 2;
+        expect(single_decoded.ok() && single_property &&
+                std::get<model::BorderValue>(single_property->value) == expected_single,
+            std::string(test_case.public_name) + " Single width 2 must decode as the named Border");
+        if (single_decoded) {
+            const auto serialized = source::serialize_form_xml(single_decoded.value());
+            expect(serialized.ok(), std::string(test_case.public_name) + " Border must serialize to public XML");
+            if (serialized) {
+                const auto reparsed = source::parse_form_xml(serialized.value());
+                expect(reparsed.ok(), std::string(test_case.public_name) + " serialized Border XML must parse");
+                if (reparsed) {
+                    const auto rebuilt = form_stream::encode_document(reparsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                            list_stream::dump_compact(single_encoded.value()),
+                        std::string(test_case.public_name) + " Border must survive native/XML/re-encode round-trip");
+                }
+            }
+        }
+        if (!test_case.group_border) {
+            const auto rounded_xml = source::parse_form_xml(xml_for(test_case,
+                R"XML(<Border kind="absolute" borderType="Rounded" width="1"/>)XML"));
+            expect(!rounded_xml,
+                std::string(test_case.public_name) + " must reject owner-unproven Rounded Border");
+        }
+
+        const auto style_xml = source::parse_form_xml(xml_for(test_case,
+            R"XML(<Border kind="styleReference" styleName="StyleBorders.ControlBorder"/>)XML"));
+        expect(style_xml.ok(), std::string(test_case.public_name) + " ControlBorder style XML must parse");
+        if (!style_xml) continue;
+        const auto style_encoded = form_stream::encode_document(style_xml.value());
+        expect(style_encoded.ok(), std::string(test_case.public_name) + " ControlBorder style must encode");
+        if (!style_encoded) continue;
+        const auto* style_record = border_record(style_encoded.value(), test_case);
+        expect(style_record && list_stream::dump_compact(*style_record) == control_border_style,
+            std::string(test_case.public_name) + " ControlBorder must use the owner slot and known style tuple");
+        model::BorderValue expected_style;
+        expected_style.kind = model::BorderKind::style_reference;
+        expected_style.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+        const auto style_decoded = form_stream::decode_document(style_encoded.value(), "NamedStyleBorder");
+        const auto* style_control = style_decoded ? style_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+        const auto* style_property = style_control ? style_control->properties().find(border_property) : nullptr;
+        const bool style_is_default = test_case.style_default;
+        expect(style_decoded.ok() && style_control &&
+                (style_is_default ? style_property == nullptr : style_property != nullptr &&
+                    std::get<model::BorderValue>(style_property->value) == expected_style) &&
+                list_stream::dump_compact(*style_record) == control_border_style,
+            std::string(test_case.public_name) + " ControlBorder style must decode with its typed value");
+        if (style_decoded) {
+            const auto serialized = source::serialize_form_xml(style_decoded.value());
+            expect(serialized.ok(), std::string(test_case.public_name) + " ControlBorder XML must serialize");
+            if (serialized) {
+                const auto reparsed = source::parse_form_xml(serialized.value());
+                expect(reparsed.ok(), std::string(test_case.public_name) + " ControlBorder XML must parse");
+                if (reparsed) {
+                    const auto rebuilt = form_stream::encode_document(reparsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                            list_stream::dump_compact(style_encoded.value()),
+                        std::string(test_case.public_name) + " ControlBorder must survive native/XML/re-encode round-trip");
+                }
+            }
+        }
+
+        const auto malformed = [&](auto mutate, std::string_view label) {
+            auto invalid = single_encoded.value();
+            auto* stored = border_record(invalid, test_case);
+            mutate(*stored);
+            expect(!form_stream::decode_document(invalid, "MalformedNamedBorder"),
+                std::string(test_case.public_name) + " must reject malformed Border " + std::string(label));
+        };
+        malformed([](auto& value) { value.items[3] = list_stream::ListValue::raw_atom("99"); }, "type");
+        malformed([](auto& value) { value.items[4] = list_stream::ListValue::raw_atom("6"); }, "width");
+        malformed([](auto& value) { value.items[5] = list_stream::ListValue::raw_atom("4"); }, "state");
+        malformed([&](auto& value) {
+            value.items[6] = list_stream::ListValue::raw_atom(
+                test_case.group_border ? std::string(standard_factory) : std::string(group_factory));
+        }, "foreign owner factory");
+        malformed([](auto& value) {
+            value.items[6] = list_stream::ListValue::raw_atom("11111111-1111-4111-8111-111111111111");
+        }, "unknown factory");
+
+        auto unknown_neighbor = single_encoded.value();
+        list_stream::ListValue* base = nullptr;
+        auto* record = find_record_with_guid(unknown_neighbor,
+            model::metamodel::descriptor_for(test_case.kind).guid);
+        if (test_case.group_border) base = &record->items[2].items[1].items[0];
+        else if (test_case.kind == model::ControlKind::check_box)
+            base = &record->items[2].items[1].items[0].items[0];
+        else if (test_case.kind == model::ControlKind::input_field ||
+                 test_case.kind == model::ControlKind::radio_button)
+            base = &record->items[2].items[2].items[0].items[0];
+        else base = &record->items[2].items[1].items[0];
+        base->items[15] = list_stream::ListValue::raw_atom("99");
+        const auto partial = form_stream::decode_document(unknown_neighbor, "BorderUnknownNeighbor");
+        const auto* partial_control = partial ? partial.value().find_control(model::ObjectId{2}) : nullptr;
+        expect(partial.ok() && !partial.value().reconstruction_complete() && partial_control &&
+                partial_control->properties().contains(border_property) &&
+                std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
+                    return diagnostic.code == "OOF1140" &&
+                        diagnostic.severity == oof::DiagnosticSeverity::warning;
+                }),
+            std::string(test_case.public_name) + " unknown neighboring slot 15 must warn and preserve Border");
+    }
+
+    const auto calendar_xml = [](std::string_view selection) {
+        return std::string("<Form id=\"1\" name=\"SelectionMode\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
+            "<CalendarField id=\"2\" name=\"Calendar\"><Position/>" + std::string(selection) +
+            "</CalendarField></ChildItems></Form>";
+    };
+    const auto default_calendar = source::parse_form_xml(calendar_xml({}));
+    expect(default_calendar.ok(), "Calendar SelectionMode default fixture must parse");
+    if (default_calendar) {
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
+        const auto default_mode = default_calendar.value().get_prop_val(key,
+            model::PropertyId::from_name("SelectionMode"));
+        expect(default_mode.status == model::PropertyReadStatus::proven_default && default_mode.value &&
+                *default_mode.value == model::PropertyValue{model::EnumerationValue{"DateSelectionMode", "Single"}},
+            "Calendar SelectionMode GetPropVal must return DateSelectionMode.Single by default");
+        const auto default_encoded = form_stream::encode_document(default_calendar.value());
+        const auto explicit_single = source::parse_form_xml(calendar_xml(
+            R"XML(<SelectionMode type="DateSelectionMode" member="Single"/>)XML"));
+        expect(default_encoded.ok() && explicit_single.ok(),
+            "default and explicit Single Calendar SelectionMode fixtures must parse and encode");
+        if (default_encoded && explicit_single) {
+            const auto explicit_single_encoded = form_stream::encode_document(explicit_single.value());
+            expect(explicit_single_encoded.ok() && list_stream::dump_compact(default_encoded.value()) ==
+                    list_stream::dump_compact(explicit_single_encoded.value()),
+                "explicit Calendar SelectionMode.Single must normalize to the default storage record");
+        }
+    }
+    for (const auto& [member, ordinal] : {std::pair{"Multiple", 1}, std::pair{"Interval", 2}}) {
+        const auto parsed = source::parse_form_xml(calendar_xml(
+            "<SelectionMode type=\"DateSelectionMode\" member=\"" + std::string(member) + "\"/>"));
+        expect(parsed.ok(), std::string("DateSelectionMode.") + member + " XML must parse");
+        if (!parsed) continue;
+        const auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), std::string("DateSelectionMode.") + member + " must encode");
+        if (!encoded) continue;
+        const auto* record = find_record_with_guid(encoded.value(),
+            model::metamodel::descriptor_for(model::ControlKind::calendar_field).guid);
+        expect(record && record->items[2].items[1].items[9].atom == std::to_string(ordinal),
+            std::string("DateSelectionMode.") + member + " must occupy Calendar info slot 9");
+        const auto decoded = form_stream::decode_document(encoded.value(), "CalendarSelectionMode");
+        const auto* control = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+        const auto* value = control ? control->properties().find(model::PropertyId::from_name("SelectionMode")) : nullptr;
+        expect(decoded.ok() && value && std::get<model::EnumerationValue>(value->value) ==
+                model::EnumerationValue{"DateSelectionMode", member},
+            std::string("DateSelectionMode.") + member + " must decode to its named value");
+        if (decoded) {
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), std::string("DateSelectionMode.") + member + " XML must serialize");
+            if (xml) {
+                const auto reparsed = source::parse_form_xml(xml.value());
+                expect(reparsed.ok(), std::string("DateSelectionMode.") + member + " XML must parse");
+                if (reparsed) {
+                    const auto rebuilt = form_stream::encode_document(reparsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                            list_stream::dump_compact(encoded.value()),
+                        std::string("DateSelectionMode.") + member + " must survive XML round-trip");
+                }
+            }
+        }
+    }
+    auto invalid_calendar = source::parse_form_xml(calendar_xml({}));
+    if (invalid_calendar) {
+        const auto key = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}};
+        expect(invalid_calendar.value().set_prop_val(key, model::PropertyId::from_name("SelectionMode"), true) ==
+                model::PropertyMutationStatus::invalid_value,
+            "Calendar SelectionMode must reject non-enumeration types");
+    }
+    for (const auto invalid : {
+            R"XML(<SelectionMode kind="automatic"/>)XML",
+            R"XML(<SelectionMode type="OtherMode" member="Single"/>)XML",
+            R"XML(<SelectionMode type="DateSelectionMode" member="Unknown"/>)XML"}) {
+        expect(!source::parse_form_xml(calendar_xml(invalid)),
+            "Calendar SelectionMode must reject invalid kind, enum type and member");
+    }
+    const auto valid_mode = source::parse_form_xml(calendar_xml(
+        R"XML(<SelectionMode type="DateSelectionMode" member="Multiple"/>)XML"));
+    expect(valid_mode.ok(), "valid SelectionMode fixture must parse before ordinal mutation");
+    if (valid_mode) {
+        const auto valid_mode_stream = form_stream::encode_document(valid_mode.value());
+        expect(valid_mode_stream.ok(), "valid SelectionMode fixture must encode before ordinal mutation");
+        if (valid_mode_stream) {
+            auto invalid_ordinal = valid_mode_stream.value();
+            auto* record = find_record_with_guid(invalid_ordinal,
+                model::metamodel::descriptor_for(model::ControlKind::calendar_field).guid);
+            record->items[2].items[1].items[9] = list_stream::ListValue::raw_atom("3");
+            expect(!form_stream::decode_document(invalid_ordinal, "InvalidSelectionModeOrdinal"),
+                "Calendar SelectionMode must reject an unsupported native ordinal");
+        }
+    }
 }
 
 void test_fresh_progress_bar_runtime_record_and_rejections() {
@@ -13494,6 +13835,7 @@ int main() {
         test_calendar_information_named_colors();
         test_calendar_field_begin_display_period();
         test_calendar_field_scalar_properties();
+        test_named_borders_for_ordinary_controls_and_calendar_selection_mode();
         test_calendar_field_captured_begin_period_record_decode();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();

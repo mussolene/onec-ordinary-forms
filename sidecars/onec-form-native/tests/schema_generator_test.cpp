@@ -418,7 +418,7 @@ void test_schema_version_and_controls(
         "generic ControlType is forbidden");
 }
 
-void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compiled_schema) {
+void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compiled_schema) {
     const auto element_type = [&](std::string_view owner, std::string_view element_name) {
         for (xmlNodePtr element : direct_children(sequence_for_type(schema, owner), "element")) {
             if (attribute(element, "name") == element_name) return attribute(element, "type");
@@ -443,11 +443,11 @@ void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compil
     const auto verify_type = [&](std::string_view type_name, std::string_view fixed_type,
                                  std::vector<std::string> expected_members) {
         xmlNodePtr complex_type = schema_component(schema, "complexType", type_name);
-        expect(complex_type != nullptr, "CommandBar enumeration schema type must exist");
+        expect(complex_type != nullptr, "fixed enumeration schema type must exist");
         xmlNodePtr type_attribute = direct_child_with_attribute(complex_type, "attribute", "name", "type");
         expect(type_attribute && attribute(type_attribute, "fixed") == fixed_type &&
                    attribute(type_attribute, "use") == "required",
-            "CommandBar enumeration type attribute must be fixed and required");
+            "enumeration type attribute must be fixed and required");
         xmlNodePtr member_attribute = direct_child_with_attribute(complex_type, "attribute", "name", "member");
         xmlNodePtr simple_type = direct_child(member_attribute, "simpleType");
         xmlNodePtr restriction = direct_child(simple_type, "restriction");
@@ -461,6 +461,22 @@ void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compil
     };
     verify_type("CommandBarButtonsAlignmentValueType", "CommandBarButtonAlignment", {"Left", "Center", "Right"});
     verify_type("CommandBarOrientationValueType", "Orientation", {"Auto", "Horizontal", "Vertical"});
+    verify_type("CalendarDateSelectionModeValueType", "DateSelectionMode", {"Single", "Multiple", "Interval"});
+    expect(element_type("CalendarFieldType", "SelectionMode") == "CalendarDateSelectionModeValueType",
+        "Calendar selection mode must use its closed property-scoped enum type");
+    const auto calendar_mode = [](std::string_view type, std::string_view member) {
+        return std::string(R"XML(<Form id="1" name="Mode" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/><SelectionMode type=")XML") +
+            std::string(type) + R"XML(" member=")XML" + std::string(member) + R"XML("/></CalendarField></ChildItems></Form>)XML";
+    };
+    for (const auto member : {"Single", "Multiple", "Interval"})
+        expect(validate_document(compiled_schema, calendar_mode("DateSelectionMode", member)) == 0,
+            "each observed Calendar selection-mode member must validate");
+    expect(validate_document(compiled_schema, calendar_mode("SelectionMode", "Single")) != 0 &&
+               validate_document(compiled_schema, calendar_mode("DateSelectionMode", "Unknown")) != 0,
+        "Calendar selection mode must reject incorrect type names and members in XSD");
+    expect(validate_document(compiled_schema,
+        R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/><SelectedDates/></CalendarField></ChildItems></Form>)XML") != 0,
+        "runtime-only selected dates must not enter persisted public XML");
 
     const auto instance = [](std::string_view alignment_type, std::string_view alignment_member,
                              std::string_view orientation_type, std::string_view orientation_member) {
@@ -1482,7 +1498,7 @@ int main() {
         expect(compiled_palette != nullptr, "palette XSD must compile");
 
         test_schema_version_and_controls(metamodel, form_schema);
-        test_command_bar_enumeration_schemas(form_schema, compiled_form.get());
+        test_fixed_control_enumeration_schemas(form_schema, compiled_form.get());
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);
         test_control_surfaces_and_property_order(metamodel, form_schema);

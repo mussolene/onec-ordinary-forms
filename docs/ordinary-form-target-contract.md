@@ -39,6 +39,15 @@ ShowCurrentDate, CalendarNavigation, EnableStartDrag и EnableDrag. Дата,
 свойства отклоняются при чтении и записи публичного XML, исключены из XSD и
 не записываются в Form.bin. Текущее значение нельзя молча выдать за default.
 
+Border поддерживается у CalendarField, CheckBox, ChoiceField, InputField,
+LabelDecoration, ListBox, PictureDecoration, ProgressBar, RadioButton, TrackBar
+и UsualGroup. Именованное значение рамки учитывает default владельца; UsualGroup
+имеет отдельный внутренний формат. Rounded разрешен только у UsualGroup,
+ширина должна равняться 1. Это расширение не означает поддержки всех вариантов
+рамок платформы. CalendarField.SelectionMode принимает DateSelectionMode.Single,
+Multiple и Interval. SelectedDates является временной коллекцией; публичный XML
+и BIN не сохраняют ее содержимое.
+
 CalendarField поддерживает восемь именованных событий: Selection, DragStart,
 DragEnd, Drag, OnActivateDate, OnPeriodOutput, OnChange и DragCheck. События
 хранятся в Events самого контрола как имена обработчиков. Кодек проверяет

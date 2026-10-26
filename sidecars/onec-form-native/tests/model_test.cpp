@@ -713,8 +713,9 @@ void test_help_metamodel() {
     expect(
         find_property(ControlKind::input_field, "Border")->value_codec ==
             ValueCodec::border &&
-        find_property(ControlKind::input_field, "Border")->persistence == PersistenceClass::unclassified,
-        "typed Border codec must not classify unproven InputField border storage");
+        find_property(ControlKind::input_field, "Border")->persistence == PersistenceClass::persisted_editable &&
+        find_property(ControlKind::input_field, "Border")->storage_codec == StorageCodec::control_base,
+        "InputField Border must use its independently verified base storage");
     expect(
         find_property(ControlKind::input_field, "ValueType")->value_codec ==
             ValueCodec::type_domain,
@@ -1201,9 +1202,13 @@ void test_document_property_api() {
                    PropertyMutationStatus::invalid_value,
         "new control BorderColor descriptors must accept ColorValue and reject other types");
 
-    const auto unknown_default = document.get_prop_val(input, PropertyId::from_name("Border"));
-    expect(unknown_default.status == PropertyReadStatus::unknown_default && !unknown_default.value,
-        "an unproven property default must remain unknown rather than Undefined");
+    const auto input_border_default = document.get_prop_val(input, PropertyId::from_name("Border"));
+    BorderValue expected_input_border;
+    expected_input_border.kind = BorderKind::style_reference;
+    expected_input_border.style = QualifiedName{"StyleBorders.ControlBorder"};
+    expect(input_border_default.status == PropertyReadStatus::proven_default &&
+            input_border_default.value == PropertyValue{expected_input_border},
+        "InputField Border must expose its proven StyleBorders.ControlBorder default");
     const auto no_default = document.get_prop_val(
         OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{15}},
         PropertyId::from_name("HorizontalAlign"));
@@ -1821,13 +1826,16 @@ void test_border_value_invariants() {
         descriptor->default_value.kind == DefaultKind::border &&
         descriptor->default_value.canonical == "WithoutBorder:0",
         "CommandBar Border must have a typed persisted descriptor and proven default");
-    const auto validate = [](const BorderValue& border) {
+    const auto validate = [](const BorderValue& border,
+                             ControlKind kind = ControlKind::command_bar) {
         Form form; form.id = ObjectId{1}; form.name = "Border";
         form.children = {ControlRef{ObjectId{2}}};
         OrdinaryFormDocument document(std::move(form));
-        ControlNode bar{ObjectId{2}, "Tools", CommandBarPayload{}};
-        bar.properties().set_explicit(PropertyId::from_name("Border"), border);
-        document.add_control(std::move(bar));
+        ControlNode control = kind == ControlKind::usual_group
+            ? ControlNode{ObjectId{2}, "Group", UsualGroupPayload{}}
+            : ControlNode{ObjectId{2}, "Tools", CommandBarPayload{}};
+        control.properties().set_explicit(PropertyId::from_name("Border"), border);
+        document.add_control(std::move(control));
         return document.validate();
     };
     BorderValue value;
@@ -1842,9 +1850,12 @@ void test_border_value_invariants() {
     value.width = 2; value.border_type = ControlBorderType::without_border;
     expect(!validate(value).ok(), "WithoutBorder width above 1 must fail");
     value.border_type = ControlBorderType::rounded;
-    expect(!validate(value).ok(), "Rounded width 2 must fail");
+    expect(!validate(value).ok() && !validate(value, ControlKind::usual_group).ok(),
+        "Rounded width 2 must fail for CommandBar and UsualGroup");
     value.width = 1;
-    expect(validate(value).ok(), "generic Rounded width 1 remains a valid value");
+    expect(!validate(value).ok(), "Rounded width 1 must be rejected for CommandBar");
+    expect(validate(value, ControlKind::usual_group).ok(),
+        "UsualGroup Rounded width 1 must remain a valid value");
     value.border_type = static_cast<ControlBorderType>(255);
     expect(!validate(value).ok(), "invalid ControlBorderType enum must fail");
     value = BorderValue{}; value.kind = static_cast<BorderKind>(255);
@@ -1867,6 +1878,41 @@ void test_border_value_invariants() {
     expect(!validate(value).ok(), "style Border must reject null composite reference");
     value.style = CompositeIdValue{5, UuidValue{"invalid"}, false};
     expect(!validate(value).ok(), "style Border must reject malformed UUID");
+}
+
+void test_control_border_and_calendar_selection_descriptors() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    constexpr std::array border_owners{
+        ControlKind::calendar_field, ControlKind::check_box, ControlKind::choice_field,
+        ControlKind::input_field, ControlKind::label_decoration, ControlKind::list_box,
+        ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
+        ControlKind::track_bar, ControlKind::usual_group,
+    };
+    for (const auto kind : border_owners) {
+        const auto* border = find_property(kind, "Border");
+        expect(border && border->persistence == PersistenceClass::persisted_editable &&
+                border->storage_codec == (kind == ControlKind::usual_group ?
+                    StorageCodec::control_info : StorageCodec::control_base) &&
+                border->value_codec == ValueCodec::border &&
+                border->default_value.kind == DefaultKind::border,
+            "each proven Border owner must expose the named typed persisted property");
+    }
+    const auto* selection_mode = find_property(ControlKind::calendar_field, "SelectionMode");
+    expect(selection_mode && selection_mode->persistence == PersistenceClass::persisted_editable &&
+            selection_mode->storage_codec == StorageCodec::control_info &&
+            selection_mode->value_codec == ValueCodec::enumeration &&
+            selection_mode->default_value.kind == DefaultKind::enumeration &&
+            selection_mode->default_value.canonical == "DateSelectionMode.Single",
+        "CalendarField SelectionMode must expose its persisted Single enum default");
+    const auto* selected_dates = find_property(ControlKind::calendar_field, "SelectedDates");
+    expect(selected_dates && selected_dates->persistence == PersistenceClass::runtime_only &&
+            selected_dates->api_access == ApiAccess::read_only &&
+            selected_dates->value_kind == ValueKind::collection &&
+            selected_dates->storage_codec == StorageCodec::none &&
+            selected_dates->default_value.kind == DefaultKind::none &&
+            selected_dates->value_codec == ValueCodec::unclassified,
+        "CalendarField SelectedDates must remain a runtime-only unclassified collection without a default");
 }
 
 }  // namespace
@@ -1902,6 +1948,7 @@ int main() {
         test_chart_number_lexical_validation();
         test_chart_summary_series_color_invariants();
         test_border_value_invariants();
+        test_control_border_and_calendar_selection_descriptors();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;

@@ -888,13 +888,29 @@ LV encode_control_font(const model::FontValue& font, std::string_view property_p
     }
 }
 
-constexpr std::array<std::pair<model::ControlBorderType, std::uint32_t>, 8> native_border_types{{
+constexpr std::array<std::pair<model::ControlBorderType, std::uint32_t>, 9> native_border_types{{
     {model::ControlBorderType::without_border, 0}, {model::ControlBorderType::single, 1},
     {model::ControlBorderType::double_line, 200}, {model::ControlBorderType::embossed, 2},
     {model::ControlBorderType::indented, 3}, {model::ControlBorderType::underline, 4},
-    {model::ControlBorderType::double_underline, 5}, {model::ControlBorderType::overline, 7}}};
+    {model::ControlBorderType::double_underline, 5}, {model::ControlBorderType::overline, 7},
+    {model::ControlBorderType::rounded, 6}}};
 
-LV encode_control_border(const model::BorderValue& border, std::string_view path) {
+model::BorderValue control_border_default(std::optional<model::ControlKind> owner) {
+    model::BorderValue value;
+    if (owner == model::ControlKind::usual_group) {
+        value.border_type = model::ControlBorderType::rounded;
+        value.width = 1;
+    } else if (owner == model::ControlKind::calendar_field || owner == model::ControlKind::choice_field ||
+        owner == model::ControlKind::input_field || owner == model::ControlKind::list_box ||
+        owner == model::ControlKind::progress_bar) {
+        value.kind = model::BorderKind::style_reference;
+        value.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+    }
+    return value;
+}
+
+LV encode_control_border(const model::BorderValue& border, std::string_view path,
+    std::optional<model::ControlKind> owner = std::nullopt) {
     if (border.kind == model::BorderKind::style_reference) {
         const auto* name = std::get_if<model::QualifiedName>(&border.style);
         if (name == nullptr || name->value != "StyleBorders.ControlBorder" ||
@@ -906,15 +922,20 @@ LV encode_control_border(const model::BorderValue& border, std::string_view path
     const auto type = std::ranges::find(native_border_types, border.border_type, [](const auto& entry) { return entry.first; });
     if (border.kind != model::BorderKind::absolute || type == native_border_types.end() ||
         !std::holds_alternative<std::monostate>(border.style) || border.width > 5 ||
-        (border.border_type == model::ControlBorderType::without_border && border.width > 1))
+        (border.border_type == model::ControlBorderType::without_border && border.width > 1) ||
+        (border.border_type == model::ControlBorderType::rounded &&
+            (owner != model::ControlKind::usual_group || border.width != 1)))
         fail("OOF1122", std::string(path), "supported absolute Border type and integer width 0..5",
             "unsupported border", "Border cannot be represented by this control");
-    const auto state = border == model::BorderValue{} ? "0" : "3";
+    const auto state = border == control_border_default(owner) ? "0" : "3";
+    const auto factory = owner == model::ControlKind::usual_group
+        ? "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2" : "48312c09-257f-4b29-b280-284dd89efc1e";
     return list({raw("3"), raw("0"), list({raw("0")}), raw(std::to_string(type->second)),
-        raw(std::to_string(border.width)), raw(state), raw("48312c09-257f-4b29-b280-284dd89efc1e")});
+        raw(std::to_string(border.width)), raw(state), raw(factory)});
 }
 
-model::BorderValue decode_control_border(const LV& value, std::string_view path) {
+model::BorderValue decode_control_border(const LV& value, std::string_view path,
+    std::optional<model::ControlKind> owner = std::nullopt) {
     require_list(value, path);
     const auto kind = integer_atom<unsigned>(at(value, 1, path), child_path(path, 1));
     model::BorderValue border;
@@ -931,13 +952,15 @@ model::BorderValue decode_control_border(const LV& value, std::string_view path)
     if (type == native_border_types.end()) fail("OOF1114", child_path(path, 3), "supported Border type", std::to_string(type_code), "Unsupported Border type");
     border.border_type = type->first;
     border.width = integer_atom<std::uint32_t>(value.items[4], child_path(path, 4));
-    if (border.width > 5 || (border.border_type == model::ControlBorderType::without_border && border.width > 1))
+    if (border.width > 5 || (border.border_type == model::ControlBorderType::without_border && border.width > 1) ||
+        (border.border_type == model::ControlBorderType::rounded &&
+            (owner != model::ControlKind::usual_group || border.width != 1)))
         fail("OOF1114", child_path(path, 4), "integer Border width 0..5 (WithoutBorder at most 1)",
             std::to_string(border.width), "Unsupported Border width");
     const auto state = integer_atom<unsigned>(value.items[5], child_path(path, 5));
     if (state != 0 && state != 3) fail("OOF1114", child_path(path, 5), "observed Border state 0 or 3", std::to_string(state), "Unsupported Border state");
     auto normalized = value;
-    const auto expected = encode_control_border(border, path);
+    const auto expected = encode_control_border(border, path, owner);
     normalized.items[5] = expected.items[5];
     // The platform XDTO reader restores these named enum values from an absent factory.
     if (state == 0 && border.width == 1 &&
@@ -1042,6 +1065,7 @@ struct CommonControlBaseCapabilities {
     bool font = false;
     bool border_color = false;
     std::optional<model::ControlKind> named_color_control{};
+    std::optional<model::ControlKind> named_border_control{};
 };
 
 struct CommonControlBaseFields {
@@ -1050,6 +1074,8 @@ struct CommonControlBaseFields {
     std::optional<model::FontValue> font;
     std::optional<model::ColorValue> border_color;
     std::vector<NamedBaseColor> named_colors{};
+    std::optional<model::ControlKind> named_border_control{};
+    std::optional<model::BorderValue> border{};
 };
 
 CommonControlBaseFields decode_common_control_base(
@@ -1061,6 +1087,10 @@ CommonControlBaseFields decode_common_control_base(
     fields.tool_tip = decoded_single_language_text(base.items[12], child_path(path, 12));
     if (capabilities.font) fields.font = decode_control_font(base.items[4], child_path(path, 4));
     if (capabilities.border_color) fields.border_color = decode_control_color(base.items[6], child_path(path, 6));
+    if (capabilities.named_border_control) {
+        fields.named_border_control = capabilities.named_border_control;
+        fields.border = decode_control_border(base.items[11], child_path(path, 11), capabilities.named_border_control);
+    }
     if (capabilities.named_color_control) {
         for (const auto& spec : base_color_properties) {
             if (spec.control != *capabilities.named_color_control) continue;
@@ -1081,6 +1111,9 @@ void apply_common_control_base(
         properties.set_explicit(model::PropertyId::from_name("Font"), *fields.font);
     if (fields.border_color && *fields.border_color != button_color_default("BorderColor"))
         properties.set_explicit(model::PropertyId::from_name("BorderColor"), *fields.border_color);
+    if (fields.border && fields.named_border_control &&
+        *fields.border != control_border_default(fields.named_border_control))
+        properties.set_explicit(model::PropertyId::from_name("Border"), *fields.border);
     for (const auto& color : fields.named_colors)
         properties.set_explicit(model::PropertyId::from_name(color.property), color.value);
 }
@@ -1118,6 +1151,36 @@ void normalize_named_control_colors(
     }
 }
 
+void encode_named_control_border(
+    LV& base, model::ControlKind control, const model::PropertySet& properties, std::string_view path) {
+    const auto* entry = properties.find(model::PropertyId::from_name("Border"));
+    auto border = control_border_default(control);
+    if (entry != nullptr) {
+        const auto* typed_border = std::get_if<model::BorderValue>(&entry->value);
+        if (typed_border == nullptr)
+            fail("OOF1122", std::string(path) + "/Border", "BorderValue", "different value type",
+                "Border property has the wrong value type");
+        border = *typed_border;
+    }
+    base.items[11] = encode_control_border(border, std::string(path) + "/Border", control);
+}
+
+void normalize_named_control_border(LV& base, model::ControlKind control, std::string_view path) {
+    static_cast<void>(decode_control_border(base.items[11], child_path(path, 11), control));
+    base.items[11] = encode_control_border(control_border_default(control), child_path(path, 11), control);
+}
+
+model::BorderValue explicit_control_border(
+    const model::PropertySet& properties, model::ControlKind owner, std::string_view path) {
+    const auto* entry = properties.find(model::PropertyId::from_name("Border"));
+    if (entry == nullptr) return control_border_default(owner);
+    const auto* border = std::get_if<model::BorderValue>(&entry->value);
+    if (border == nullptr)
+        fail("OOF1122", std::string(path), "BorderValue", "different value type",
+            "Border property has the wrong value type");
+    return *border;
+}
+
 void encode_common_control_base(
     LV& base, const CommonControlBaseFields& fields, std::string_view path) {
     require_arity(base, 21, path);
@@ -1129,6 +1192,10 @@ void encode_common_control_base(
     }
     if (fields.border_color) {
         base.items[6] = encode_control_color(*fields.border_color, std::string(path) + "/BorderColor");
+    }
+    if (fields.border) {
+        base.items[11] = encode_control_border(*fields.border, std::string(path) + "/Border",
+            fields.named_border_control);
     }
 }
 
@@ -1294,7 +1361,8 @@ LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
 
 
 LV canonical_usual_group_properties(bool enabled, std::string_view caption, std::string_view tool_tip,
-    const model::ColorValue* border_color = nullptr, const model::FontValue* font = nullptr) {
+    const model::ColorValue* border_color = nullptr, const model::FontValue* font = nullptr,
+    const model::BorderValue* border = nullptr) {
     auto base = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,4,700,1,100},0,{4,4,{0},4},{4,4,{0},4},"
         "{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
@@ -1304,13 +1372,16 @@ LV canonical_usual_group_properties(bool enabled, std::string_view caption, std:
             font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
             border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
         "$/UsualGroup");
-    return list({raw("0"), list({
+    auto group_properties = list({
         std::move(base),
         raw("8"),
         encoded_localized(caption),
-        parse_constant("{3,0,{0},6,1,0,cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2}"),
+        border == nullptr ? encode_control_border(control_border_default(model::ControlKind::usual_group),
+            "$/UsualGroup/Border", model::ControlKind::usual_group) :
+            encode_control_border(*border, "$/UsualGroup/Border", model::ControlKind::usual_group),
         raw("0"),
-    })});
+    });
+    return list({raw("0"), std::move(group_properties)});
 }
 
 LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {}) {
@@ -1506,7 +1577,7 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
     const model::ColorValue* border_color = nullptr, std::string_view end_period = "00010101000000",
     bool show_current_date = true, bool calendar_navigation = true,
     bool enable_start_drag = false, bool enable_drag = false,
-    const model::PropertySet* color_properties = nullptr) {
+    const model::PropertySet* color_properties = nullptr, std::int32_t selection_mode = 0) {
     const LV zero_record = list({raw("0")});
     const LV canonical_4_4_record = list({raw("4"), raw("4"), zero_record, raw("4")});
     const LV canonical_neg7_record = list({raw("4"), raw("3"), list({raw("-7")}), raw("3")});
@@ -1530,7 +1601,7 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
         list({raw("4"), raw("3"), list({raw("-14")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-15")}), raw("3")}),
         raw(std::string(begin_period)), raw(std::string(end_period)),
-        raw(show_current_date ? "1" : "0"), raw(calendar_navigation ? "1" : "0"), raw("0"),
+        raw(show_current_date ? "1" : "0"), raw(calendar_navigation ? "1" : "0"), raw(std::to_string(selection_mode)),
         raw(enable_start_drag ? "1" : "0"), raw(enable_drag ? "1" : "0"), raw("0"), raw("1"),
     });
     if (color_properties)
@@ -4567,6 +4638,8 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     const std::string& tool_tip = common.tool_tip;
     const auto& border_color = *common.border_color;
     const auto& font = *common.font;
+    const auto border = decode_control_border(properties.items[3], child_path(properties_path, 3),
+        model::ControlKind::usual_group);
     const std::string caption = decoded_single_language_text(properties.items[2], child_path(properties_path, 2));
     auto normalized = properties;
     auto normalized_base = base;
@@ -4574,8 +4647,10 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     normalize_named_control_colors(normalized_base, model::ControlKind::usual_group, base_path);
     normalized.items[0] = std::move(normalized_base);
     normalized.items[2] = encoded_localized(caption);
+    normalized.items[3] = encode_control_border(border, child_path(properties_path, 3),
+        model::ControlKind::usual_group);
     if (list_stream::dump_compact(normalized) != list_stream::dump_compact(
-        canonical_usual_group_properties(enabled, caption, tool_tip, &border_color, &font).items[1]))
+        canonical_usual_group_properties(enabled, caption, tool_tip, &border_color, &font, &border).items[1]))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "UsualGroup");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -4595,6 +4670,8 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     model::FontValue default_font;
     default_font.bold = true;
     apply_common_control_base(control.properties(), common, default_font);
+    if (border != control_border_default(model::ControlKind::usual_group))
+        control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
@@ -4825,7 +4902,8 @@ DecodedControl decode_picture_decoration(
     require_arity(base_properties, 21, base_path);
     require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const auto common = decode_common_control_base(base_properties, base_path,
-        CommonControlBaseCapabilities{false, false, model::ControlKind::picture_decoration});
+        CommonControlBaseCapabilities{false, false, model::ControlKind::picture_decoration,
+            model::ControlKind::picture_decoration});
     const bool enabled = common.enabled;
     const std::string& tool_tip = common.tool_tip;
     const std::string picture_slot_path = child_path(properties_path, 4);
@@ -4837,6 +4915,7 @@ DecodedControl decode_picture_decoration(
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalize_named_control_colors(normalized_base, model::ControlKind::picture_decoration, base_path);
+    normalize_named_control_border(normalized_base, model::ControlKind::picture_decoration, base_path);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[4].items[2] = canonical_button_picture();
     if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
@@ -4986,7 +5065,8 @@ DecodedControl decode_radio_button(
     require_arity(base_properties, 21, base_path);
     require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const auto common = decode_common_control_base(
-        base_properties, base_path, CommonControlBaseCapabilities{true, true, model::ControlKind::radio_button});
+        base_properties, base_path, CommonControlBaseCapabilities{true, true, model::ControlKind::radio_button,
+            model::ControlKind::radio_button});
     auto named_events = decode_control_event_collection(info.items[5], child_path(info_path, 5),
         model::ControlKind::radio_button);
     const bool enabled = common.enabled;
@@ -5005,6 +5085,7 @@ DecodedControl decode_radio_button(
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalize_named_control_colors(normalized_base, model::ControlKind::radio_button, base_path);
+    normalize_named_control_border(normalized_base, model::ControlKind::radio_button, base_path);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[2] = encoded_localized(caption);
     normalized_info.items[2].items[0] = std::move(normalized_properties);
@@ -5237,7 +5318,8 @@ DecodedControl decode_label(
     const auto& base_properties = properties.items[0];
     const std::string base_properties_path = child_path(properties_path, 0);
     const auto common = decode_common_control_base(
-        base_properties, base_properties_path, CommonControlBaseCapabilities{true, true, model::ControlKind::label_decoration});
+        base_properties, base_properties_path, CommonControlBaseCapabilities{true, true,
+            model::ControlKind::label_decoration, model::ControlKind::label_decoration});
     require_raw_constant(properties.items[1], "11", child_path(properties_path, 1));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
@@ -5252,10 +5334,15 @@ DecodedControl decode_label(
     auto normalized_base_properties = base_properties;
     normalized_base_properties.items[12] = encoded_localized(common.tool_tip);
     normalize_named_control_colors(normalized_base_properties, model::ControlKind::label_decoration, base_properties_path);
+    normalize_named_control_border(normalized_base_properties, model::ControlKind::label_decoration,
+        base_properties_path);
     normalized_properties.items[0] = std::move(normalized_base_properties);
     normalized_properties.items[2] = encoded_localized(caption);
+    auto canonical_common = common;
+    canonical_common.named_border_control.reset();
+    canonical_common.border.reset();
     const auto canonical_properties = canonical_label_properties(
-        caption, horizontal_align, common);
+        caption, horizontal_align, canonical_common);
     if (list_stream::dump_compact(normalized_properties) !=
         list_stream::dump_compact(canonical_properties)) {
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
@@ -6044,7 +6131,8 @@ DecodedControl decode_progress_bar(
     require_arity(properties, 21, properties_path);
     require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const auto common = decode_common_control_base(properties, properties_path,
-        CommonControlBaseCapabilities{true, true, model::ControlKind::progress_bar});
+        CommonControlBaseCapabilities{true, true, model::ControlKind::progress_bar,
+            model::ControlKind::progress_bar});
     const auto& font = *common.font;
     const auto& border_color = *common.border_color;
     const auto min_path = child_path(info_list_path, 2);
@@ -6059,6 +6147,7 @@ DecodedControl decode_progress_bar(
     auto normalized_info = info_list;
     normalized_info.items[0] = std::move(normalized_properties);
     normalize_named_control_colors(normalized_info.items[0], model::ControlKind::progress_bar, properties_path);
+    normalize_named_control_border(normalized_info.items[0], model::ControlKind::progress_bar, properties_path);
     normalized_info.items[2] = raw("0");
     normalized_info.items[3] = raw("100");
     normalized_info.items[4] = raw("1");
@@ -6123,7 +6212,7 @@ DecodedControl decode_track_bar(
     require_arity(properties, 21, properties_path);
     require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const auto common = decode_common_control_base(properties, properties_path,
-        CommonControlBaseCapabilities{false, true, model::ControlKind::track_bar});
+        CommonControlBaseCapabilities{false, true, model::ControlKind::track_bar, model::ControlKind::track_bar});
     auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
         model::ControlKind::track_bar);
     const auto& border_color = *common.border_color;
@@ -6152,6 +6241,8 @@ DecodedControl decode_track_bar(
 
     auto normalized_info = info;
     normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::track_bar,
+        child_path(child_path(info_path, 1), 0));
+    normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::track_bar,
         child_path(child_path(info_path, 1), 0));
     normalized_info.items[1].items[0].items[1] = raw("1");
     normalized_info.items[1].items[0].items[12] = encoded_localized("");
@@ -6225,7 +6316,8 @@ DecodedControl decode_list_box(
     require_arity(properties, 7, properties_path);
     const auto base_path = child_path(properties_path, 0);
     const auto common = decode_common_control_base(
-        properties.items[0], base_path, CommonControlBaseCapabilities{false, true, model::ControlKind::list_box});
+        properties.items[0], base_path, CommonControlBaseCapabilities{false, true, model::ControlKind::list_box,
+            model::ControlKind::list_box});
     const auto flags_path = child_path(properties_path, 1);
     require_list(properties.items[1], flags_path);
     require_arity(properties.items[1], 38, flags_path);
@@ -6240,6 +6332,8 @@ DecodedControl decode_list_box(
     const bool show_check_box = bool_atom(properties.items[5], child_path(properties_path, 5));
     auto normalized_info = info;
     normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::list_box,
+        child_path(child_path(info_path, 1), 0));
+    normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::list_box,
         child_path(child_path(info_path, 1), 0));
     normalized_info.items[1].items[0].items[1] = raw("1");
     normalized_info.items[1].items[0].items[12] = encoded_localized("");
@@ -6305,7 +6399,7 @@ DecodedControl decode_check_box(
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     const auto common = decode_common_control_base(base_properties, base_path,
-        CommonControlBaseCapabilities{true, true, model::ControlKind::check_box});
+        CommonControlBaseCapabilities{true, true, model::ControlKind::check_box, model::ControlKind::check_box});
     auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
         model::ControlKind::check_box);
     const bool enabled = common.enabled;
@@ -6316,6 +6410,8 @@ DecodedControl decode_check_box(
         properties.items[2], child_path(properties_path, 2));
     auto normalized_info = info;
     normalize_named_control_colors(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
+        child_path(child_path(child_path(info_path, 1), 0), 0));
+    normalize_named_control_border(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
         child_path(child_path(child_path(info_path, 1), 0), 0));
     normalized_info.items[1].items[0].items[0].items[12] = encoded_localized(tool_tip);
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
@@ -6381,7 +6477,7 @@ DecodedControl decode_choice_field(
     const auto& base_properties = info_properties.items[0];
     const auto base_path = child_path(info_properties_path, 0);
     const auto common = decode_common_control_base(base_properties, base_path,
-        CommonControlBaseCapabilities{true, true, model::ControlKind::choice_field});
+        CommonControlBaseCapabilities{true, true, model::ControlKind::choice_field, model::ControlKind::choice_field});
     const bool enabled = common.enabled;
     const auto& border_color = *common.border_color;
     const auto& tool_tip = common.tool_tip;
@@ -6390,6 +6486,8 @@ DecodedControl decode_choice_field(
         "ChoiceField cannot contain storage children");
     auto normalized_info = info;
     normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::choice_field,
+        child_path(child_path(info_path, 1), 0));
+    normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::choice_field,
         child_path(child_path(info_path, 1), 0));
     normalized_info.items[1].items[0].items[6] =
         encode_control_color(border_color, child_path(base_path, 6));
@@ -6492,7 +6590,8 @@ DecodedControl decode_calendar_field(
     }
     const auto& base_properties = properties.items[0];
     auto common = decode_common_control_base(base_properties, child_path(properties_path, 0),
-        CommonControlBaseCapabilities{true, true, model::ControlKind::calendar_field});
+        CommonControlBaseCapabilities{true, true, model::ControlKind::calendar_field,
+            model::ControlKind::calendar_field});
     const bool enabled = common.enabled;
     const auto& font = *common.font;
     const auto& border_color = *common.border_color;
@@ -6501,8 +6600,15 @@ DecodedControl decode_calendar_field(
     LV profile_info = info;
     normalize_named_control_colors(profile_info.items[1].items[0], model::ControlKind::calendar_field,
         child_path(child_path(info_path, 1), 0));
+    normalize_named_control_border(profile_info.items[1].items[0], model::ControlKind::calendar_field,
+        child_path(child_path(info_path, 1), 0));
     profile_info.items[2] = list({raw("0")});
     require_arity(properties, 14, properties_path);
+    const auto selection_mode = integer_atom<std::int32_t>(properties.items[9], child_path(properties_path, 9));
+    if (selection_mode < 0 || selection_mode > 2)
+        fail("OOF1114", child_path(properties_path, 9), "DateSelectionMode storage value 0, 1, or 2",
+            std::to_string(selection_mode), "CalendarField SelectionMode value is unsupported");
+    profile_info.items[1].items[9] = raw("0");
     for (const auto& spec : calendar_info_color_properties) {
         const auto color = decode_control_color(properties.items[spec.slot], child_path(properties_path, spec.slot));
         if (color != control_color_property_default(spec)) common.named_colors.push_back({spec.property, color});
@@ -6561,6 +6667,11 @@ DecodedControl decode_calendar_field(
     if (linked_attribute != nullptr) control.data_path = model::DataPath{
         model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     apply_common_control_base(control.properties(), common);
+    if (selection_mode != 0) {
+        constexpr std::array<std::string_view, 3> members{"Single", "Multiple", "Interval"};
+        control.properties().set_explicit(model::PropertyId::from_name("SelectionMode"),
+            model::EnumerationValue{"DateSelectionMode", std::string(members[static_cast<std::size_t>(selection_mode)])});
+    }
     if (begin_atom != "00010101000000") {
         control.properties().set_explicit(
             model::PropertyId::from_name("BeginOfDisplayPeriod"),
@@ -7369,7 +7480,8 @@ DecodedControl decode_input_field(
             std::to_string(stored_length), "Date-only InputField payload slot must be zero");
     }
     const auto common = decode_common_control_base(
-        base_info, base_info_path, CommonControlBaseCapabilities{true, true, model::ControlKind::input_field});
+        base_info, base_info_path, CommonControlBaseCapabilities{true, true, model::ControlKind::input_field,
+            model::ControlKind::input_field});
     const bool enabled = common.enabled;
     const std::string& tool_tip = common.tool_tip;
     const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
@@ -7395,6 +7507,8 @@ DecodedControl decode_input_field(
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
     LV normalized_info = info;
     normalize_named_control_colors(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
+        child_path(child_path(child_path(info_path, 2), 0), 0));
+    normalize_named_control_border(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
         child_path(child_path(child_path(info_path, 2), 0), 0));
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values,
@@ -8020,7 +8134,7 @@ LV encode_picture_decoration(
         fail("OOF1122", "$/PictureDecoration", "plain PictureDecoration", control.name,
             "PictureDecoration uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture", "TextColor", "BackColor"}, "$/PictureDecoration");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture", "TextColor", "BackColor", "Border"}, "$/PictureDecoration");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
@@ -8056,6 +8170,8 @@ LV encode_picture_decoration(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
     auto picture_properties = canonical_picture_properties(enabled, tool_tip);
     encode_named_control_colors(picture_properties.items[0], model::ControlKind::picture_decoration,
+        control.properties(), "$/PictureDecoration");
+    encode_named_control_border(picture_properties.items[0], model::ControlKind::picture_decoration,
         control.properties(), "$/PictureDecoration");
     if (standard_picture != nullptr) {
         picture_properties.items[4].items[2] = encode_standard_button_picture(*standard_picture);
@@ -8118,7 +8234,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border"}, "$/LabelDecoration");
     const std::string caption = explicit_string(control.properties(), "Caption");
     const CommonControlBaseFields common{
         explicit_bool(control.properties(), "Enabled", true),
@@ -8147,6 +8263,8 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     auto label_properties = canonical_label_properties(caption, horizontal_align, common);
     encode_named_control_colors(label_properties.items[0], model::ControlKind::label_decoration,
+        control.properties(), "$/LabelDecoration");
+    encode_named_control_border(label_properties.items[0], model::ControlKind::label_decoration,
         control.properties(), "$/LabelDecoration");
     return list({
         raw(std::string(descriptor.guid)),
@@ -8185,7 +8303,7 @@ LV encode_progress_bar(
             "single numeric Attribute", attribute->name, "ProgressBar DataPath must target a single numeric attribute");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "Font", "BorderColor", "BackColor"}, "$/ProgressBar");
+        {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "Font", "BorderColor", "BackColor", "Border"}, "$/ProgressBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto font = explicit_control_font(control.properties(), "$/ProgressBar/Font");
@@ -8197,6 +8315,8 @@ LV encode_progress_bar(
     auto progress_info = canonical_progress_bar_info(enabled, tool_tip, max_value, min_value, step,
         &font, &border_color);
     encode_named_control_colors(progress_info.items[0], model::ControlKind::progress_bar,
+        control.properties(), "$/ProgressBar");
+    encode_named_control_border(progress_info.items[0], model::ControlKind::progress_bar,
         control.properties(), "$/ProgressBar");
     return list({
         raw(std::string(descriptor.guid)),
@@ -8234,7 +8354,7 @@ LV encode_track_bar(
             "TrackBar DataPath must target the supported numeric domain");
     }
     require_allowed_properties(
-        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "BorderColor", "TextColor", "BackColor", "ButtonBackColor"}, "$/TrackBar");
+        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "BorderColor", "TextColor", "BackColor", "ButtonBackColor", "Border"}, "$/TrackBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "TrackBar");
@@ -8258,6 +8378,8 @@ LV encode_track_bar(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
     auto track_info = canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step, &border_color);
     encode_named_control_colors(track_info.items[1].items[0], model::ControlKind::track_bar,
+        control.properties(), "$/TrackBar");
+    encode_named_control_border(track_info.items[1].items[0], model::ControlKind::track_bar,
         control.properties(), "$/TrackBar");
     track_info.items[2] = encode_control_event_collection(document, control, "$/TrackBar/Events");
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
@@ -8285,7 +8407,7 @@ LV encode_list_box(
             control.name, "ListBox uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly", "BorderColor", "FieldTextColor", "FieldBackColor"}, "$/ListBox");
+        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly", "BorderColor", "FieldTextColor", "FieldBackColor", "Border"}, "$/ListBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
@@ -8306,6 +8428,8 @@ LV encode_list_box(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
     auto list_info = canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip, border_color);
     encode_named_control_colors(list_info.items[1].items[0], model::ControlKind::list_box,
+        control.properties(), "$/ListBox");
+    encode_named_control_border(list_info.items[1].items[0], model::ControlKind::list_box,
         control.properties(), "$/ListBox");
     return list({
         raw(std::string(descriptor.guid)),
@@ -8333,7 +8457,7 @@ LV encode_check_box(
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor"}, "$/CheckBox");
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border"}, "$/CheckBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
@@ -8351,6 +8475,8 @@ LV encode_check_box(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     auto check_info = canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color);
     encode_named_control_colors(check_info.items[1].items[0].items[0], model::ControlKind::check_box,
+        control.properties(), "$/CheckBox");
+    encode_named_control_border(check_info.items[1].items[0].items[0], model::ControlKind::check_box,
         control.properties(), "$/CheckBox");
     check_info.items[2] = encode_control_event_collection(document, control, "$/CheckBox/Events");
     return list({
@@ -8380,7 +8506,7 @@ LV encode_choice_field(
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/ChoiceField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Border"}, "$/ChoiceField");
     if (control.data_path) {
         const auto* attribute = document.find_attribute(control.data_path->attribute.id());
         if (attribute == nullptr) {
@@ -8399,6 +8525,8 @@ LV encode_choice_field(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
     auto choice_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font);
     encode_named_control_colors(choice_info.items[1].items[0], model::ControlKind::choice_field,
+        control.properties(), "$/ChoiceField");
+    encode_named_control_border(choice_info.items[1].items[0], model::ControlKind::choice_field,
         control.properties(), "$/ChoiceField");
     return list({
         raw(std::string(descriptor.guid)),
@@ -8428,7 +8556,7 @@ LV encode_radio_button(
             "RadioButton uses a storage concept outside the supported basic profile");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "Caption", "ToolTip", "SelectionValue", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor"}, "$/RadioButton");
+        {"Enabled", "Caption", "ToolTip", "SelectionValue", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border"}, "$/RadioButton");
     bool first_in_group = false;
     if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("FirstInGroup"))) {
         const auto* value = std::get_if<bool>(&entry->value);
@@ -8493,6 +8621,8 @@ LV encode_radio_button(
     auto radio_info = canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
         &font, &border_color);
     encode_named_control_colors(radio_info.items[2].items[0].items[0], model::ControlKind::radio_button,
+        control.properties(), "$/RadioButton");
+    encode_named_control_border(radio_info.items[2].items[0].items[0], model::ControlKind::radio_button,
         control.properties(), "$/RadioButton");
     radio_info.items[5] = encode_control_event_collection(document, control, "$/RadioButton/Events");
     return list({
@@ -8608,13 +8738,15 @@ LV encode_calendar_field(
             "explicit value", "CalendarField CurrentDate is runtime-only and cannot be written to persisted Form.bin");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "BeginOfDisplayPeriod", "EndOfDisplayPeriod", "ShowCurrentDate", "CalendarNavigation",
+        {"Enabled", "BeginOfDisplayPeriod", "EndOfDisplayPeriod", "ShowCurrentDate", "CalendarNavigation", "SelectionMode", "Border",
          "EnableStartDrag", "EnableDrag", "ToolTip", "Font", "BorderColor", "HolidayColor", "SelectionBackColor", "SelectionTextColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const bool show_current_date = explicit_bool(control.properties(), "ShowCurrentDate", true);
     const bool calendar_navigation = explicit_bool(control.properties(), "CalendarNavigation", true);
     const bool enable_start_drag = explicit_bool(control.properties(), "EnableStartDrag", false);
     const bool enable_drag = explicit_bool(control.properties(), "EnableDrag", false);
+    const std::int32_t selection_mode = explicit_enum_storage_value(control.properties(), "CalendarField",
+        "SelectionMode", "DateSelectionMode", 0, {{"Single", 0}, {"Multiple", 1}, {"Interval", 2}});
     const auto font = explicit_control_font(control.properties(), "$/CalendarField/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "CalendarField");
     const auto calendar_date_atom = [&](std::string_view property_name) {
@@ -8642,8 +8774,11 @@ LV encode_calendar_field(
     const std::string end_period = calendar_date_atom("EndOfDisplayPeriod");
     auto info = canonical_calendar_field_info(enabled, begin_period,
         explicit_string(control.properties(), "ToolTip"), &font, &border_color, end_period,
-        show_current_date, calendar_navigation, enable_start_drag, enable_drag, &control.properties());
+        show_current_date, calendar_navigation, enable_start_drag, enable_drag, &control.properties(),
+        selection_mode);
     encode_named_control_colors(info.items[1].items[0], model::ControlKind::calendar_field,
+        control.properties(), "$/CalendarField");
+    encode_named_control_border(info.items[1].items[0], model::ControlKind::calendar_field,
         control.properties(), "$/CalendarField");
     info.items[2] = encode_control_event_collection(document, control, "$/CalendarField/Events");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
@@ -8718,7 +8853,7 @@ LV encode_input_field(
     require_allowed_properties(control.properties(), {
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
-        "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete",
+        "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border",
         "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
@@ -8753,6 +8888,8 @@ LV encode_input_field(
     auto input_info = canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags,
         text_values, layout_values, &font, &border_color);
     encode_named_control_colors(input_info.items[2].items[0].items[0], model::ControlKind::input_field,
+        control.properties(), "$/InputField");
+    encode_named_control_border(input_info.items[2].items[0].items[0], model::ControlKind::input_field,
         control.properties(), "$/InputField");
     return list({
         raw(std::string(descriptor.guid)),
@@ -10235,18 +10372,20 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "UsualGroup uses an unsupported storage concept");
                     }
                     require_allowed_properties(control->properties(),
-                        {"Caption", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor"},
+                        {"Caption", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border"},
                         child_path(path, ordinal) + "/UsualGroup");
                     const bool enabled = explicit_bool(control->properties(), "Enabled", true);
                     const auto caption = explicit_string(control->properties(), "Caption");
                     const auto tool_tip = explicit_string(control->properties(), "ToolTip");
                     const auto border_color = explicit_control_color(control->properties(), "BorderColor", "UsualGroup");
+                    const auto border = explicit_control_border(control->properties(), model::ControlKind::usual_group,
+                        "$/UsualGroup/Border");
                     std::optional<model::FontValue> font;
                     if (control->properties().find(model::PropertyId::from_name("Font")))
                         font = explicit_control_font(control->properties(), "$/UsualGroup/Font");
                     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
                     auto group_properties = canonical_usual_group_properties(enabled, caption, tool_tip,
-                        &border_color, font ? &*font : nullptr);
+                        &border_color, font ? &*font : nullptr, &border);
                     encode_named_control_colors(group_properties.items[1].items[0], model::ControlKind::usual_group,
                         control->properties(), "$/UsualGroup");
                     record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),

@@ -2167,6 +2167,11 @@ void test_command_bar_border_xml_contract() {
         {model::ControlBorderType::rounded, "Rounded"},
     }};
     for (const auto& [type, name] : types) {
+        if (type == model::ControlBorderType::rounded) {
+            expect(!source::parse_form_xml(xml_for("<Border kind=\"absolute\" borderType=\"Rounded\" width=\"1\"/>")),
+                "Rounded is not a CommandBar border type");
+            continue;
+        }
         model::BorderValue expected; expected.border_type = type; expected.width = 1;
         round_trip("<Border kind=\"absolute\" borderType=\"" + std::string(name) + "\" width=\"1\"/>", expected);
     }
@@ -2276,6 +2281,7 @@ void test_chart_summary_series_color_xml() {
 void test_runtime_properties_are_not_public_xml() {
     for (const auto fragment : {
              R"XML(<CalendarField id="2" name="C"><Position/><CurrentDate>2026-12-25T00:00:00</CurrentDate></CalendarField>)XML",
+             R"XML(<CalendarField id="2" name="C"><Position/><SelectedDates/></CalendarField>)XML",
              R"XML(<InputField id="2" name="I"><Position/><ChoiceIncomplete>false</ChoiceIncomplete></InputField>)XML",
              R"XML(<InputField id="2" name="I"><Position/><MarkIncomplete>false</MarkIncomplete></InputField>)XML"}) {
         const std::string xml = std::string(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems>)XML") +
@@ -2330,6 +2336,33 @@ void test_typed_defaults_for_existing_codecs() {
                model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", "Unknown"}) ==
                model::PropertyMutationStatus::invalid_value,
         "typed enum defaults must not widen the property domain to unknown members");
+}
+
+void test_border_and_calendar_selection_xml_contract() {
+    const auto parse = [](std::string_view control, std::string_view properties) {
+        return source::parse_form_xml(std::string(R"XML(<Form id="1" name="Borders" ordinaryFormVersion="2.1"><ChildItems><)XML") +
+            std::string(control) + R"XML( id="2" name="C"><Position/>)XML" + std::string(properties) +
+            "</" + std::string(control) + "></ChildItems></Form>");
+    };
+    const auto group = parse("UsualGroup", R"XML(<Border kind="absolute" borderType="Rounded" width="1"/>)XML");
+    expect(group.ok(), "Group rounded default must be readable from named XML");
+    if (group) {
+        const auto xml = source::serialize_form_xml(group.value());
+        expect(xml.ok() && xml.value().find("<Border ") == std::string::npos,
+            "explicit Group rounded default must remain implicit after normalization");
+    }
+    expect(!parse("CalendarField", R"XML(<Border kind="absolute" borderType="Rounded" width="1"/>)XML"),
+        "rounded border must be rejected outside its declared Group owner");
+    expect(!parse("UsualGroup", R"XML(<Border kind="absolute" borderType="Rounded" width="2"/>)XML"),
+        "rounded border width must stay at the platform-supported value");
+    for (const auto member : {"Single", "Multiple", "Interval"}) {
+        const auto value = parse("CalendarField", std::string(R"XML(<SelectionMode type="DateSelectionMode" member=")XML") +
+            member + R"XML("/>)XML");
+        expect(value.ok(), "Calendar selection-mode members must parse as typed values");
+    }
+    expect(!parse("CalendarField", R"XML(<SelectionMode type="SelectionMode" member="Single"/>)XML") &&
+               !parse("CalendarField", R"XML(<SelectionMode type="DateSelectionMode" member="Unknown"/>)XML"),
+        "Calendar selection mode must fail at the semantic XML boundary for unknown domains");
 }
 
 void test_named_style_color_defaults() {
@@ -2402,6 +2435,7 @@ void test_named_style_color_defaults() {
 int main() {
     try {
         test_named_style_color_defaults();
+        test_border_and_calendar_selection_xml_contract();
         test_typed_defaults_for_existing_codecs();
         test_runtime_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();

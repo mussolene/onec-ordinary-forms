@@ -132,6 +132,8 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
         (property.api_name == "BeginOfDisplayPeriod" || property.api_name == "EndOfDisplayPeriod")) {
         return "CalendarBeginDateValueType";
     }
+    if (property.control_kind == model::ControlKind::calendar_field && property.api_name == "SelectionMode")
+        return "CalendarDateSelectionModeValueType";
     if (property.control_kind == model::ControlKind::command_bar) {
         if (property.api_name == "ButtonsAlignment") return "CommandBarButtonsAlignmentValueType";
         if (property.api_name == "Orientation") return "CommandBarOrientationValueType";
@@ -412,6 +414,15 @@ void append_value_types(std::string& output) {
     <xs:attribute name="member" use="required">
       <xs:simpleType><xs:restriction base="xs:string">
         <xs:enumeration value="Auto"/><xs:enumeration value="Horizontal"/><xs:enumeration value="Vertical"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="CalendarDateSelectionModeValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="DateSelectionMode"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Single"/><xs:enumeration value="Multiple"/><xs:enumeration value="Interval"/>
       </xs:restriction></xs:simpleType>
     </xs:attribute>
   </xs:complexType>

@@ -708,6 +708,23 @@ void apply_proven_storage_overrides(
         ControlKind::input_field, ControlKind::calendar_field, ControlKind::progress_bar,
     });
 
+    for (const auto kind : {ControlKind::calendar_field, ControlKind::check_box, ControlKind::choice_field,
+             ControlKind::input_field, ControlKind::label_decoration, ControlKind::list_box,
+             ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
+             ControlKind::track_bar}) {
+        const auto default_value = kind == ControlKind::calendar_field || kind == ControlKind::choice_field ||
+                kind == ControlKind::input_field || kind == ControlKind::list_box ||
+                kind == ControlKind::progress_bar
+            ? "StyleBorders.ControlBorder" : "WithoutBorder:0";
+        auto& control = properties[static_cast<std::size_t>(kind)];
+        classify_property(control, "Border", StorageCodec::control_base, DefaultKind::border, default_value);
+        std::ranges::find(control, "Border", &PropertyDescriptor::api_name)->value_codec = ValueCodec::border;
+    }
+    auto& usual_group_border = properties[static_cast<std::size_t>(ControlKind::usual_group)];
+    classify_property(usual_group_border, "Border", StorageCodec::control_info,
+        DefaultKind::border, "Rounded:1");
+    std::ranges::find(usual_group_border, "Border", &PropertyDescriptor::api_name)->value_codec = ValueCodec::border;
+
     auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];
     classify_property(usual_group, "Font", StorageCodec::control_base, DefaultKind::font, "automatic,bold=true");
     classify_property(usual_group, "Caption", StorageCodec::control_info, DefaultKind::string, "");
@@ -881,6 +898,16 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::undefined,
         "undefined");
+    classify_property(calendar_field, "SelectionMode", StorageCodec::control_info,
+        DefaultKind::enumeration, "DateSelectionMode.Single");
+    std::ranges::find(calendar_field, "SelectionMode", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    if (const auto selected_dates = std::ranges::find(
+            calendar_field, "SelectedDates", &PropertyDescriptor::api_name);
+        selected_dates != calendar_field.end()) {
+        selected_dates->persistence = PersistenceClass::runtime_only;
+        selected_dates->storage_codec = StorageCodec::none;
+        selected_dates->default_value = {DefaultKind::none, {}};
+    }
     classify_property(
         calendar_field,
         "ShowCurrentDate",

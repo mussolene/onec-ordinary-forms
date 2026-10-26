@@ -109,9 +109,15 @@ bool property_value_matches(
                         (typed_value.member == "Auto" || typed_value.member == "Horizontal" ||
                          typed_value.member == "Vertical");
                 }
+                if (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") {
+                    return typed_value.type_name == "DateSelectionMode" &&
+                        (typed_value.member == "Single" || typed_value.member == "Multiple" || typed_value.member == "Interval");
+                }
                 return true;
             } else if constexpr (std::is_same_v<Value, BorderValue>) {
-                return expected == metamodel::ValueCodec::border && valid_border_value(typed_value);
+                if (expected != metamodel::ValueCodec::border || !valid_border_value(typed_value)) return false;
+                return typed_value.kind != BorderKind::absolute || typed_value.border_type != ControlBorderType::rounded ||
+                    descriptor.owner != metamodel::DescriptorOwner::control || descriptor.control_kind == ControlKind::usual_group;
             } else if constexpr (std::is_same_v<Value, ColorValue>) {
                 return expected == metamodel::ValueCodec::color;
             } else if constexpr (std::is_same_v<Value, FontValue>) {
@@ -141,8 +147,9 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
-    if (descriptor.control_kind == ControlKind::command_bar &&
-        (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) {
+    if ((descriptor.control_kind == ControlKind::command_bar &&
+         (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||
+        (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode")) {
         return property_value_matches(descriptor, PropertyValue{value});
     }
     if (descriptor.api_name == "HorizontalAlign") {
@@ -281,6 +288,12 @@ std::optional<PropertyValue> materialize_default(
         }
         case DefaultKind::border:
             if (value.canonical == "WithoutBorder:0") return PropertyValue{BorderValue{}};
+            if (value.canonical == "Rounded:1") {
+                BorderValue border;
+                border.border_type = ControlBorderType::rounded;
+                border.width = 1;
+                return PropertyValue{border};
+            }
             if (value.canonical == "StyleBorders.ControlBorder") {
                 BorderValue border;
                 border.kind = BorderKind::style_reference;

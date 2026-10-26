@@ -1096,9 +1096,18 @@ bool equals_descriptor_default(
             else if (canonical != "automatic") return false;
             return std::get<model::FontValue>(value) == expected;
         }
-        case mm::DefaultKind::border:
-            return canonical == "WithoutBorder:0" && std::holds_alternative<model::BorderValue>(value) &&
-                std::get<model::BorderValue>(value) == model::BorderValue{};
+        case mm::DefaultKind::border: {
+            if (!std::holds_alternative<model::BorderValue>(value)) return false;
+            model::BorderValue expected;
+            if (canonical == "StyleBorders.ControlBorder") {
+                expected.kind = model::BorderKind::style_reference;
+                expected.style = model::QualifiedName{std::string(canonical)};
+            } else if (canonical == "Rounded:1") {
+                expected.border_type = model::ControlBorderType::rounded;
+                expected.width = 1;
+            } else if (canonical != "WithoutBorder:0") return false;
+            return std::get<model::BorderValue>(value) == expected;
+        }
         case mm::DefaultKind::shortcut:
             return canonical == "None" && std::holds_alternative<model::ShortcutValue>(value) &&
                 std::get<model::ShortcutValue>(value) == model::ShortcutValue{};
