@@ -207,7 +207,7 @@
           </Control>
           <Control name="ChoiceField" apiName="ComboBox" russianName="ПолеВыбора" children="none">
             <Properties>
-              <Property name="ChoiceListHeight" apiName="ChoiceListHeight" russianName="ВысотаСпискаВыбора" russianType="Число" valueCodec="decimal"/>
+              <Property name="ChoiceListHeight" apiName="ChoiceListHeight" russianName="ВысотаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
               <Property name="SelButtonPicture" apiName="SelButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
@@ -226,7 +226,7 @@
               <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
               <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
-              <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="decimal"/>
+              <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
             </Properties>
             <Events>
@@ -305,7 +305,7 @@
               <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
               <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
-              <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="decimal"/>
+              <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
               <Property name="TypeLinkItem" apiName="TypeLinkItem" russianName="ЭлементСвязиПоТипу" russianType="" valueCodec="unclassified"/>
             </Properties>

@@ -2043,7 +2043,7 @@
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
-      <xs:element name="ChoiceListHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListHeight" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelButtonPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
@@ -2061,7 +2061,7 @@
       <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceListWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListWidth" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="ChoiceFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
@@ -2156,7 +2156,7 @@
       <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceListWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListWidth" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TypeLinkItem" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="InputFieldEventsType" minOccurs="0" maxOccurs="1"/>

@@ -1550,7 +1550,9 @@ LV canonical_choice_field_info(
     bool clear_button = false,
     bool spin_button = false,
     bool open_button = false,
-    bool read_only = false) {
+    bool read_only = false,
+    std::int32_t choice_list_height = 0,
+    std::int32_t choice_list_width = 0) {
     auto properties = parse_constant(R"OOF(
 {{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
 )OOF");
@@ -1565,6 +1567,8 @@ LV canonical_choice_field_info(
     properties.items[9] = raw(spin_button ? "1" : "0");
     properties.items[10] = raw(open_button ? "1" : "0");
     properties.items[13] = raw(read_only ? "1" : "0");
+    properties.items[31] = raw(std::to_string(choice_list_height));
+    properties.items[32] = raw(std::to_string(choice_list_width));
     return list({raw("2"), std::move(properties), list({raw("0")})});
 }
 
@@ -1744,6 +1748,7 @@ struct InputFieldLayoutValues {
     std::int32_t horizontal_align = 4;
     std::int32_t vertical_align = 0;
     std::int32_t choice_list_height = 0;
+    std::int32_t choice_list_width = 0;
 };
 
 InputFieldFlagValues decode_input_field_flags(
@@ -1803,6 +1808,7 @@ LV canonical_input_field_info(
     value.items[2].items[0].items[17] = raw(std::to_string(layout_values.horizontal_align));
     value.items[2].items[0].items[18] = raw(std::to_string(layout_values.vertical_align));
     value.items[2].items[0].items[31] = raw(std::to_string(layout_values.choice_list_height));
+    value.items[2].items[0].items[32] = raw(std::to_string(layout_values.choice_list_width));
     if (type.entries.empty()) {
         value.items[2].items[0].items[14] = raw("0");
     } else if (type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::string) {
@@ -6648,6 +6654,8 @@ DecodedControl decode_choice_field(
     const bool spin_button = bool_atom(info_properties.items[9], child_path(info_properties_path, 9));
     const bool open_button = bool_atom(info_properties.items[10], child_path(info_properties_path, 10));
     const bool read_only = bool_atom(info_properties.items[13], child_path(info_properties_path, 13));
+    const auto choice_list_height = integer_atom<std::int32_t>(info_properties.items[31], child_path(info_properties_path, 31));
+    const auto choice_list_width = integer_atom<std::int32_t>(info_properties.items[32], child_path(info_properties_path, 32));
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
         "ChoiceField cannot contain storage children");
     auto normalized_info = info;
@@ -6660,7 +6668,8 @@ DecodedControl decode_choice_field(
         encode_control_color(border_color, child_path(base_path, 6));
     normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
     const LV canonical_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font, false,
-        choice_button, clear_button, spin_button, open_button, read_only);
+        choice_button, clear_button, spin_button, open_button, read_only,
+        choice_list_height, choice_list_width);
     require_list_stream_shape(normalized_info, canonical_info, info_path,
         "ChoiceField profile with valid record arity and atom types");
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
@@ -6695,6 +6704,10 @@ DecodedControl decode_choice_field(
     if (spin_button) control.properties().set_explicit(model::PropertyId::from_name("SpinButton"), true);
     if (open_button) control.properties().set_explicit(model::PropertyId::from_name("OpenButton"), true);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    if (choice_list_height != 0) control.properties().set_explicit(
+        model::PropertyId::from_name("ChoiceListHeight"), static_cast<std::int64_t>(choice_list_height));
+    if (choice_list_width != 0) control.properties().set_explicit(
+        model::PropertyId::from_name("ChoiceListWidth"), static_cast<std::int64_t>(choice_list_width));
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -7674,10 +7687,12 @@ DecodedControl decode_input_field(
     }
     const auto choice_list_height = integer_atom<std::int32_t>(
         payload.items[31], child_path(payload_path, 31));
+    const auto choice_list_width = integer_atom<std::int32_t>(
+        payload.items[32], child_path(payload_path, 32));
     const auto input_field_flags = decode_input_field_flags(
         info, info_path, InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format};
-    const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
+    const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width};
     LV normalized_info = info;
     normalize_named_control_colors(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
         child_path(child_path(child_path(info_path, 2), 0), 0));
@@ -7722,6 +7737,10 @@ DecodedControl decode_input_field(
     if (choice_list_height != 0) {
         control.properties().set_explicit(model::PropertyId::from_name("ChoiceListHeight"),
             static_cast<std::int64_t>(choice_list_height));
+    }
+    if (choice_list_width != 0) {
+        control.properties().set_explicit(model::PropertyId::from_name("ChoiceListWidth"),
+            static_cast<std::int64_t>(choice_list_width));
     }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         if (input_field_flags[index] != input_field_flag_mappings[index].default_value) {
@@ -8707,7 +8726,7 @@ LV encode_choice_field(
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Border", "Transparent", "ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly"}, "$/ChoiceField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Border", "Transparent", "ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly", "ChoiceListHeight", "ChoiceListWidth"}, "$/ChoiceField");
     if (control.data_path) {
         const auto* attribute = document.find_attribute(control.data_path->attribute.id());
         if (attribute == nullptr) {
@@ -8729,9 +8748,14 @@ LV encode_choice_field(
     const bool spin_button = explicit_bool(control.properties(), "SpinButton", false);
     const bool open_button = explicit_bool(control.properties(), "OpenButton", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);
+    const std::int32_t choice_list_height = explicit_integer(
+        control.properties(), "ChoiceListHeight", 0, "$/ChoiceField/ChoiceListHeight");
+    const std::int32_t choice_list_width = explicit_integer(
+        control.properties(), "ChoiceListWidth", 0, "$/ChoiceField/ChoiceListWidth");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
     auto choice_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font, transparent,
-        choice_button, clear_button, spin_button, open_button, read_only);
+        choice_button, clear_button, spin_button, open_button, read_only,
+        choice_list_height, choice_list_width);
     encode_named_control_colors(choice_info.items[1].items[0], model::ControlKind::choice_field,
         control.properties(), "$/ChoiceField");
     encode_named_control_border(choice_info.items[1].items[0], model::ControlKind::choice_field,
@@ -9069,7 +9093,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -9091,6 +9115,7 @@ LV encode_input_field(
         explicit_enum_storage_value(control.properties(), "InputField", "VerticalAlign", "VerticalAlign", 0,
             {{"Top", 0}, {"Center", 1}, {"Bottom", 2}}),
         explicit_integer(control.properties(), "ChoiceListHeight", 0, "$/InputField/ChoiceListHeight"),
+        explicit_integer(control.properties(), "ChoiceListWidth", 0, "$/InputField/ChoiceListWidth"),
     };
     const auto font = explicit_control_font(control.properties(), "$/InputField/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "InputField");

@@ -651,6 +651,14 @@ void test_table_column_choice_and_check_box_profiles() {
         return document;
     };
 
+    for (const auto column_index : {std::size_t{0}, std::size_t{1}}) {
+        auto with_width = make_document();
+        auto* owner = const_cast<model::ControlNode*>(with_width.find_control(model::ObjectId{3}));
+        std::get<model::TablePayload>(owner->payload).columns[column_index].control.properties.set_explicit(
+            model::PropertyId::from_name("ChoiceListWidth"), std::int64_t{17});
+        expect(!form_stream::encode_document(with_width),
+            "standalone ChoiceListWidth support must not silently expand TableColumnEditor contracts");
+    }
     const auto document = make_document();
     auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "three named default Table editors must encode" :
@@ -7989,7 +7997,8 @@ void test_common_control_named_scalar_properties() {
         std::vector<std::pair<model::PropertyValue, int>> values;
         std::size_t slot;
         bool base;
-        bool indicator = false;
+        bool nested_payload = false;
+        std::string_view invalid_native = "99";
     };
     const auto enumeration = [](std::string_view type, std::string_view member) -> model::PropertyValue {
         return model::EnumerationValue{std::string(type), std::string(member)};
@@ -8008,6 +8017,12 @@ void test_common_control_named_scalar_properties() {
         {model::ControlKind::radio_button, "RadioButton", "TitleLocation", enumeration("TitleLocation", "TitleRight"),
             {{enumeration("TitleLocation", "TitleLeft"), 0}, {enumeration("TitleLocation", "TitleRight"), 1}}, 3, false, true},
         {model::ControlKind::check_box, "CheckBox", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::choice_field, "ChoiceField", "ChoiceListHeight", std::int64_t{0},
+            {{std::int64_t{0}, 0}, {std::int64_t{17}, 17}, {std::int64_t{-1}, -1}, {std::int64_t{-2147483648}, -2147483648}, {std::int64_t{2147483647}, 2147483647}}, 31, false, false, "2147483648"},
+        {model::ControlKind::choice_field, "ChoiceField", "ChoiceListWidth", std::int64_t{0},
+            {{std::int64_t{0}, 0}, {std::int64_t{17}, 17}, {std::int64_t{-1}, -1}, {std::int64_t{-2147483648}, -2147483648}, {std::int64_t{2147483647}, 2147483647}}, 32, false, false, "2147483648"},
+        {model::ControlKind::input_field, "InputField", "ChoiceListWidth", std::int64_t{0},
+            {{std::int64_t{0}, 0}, {std::int64_t{17}, 17}, {std::int64_t{-1}, -1}, {std::int64_t{-2147483648}, -2147483648}, {std::int64_t{2147483647}, 2147483647}}, 32, false, true, "2147483648"},
         {model::ControlKind::choice_field, "ChoiceField", "ChoiceButton", false, {{false, 0}, {true, 1}}, 7, false},
         {model::ControlKind::choice_field, "ChoiceField", "ClearButton", false, {{false, 0}, {true, 1}}, 8, false},
         {model::ControlKind::choice_field, "ChoiceField", "SpinButton", false, {{false, 0}, {true, 1}}, 9, false},
@@ -8037,8 +8052,11 @@ void test_common_control_named_scalar_properties() {
         const std::string label = std::string(spec.owner) + "." + std::string(spec.name);
         const auto fixture = [&] {
             const std::string attributes = spec.kind == model::ControlKind::check_box ?
-                R"XML(<Attributes><Attribute id="3" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes>)XML" : "";
-            const std::string data_path = spec.kind == model::ControlKind::check_box ? R"XML(<DataPath attributeId="3"/>)XML" : "";
+                R"XML(<Attributes><Attribute id="3" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes>)XML" :
+                spec.kind == model::ControlKind::input_field ?
+                    R"XML(<Attributes><Attribute id="3" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes>)XML" : "";
+            const std::string data_path = spec.kind == model::ControlKind::check_box || spec.kind == model::ControlKind::input_field ?
+                R"XML(<DataPath attributeId="3"/>)XML" : "";
             return source::parse_form_xml(std::string("<Form id=\"1\" name=\"Scalars\" ordinaryFormVersion=\"2.1\">") + attributes + "<ChildItems><" +
                 std::string(spec.owner) + " id=\"2\" name=\"Control\">" + data_path + "<Position/></" + std::string(spec.owner) + "></ChildItems></Form>");
         };
@@ -8046,11 +8064,12 @@ void test_common_control_named_scalar_properties() {
         expect(absent.ok(), label + " default XML must parse");
         const auto base_block = [&](auto& record) -> decltype(&record) {
             if (spec.kind == model::ControlKind::check_box) return &record.items[2].items[1].items[0].items[0];
-            if (spec.kind == model::ControlKind::radio_button) return &record.items[2].items[2].items[0].items[0];
+            if (spec.kind == model::ControlKind::radio_button || spec.kind == model::ControlKind::input_field)
+                return &record.items[2].items[2].items[0].items[0];
             return &record.items[2].items[1].items[0];
         };
-        const auto indicator_block = [&](auto& record) -> decltype(&record) {
-            return spec.kind == model::ControlKind::radio_button ?
+        const auto nested_block = [&](auto& record) -> decltype(&record) {
+            return spec.kind == model::ControlKind::radio_button || spec.kind == model::ControlKind::input_field ?
                 &record.items[2].items[2].items[0] : &record.items[2].items[1].items[0];
         };
         const auto property = model::PropertyId::from_name(spec.name);
@@ -8086,7 +8105,7 @@ void test_common_control_named_scalar_properties() {
             expect(encoded.ok(), label + " named value must encode");
             const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(spec.kind).guid);
             const auto* block = spec.base ? base_block(*record) :
-                spec.indicator ? indicator_block(*record) : &record->items[2].items[1];
+                spec.nested_payload ? nested_block(*record) : &record->items[2].items[1];
             expect(block->items[spec.slot].atom == std::to_string(code), label + " must use its independently observed slot and code");
             const auto decoded = form_stream::decode_document(encoded.value(), "Scalars");
             expect(decoded.ok() && decoded.value().reconstruction_complete(), label + " must decode completely");
@@ -8102,8 +8121,8 @@ void test_common_control_named_scalar_properties() {
             auto invalid = encoded.value();
             auto* invalid_record = find_record_with_guid(invalid, model::metamodel::descriptor_for(spec.kind).guid);
             auto* invalid_block = spec.base ? base_block(*invalid_record) :
-                spec.indicator ? indicator_block(*invalid_record) : &invalid_record->items[2].items[1];
-            invalid_block->items[spec.slot] = list_stream::ListValue::raw_atom("99");
+                spec.nested_payload ? nested_block(*invalid_record) : &invalid_record->items[2].items[1];
+            invalid_block->items[spec.slot] = list_stream::ListValue::raw_atom(std::string(spec.invalid_native));
             expect(!form_stream::decode_document(invalid, "InvalidScalar"), label + " must reject invalid native scalar codes");
             auto unknown = encoded.value();
             auto* unknown_record = find_record_with_guid(unknown, model::metamodel::descriptor_for(spec.kind).guid);
@@ -8115,11 +8134,19 @@ void test_common_control_named_scalar_properties() {
         }
         expect(absent.value().set_prop_val(key, property, std::string("invalid")) == model::PropertyMutationStatus::invalid_value,
             label + " must reject an incorrect API value type");
-        if (spec.indicator && spec.name == "HorizontalAlign") {
+        if ((spec.kind == model::ControlKind::check_box || spec.kind == model::ControlKind::radio_button) &&
+            spec.name == "HorizontalAlign") {
             for (const auto member : {"Auto", "Justify"})
                 expect(absent.value().set_prop_val(key, property, model::EnumerationValue{"HorizontalAlign", member}) ==
                         model::PropertyMutationStatus::invalid_value,
                     label + " must reject shared enum members rejected by this platform control");
+        }
+        if (std::holds_alternative<std::int64_t>(spec.default_value)) {
+            for (const auto value : {std::int64_t{-2147483649LL}, std::int64_t{2147483648LL}})
+                expect(absent.value().set_prop_val(key, property, value) == model::PropertyMutationStatus::invalid_value,
+                    label + " must reject int32 overflow without wrapping");
+            expect(absent.value().set_prop_val(key, property, model::DecimalValue{"1.5"}) ==
+                    model::PropertyMutationStatus::invalid_value, label + " must reject a fractional source value without truncation");
         }
         if (std::holds_alternative<model::EnumerationValue>(spec.default_value)) {
             const auto type = std::get<model::EnumerationValue>(spec.default_value).type_name;

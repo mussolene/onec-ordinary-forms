@@ -59,8 +59,11 @@ TrackBar сохраняет MarkingAppearance (DontShow, TopLeft, BottomRight, B
 Числовые LargeStep и MarkingStep не входят в это расширение.
 
 ChoiceField сохраняет ChoiceButton, ClearButton, SpinButton, OpenButton и ReadOnly
-как булевы свойства с default false. Проверка этих флагов не означает поддержки
-списков, дополнительных картинок или размеров списка выбора.
+как булевы свойства с default false. ChoiceField также сохраняет ChoiceListHeight
+и ChoiceListWidth, InputField сохраняет ChoiceListWidth. Эти размеры являются
+signed int32 с default 0; дробные и выходящие за диапазон значения исходников
+отклоняются. Редакторы колонок таблицы не получают эти свойства автоматически.
+Поддержка списков и дополнительных картинок остается отдельной задачей.
 
 CheckBox и RadioButton сохраняют HorizontalAlign (Left, Center, Right),
 VerticalAlign (Top, Center, Bottom) и TitleLocation (TitleLeft, TitleRight).

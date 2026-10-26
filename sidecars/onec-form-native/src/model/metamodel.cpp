@@ -881,6 +881,10 @@ void apply_proven_storage_overrides(
     auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
     for (const auto name : {"ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly"})
         classify_property(choice_field, name, StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(choice_field, "ChoiceListHeight", StorageCodec::control_info, DefaultKind::integer, "0");
+    std::ranges::find(choice_field, "ChoiceListHeight", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(choice_field, "ChoiceListWidth", StorageCodec::control_info, DefaultKind::integer, "0");
+    std::ranges::find(choice_field, "ChoiceListWidth", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     if (const auto choice_list = std::ranges::find(choice_field, "ChoiceList", &PropertyDescriptor::api_name);
         choice_list != choice_field.end()) {
         choice_list->persistence = PersistenceClass::runtime_only;
@@ -1009,6 +1013,8 @@ void apply_proven_storage_overrides(
     classify_property(input_field, "VerticalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Top");
     classify_property(input_field, "ChoiceListHeight", StorageCodec::control_info, DefaultKind::integer, "0");
     std::ranges::find(input_field, "ChoiceListHeight", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(input_field, "ChoiceListWidth", StorageCodec::control_info, DefaultKind::integer, "0");
+    std::ranges::find(input_field, "ChoiceListWidth", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(
         input_field,
         "AutoChoiceIncomplete",
