@@ -663,6 +663,15 @@ void apply_proven_storage_overrides(
         }
     };
 
+    auto& spreadsheet_properties = properties[static_cast<std::size_t>(ControlKind::spreadsheet_document_field)];
+    for (const auto name : {"Enabled", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}) {
+        classify_property(spreadsheet_properties, name, StorageCodec::control_info, DefaultKind::boolean, "true");
+    }
+    classify_property(spreadsheet_properties, "BorderColor", StorageCodec::control_info, DefaultKind::color, "automatic");
+    classify_property(spreadsheet_properties, "Border", StorageCodec::control_info, DefaultKind::border, "StyleBorders.ControlBorder");
+    classify_property(spreadsheet_properties, "ShowSelection", StorageCodec::control_info, DefaultKind::enumeration,
+        "SpreadsheetDocumentSelectionShowModeType.WhenActive");
+
     classify_shared_control_property("Enabled", StorageCodec::control_base, DefaultKind::boolean, "true", {
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
@@ -1213,6 +1222,12 @@ void apply_proven_storage_overrides(
             event->storage_event_id = id;
         }
     };
+    constexpr std::array spreadsheet_events{
+        std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}, std::pair{"DragStart", 3U},
+        std::pair{"DragCheck", 4U}, std::pair{"DragEnd", 5U}, std::pair{"Drag", 6U},
+        std::pair{"OnChangeAreaContent", 7U},
+    };
+    classify_control_events(ControlKind::spreadsheet_document_field, spreadsheet_events);
     classify_control_events(ControlKind::picture_decoration, picture_drag_events);
     classify_control_events(ControlKind::list_box, list_box_events);
 

@@ -922,6 +922,29 @@ void test_help_metamodel() {
             descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
             descriptor->storage_event_id == id, std::string(name) + " must have its proven event descriptor");
     }
+    for (const auto name : {"Enabled", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}) {
+        const auto* descriptor = find_property(ControlKind::spreadsheet_document_field, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == StorageCodec::control_info && descriptor->default_value.kind == DefaultKind::boolean &&
+            descriptor->default_value.canonical == "true", std::string(name) + " must have its observed default");
+    }
+    const auto* spreadsheet_border_color = find_property(ControlKind::spreadsheet_document_field, "BorderColor");
+    expect(spreadsheet_border_color && spreadsheet_border_color->storage_codec == StorageCodec::control_info &&
+        spreadsheet_border_color->default_value.canonical == "automatic", "spreadsheet BorderColor must default to automatic");
+    const auto* sheet_border = find_property(ControlKind::spreadsheet_document_field, "Border");
+    const auto* sheet_selection = find_property(ControlKind::spreadsheet_document_field, "ShowSelection");
+    expect(sheet_border && sheet_border->storage_codec == StorageCodec::control_info &&
+        sheet_border->default_value.canonical == "StyleBorders.ControlBorder", "spreadsheet border style default must be named");
+    expect(sheet_selection && sheet_selection->storage_codec == StorageCodec::control_info &&
+        sheet_selection->default_value.canonical == "SpreadsheetDocumentSelectionShowModeType.WhenActive", "spreadsheet selection default must be named");
+    for (const auto& [name, id] : std::array{std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U},
+        std::pair{"DragStart", 3U}, std::pair{"DragCheck", 4U}, std::pair{"DragEnd", 5U}, std::pair{"Drag", 6U},
+        std::pair{"OnChangeAreaContent", 7U}}) {
+        const auto* descriptor = find_event(ControlKind::spreadsheet_document_field, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == StorageCodec::event_record && descriptor->storage_event_id == id &&
+            descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c", "spreadsheet event descriptor must match the platform");
+    }
     constexpr std::array calendar_event_storage{
         std::pair{"Selection", 1U}, std::pair{"DragStart", 3U}, std::pair{"DragEnd", 5U},
         std::pair{"Drag", 6U}, std::pair{"OnActivateDate", 0U}, std::pair{"OnPeriodOutput", 2U},

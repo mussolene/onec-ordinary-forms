@@ -950,7 +950,7 @@ model::BorderValue control_border_default(std::optional<model::ControlKind> owne
         value.width = 1;
     } else if (owner == model::ControlKind::calendar_field || owner == model::ControlKind::choice_field ||
         owner == model::ControlKind::input_field || owner == model::ControlKind::list_box ||
-        owner == model::ControlKind::progress_bar) {
+        owner == model::ControlKind::progress_bar || owner == model::ControlKind::spreadsheet_document_field) {
         value.kind = model::BorderKind::style_reference;
         value.style = model::QualifiedName{"StyleBorders.ControlBorder"};
     }
@@ -7784,8 +7784,39 @@ DecodedControl decode_spreadsheet_document_field(
             std::to_string(view_info.items.size()) + " fields with " + std::to_string(area_count) + " areas",
             "SpreadsheetDocumentField cannot persist nondefault view settings");
     }
+    constexpr std::array spreadsheet_bool_slots{
+        std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U},
+        std::pair{"VerticalScrollBar", 16U}, std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}};
+    model::PropertySet sheet_properties;
+    for (const auto& [name, slot] : spreadsheet_bool_slots) {
+        const bool value = bool_atom(info.items.at(slot), child_path(info_path, slot));
+        if (!value) sheet_properties.set_explicit(model::PropertyId::from_name(name), false);
+    }
+    for (const auto& [primary, paired] : {std::pair{15U, 31U}, std::pair{16U, 32U}}) {
+        if (bool_atom(info.items.at(primary), child_path(info_path, primary)) !=
+            bool_atom(info.items.at(paired), child_path(info_path, paired))) {
+            fail("OOF1114", child_path(info_path, paired), "matching scroll bar fields", "mismatch",
+                "SpreadsheetDocumentField scroll bar fields disagree");
+        }
+    }
+    const auto border_color = decode_control_color(info.items.at(9), child_path(info_path, 9));
+    if (border_color != model::ColorValue{})
+        sheet_properties.set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    const auto border = decode_control_border(info.items.at(10), child_path(info_path, 10),
+        model::ControlKind::spreadsheet_document_field);
+    if (border != control_border_default(model::ControlKind::spreadsheet_document_field))
+        sheet_properties.set_explicit(model::PropertyId::from_name("Border"), border);
+    const auto selection = integer_atom<unsigned>(info.items.at(27), child_path(info_path, 27));
+    if (selection > 1) fail("OOF1114", child_path(info_path, 27), "ShowSelection code 0 or 1",
+        std::to_string(selection), "SpreadsheetDocumentField ShowSelection is unsupported");
+    if (selection == 1) sheet_properties.set_explicit(model::PropertyId::from_name("ShowSelection"),
+        model::EnumerationValue{"SpreadsheetDocumentSelectionShowModeType", "Always"});
+    auto named_events = decode_control_event_collection(info.items.at(17), child_path(info_path, 17),
+        model::ControlKind::spreadsheet_document_field);
     const LV expected_info = canonical_spreadsheet_field_info(payload, fresh_add_default);
     LV normalized_info = info;
+    for (const auto slot : {8U, 9U, 10U, 15U, 16U, 17U, 25U, 26U, 27U, 31U, 32U})
+        normalized_info.items.at(slot) = expected_info.items.at(slot);
     auto& normalized_document_info = normalized_info.items.at(11);
     const auto& expected_document_info = expected_info.items.at(11);
     for (std::size_t index = 0; index < typed_cell_record_indices.size(); ++index) {
@@ -7845,23 +7876,45 @@ DecodedControl decode_spreadsheet_document_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::SpreadsheetDocumentFieldPayload{}};
     std::get<model::SpreadsheetDocumentFieldPayload>(control.payload) = std::move(payload);
+    control.properties() = std::move(sheet_properties);
     control.position = std::move(geometry.position);
-    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
 
 LV encode_spreadsheet_document_field(
+    const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
     const GeometryContext& context) {
     if (control.kind() != model::ControlKind::spreadsheet_document_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
-        !control.events.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty()) {
-        fail("OOF1122", "$", "plain SpreadsheetDocumentField with no events, binding, extensions, or children",
+        control.data_path || !control.extension_properties.empty() || !control.children.empty()) {
+        fail("OOF1122", "$", "SpreadsheetDocumentField without binding, extensions, or children",
             control.name, "Control uses an unsupported storage concept");
     }
-    if (!control.properties().empty())
-        fail("OOF1122", "$/SpreadsheetDocumentField", "no additional control properties", "present", "SpreadsheetDocumentField property is outside the supported profile");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Border", "ShowSelection", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}, "$/SpreadsheetDocumentField");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
-    const auto info = canonical_spreadsheet_field_info(std::get<model::SpreadsheetDocumentFieldPayload>(control.payload));
+    auto info = canonical_spreadsheet_field_info(std::get<model::SpreadsheetDocumentFieldPayload>(control.payload));
+    for (const auto& [name, slot] : std::array{
+        std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U}, std::pair{"VerticalScrollBar", 16U},
+        std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}}) {
+        info.items.at(slot) = raw(explicit_bool(control.properties(), name, true) ? "1" : "0");
+    }
+    info.items.at(31) = info.items.at(15);
+    info.items.at(32) = info.items.at(16);
+    info.items.at(9) = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "SpreadsheetDocumentField"), "$/SpreadsheetDocumentField/BorderColor");
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("Border"))) {
+        const auto* border = std::get_if<model::BorderValue>(&entry->value);
+        if (!border) fail("OOF1122", "$/SpreadsheetDocumentField/Border", "BorderValue", "different type", "Border has the wrong type");
+        info.items.at(10) = encode_control_border(*border, "$/SpreadsheetDocumentField/Border", model::ControlKind::spreadsheet_document_field);
+    }
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("ShowSelection"))) {
+        const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
+        if (!value || value->type_name != "SpreadsheetDocumentSelectionShowModeType" ||
+            (value->member != "WhenActive" && value->member != "Always"))
+            fail("OOF1122", "$/SpreadsheetDocumentField/ShowSelection", "known selection display mode", "invalid", "ShowSelection is unsupported");
+        info.items.at(27) = raw(value->member == "Always" ? "1" : "0");
+    }
+    info.items.at(17) = encode_control_event_collection(document, control, "$/SpreadsheetDocumentField/Events");
     const auto metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())), info,
         encode_geometry(control.position, context, IncomingAnchorLists{}), metadata, list({raw("0")})});
@@ -11024,7 +11077,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::dendrogram) {
                     record = encode_dendrogram(*control, context);
                 } else if (control->kind() == model::ControlKind::spreadsheet_document_field) {
-                    record = encode_spreadsheet_document_field(*control, context);
+                    record = encode_spreadsheet_document_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::text_document_field) {
                     record = encode_text_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::graphical_schema_field ||

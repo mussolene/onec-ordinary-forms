@@ -133,6 +133,10 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::type_domain;
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 if (expected != metamodel::ValueCodec::enumeration) return false;
+                if (descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") {
+                    return typed_value.type_name == "SpreadsheetDocumentSelectionShowModeType" &&
+                        (typed_value.member == "WhenActive" || typed_value.member == "Always");
+                }
                 if (descriptor.control_kind == ControlKind::panel && descriptor.api_name == "ShowTabs") {
                     constexpr std::array<std::string_view, 13> members{"DontUse", "Top", "Bottom", "LeftVertical",
                         "RightVertical", "LeftHorizontal", "RightHorizontal", "TopScrolling", "TopMultiLine",
@@ -223,7 +227,8 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
-    if ((descriptor.control_kind == ControlKind::panel && descriptor.api_name == "ShowTabs") ||
+    if ((descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") ||
+        (descriptor.control_kind == ControlKind::panel && descriptor.api_name == "ShowTabs") ||
         (descriptor.control_kind == ControlKind::command_bar &&
          (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||
         ((descriptor.control_kind == ControlKind::check_box || descriptor.control_kind == ControlKind::radio_button) &&

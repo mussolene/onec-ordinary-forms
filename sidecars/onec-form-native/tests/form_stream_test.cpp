@@ -12711,6 +12711,133 @@ R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
     }
 }
 
+void test_spreadsheet_document_field_named_properties_and_events() {
+    constexpr std::array booleans{
+        std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U},
+        std::pair{"VerticalScrollBar", 16U}, std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}};
+    constexpr std::array events{
+        std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}, std::pair{"DragStart", 3U},
+        std::pair{"DragCheck", 4U}, std::pair{"DragEnd", 5U}, std::pair{"Drag", 6U},
+        std::pair{"OnChangeAreaContent", 7U}};
+    const auto make_document = [&](bool explicit_values, bool wrong_owner = false, const model::BorderValue* selected_border = nullptr) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "SheetProperties";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+        auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload).cells;
+        cells.push_back({1, 1, "Unicode 世界", std::nullopt});
+        model::TypeDomainEntry entry; entry.term = model::TypeDomainTerm::boolean;
+        cells.push_back({2, 2, {}, model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{entry}}, true}});
+        if (explicit_values) {
+            for (const auto& [name, slot] : booleans) {
+                static_cast<void>(slot); field.properties().set_explicit(model::PropertyId::from_name(name), false);
+            }
+            model::ColorValue color; color.kind = model::ColorKind::absolute;
+            color.red = 31; color.green = 61; color.blue = 101;
+            field.properties().set_explicit(model::PropertyId::from_name("BorderColor"), color);
+            model::BorderValue border; border.border_type = model::ControlBorderType::single; border.width = 2;
+            field.properties().set_explicit(model::PropertyId::from_name("Border"), selected_border ? *selected_border : border);
+            field.properties().set_explicit(model::PropertyId::from_name("ShowSelection"),
+                model::EnumerationValue{"SpreadsheetDocumentSelectionShowModeType", "Always"});
+            for (std::size_t i = 0; i < events.size(); ++i) {
+                const model::ObjectId id{100 + i}; field.events.push_back(model::EventRef{id});
+                document.add_event(model::Event{id, events[i].first, std::string("Handle") + events[i].first,
+                    wrong_owner ? model::EventOwner{model::FormRef{model::ObjectId{1}}} : model::EventOwner{model::ControlRef{model::ObjectId{2}}}});
+            }
+        }
+        document.add_control(std::move(field)); return document;
+    };
+    const auto info_of = [](auto& stream) -> auto& {
+        auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field).guid);
+        expect(record != nullptr, "spreadsheet record must exist"); return record->items.at(2);
+    };
+    for (const bool changed : {false, true}) {
+        const auto encoded = form_stream::encode_document(make_document(changed));
+        expect(encoded.ok(), encoded.ok() ? "" : encoded.diagnostics().front().message);
+        const auto& info = info_of(encoded.value());
+        for (const auto& [name, slot] : booleans) {
+            static_cast<void>(name); expect(info.items.at(slot).atom == (changed ? "0" : "1"), "spreadsheet Boolean slot must match");
+        }
+        expect(info.items.at(15).atom == info.items.at(31).atom && info.items.at(16).atom == info.items.at(32).atom,
+            "scroll bar paired fields must match");
+        expect(info.items.at(27).atom == (changed ? "1" : "0"), "selection mode slot must match");
+        expect(info.items.at(17).items.size() == (changed ? events.size() + 1 : 1), "event count must match");
+        if (changed) for (const auto& [name, id] : events) {
+            static_cast<void>(name); expect(std::ranges::any_of(info.items.at(17).items.begin() + 1, info.items.at(17).items.end(),
+                [&](const auto& event) { return event.items.at(0).atom == std::to_string(id); }), "observed event ID must survive");
+        }
+        const auto decoded = form_stream::decode_document(encoded.value(), "SheetProperties");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "spreadsheet properties must decode completely");
+        const auto* field = decoded.value().find_control(model::ObjectId{2});
+        expect(field && field->events.size() == (changed ? events.size() : 0), "all events must be retained");
+        const auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(field->payload).cells;
+        expect(cells.size() == 2 && cells[0].text == "Unicode 世界" && cells[1].typed_value &&
+            std::get<bool>(cells[1].typed_value->value), "typed and text cells must survive");
+        if (changed) for (const auto& [name, slot] : booleans) {
+            static_cast<void>(slot); const auto* property = field->properties().find(model::PropertyId::from_name(name));
+            expect(property && !std::get<bool>(property->value), "explicit false property must survive");
+        }
+        const auto xml = source::serialize_form_xml(decoded.value()); expect(xml.ok(), "sheet XML must serialize");
+        const auto parsed = source::parse_form_xml(xml.value()); expect(parsed.ok(), "sheet XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "sheet properties and events must round-trip");
+    }
+    const auto encoded = form_stream::encode_document(make_document(true)); expect(encoded.ok(), "sheet mutation fixture must encode");
+    auto fresh_add = encoded.value();
+    auto& fresh_view = info_of(fresh_add).items.at(14);
+    expect(fresh_view.items.size() == 30 && fresh_view.items.at(23).atom == "1", "writer must produce normalized view profile");
+    fresh_view.items.at(23) = list_stream::ListValue::raw_atom("0");
+    fresh_view.items.erase(fresh_view.items.begin() + 24);
+    const auto fresh_decoded = form_stream::decode_document(fresh_add, "FreshSheetProperties");
+    expect(fresh_decoded.ok() && fresh_decoded.value().reconstruction_complete(),
+        "fresh Add view must coexist with named properties and events");
+    const auto* fresh_field = fresh_decoded.value().find_control(model::ObjectId{2});
+    expect(fresh_field && fresh_field->events.size() == events.size(), "fresh view must retain all event handlers");
+    for (const auto& [name, slot] : booleans) {
+        static_cast<void>(slot); const auto* value = fresh_field->properties().find(model::PropertyId::from_name(name));
+        expect(value && !std::get<bool>(value->value), "fresh view must retain each named Boolean");
+    }
+    const auto& fresh_cells = std::get<model::SpreadsheetDocumentFieldPayload>(fresh_field->payload).cells;
+    expect(fresh_cells.size() == 2 && fresh_cells[0].text == "Unicode 世界" && fresh_cells[1].typed_value &&
+        std::get<bool>(fresh_cells[1].typed_value->value), "fresh view must retain text and typed cells");
+    const auto fresh_rebuilt = form_stream::encode_document(fresh_decoded.value());
+    expect(fresh_rebuilt.ok() && list_stream::dump_compact(fresh_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "fresh view must normalize to the supported named model without losing properties or events");
+    for (const auto slot : {31U, 32U}) {
+        auto broken = encoded.value(); info_of(broken).items.at(slot) = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(broken, "BrokenPair"), "mismatched scroll bar pair must fail");
+    }
+    for (const auto border_type : {model::ControlBorderType::without_border, model::ControlBorderType::single,
+             model::ControlBorderType::double_line, model::ControlBorderType::embossed, model::ControlBorderType::indented,
+             model::ControlBorderType::underline, model::ControlBorderType::double_underline, model::ControlBorderType::overline}) {
+        const unsigned maximum = border_type == model::ControlBorderType::without_border ? 1 : 5;
+        for (unsigned width = 0; width <= maximum; ++width) {
+            model::BorderValue border; border.border_type = border_type; border.width = width;
+            auto doc = make_document(true, false, &border);
+            auto stream = form_stream::encode_document(doc); expect(stream.ok(), "observed border must encode");
+            auto parsed = form_stream::decode_document(stream.value(), "SheetBorder");
+            expect(parsed.ok() && parsed.value().reconstruction_complete(), "observed border must decode");
+            const auto* restored = parsed.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("Border"));
+            expect(restored && std::get<model::BorderValue>(restored->value) == border, "border must survive round-trip");
+        }
+    }
+    auto invalid_mode = encoded.value(); info_of(invalid_mode).items.at(27) = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(invalid_mode, "InvalidSelection"), "unknown selection mode must fail");
+    model::BorderValue rounded; rounded.border_type = model::ControlBorderType::rounded; rounded.width = 1;
+    auto rounded_document = make_document(true, false, &rounded);
+    expect(!form_stream::encode_document(rounded_document), "unobserved rounded border must fail");
+    auto unknown_event = encoded.value(); info_of(unknown_event).items.at(17).items.at(1).items.at(0) = list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(unknown_event, "UnknownEvent"), "unknown event must fail");
+    auto duplicate = encoded.value(); auto& collection = info_of(duplicate).items.at(17);
+    collection.items.at(2).items.at(0) = collection.items.at(1).items.at(0);
+    expect(!form_stream::decode_document(duplicate, "DuplicateEvent"), "duplicate event must fail");
+    expect(!form_stream::encode_document(make_document(true, true)), "foreign event owner must fail");
+    auto neighbor = encoded.value(); info_of(neighbor).items.at(18) = list_stream::ListValue::raw_atom("1");
+    const auto partial = form_stream::decode_document(neighbor, "UnknownNeighbor");
+    expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown neighbor must remain incomplete");
+}
+
 void test_spreadsheet_document_field_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -15932,6 +16059,7 @@ int main() {
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_single_input_field_round_trip();
         test_spreadsheet_cell_controls();
+        test_spreadsheet_document_field_named_properties_and_events();
         test_spreadsheet_document_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
