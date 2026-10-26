@@ -680,7 +680,7 @@ void apply_proven_storage_overrides(
     classify_shared_control_property("BorderColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::panel, ControlKind::command_bar, ControlKind::button, ControlKind::check_box,
             ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,
-            ControlKind::text_document_field, ControlKind::radio_button, ControlKind::list_box,
+            ControlKind::text_document_field, ControlKind::radio_button, ControlKind::picture_decoration, ControlKind::list_box,
             ControlKind::input_field, ControlKind::calendar_field, ControlKind::usual_group,
             ControlKind::progress_bar, ControlKind::track_bar});
     classify_shared_control_property("TextColor", StorageCodec::control_base, DefaultKind::color,
@@ -704,7 +704,7 @@ void apply_proven_storage_overrides(
             ControlKind::track_bar, ControlKind::calendar_field});
     classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
         ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
-        ControlKind::choice_field, ControlKind::command_bar, ControlKind::radio_button,
+        ControlKind::choice_field, ControlKind::command_bar, ControlKind::radio_button, ControlKind::picture_decoration,
         ControlKind::input_field, ControlKind::calendar_field, ControlKind::progress_bar,
     });
 
@@ -729,6 +729,11 @@ void apply_proven_storage_overrides(
     classify_property(usual_group, "Font", StorageCodec::control_base, DefaultKind::font, "automatic,bold=true");
     classify_property(usual_group, "Caption", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(usual_group, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
+    for (const auto kind : {ControlKind::check_box, ControlKind::choice_field, ControlKind::label_decoration,
+             ControlKind::picture_decoration, ControlKind::radio_button}) {
+        classify_property(properties[static_cast<std::size_t>(kind)], "Transparent",
+            StorageCodec::control_base, DefaultKind::boolean, "false");
+    }
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
     classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;

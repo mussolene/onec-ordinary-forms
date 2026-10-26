@@ -48,6 +48,10 @@ LabelDecoration, ListBox, PictureDecoration, ProgressBar, RadioButton, TrackBar
 Multiple и Interval. SelectedDates является временной коллекцией; публичный XML
 и BIN не сохраняют ее содержимое.
 
+CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration также
+сохраняют Transparent. PictureDecoration поддерживает Font и BorderColor через
+те же именованные типы значений, что и остальные подтвержденные владельцы.
+
 UsualGroup и TrackBar сохраняют Transparent. ProgressBar сохраняет ShowPercent,
 ShowStyle (ProgressBarSmoothingMode.Smooth, Broken, BrokenTilt) и Orientation.
 TrackBar сохраняет MarkingAppearance (DontShow, TopLeft, BottomRight, BothSides)

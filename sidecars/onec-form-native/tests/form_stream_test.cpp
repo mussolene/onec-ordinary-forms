@@ -5423,7 +5423,7 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
         tool_tip_path, "multilingual PictureDecoration ToolTip must be rejected without loss");
 
     auto unsupported_leaf = implicit_default.value();
-    mutable_picture_base(unsupported_leaf).items[5] = list_stream::ListValue::raw_atom("1");
+    mutable_picture_base(unsupported_leaf).items[15] = list_stream::ListValue::raw_atom("99");
     const auto partial_picture = form_stream::decode_document(unsupported_leaf, "PictureDecorationCodec");
     expect(partial_picture.ok() && !partial_picture.value().reconstruction_complete() &&
                std::any_of(partial_picture.diagnostics().begin(), partial_picture.diagnostics().end(),
@@ -5586,7 +5586,7 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
 
     auto unknown_property_document = make_document(false, true, "");
     const_cast<model::ControlNode*>(unknown_property_document.find_control(model::ObjectId{2}))
-        ->properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
+        ->properties().set_explicit(model::PropertyId::from_name("Zoomable"), true);
     expect_failure(form_stream::encode_document(unknown_property_document), "OOF1122",
         "$/PictureDecoration", "unimplemented non-default picture formatting must be rejected");
 
@@ -6822,7 +6822,7 @@ void test_check_box_radio_button_track_bar_named_on_change_events() {
     }
 }
 
-void test_calendar_group_progress_track_common_base_font_border_color() {
+void test_common_control_font_and_border_color() {
     const auto make_document = [](model::ControlKind kind,
                                   std::optional<model::FontValue> font = std::nullopt,
                                   std::optional<model::ColorValue> border_color = std::nullopt,
@@ -6839,7 +6839,9 @@ void test_calendar_group_progress_track_common_base_font_border_color() {
                 ? model::ControlNode{model::ObjectId{2}, "Group", model::UsualGroupPayload{}}
                 : kind == model::ControlKind::progress_bar
                     ? model::ControlNode{model::ObjectId{2}, "Progress", model::ProgressBarPayload{}}
-                    : model::ControlNode{model::ObjectId{2}, "Track", model::TrackBarPayload{}};
+                    : kind == model::ControlKind::picture_decoration
+                        ? model::ControlNode{model::ObjectId{2}, "Picture", model::PictureDecorationPayload{}}
+                        : model::ControlNode{model::ObjectId{2}, "Track", model::TrackBarPayload{}};
         if (font) control.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
         if (border_color)
             control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), *border_color);
@@ -6873,7 +6875,8 @@ void test_calendar_group_progress_track_common_base_font_border_color() {
     rgb_color.blue = 201;
 
     for (const auto kind : {model::ControlKind::calendar_field, model::ControlKind::usual_group,
-                             model::ControlKind::progress_bar, model::ControlKind::track_bar}) {
+                             model::ControlKind::progress_bar, model::ControlKind::track_bar,
+                             model::ControlKind::picture_decoration}) {
         const bool supports_font = kind != model::ControlKind::track_bar;
         auto default_font = automatic_font;
         if (kind == model::ControlKind::usual_group) default_font.bold = true;
@@ -7700,8 +7703,7 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
             type_specific_xml(test_case) + "<ChildItems><" + std::string(test_case.public_name) +
             " id=\"2\" name=\"Control\">" + data_path + "<Position/>" +
             std::string(border) + selection_mode +
-            (test_case.kind == model::ControlKind::picture_decoration ? std::string{} :
-                std::string(R"XML(<BorderColor kind="absolute" red="17" green="83" blue="201"/>)XML")) + events +
+            std::string(R"XML(<BorderColor kind="absolute" red="17" green="83" blue="201"/>)XML") + events +
             "</" + std::string(test_case.public_name) + "></ChildItems></Form>";
     };
     const auto border_record = [](auto& encoded, const BorderCase& test_case) -> auto* {
@@ -7978,7 +7980,7 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
     }
 }
 
-void test_group_progress_track_named_scalar_properties() {
+void test_common_control_named_scalar_properties() {
     struct ScalarCase {
         model::ControlKind kind;
         std::string_view owner;
@@ -7992,6 +7994,11 @@ void test_group_progress_track_named_scalar_properties() {
         return model::EnumerationValue{std::string(type), std::string(member)};
     };
     const std::vector<ScalarCase> cases{
+        {model::ControlKind::check_box, "CheckBox", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::choice_field, "ChoiceField", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::radio_button, "RadioButton", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::label_decoration, "LabelDecoration", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::picture_decoration, "PictureDecoration", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::usual_group, "UsualGroup", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::track_bar, "TrackBar", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::progress_bar, "ProgressBar", "ShowPercent", false, {{false, 0}, {true, 1}}, 6, false},
@@ -8011,11 +8018,19 @@ void test_group_progress_track_named_scalar_properties() {
     for (const auto& spec : cases) {
         const std::string label = std::string(spec.owner) + "." + std::string(spec.name);
         const auto fixture = [&] {
-            return source::parse_form_xml(std::string("<Form id=\"1\" name=\"Scalars\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
-                std::string(spec.owner) + " id=\"2\" name=\"Control\"><Position/></" + std::string(spec.owner) + "></ChildItems></Form>");
+            const std::string attributes = spec.kind == model::ControlKind::check_box ?
+                R"XML(<Attributes><Attribute id="3" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes>)XML" : "";
+            const std::string data_path = spec.kind == model::ControlKind::check_box ? R"XML(<DataPath attributeId="3"/>)XML" : "";
+            return source::parse_form_xml(std::string("<Form id=\"1\" name=\"Scalars\" ordinaryFormVersion=\"2.1\">") + attributes + "<ChildItems><" +
+                std::string(spec.owner) + " id=\"2\" name=\"Control\">" + data_path + "<Position/></" + std::string(spec.owner) + "></ChildItems></Form>");
         };
         auto absent = fixture();
         expect(absent.ok(), label + " default XML must parse");
+        const auto base_block = [&](auto& record) -> decltype(&record) {
+            if (spec.kind == model::ControlKind::check_box) return &record.items[2].items[1].items[0].items[0];
+            if (spec.kind == model::ControlKind::radio_button) return &record.items[2].items[2].items[0].items[0];
+            return &record.items[2].items[1].items[0];
+        };
         const auto property = model::PropertyId::from_name(spec.name);
         const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
         const auto read_default = absent.value().get_prop_val(key, property);
@@ -8048,8 +8063,7 @@ void test_group_progress_track_named_scalar_properties() {
             const auto encoded = form_stream::encode_document(document.value());
             expect(encoded.ok(), label + " named value must encode");
             const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(spec.kind).guid);
-            const auto* block = &record->items[2].items[1];
-            if (spec.base) block = &block->items[0];
+            const auto* block = spec.base ? base_block(*record) : &record->items[2].items[1];
             expect(block->items[spec.slot].atom == std::to_string(code), label + " must use its independently observed slot and code");
             const auto decoded = form_stream::decode_document(encoded.value(), "Scalars");
             expect(decoded.ok() && decoded.value().reconstruction_complete(), label + " must decode completely");
@@ -8064,13 +8078,12 @@ void test_group_progress_track_named_scalar_properties() {
                 label + " must survive XML/native rebuild without a baseline");
             auto invalid = encoded.value();
             auto* invalid_record = find_record_with_guid(invalid, model::metamodel::descriptor_for(spec.kind).guid);
-            auto* invalid_block = &invalid_record->items[2].items[1];
-            if (spec.base) invalid_block = &invalid_block->items[0];
+            auto* invalid_block = spec.base ? base_block(*invalid_record) : &invalid_record->items[2].items[1];
             invalid_block->items[spec.slot] = list_stream::ListValue::raw_atom("99");
             expect(!form_stream::decode_document(invalid, "InvalidScalar"), label + " must reject invalid native scalar codes");
             auto unknown = encoded.value();
             auto* unknown_record = find_record_with_guid(unknown, model::metamodel::descriptor_for(spec.kind).guid);
-            unknown_record->items[2].items[1].items[0].items[15] = list_stream::ListValue::raw_atom("99");
+            base_block(*unknown_record)->items[15] = list_stream::ListValue::raw_atom("99");
             const auto partial = form_stream::decode_document(unknown, "UnknownScalarNeighbor");
             expect(partial.ok() && !partial.value().reconstruction_complete() &&
                     partial.value().get_prop_val(key, property).value == read_value.value,
@@ -13943,14 +13956,14 @@ int main() {
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_named_events_round_trip_and_rejections();
         test_check_box_radio_button_track_bar_named_on_change_events();
-        test_calendar_group_progress_track_common_base_font_border_color();
+        test_common_control_font_and_border_color();
         test_all_named_base_color_pairs_public_xml_round_trip();
         test_text_document_field_persisted_profile_and_rejections();
         test_calendar_information_named_colors();
         test_calendar_field_begin_display_period();
         test_calendar_field_scalar_properties();
         test_named_borders_for_ordinary_controls_and_calendar_selection_mode();
-        test_group_progress_track_named_scalar_properties();
+        test_common_control_named_scalar_properties();
         test_calendar_field_captured_begin_period_record_decode();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
