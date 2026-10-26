@@ -74,7 +74,11 @@ struct XmlErrorCapture {
     int line = 0;
 };
 
+#if LIBXML_VERSION >= 21200
+void capture_xml_error(void* context, const xmlError* error) {
+#else
 void capture_xml_error(void* context, xmlErrorPtr error) {
+#endif
     if (context == nullptr || error == nullptr) {
         return;
     }
