@@ -683,6 +683,25 @@ void apply_proven_storage_overrides(
             ControlKind::text_document_field, ControlKind::radio_button, ControlKind::list_box,
             ControlKind::input_field, ControlKind::calendar_field, ControlKind::usual_group,
             ControlKind::progress_bar, ControlKind::track_bar});
+    classify_shared_control_property("TextColor", StorageCodec::control_base, DefaultKind::color,
+        "automatic", {ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
+            ControlKind::picture_decoration, ControlKind::radio_button, ControlKind::track_bar});
+    classify_shared_control_property("FieldTextColor", StorageCodec::control_base, DefaultKind::color,
+        "automatic", {ControlKind::check_box, ControlKind::choice_field, ControlKind::input_field,
+            ControlKind::list_box, ControlKind::radio_button, ControlKind::calendar_field});
+    classify_shared_control_property("BackColor", StorageCodec::control_base, DefaultKind::color,
+        "automatic", {ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
+            ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
+            ControlKind::track_bar});
+    classify_shared_control_property("FieldBackColor", StorageCodec::control_base, DefaultKind::color,
+        "automatic", {ControlKind::check_box, ControlKind::choice_field, ControlKind::input_field,
+            ControlKind::list_box, ControlKind::radio_button, ControlKind::calendar_field});
+    classify_shared_control_property("ButtonTextColor", StorageCodec::control_base, DefaultKind::color,
+        "StyleColors.ButtonTextColor", {ControlKind::choice_field, ControlKind::input_field,
+            ControlKind::calendar_field});
+    classify_shared_control_property("ButtonBackColor", StorageCodec::control_base, DefaultKind::color,
+        "StyleColors.ButtonBackColor", {ControlKind::choice_field, ControlKind::input_field,
+            ControlKind::track_bar, ControlKind::calendar_field});
     classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
         ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
         ControlKind::choice_field, ControlKind::command_bar, ControlKind::radio_button,
@@ -850,6 +869,12 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::undefined,
         "undefined");
+    classify_property(calendar_field, "HolidayColor", StorageCodec::control_info,
+        DefaultKind::color, "StyleColors.SpecialTextColor");
+    classify_property(calendar_field, "SelectionBackColor", StorageCodec::control_info,
+        DefaultKind::color, "StyleColors.FieldSelectionBackColor");
+    classify_property(calendar_field, "SelectionTextColor", StorageCodec::control_info,
+        DefaultKind::color, "StyleColors.FieldSelectedTextColor");
     classify_property(
         calendar_field,
         "EndOfDisplayPeriod",

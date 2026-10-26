@@ -803,6 +803,9 @@ LV encode_control_color(const model::ColorValue& color, std::string_view path) {
     else if (name->value == "StyleColors.ButtonBackColor") style_id = -7;
     else if (name->value == "StyleColors.ButtonBorderColor") style_id = -34;
     else if (name->value == "StyleColors.BorderColor") style_id = -22;
+    else if (name->value == "StyleColors.SpecialTextColor") style_id = -16;
+    else if (name->value == "StyleColors.FieldSelectionBackColor") style_id = -14;
+    else if (name->value == "StyleColors.FieldSelectedTextColor") style_id = -15;
     else fail("OOF1122", std::string(path), "known control StyleColors property", name->value,
         "Control color style reference is unsupported");
     return list({raw("4"), raw("3"), list({raw(std::to_string(style_id))}), raw("3")});
@@ -841,6 +844,9 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
         else if (style_id == -7) style_name = "StyleColors.ButtonBackColor";
         else if (style_id == -34) style_name = "StyleColors.ButtonBorderColor";
         else if (style_id == -22) style_name = "StyleColors.BorderColor";
+        else if (style_id == -16) style_name = "StyleColors.SpecialTextColor";
+        else if (style_id == -14) style_name = "StyleColors.FieldSelectionBackColor";
+        else if (style_id == -15) style_name = "StyleColors.FieldSelectedTextColor";
         else fail("OOF1114", child_path(path, 2) + "/0", "known control StyleColors ID",
             std::to_string(style_id), "Control color style identifier is unsupported");
         model::ColorValue color;
@@ -952,9 +958,90 @@ model::FontValue decode_control_font(const LV& value, std::string_view path) {
     }
 }
 
+enum class ControlColorDefault : std::uint8_t {
+    automatic, button_text, button_back, special_text, field_selection_back, field_selected_text
+};
+
+struct ControlColorPropertySpec {
+    model::ControlKind control;
+    std::string_view property;
+    std::size_t slot;
+    ControlColorDefault default_kind;
+};
+
+constexpr ControlColorPropertySpec base_color_properties[]{
+    {model::ControlKind::check_box, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::check_box, "FieldTextColor", 8, ControlColorDefault::automatic},
+    {model::ControlKind::check_box, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::check_box, "FieldBackColor", 7, ControlColorDefault::automatic},
+    {model::ControlKind::choice_field, "ButtonTextColor", 10, ControlColorDefault::button_text},
+    {model::ControlKind::choice_field, "FieldTextColor", 8, ControlColorDefault::automatic},
+    {model::ControlKind::choice_field, "ButtonBackColor", 9, ControlColorDefault::button_back},
+    {model::ControlKind::choice_field, "FieldBackColor", 7, ControlColorDefault::automatic},
+    {model::ControlKind::usual_group, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::usual_group, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::input_field, "ButtonTextColor", 10, ControlColorDefault::button_text},
+    {model::ControlKind::input_field, "FieldTextColor", 8, ControlColorDefault::automatic},
+    {model::ControlKind::input_field, "ButtonBackColor", 9, ControlColorDefault::button_back},
+    {model::ControlKind::input_field, "FieldBackColor", 7, ControlColorDefault::automatic},
+    {model::ControlKind::label_decoration, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::label_decoration, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::list_box, "FieldTextColor", 8, ControlColorDefault::automatic},
+    {model::ControlKind::list_box, "FieldBackColor", 7, ControlColorDefault::automatic},
+    {model::ControlKind::picture_decoration, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::picture_decoration, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::progress_bar, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::radio_button, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::radio_button, "FieldTextColor", 8, ControlColorDefault::automatic},
+    {model::ControlKind::radio_button, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::radio_button, "FieldBackColor", 7, ControlColorDefault::automatic},
+    {model::ControlKind::track_bar, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::track_bar, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::track_bar, "ButtonBackColor", 9, ControlColorDefault::button_back},
+    {model::ControlKind::calendar_field, "ButtonTextColor", 10, ControlColorDefault::button_text},
+    {model::ControlKind::calendar_field, "FieldTextColor", 8, ControlColorDefault::automatic},
+    {model::ControlKind::calendar_field, "ButtonBackColor", 9, ControlColorDefault::button_back},
+    {model::ControlKind::calendar_field, "FieldBackColor", 7, ControlColorDefault::automatic},
+};
+
+constexpr ControlColorPropertySpec calendar_info_color_properties[]{
+    {model::ControlKind::calendar_field, "HolidayColor", 2, ControlColorDefault::special_text},
+    {model::ControlKind::calendar_field, "SelectionBackColor", 3, ControlColorDefault::field_selection_back},
+    {model::ControlKind::calendar_field, "SelectionTextColor", 4, ControlColorDefault::field_selected_text},
+};
+
+model::ColorValue control_color_property_default(const ControlColorPropertySpec& spec) {
+    switch (spec.default_kind) {
+        case ControlColorDefault::automatic:
+            return {};
+        case ControlColorDefault::button_text:
+            return button_color_default("ButtonTextColor");
+        case ControlColorDefault::button_back:
+            return button_color_default("ButtonBackColor");
+        case ControlColorDefault::special_text:
+        case ControlColorDefault::field_selection_back:
+        case ControlColorDefault::field_selected_text: {
+            model::ColorValue color;
+            color.kind = model::ColorKind::style_reference;
+            const auto name = spec.default_kind == ControlColorDefault::special_text ? "StyleColors.SpecialTextColor" :
+                spec.default_kind == ControlColorDefault::field_selection_back ? "StyleColors.FieldSelectionBackColor" :
+                "StyleColors.FieldSelectedTextColor";
+            color.style = model::QualifiedName{name};
+            return color;
+        }
+    }
+    throw std::logic_error("Unknown named control color default");
+}
+
+struct NamedBaseColor {
+    std::string_view property;
+    model::ColorValue value;
+};
+
 struct CommonControlBaseCapabilities {
     bool font = false;
     bool border_color = false;
+    std::optional<model::ControlKind> named_color_control{};
 };
 
 struct CommonControlBaseFields {
@@ -962,6 +1049,7 @@ struct CommonControlBaseFields {
     std::string tool_tip;
     std::optional<model::FontValue> font;
     std::optional<model::ColorValue> border_color;
+    std::vector<NamedBaseColor> named_colors{};
 };
 
 CommonControlBaseFields decode_common_control_base(
@@ -973,6 +1061,14 @@ CommonControlBaseFields decode_common_control_base(
     fields.tool_tip = decoded_single_language_text(base.items[12], child_path(path, 12));
     if (capabilities.font) fields.font = decode_control_font(base.items[4], child_path(path, 4));
     if (capabilities.border_color) fields.border_color = decode_control_color(base.items[6], child_path(path, 6));
+    if (capabilities.named_color_control) {
+        for (const auto& spec : base_color_properties) {
+            if (spec.control != *capabilities.named_color_control) continue;
+            const auto color_path = child_path(path, spec.slot);
+            const auto color = decode_control_color(base.items[spec.slot], color_path);
+            if (color != control_color_property_default(spec)) fields.named_colors.push_back({spec.property, color});
+        }
+    }
     return fields;
 }
 
@@ -985,6 +1081,41 @@ void apply_common_control_base(
         properties.set_explicit(model::PropertyId::from_name("Font"), *fields.font);
     if (fields.border_color && *fields.border_color != button_color_default("BorderColor"))
         properties.set_explicit(model::PropertyId::from_name("BorderColor"), *fields.border_color);
+    for (const auto& color : fields.named_colors)
+        properties.set_explicit(model::PropertyId::from_name(color.property), color.value);
+}
+
+void encode_named_control_colors(
+    LV& base, model::ControlKind control, const model::PropertySet& properties, std::string_view path,
+    std::span<const ControlColorPropertySpec> specs = base_color_properties) {
+    for (const auto& spec : specs) {
+        if (spec.control != control) continue;
+        const auto* entry = properties.find(model::PropertyId::from_name(spec.property));
+        const model::ColorValue* color = nullptr;
+        if (entry == nullptr) {
+            const auto default_value = control_color_property_default(spec);
+            base.items[spec.slot] = encode_control_color(default_value,
+                std::string(path) + "/" + std::string(spec.property));
+            continue;
+        }
+        color = std::get_if<model::ColorValue>(&entry->value);
+        if (color == nullptr)
+            fail("OOF1122", std::string(path) + "/" + std::string(spec.property), "ColorValue",
+                "different value type", "Named base color property has the wrong value type");
+        base.items[spec.slot] = encode_control_color(*color,
+            std::string(path) + "/" + std::string(spec.property));
+    }
+}
+
+void normalize_named_control_colors(
+    LV& base, model::ControlKind control, std::string_view path,
+    std::span<const ControlColorPropertySpec> specs = base_color_properties) {
+    for (const auto& spec : specs) {
+        if (spec.control != control) continue;
+        const auto color_path = child_path(path, spec.slot);
+        static_cast<void>(decode_control_color(base.items[spec.slot], color_path));
+        base.items[spec.slot] = encode_control_color(control_color_property_default(spec), color_path);
+    }
 }
 
 void encode_common_control_base(
@@ -1374,7 +1505,8 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
     std::string_view tool_tip = {}, const model::FontValue* font = nullptr,
     const model::ColorValue* border_color = nullptr, std::string_view end_period = "00010101000000",
     bool show_current_date = true, bool calendar_navigation = true,
-    bool enable_start_drag = false, bool enable_drag = false) {
+    bool enable_start_drag = false, bool enable_drag = false,
+    const model::PropertySet* color_properties = nullptr) {
     const LV zero_record = list({raw("0")});
     const LV canonical_4_4_record = list({raw("4"), raw("4"), zero_record, raw("4")});
     const LV canonical_neg7_record = list({raw("4"), raw("3"), list({raw("-7")}), raw("3")});
@@ -1392,7 +1524,7 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
             font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
             border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
         "$/CalendarField");
-    const LV properties = list({
+    LV properties = list({
         base_properties, raw("9"),
         list({raw("4"), raw("3"), list({raw("-16")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-14")}), raw("3")}),
@@ -1401,7 +1533,10 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
         raw(show_current_date ? "1" : "0"), raw(calendar_navigation ? "1" : "0"), raw("0"),
         raw(enable_start_drag ? "1" : "0"), raw(enable_drag ? "1" : "0"), raw("0"), raw("1"),
     });
-    return list({raw("1"), properties, zero_record});
+    if (color_properties)
+        encode_named_control_colors(properties, model::ControlKind::calendar_field, *color_properties,
+            "$/CalendarField", calendar_info_color_properties);
+    return list({raw("1"), std::move(properties), zero_record});
 }
 
 LV canonical_text_document_field_info(bool enabled, const model::ColorValue& border_color,
@@ -4426,7 +4561,8 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     const auto base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
     require_raw_constant(base.items[0], "19", child_path(base_path, 0));
-    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
+    const auto common = decode_common_control_base(base, base_path,
+        CommonControlBaseCapabilities{true, true, model::ControlKind::usual_group});
     const bool enabled = common.enabled;
     const std::string& tool_tip = common.tool_tip;
     const auto& border_color = *common.border_color;
@@ -4435,6 +4571,7 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     auto normalized = properties;
     auto normalized_base = base;
     normalized_base.items[12] = encoded_localized(tool_tip);
+    normalize_named_control_colors(normalized_base, model::ControlKind::usual_group, base_path);
     normalized.items[0] = std::move(normalized_base);
     normalized.items[2] = encoded_localized(caption);
     if (list_stream::dump_compact(normalized) != list_stream::dump_compact(
@@ -4687,9 +4824,10 @@ DecodedControl decode_picture_decoration(
     const std::string base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
     require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_path, 12));
+    const auto common = decode_common_control_base(base_properties, base_path,
+        CommonControlBaseCapabilities{false, false, model::ControlKind::picture_decoration});
+    const bool enabled = common.enabled;
+    const std::string& tool_tip = common.tool_tip;
     const std::string picture_slot_path = child_path(properties_path, 4);
     const auto& picture_slot = picture_properties.items[4];
     require_arity(picture_slot, 11, picture_slot_path);
@@ -4698,6 +4836,7 @@ DecodedControl decode_picture_decoration(
     auto normalized_properties = picture_properties;
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized(tool_tip);
+    normalize_named_control_colors(normalized_base, model::ControlKind::picture_decoration, base_path);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[4].items[2] = canonical_button_picture();
     if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
@@ -4735,12 +4874,7 @@ DecodedControl decode_picture_decoration(
         name,
         model::PictureDecorationPayload{},
     };
-    if (!enabled) {
-        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    }
-    if (!tool_tip.empty()) {
-        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    }
+    apply_common_control_base(control.properties(), common);
     if (picture && picture->standard_name) {
         control.properties().set_explicit(model::PropertyId::from_name("Picture"),
             model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
@@ -4852,7 +4986,7 @@ DecodedControl decode_radio_button(
     require_arity(base_properties, 21, base_path);
     require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const auto common = decode_common_control_base(
-        base_properties, base_path, CommonControlBaseCapabilities{true, true});
+        base_properties, base_path, CommonControlBaseCapabilities{true, true, model::ControlKind::radio_button});
     const bool enabled = common.enabled;
     const std::string& tool_tip = common.tool_tip;
     const std::string caption = decoded_single_language_text(
@@ -4868,6 +5002,7 @@ DecodedControl decode_radio_button(
     auto normalized_properties = properties;
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized(tool_tip);
+    normalize_named_control_colors(normalized_base, model::ControlKind::radio_button, base_path);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[2] = encoded_localized(caption);
     normalized_info.items[2].items[0] = std::move(normalized_properties);
@@ -5098,7 +5233,7 @@ DecodedControl decode_label(
     const auto& base_properties = properties.items[0];
     const std::string base_properties_path = child_path(properties_path, 0);
     const auto common = decode_common_control_base(
-        base_properties, base_properties_path, CommonControlBaseCapabilities{true, true});
+        base_properties, base_properties_path, CommonControlBaseCapabilities{true, true, model::ControlKind::label_decoration});
     require_raw_constant(properties.items[1], "11", child_path(properties_path, 1));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
@@ -5112,6 +5247,7 @@ DecodedControl decode_label(
     auto normalized_properties = properties;
     auto normalized_base_properties = base_properties;
     normalized_base_properties.items[12] = encoded_localized(common.tool_tip);
+    normalize_named_control_colors(normalized_base_properties, model::ControlKind::label_decoration, base_properties_path);
     normalized_properties.items[0] = std::move(normalized_base_properties);
     normalized_properties.items[2] = encoded_localized(caption);
     const auto canonical_properties = canonical_label_properties(
@@ -5904,7 +6040,7 @@ DecodedControl decode_progress_bar(
     require_arity(properties, 21, properties_path);
     require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const auto common = decode_common_control_base(properties, properties_path,
-        CommonControlBaseCapabilities{true, true});
+        CommonControlBaseCapabilities{true, true, model::ControlKind::progress_bar});
     const auto& font = *common.font;
     const auto& border_color = *common.border_color;
     const auto min_path = child_path(info_list_path, 2);
@@ -5918,6 +6054,7 @@ DecodedControl decode_progress_bar(
     normalized_properties.items[12] = encoded_localized("");
     auto normalized_info = info_list;
     normalized_info.items[0] = std::move(normalized_properties);
+    normalize_named_control_colors(normalized_info.items[0], model::ControlKind::progress_bar, properties_path);
     normalized_info.items[2] = raw("0");
     normalized_info.items[3] = raw("100");
     normalized_info.items[4] = raw("1");
@@ -5982,7 +6119,7 @@ DecodedControl decode_track_bar(
     require_arity(properties, 21, properties_path);
     require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const auto common = decode_common_control_base(properties, properties_path,
-        CommonControlBaseCapabilities{false, true});
+        CommonControlBaseCapabilities{false, true, model::ControlKind::track_bar});
     const auto& border_color = *common.border_color;
     const std::int32_t min_value = integer_atom<std::int32_t>(
         info_payload.items[2], child_path(payload_path, 2));
@@ -6008,6 +6145,8 @@ DecodedControl decode_track_bar(
     }
 
     auto normalized_info = info;
+    normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::track_bar,
+        child_path(child_path(info_path, 1), 0));
     normalized_info.items[1].items[0].items[1] = raw("1");
     normalized_info.items[1].items[0].items[12] = encoded_localized("");
     normalized_info.items[1].items[2] = raw("0");
@@ -6078,7 +6217,7 @@ DecodedControl decode_list_box(
     require_arity(properties, 7, properties_path);
     const auto base_path = child_path(properties_path, 0);
     const auto common = decode_common_control_base(
-        properties.items[0], base_path, CommonControlBaseCapabilities{false, true});
+        properties.items[0], base_path, CommonControlBaseCapabilities{false, true, model::ControlKind::list_box});
     const auto flags_path = child_path(properties_path, 1);
     require_list(properties.items[1], flags_path);
     require_arity(properties.items[1], 38, flags_path);
@@ -6092,6 +6231,8 @@ DecodedControl decode_list_box(
     const bool show_picture = bool_atom(properties.items[4], child_path(properties_path, 4));
     const bool show_check_box = bool_atom(properties.items[5], child_path(properties_path, 5));
     auto normalized_info = info;
+    normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::list_box,
+        child_path(child_path(info_path, 1), 0));
     normalized_info.items[1].items[0].items[1] = raw("1");
     normalized_info.items[1].items[0].items[12] = encoded_localized("");
     normalized_info.items[1].items[1].items[1] = raw("100743712");
@@ -6155,7 +6296,8 @@ DecodedControl decode_check_box(
     require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{true, true});
+    const auto common = decode_common_control_base(base_properties, base_path,
+        CommonControlBaseCapabilities{true, true, model::ControlKind::check_box});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
     const auto& font = *common.font;
@@ -6163,6 +6305,8 @@ DecodedControl decode_check_box(
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     auto normalized_info = info;
+    normalize_named_control_colors(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
+        child_path(child_path(child_path(info_path, 1), 0), 0));
     normalized_info.items[1].items[0].items[0].items[12] = encoded_localized(tool_tip);
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
@@ -6224,7 +6368,8 @@ DecodedControl decode_choice_field(
     require_raw_constant(info_properties.items[1], "31", child_path(info_properties_path, 1));
     const auto& base_properties = info_properties.items[0];
     const auto base_path = child_path(info_properties_path, 0);
-    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{true, true});
+    const auto common = decode_common_control_base(base_properties, base_path,
+        CommonControlBaseCapabilities{true, true, model::ControlKind::choice_field});
     const bool enabled = common.enabled;
     const auto& border_color = *common.border_color;
     const auto& tool_tip = common.tool_tip;
@@ -6232,6 +6377,8 @@ DecodedControl decode_choice_field(
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
         "ChoiceField cannot contain storage children");
     auto normalized_info = info;
+    normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::choice_field,
+        child_path(child_path(info_path, 1), 0));
     normalized_info.items[1].items[0].items[6] =
         encode_control_color(border_color, child_path(base_path, 6));
     normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
@@ -6332,16 +6479,24 @@ DecodedControl decode_calendar_field(
             "CalendarField property record is incomplete");
     }
     const auto& base_properties = properties.items[0];
-    const auto common = decode_common_control_base(base_properties, child_path(properties_path, 0),
-        CommonControlBaseCapabilities{true, true});
+    auto common = decode_common_control_base(base_properties, child_path(properties_path, 0),
+        CommonControlBaseCapabilities{true, true, model::ControlKind::calendar_field});
     const bool enabled = common.enabled;
     const auto& font = *common.font;
     const auto& border_color = *common.border_color;
     auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
         model::ControlKind::calendar_field);
     LV profile_info = info;
+    normalize_named_control_colors(profile_info.items[1].items[0], model::ControlKind::calendar_field,
+        child_path(child_path(info_path, 1), 0));
     profile_info.items[2] = list({raw("0")});
     require_arity(properties, 14, properties_path);
+    for (const auto& spec : calendar_info_color_properties) {
+        const auto color = decode_control_color(properties.items[spec.slot], child_path(properties_path, spec.slot));
+        if (color != control_color_property_default(spec)) common.named_colors.push_back({spec.property, color});
+    }
+    normalize_named_control_colors(profile_info.items[1], model::ControlKind::calendar_field,
+        properties_path, calendar_info_color_properties);
     const auto begin_path = child_path(properties_path, 5);
     const auto begin_atom = raw_atom(properties.items[5], begin_path);
     const auto end_path = child_path(properties_path, 6);
@@ -7202,7 +7357,7 @@ DecodedControl decode_input_field(
             std::to_string(stored_length), "Date-only InputField payload slot must be zero");
     }
     const auto common = decode_common_control_base(
-        base_info, base_info_path, CommonControlBaseCapabilities{true, true});
+        base_info, base_info_path, CommonControlBaseCapabilities{true, true, model::ControlKind::input_field});
     const bool enabled = common.enabled;
     const std::string& tool_tip = common.tool_tip;
     const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
@@ -7226,7 +7381,10 @@ DecodedControl decode_input_field(
         info, info_path, InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
-    if (list_stream::dump_compact(info) != list_stream::dump_compact(
+    LV normalized_info = info;
+    normalize_named_control_colors(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
+        child_path(child_path(child_path(info_path, 2), 0), 0));
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values,
             &*common.font, &*common.border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
@@ -7850,7 +8008,7 @@ LV encode_picture_decoration(
         fail("OOF1122", "$/PictureDecoration", "plain PictureDecoration", control.name,
             "PictureDecoration uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture"}, "$/PictureDecoration");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture", "TextColor", "BackColor"}, "$/PictureDecoration");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
@@ -7885,6 +8043,8 @@ LV encode_picture_decoration(
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
     auto picture_properties = canonical_picture_properties(enabled, tool_tip);
+    encode_named_control_colors(picture_properties.items[0], model::ControlKind::picture_decoration,
+        control.properties(), "$/PictureDecoration");
     if (standard_picture != nullptr) {
         picture_properties.items[4].items[2] = encode_standard_button_picture(*standard_picture);
     } else if (picture_asset != nullptr) {
@@ -7946,7 +8106,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor"}, "$/LabelDecoration");
     const std::string caption = explicit_string(control.properties(), "Caption");
     const CommonControlBaseFields common{
         explicit_bool(control.properties(), "Enabled", true),
@@ -7973,10 +8133,13 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         else horizontal_align = 2;
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
+    auto label_properties = canonical_label_properties(caption, horizontal_align, common);
+    encode_named_control_colors(label_properties.items[0], model::ControlKind::label_decoration,
+        control.properties(), "$/LabelDecoration");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("3"), canonical_label_properties(caption, horizontal_align, common), list({raw("0")})}),
+        list({raw("3"), std::move(label_properties), list({raw("0")})}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -8010,7 +8173,7 @@ LV encode_progress_bar(
             "single numeric Attribute", attribute->name, "ProgressBar DataPath must target a single numeric attribute");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "Font", "BorderColor"}, "$/ProgressBar");
+        {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "Font", "BorderColor", "BackColor"}, "$/ProgressBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto font = explicit_control_font(control.properties(), "$/ProgressBar/Font");
@@ -8019,11 +8182,14 @@ LV encode_progress_bar(
     const std::int32_t min_value = explicit_integer(control.properties(), "MinValue", 0, "$/ProgressBar/MinValue");
     const std::int32_t step = explicit_integer(control.properties(), "Step", 1, "$/ProgressBar/Step");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
+    auto progress_info = canonical_progress_bar_info(enabled, tool_tip, max_value, min_value, step,
+        &font, &border_color);
+    encode_named_control_colors(progress_info.items[0], model::ControlKind::progress_bar,
+        control.properties(), "$/ProgressBar");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("0"), canonical_progress_bar_info(enabled, tool_tip, max_value, min_value, step,
-            &font, &border_color)}),
+        list({raw("0"), std::move(progress_info)}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -8056,7 +8222,7 @@ LV encode_track_bar(
             "TrackBar DataPath must target the supported numeric domain");
     }
     require_allowed_properties(
-        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "BorderColor"}, "$/TrackBar");
+        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "BorderColor", "TextColor", "BackColor", "ButtonBackColor"}, "$/TrackBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "TrackBar");
@@ -8078,8 +8244,11 @@ LV encode_track_bar(
             "TrackBar Step values at or below zero were not accepted by the platform runtime");
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
+    auto track_info = canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step, &border_color);
+    encode_named_control_colors(track_info.items[1].items[0], model::ControlKind::track_bar,
+        control.properties(), "$/TrackBar");
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
-        canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step, &border_color),
+        std::move(track_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")})});
@@ -8103,7 +8272,7 @@ LV encode_list_box(
             control.name, "ListBox uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly", "BorderColor"}, "$/ListBox");
+        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly", "BorderColor", "FieldTextColor", "FieldBackColor"}, "$/ListBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
@@ -8122,10 +8291,13 @@ LV encode_list_box(
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "ListBox");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
+    auto list_info = canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip, border_color);
+    encode_named_control_colors(list_info.items[1].items[0], model::ControlKind::list_box,
+        control.properties(), "$/ListBox");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip, border_color),
+        std::move(list_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -8148,7 +8320,7 @@ LV encode_check_box(
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor"}, "$/CheckBox");
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor"}, "$/CheckBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
@@ -8164,10 +8336,13 @@ LV encode_check_box(
     const auto font = explicit_control_font(control.properties(), "$/CheckBox/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "CheckBox");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
+    auto check_info = canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color);
+    encode_named_control_colors(check_info.items[1].items[0].items[0], model::ControlKind::check_box,
+        control.properties(), "$/CheckBox");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color),
+        std::move(check_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -8191,7 +8366,7 @@ LV encode_choice_field(
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font"}, "$/ChoiceField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/ChoiceField");
     if (control.data_path) {
         const auto* attribute = document.find_attribute(control.data_path->attribute.id());
         if (attribute == nullptr) {
@@ -8208,10 +8383,13 @@ LV encode_choice_field(
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto font = explicit_control_font(control.properties(), "$/ChoiceField/Font");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
+    auto choice_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font);
+    encode_named_control_colors(choice_info.items[1].items[0], model::ControlKind::choice_field,
+        control.properties(), "$/ChoiceField");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_choice_field_info(enabled, tool_tip, border_color, &font),
+        std::move(choice_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -8236,7 +8414,7 @@ LV encode_radio_button(
             "RadioButton uses a storage concept outside the supported basic profile");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "Caption", "ToolTip", "SelectionValue", "Font", "BorderColor"}, "$/RadioButton");
+        {"Enabled", "Caption", "ToolTip", "SelectionValue", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor"}, "$/RadioButton");
     bool first_in_group = false;
     if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("FirstInGroup"))) {
         const auto* value = std::get_if<bool>(&entry->value);
@@ -8298,11 +8476,14 @@ LV encode_radio_button(
     const auto font = explicit_control_font(control.properties(), "$/RadioButton/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "RadioButton");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
+    auto radio_info = canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
+        &font, &border_color);
+    encode_named_control_colors(radio_info.items[2].items[0].items[0], model::ControlKind::radio_button,
+        control.properties(), "$/RadioButton");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
-            &font, &border_color),
+        std::move(radio_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
         list({raw("0")}),
@@ -8413,7 +8594,7 @@ LV encode_calendar_field(
     }
     require_allowed_properties(control.properties(),
         {"Enabled", "BeginOfDisplayPeriod", "EndOfDisplayPeriod", "ShowCurrentDate", "CalendarNavigation",
-         "EnableStartDrag", "EnableDrag", "ToolTip", "Font", "BorderColor"}, "$/CalendarField");
+         "EnableStartDrag", "EnableDrag", "ToolTip", "Font", "BorderColor", "HolidayColor", "SelectionBackColor", "SelectionTextColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const bool show_current_date = explicit_bool(control.properties(), "ShowCurrentDate", true);
     const bool calendar_navigation = explicit_bool(control.properties(), "CalendarNavigation", true);
@@ -8446,7 +8627,9 @@ LV encode_calendar_field(
     const std::string end_period = calendar_date_atom("EndOfDisplayPeriod");
     auto info = canonical_calendar_field_info(enabled, begin_period,
         explicit_string(control.properties(), "ToolTip"), &font, &border_color, end_period,
-        show_current_date, calendar_navigation, enable_start_drag, enable_drag);
+        show_current_date, calendar_navigation, enable_start_drag, enable_drag, &control.properties());
+    encode_named_control_colors(info.items[1].items[0], model::ControlKind::calendar_field,
+        control.properties(), "$/CalendarField");
     info.items[2] = encode_control_event_collection(document, control, "$/CalendarField/Events");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
     return list({
@@ -8521,7 +8704,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "Font", "BorderColor"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -8552,11 +8735,14 @@ LV encode_input_field(
         input_field_flags[index] = explicit_bool(control.properties(), mapping.name, mapping.default_value);
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
+    auto input_info = canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags,
+        text_values, layout_values, &font, &border_color);
+    encode_named_control_colors(input_info.items[2].items[0].items[0], model::ControlKind::input_field,
+        control.properties(), "$/InputField");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags, text_values, layout_values,
-            &font, &border_color),
+        std::move(input_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -10034,7 +10220,7 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "UsualGroup uses an unsupported storage concept");
                     }
                     require_allowed_properties(control->properties(),
-                        {"Caption", "Enabled", "ToolTip", "BorderColor", "Font"},
+                        {"Caption", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor"},
                         child_path(path, ordinal) + "/UsualGroup");
                     const bool enabled = explicit_bool(control->properties(), "Enabled", true);
                     const auto caption = explicit_string(control->properties(), "Caption");
@@ -10044,8 +10230,12 @@ Result<list_stream::ListValue> encode_document(
                     if (control->properties().find(model::PropertyId::from_name("Font")))
                         font = explicit_control_font(control->properties(), "$/UsualGroup/Font");
                     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
+                    auto group_properties = canonical_usual_group_properties(enabled, caption, tool_tip,
+                        &border_color, font ? &*font : nullptr);
+                    encode_named_control_colors(group_properties.items[1].items[0], model::ControlKind::usual_group,
+                        control->properties(), "$/UsualGroup");
                     record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
-                        canonical_usual_group_properties(enabled, caption, tool_tip, &border_color, font ? &*font : nullptr),
+                        std::move(group_properties),
                         encode_geometry(control->position, context, IncomingAnchorLists{}),
                         list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
                         list({raw("0")})});

@@ -2293,9 +2293,48 @@ void test_runtime_properties_are_not_public_xml() {
         "XML writer must reject explicit runtime state instead of silently losing it");
 }
 
+void test_typed_defaults_for_existing_codecs() {
+    auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="TypedDefaults" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="B"><Position/></Button><CommandBar id="3" name="Bar"><Position/></CommandBar><InputField id="4" name="I"><Position/></InputField><HTMLDocumentField id="5" name="H"><Position/></HTMLDocumentField><Splitter id="6" name="S"><Position/></Splitter><RadioButton id="7" name="R"><Position/></RadioButton></ChildItems></Form>)XML");
+    expect(parsed.ok(), "typed-default fixture must parse");
+    if (!parsed) return;
+    struct Expected {std::uint64_t owner; std::string_view name; model::PropertyValue value;};
+    const Expected cases[]{
+        {2, "HorizontalAlign", model::EnumerationValue{"HorizontalAlign", "Center"}},
+        {2, "VerticalAlign", model::EnumerationValue{"VerticalAlign", "Center"}},
+        {2, "PictureLocation", model::EnumerationValue{"PictureLocation", "Left"}},
+        {2, "PictureSize", model::EnumerationValue{"PictureSize", "RealSize"}},
+        {2, "MenuMode", model::EnumerationValue{"MenuMode", "DontUse"}},
+        {2, "Shortcut", model::ShortcutValue{}},
+        {3, "Border", model::BorderValue{}},
+        {4, "HorizontalAlign", model::EnumerationValue{"HorizontalAlign", "Auto"}},
+        {4, "VerticalAlign", model::EnumerationValue{"VerticalAlign", "Top"}},
+        {5, "Output", model::EnumerationValue{"Output", "Auto"}},
+        {6, "Orientation", model::EnumerationValue{"Orientation", "Auto"}},
+        {7, "SelectionValue", model::UndefinedValue{}},
+    };
+    for (const auto& test : cases) {
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{test.owner}};
+        const auto property = model::PropertyId::from_name(test.name);
+        const auto before = parsed.value().get_prop_val(owner, property);
+        expect(before.status == model::PropertyReadStatus::proven_default && before.value && *before.value == test.value,
+            "declared typed defaults must be materialized by GetPropVal");
+        expect(parsed.value().set_prop_val(owner, property, test.value) == model::PropertyMutationStatus::applied,
+            "the same typed default must be accepted by SetPropVal");
+        expect(parsed.value().reset_prop_val(owner, property) == model::PropertyMutationStatus::reset,
+            "reset must reveal the original typed default");
+        const auto after = parsed.value().get_prop_val(owner, property);
+        expect(after.status == model::PropertyReadStatus::proven_default && after.value && *after.value == test.value,
+            "GetPropVal must return the same typed default after reset");
+    }
+    expect(parsed.value().set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+               model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", "Unknown"}) ==
+               model::PropertyMutationStatus::invalid_value,
+        "typed enum defaults must not widen the property domain to unknown members");
+}
+
 void test_named_style_color_defaults() {
     const auto parsed = oof::source::parse_form_xml(
-        R"XML(<Form id="1" name="ColorDefaults" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="OwnButton"><Position/></Button></ChildItems></Form>)XML");
+        R"XML(<Form id="1" name="ColorDefaults" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="OwnButton"><Position/></Button><CalendarField id="3" name="OwnCalendar"><Position/></CalendarField></ChildItems></Form>)XML");
     expect(parsed.ok(), "style-color default fixture must parse");
     if (!parsed) return;
     auto document = parsed.value();
@@ -2313,10 +2352,49 @@ void test_named_style_color_defaults() {
         expect(document.set_prop_val(owner, property, *value.value) == oof::model::PropertyMutationStatus::applied,
             "style-color default must remain editable through the typed property API");
     }
+    const oof::model::OrdinaryFormDocument::ObjectKey calendar{oof::model::ObjectCategory::control, oof::model::ObjectId{3}};
+    for (const auto& [property_name, style_name] : std::array{
+             std::pair{"HolidayColor", "StyleColors.SpecialTextColor"},
+             std::pair{"SelectionBackColor", "StyleColors.FieldSelectionBackColor"},
+             std::pair{"SelectionTextColor", "StyleColors.FieldSelectedTextColor"}}) {
+        const auto property = oof::model::PropertyId::from_name(property_name);
+        const auto value = document.get_prop_val(calendar, property);
+        expect(value.status == oof::model::PropertyReadStatus::proven_default && value.value,
+            "Calendar style defaults must be returned as typed named colors");
+        if (!value.value) continue;
+        const auto& color = std::get<oof::model::ColorValue>(*value.value);
+        expect(color.kind == oof::model::ColorKind::style_reference &&
+                std::get<oof::model::QualifiedName>(color.style).value == style_name,
+            "Calendar style default must use the independently verified StyleColors property");
+        expect(document.set_prop_val(calendar, property, *value.value) == oof::model::PropertyMutationStatus::applied,
+            "Calendar style default must be accepted by SetPropVal");
+    }
     const auto xml = oof::source::serialize_form_xml(document);
     expect(xml.ok() && xml.value().find("<ButtonTextColor") == std::string::npos &&
             xml.value().find("<ButtonBackColor") == std::string::npos,
         "explicit values equal to proven style-color defaults must be omitted from XML");
+    expect(xml.ok() && xml.value().find("<HolidayColor") == std::string::npos &&
+            xml.value().find("<SelectionBackColor") == std::string::npos &&
+            xml.value().find("<SelectionTextColor") == std::string::npos,
+        "Calendar named style defaults must also remain implicit in XML");
+    oof::model::ColorValue alternate;
+    alternate.kind = oof::model::ColorKind::style_reference;
+    alternate.style = oof::model::QualifiedName{"StyleColors.FieldSelectedTextColor"};
+    expect(document.set_prop_val(calendar, oof::model::PropertyId::from_name("HolidayColor"), alternate) ==
+               oof::model::PropertyMutationStatus::applied,
+        "Calendar colors must accept a non-default named style");
+    const auto changed_xml = oof::source::serialize_form_xml(document);
+    expect(changed_xml.ok() && changed_xml.value().find("<HolidayColor") != std::string::npos,
+        "non-default Calendar style must remain visible in source XML");
+    if (changed_xml) {
+        const auto restored = oof::source::parse_form_xml(changed_xml.value());
+        expect(restored.ok(), "non-default Calendar style XML must parse");
+        if (restored) {
+            const auto value = restored.value().get_prop_val(calendar, oof::model::PropertyId::from_name("HolidayColor"));
+            expect(value.value && std::get<oof::model::ColorValue>(*value.value) == alternate,
+                "non-default Calendar style must survive public XML");
+        }
+    }
 }
 
 }  // namespace
@@ -2324,6 +2402,7 @@ void test_named_style_color_defaults() {
 int main() {
     try {
         test_named_style_color_defaults();
+        test_typed_defaults_for_existing_codecs();
         test_runtime_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();

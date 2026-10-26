@@ -68,7 +68,9 @@ bool property_value_matches(
             using Value = std::remove_cvref_t<decltype(typed_value)>;
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
                 return expected == metamodel::ValueCodec::date ||
-                       expected == metamodel::ValueCodec::action_source_reference;
+                       expected == metamodel::ValueCodec::action_source_reference ||
+                       (descriptor.control_kind == ControlKind::radio_button &&
+                        descriptor.api_name == "SelectionValue" && expected == metamodel::ValueCodec::decimal);
             } else if constexpr (std::is_same_v<Value, bool>) {
                 return expected == metamodel::ValueCodec::boolean;
             } else if constexpr (std::is_same_v<Value, std::int64_t>) {
@@ -152,6 +154,23 @@ bool property_api_enumeration_matches(
         return value.type_name == "VerticalAlign" &&
             (value.member == "Top" || value.member == "Center" || value.member == "Bottom");
     }
+    if (descriptor.control_kind == ControlKind::button) {
+        if (descriptor.api_name == "PictureLocation")
+            return value.type_name == "PictureLocation" && (value.member == "Left" || value.member == "Right");
+        if (descriptor.api_name == "PictureSize")
+            return value.type_name == "PictureSize" &&
+                (value.member == "RealSize" || value.member == "Stretch" || value.member == "Proportionally" ||
+                 value.member == "Tile" || value.member == "AutoSize" || value.member == "ByFontSize");
+        if (descriptor.api_name == "MenuMode")
+            return value.type_name == "MenuMode" &&
+                (value.member == "DontUse" || value.member == "Use" || value.member == "UseExtra");
+    }
+    if (descriptor.control_kind == ControlKind::html_document_field && descriptor.api_name == "Output")
+        return value.type_name == "Output" &&
+            (value.member == "Auto" || value.member == "Enable" || value.member == "Disable");
+    if (descriptor.control_kind == ControlKind::splitter && descriptor.api_name == "Orientation")
+        return value.type_name == "Orientation" &&
+            (value.member == "Auto" || value.member == "Horizontal" || value.member == "Vertical");
     if (descriptor.control_kind == ControlKind::dendrogram &&
         descriptor.api_name == "Orientation") {
         return value.type_name == "DendrogramOrientation" &&
@@ -230,7 +249,10 @@ std::optional<PropertyValue> materialize_default(
             if (value.canonical == "StyleColors.ButtonTextColor" ||
                 value.canonical == "StyleColors.ButtonBackColor" ||
                 value.canonical == "StyleColors.ButtonBorderColor" ||
-                value.canonical == "StyleColors.BorderColor") {
+                value.canonical == "StyleColors.BorderColor" ||
+                value.canonical == "StyleColors.SpecialTextColor" ||
+                value.canonical == "StyleColors.FieldSelectionBackColor" ||
+                value.canonical == "StyleColors.FieldSelectedTextColor") {
                 ColorValue color;
                 color.kind = ColorKind::style_reference;
                 color.style = QualifiedName{std::string(value.canonical)};
@@ -247,27 +269,30 @@ std::optional<PropertyValue> materialize_default(
             return std::nullopt;
         case DefaultKind::enumeration: {
             const auto separator = value.canonical.find('.');
-            if (separator == std::string_view::npos || separator == 0 ||
-                separator + 1 == value.canonical.size()) return std::nullopt;
-            const auto type_name = value.canonical.substr(0, separator);
-            const auto member = value.canonical.substr(separator + 1);
-            const bool known_type =
-                (descriptor.control_kind == ControlKind::command_bar &&
-                 descriptor.api_name == "ButtonsAlignment" &&
-                 type_name == "CommandBarButtonAlignment") ||
-                (descriptor.control_kind == ControlKind::command_bar &&
-                 descriptor.api_name == "Orientation" && type_name == "Orientation") ||
-                (descriptor.control_kind == ControlKind::dendrogram &&
-                 descriptor.api_name == "Orientation" && type_name == "DendrogramOrientation");
-            if (!known_type) return std::nullopt;
+            if (value.canonical.empty() || separator == 0 ||
+                (separator != std::string_view::npos && separator + 1 == value.canonical.size())) return std::nullopt;
+            const auto type_name = separator == std::string_view::npos
+                ? descriptor.api_name : value.canonical.substr(0, separator);
+            const auto member = separator == std::string_view::npos
+                ? value.canonical : value.canonical.substr(separator + 1);
             EnumerationValue parsed{std::string(type_name), std::string(member)};
             if (!property_api_enumeration_matches(descriptor, parsed)) return std::nullopt;
             return PropertyValue{std::move(parsed)};
         }
+        case DefaultKind::border:
+            if (value.canonical == "WithoutBorder:0") return PropertyValue{BorderValue{}};
+            if (value.canonical == "StyleBorders.ControlBorder") {
+                BorderValue border;
+                border.kind = BorderKind::style_reference;
+                border.style = QualifiedName{std::string(value.canonical)};
+                return PropertyValue{border};
+            }
+            return std::nullopt;
+        case DefaultKind::shortcut:
+            if (value.canonical == "None") return PropertyValue{ShortcutValue{}};
+            return std::nullopt;
         case DefaultKind::unknown:
         case DefaultKind::none:
-        case DefaultKind::border:
-        case DefaultKind::shortcut:
             return std::nullopt;
     }
     return std::nullopt;

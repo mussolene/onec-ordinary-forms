@@ -163,7 +163,8 @@ list_stream::ListValue* find_chart_record(list_stream::ListValue& value) {
     return nullptr;
 }
 
-list_stream::ListValue* find_record_with_guid(list_stream::ListValue& value, std::string_view guid) {
+template <typename Value>
+Value* find_record_with_guid(Value& value, std::string_view guid) {
     if (value.is_list && value.items.size() == 6 && !value.items[0].is_list && value.items[0].atom == guid) {
         return &value;
     }
@@ -6676,7 +6677,9 @@ void test_calendar_field_named_events_round_trip_and_rejections() {
 void test_calendar_group_progress_track_common_base_font_border_color() {
     const auto make_document = [](model::ControlKind kind,
                                   std::optional<model::FontValue> font = std::nullopt,
-                                  std::optional<model::ColorValue> border_color = std::nullopt) {
+                                  std::optional<model::ColorValue> border_color = std::nullopt,
+                                  std::string_view named_color_property = {},
+                                  std::optional<model::ColorValue> named_color = std::nullopt) {
         model::Form form;
         form.id = model::ObjectId{1};
         form.name = "CommonBaseWaveThree";
@@ -6692,11 +6695,13 @@ void test_calendar_group_progress_track_common_base_font_border_color() {
         if (font) control.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
         if (border_color)
             control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), *border_color);
+        if (named_color && !named_color_property.empty())
+            control.properties().set_explicit(model::PropertyId::from_name(named_color_property), *named_color);
         document.add_control(std::move(control));
         return document;
     };
-    const auto common_base = [](list_stream::ListValue& encoded, model::ControlKind kind)
-        -> list_stream::ListValue* {
+    const auto common_base = [](auto& encoded, model::ControlKind kind)
+        -> decltype(&encoded) {
         auto* record = find_record_with_guid(encoded, model::metamodel::descriptor_for(kind).guid);
         if (record == nullptr) return nullptr;
         return &record->items[2].items[1].items[0];
@@ -6834,7 +6839,7 @@ void test_calendar_group_progress_track_common_base_font_border_color() {
         if (unknown_neighbor.ok()) {
             auto* base = common_base(unknown_neighbor.value(), kind);
             expect(base != nullptr, "candidate common-base record must be locatable for profile validation");
-            if (base != nullptr) base->items[3] = list_stream::ListValue::raw_atom("7");
+            if (base != nullptr) base->items[5] = list_stream::ListValue::raw_atom("7");
             const auto partial = form_stream::decode_document(unknown_neighbor.value(), "CommonBaseWaveThreeNeighbor");
             const auto* decoded_color = partial ? property(partial.value(), "BorderColor") : nullptr;
             const auto* decoded_font = partial && supports_font ? property(partial.value(), "Font") : nullptr;
@@ -6855,6 +6860,345 @@ void test_calendar_group_progress_track_common_base_font_border_color() {
                         model::PropertyId::from_name("Font"), std::string("Arial")) ==
                     model::PropertyMutationStatus::invalid_value,
                 "wrong-typed common-base Font must fail at the public property boundary");
+        }
+    }
+
+    struct NamedColorCase {
+        model::ControlKind kind;
+        std::string_view property;
+        std::size_t slot;
+        model::ColorValue default_value;
+    };
+    const model::ColorValue button_text_default{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.ButtonTextColor"}};
+    const model::ColorValue button_back_default{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.ButtonBackColor"}};
+    const std::array named_color_cases{
+        NamedColorCase{model::ControlKind::calendar_field, "ButtonTextColor", 10, button_text_default},
+        NamedColorCase{model::ControlKind::usual_group, "TextColor", 3, automatic_color},
+        NamedColorCase{model::ControlKind::progress_bar, "BackColor", 2, automatic_color},
+        NamedColorCase{model::ControlKind::track_bar, "ButtonBackColor", 9, button_back_default},
+    };
+    for (const auto& test_case : named_color_cases) {
+        model::ColorValue rgb = rgb_color;
+        std::optional<model::FontValue> test_font;
+        if (test_case.kind != model::ControlKind::track_bar) {
+            auto joint_font = automatic_font;
+            if (test_case.kind == model::ControlKind::usual_group) joint_font.bold = true;
+            test_font = joint_font;
+        }
+        const auto encoded_default = form_stream::encode_document(make_document(test_case.kind,
+            test_font,
+            automatic_color, test_case.property, test_case.default_value));
+        const auto encoded_rgb = form_stream::encode_document(make_document(test_case.kind,
+            test_font,
+            rgb_color, test_case.property, rgb));
+        expect(encoded_default.ok() && encoded_rgb.ok(),
+            "named base colors must encode jointly with Font and BorderColor values");
+        if (!encoded_default.ok() || !encoded_rgb.ok()) continue;
+        const auto* default_base = common_base(encoded_default.value(), test_case.kind);
+        const auto* rgb_base = common_base(encoded_rgb.value(), test_case.kind);
+        const auto packed = (static_cast<std::uint32_t>(rgb.blue) << 16) |
+            (static_cast<std::uint32_t>(rgb.green) << 8) | rgb.red;
+        expect(default_base && rgb_base &&
+                list_stream::dump_compact(default_base->items[test_case.slot]) ==
+                    list_stream::dump_compact(test_case.slot == 3 || test_case.slot == 2 ||
+                        test_case.slot == 8 || test_case.slot == 7 ?
+                        list_stream::parse("{4,4,{0},4}") :
+                        (test_case.slot == 9 ? list_stream::parse("{4,3,{-7},3}") :
+                         list_stream::parse("{4,3,{-21},3}"))) &&
+                list_stream::dump_compact(rgb_base->items[test_case.slot]) ==
+                    "{4,0,{" + std::to_string(packed) + "},0}",
+            "named base color defaults and RGB values must occupy the proven base19 slot");
+        const auto decoded = form_stream::decode_document(encoded_rgb.value(), "NamedBaseColorRoundTrip");
+        const auto* actual = decoded ? property(decoded.value(), test_case.property) : nullptr;
+        expect(decoded.ok() && decoded.value().reconstruction_complete() && actual &&
+                std::get<model::ColorValue>(actual->value) == rgb,
+            "named base RGB colors must decode without losing other common base properties");
+        auto neighbor_probe = encoded_rgb.value();
+        auto* neighbor_base = common_base(neighbor_probe, test_case.kind);
+        if (neighbor_base != nullptr) neighbor_base->items[5] = list_stream::ListValue::raw_atom("7");
+        const auto partial = form_stream::decode_document(neighbor_probe, "NamedBaseColorNeighbor");
+        const auto* retained_color = partial ? property(partial.value(), test_case.property) : nullptr;
+        expect(partial.ok() && !partial.value().reconstruction_complete() && retained_color &&
+                std::get<model::ColorValue>(retained_color->value) == rgb,
+            "unknown neighboring base values must warn without dropping known named colors");
+        if (decoded.ok()) {
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "named base color XML must serialize");
+            if (xml.ok()) {
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "named base color XML must parse");
+                if (parsed.ok()) {
+                    const auto rebuilt = form_stream::encode_document(parsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                            list_stream::dump_compact(encoded_rgb.value()),
+                        "named base colors must survive public XML rebuild with Font and BorderColor");
+                }
+            }
+        }
+        model::ColorValue alpha_color = rgb;
+        alpha_color.alpha = 127;
+        expect(!form_stream::encode_document(make_document(test_case.kind, test_font, std::nullopt,
+                    test_case.property, alpha_color)).ok(),
+            "named base colors with unsupported alpha must fail closed");
+        model::ColorValue unknown_style{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.Unsupported"}};
+        expect(!form_stream::encode_document(make_document(test_case.kind, test_font, std::nullopt,
+                    test_case.property, unknown_style)).ok(),
+            "named base colors with unknown style references must fail closed");
+    }
+}
+
+void test_all_named_base_color_pairs_public_xml_round_trip() {
+    struct Case {
+        model::ControlKind kind;
+        std::string_view public_name;
+        std::string_view property;
+        std::size_t slot;
+        std::string_view default_style;
+    };
+    constexpr std::array cases{
+        Case{model::ControlKind::check_box, "CheckBox", "TextColor", 3, ""},
+        Case{model::ControlKind::check_box, "CheckBox", "FieldTextColor", 8, ""},
+        Case{model::ControlKind::check_box, "CheckBox", "BackColor", 2, ""},
+        Case{model::ControlKind::check_box, "CheckBox", "FieldBackColor", 7, ""},
+        Case{model::ControlKind::choice_field, "ChoiceField", "ButtonTextColor", 10, "StyleColors.ButtonTextColor"},
+        Case{model::ControlKind::choice_field, "ChoiceField", "FieldTextColor", 8, ""},
+        Case{model::ControlKind::choice_field, "ChoiceField", "ButtonBackColor", 9, "StyleColors.ButtonBackColor"},
+        Case{model::ControlKind::choice_field, "ChoiceField", "FieldBackColor", 7, ""},
+        Case{model::ControlKind::usual_group, "UsualGroup", "TextColor", 3, ""},
+        Case{model::ControlKind::usual_group, "UsualGroup", "BackColor", 2, ""},
+        Case{model::ControlKind::input_field, "InputField", "ButtonTextColor", 10, "StyleColors.ButtonTextColor"},
+        Case{model::ControlKind::input_field, "InputField", "FieldTextColor", 8, ""},
+        Case{model::ControlKind::input_field, "InputField", "ButtonBackColor", 9, "StyleColors.ButtonBackColor"},
+        Case{model::ControlKind::input_field, "InputField", "FieldBackColor", 7, ""},
+        Case{model::ControlKind::label_decoration, "LabelDecoration", "TextColor", 3, ""},
+        Case{model::ControlKind::label_decoration, "LabelDecoration", "BackColor", 2, ""},
+        Case{model::ControlKind::list_box, "ListBox", "FieldTextColor", 8, ""},
+        Case{model::ControlKind::list_box, "ListBox", "FieldBackColor", 7, ""},
+        Case{model::ControlKind::picture_decoration, "PictureDecoration", "TextColor", 3, ""},
+        Case{model::ControlKind::picture_decoration, "PictureDecoration", "BackColor", 2, ""},
+        Case{model::ControlKind::progress_bar, "ProgressBar", "BackColor", 2, ""},
+        Case{model::ControlKind::radio_button, "RadioButton", "TextColor", 3, ""},
+        Case{model::ControlKind::radio_button, "RadioButton", "FieldTextColor", 8, ""},
+        Case{model::ControlKind::radio_button, "RadioButton", "BackColor", 2, ""},
+        Case{model::ControlKind::radio_button, "RadioButton", "FieldBackColor", 7, ""},
+        Case{model::ControlKind::track_bar, "TrackBar", "TextColor", 3, ""},
+        Case{model::ControlKind::track_bar, "TrackBar", "BackColor", 2, ""},
+        Case{model::ControlKind::track_bar, "TrackBar", "ButtonBackColor", 9, "StyleColors.ButtonBackColor"},
+        Case{model::ControlKind::calendar_field, "CalendarField", "ButtonTextColor", 10, "StyleColors.ButtonTextColor"},
+        Case{model::ControlKind::calendar_field, "CalendarField", "FieldTextColor", 8, ""},
+        Case{model::ControlKind::calendar_field, "CalendarField", "ButtonBackColor", 9, "StyleColors.ButtonBackColor"},
+        Case{model::ControlKind::calendar_field, "CalendarField", "FieldBackColor", 7, ""},
+    };
+    const auto default_color = [](std::string_view style) {
+        if (style.empty()) return model::ColorValue{};
+        return model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{std::string(style)}};
+    };
+    const auto base_for = [](auto& encoded, const Case& test_case)
+        -> decltype(&encoded) {
+        auto* record = find_record_with_guid(encoded,
+            model::metamodel::descriptor_for(test_case.kind).guid);
+        if (record == nullptr) return nullptr;
+        if (test_case.kind == model::ControlKind::input_field ||
+            test_case.kind == model::ControlKind::radio_button)
+            return &record->items[2].items[2].items[0].items[0];
+        if (test_case.kind == model::ControlKind::check_box)
+            return &record->items[2].items[1].items[0].items[0];
+        return &record->items[2].items[1].items[0];
+    };
+    const auto type_specific_xml = [](const Case& test_case) -> std::string {
+        if (test_case.kind == model::ControlKind::check_box)
+            return R"XML(<Attributes><Attribute id="3" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes>)XML";
+        if (test_case.kind == model::ControlKind::input_field)
+            return R"XML(<Attributes><Attribute id="3" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes>)XML";
+        if (test_case.kind == model::ControlKind::list_box)
+            return R"XML(<Attributes><Attribute id="3" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes>)XML";
+        return {};
+    };
+    constexpr std::uint32_t packed_rgb = (201U << 16) | (83U << 8) | 17U;
+    const model::ColorValue rgb{model::ColorKind::absolute, 17, 83, 201, 255, std::monostate{}};
+    for (const auto& test_case : cases) {
+        std::string data_path;
+        if (test_case.kind == model::ControlKind::check_box ||
+            test_case.kind == model::ControlKind::input_field ||
+            test_case.kind == model::ControlKind::list_box)
+            data_path = R"XML(<DataPath attributeId="3"/>)XML";
+        const auto make_xml = [&](std::string_view property_value) {
+            return std::string("<Form id=\"1\" name=\"BaseColorCase\" ordinaryFormVersion=\"2.1\">") +
+                type_specific_xml(test_case) + "<ChildItems><" + std::string(test_case.public_name) +
+                " id=\"2\" name=\"Control\">" + data_path + "<Position/>" +
+                std::string(property_value) + "</" + std::string(test_case.public_name) +
+                "></ChildItems></Form>";
+        };
+        const auto absent_xml = source::parse_form_xml(make_xml(std::string_view{}));
+        expect(absent_xml.ok(), "minimal public XML must parse for each named base color owner");
+        if (!absent_xml.ok()) continue;
+        const auto absent_encoded = form_stream::encode_document(absent_xml.value());
+        expect(absent_encoded.ok(), "each named base color default must encode");
+        if (!absent_encoded.ok()) continue;
+        const auto default_value = absent_xml.value().get_prop_val(
+            {model::ObjectCategory::control, model::ObjectId{2}},
+            model::PropertyId::from_name(test_case.property));
+        expect(default_value.value && *default_value.value == model::PropertyValue{default_color(test_case.default_style)},
+            "GetPropVal must materialize the typed default for each named base color");
+        const auto* control = absent_xml.value().find_control(model::ObjectId{2});
+        expect(control && control->properties().find(model::PropertyId::from_name(test_case.property)) == nullptr,
+            "absent named base colors must remain implicit properties");
+        auto* absent_base = base_for(absent_encoded.value(), test_case);
+        const std::string expected_default = test_case.default_style.empty() ? "{4,4,{0},4}" :
+            (test_case.default_style == "StyleColors.ButtonBackColor" ? "{4,3,{-7},3}" : "{4,3,{-21},3}");
+        expect(absent_base && list_stream::dump_compact(absent_base->items[test_case.slot]) == expected_default,
+            "each named base color must retain its proven slot and default storage value");
+
+        const auto explicit_default_xml = source::parse_form_xml(make_xml(
+            test_case.default_style.empty() ?
+                "<" + std::string(test_case.property) + " kind=\"automatic\"/>" :
+                "<" + std::string(test_case.property) + " kind=\"styleReference\" styleName=\"" +
+                    std::string(test_case.default_style) + "\"/>"));
+        expect(explicit_default_xml.ok(), "explicit typed defaults must parse for each named base color");
+        if (explicit_default_xml.ok()) {
+            const auto explicit_default_encoded = form_stream::encode_document(explicit_default_xml.value());
+            expect(explicit_default_encoded.ok() &&
+                    list_stream::dump_compact(explicit_default_encoded.value()) ==
+                        list_stream::dump_compact(absent_encoded.value()),
+                "explicit named base color defaults must normalize to the same storage record");
+        }
+
+        const auto colored_xml = source::parse_form_xml(make_xml(
+            "<" + std::string(test_case.property) +
+            " kind=\"absolute\" red=\"17\" green=\"83\" blue=\"201\"/>"));
+        expect(colored_xml.ok(), "RGB values must parse through each public named property");
+        if (!colored_xml.ok()) continue;
+        const auto encoded = form_stream::encode_document(colored_xml.value());
+        expect(encoded.ok(), "RGB values must encode for each named base color");
+        if (!encoded.ok()) continue;
+        auto* base = base_for(encoded.value(), test_case);
+        expect(base && list_stream::dump_compact(base->items[test_case.slot]) ==
+                "{4,0,{" + std::to_string(packed_rgb) + "},0}",
+            "RGB values must use the proven base19 slot and packed BGR codec");
+        const auto decoded = form_stream::decode_document(encoded.value(), "NamedBaseColorPublicXml");
+        const auto* decoded_control = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+        const auto* decoded_color = decoded_control ? decoded_control->properties().find(
+            model::PropertyId::from_name(test_case.property)) : nullptr;
+        expect(decoded.ok() && decoded.value().reconstruction_complete() && decoded_color &&
+                std::get<model::ColorValue>(decoded_color->value) == rgb,
+            "all named RGB colors must decode completely with their typed values");
+        if (!decoded.ok()) continue;
+        const auto serialized_xml = source::serialize_form_xml(decoded.value());
+        expect(serialized_xml.ok(), "decoded named colors must serialize as public Form.xml");
+        if (!serialized_xml.ok()) continue;
+        const auto reparsed = source::parse_form_xml(serialized_xml.value());
+        expect(reparsed.ok(), "serialized named color XML must parse through the native parser");
+        if (!reparsed.ok()) continue;
+        const auto reencoded = form_stream::encode_document(reparsed.value());
+        expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+                list_stream::dump_compact(encoded.value()),
+            "all 32 named colors must survive public XML serialization and rebuild");
+    }
+
+    auto style_xml = source::parse_form_xml(
+        R"XML(<Form id="1" name="ColorStyle" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes><ChildItems><CheckBox id="2" name="Check"><DataPath attributeId="3"/><Position/></CheckBox></ChildItems></Form>)XML");
+    expect(style_xml.ok(), "style codec probe must parse through a public CheckBox element");
+    if (style_xml.ok()) {
+        auto style_document = std::move(style_xml.value());
+        const model::ColorValue style{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.ButtonBorderColor"}};
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
+        expect(style_document.set_prop_val(key, model::PropertyId::from_name("TextColor"), style) ==
+                model::PropertyMutationStatus::applied,
+            "known style references must be accepted as named base color values");
+        const auto encoded_style = form_stream::encode_document(style_document);
+        expect(encoded_style.ok(), "known style references must encode through the common color codec");
+        if (encoded_style.ok()) {
+            const auto decoded_style = form_stream::decode_document(encoded_style.value(), "NamedColorStyle");
+            const auto* styled_control = decoded_style ? decoded_style.value().find_control(model::ObjectId{2}) : nullptr;
+            const auto* styled_color = styled_control ? styled_control->properties().find(
+                model::PropertyId::from_name("TextColor")) : nullptr;
+            expect(decoded_style.ok() && styled_color &&
+                    std::get<model::ColorValue>(styled_color->value) == style,
+                "named base colors must round-trip a known non-default style reference");
+        }
+
+        auto alpha_document = style_document;
+        model::ColorValue alpha{model::ColorKind::absolute, 17, 83, 201, 127, std::monostate{}};
+        expect(alpha_document.set_prop_val(key, model::PropertyId::from_name("TextColor"), alpha) ==
+                model::PropertyMutationStatus::applied,
+            "alpha fixture must be set through the public typed property API");
+        expect(!form_stream::encode_document(alpha_document).ok(),
+            "named base color codec must reject unsupported alpha values");
+        auto wrong_type_document = style_document;
+        expect(wrong_type_document.set_prop_val(key, model::PropertyId::from_name("TextColor"), true) ==
+                model::PropertyMutationStatus::invalid_value,
+            "named base color property API must reject wrong value types");
+        auto unknown_style_document = style_document;
+        const model::ColorValue unknown_style{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.Unsupported"}};
+        expect(unknown_style_document.set_prop_val(key, model::PropertyId::from_name("TextColor"), unknown_style) ==
+                model::PropertyMutationStatus::applied,
+            "unknown-style fixture must be set through the public typed property API");
+        expect(!form_stream::encode_document(unknown_style_document).ok(),
+            "named base color codec must reject unknown style references");
+    }
+}
+
+void test_calendar_information_named_colors() {
+    struct Case {std::string_view name; std::size_t slot; std::string_view style;};
+    const Case cases[]{
+        {"HolidayColor", 2, "StyleColors.SpecialTextColor"},
+        {"SelectionBackColor", 3, "StyleColors.FieldSelectionBackColor"},
+        {"SelectionTextColor", 4, "StyleColors.FieldSelectedTextColor"},
+    };
+    const auto empty = source::parse_form_xml(R"XML(<Form id="1" name="CalendarColors" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/></CalendarField></ChildItems></Form>)XML");
+    expect(empty.ok(), "Calendar information-color fixture must parse");
+    if (!empty) return;
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+    for (const auto& test : cases) {
+        model::ColorValue expected_default;
+        expected_default.kind = model::ColorKind::style_reference;
+        expected_default.style = model::QualifiedName{std::string(test.style)};
+        const auto value = empty.value().get_prop_val(owner, model::PropertyId::from_name(test.name));
+        expect(value.status == model::PropertyReadStatus::proven_default && value.value &&
+                std::get<model::ColorValue>(*value.value) == expected_default,
+            "Calendar information-color default must match the observed platform style");
+        model::ColorValue rgb;
+        rgb.kind = model::ColorKind::absolute;
+        rgb.red = 13;
+        rgb.green = 59;
+        rgb.blue = static_cast<std::uint8_t>(101 + test.slot);
+        model::ColorValue alternate;
+        alternate.kind = model::ColorKind::style_reference;
+        alternate.style = model::QualifiedName{"StyleColors.ButtonTextColor"};
+        for (const auto& color : {rgb, alternate, model::ColorValue{}, expected_default}) {
+            auto document = empty.value();
+            expect(document.set_prop_val(owner, model::PropertyId::from_name(test.name), color) ==
+                       model::PropertyMutationStatus::applied,
+                "Calendar information color must accept its typed value");
+            const auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), "Calendar information color must encode");
+            if (!encoded) continue;
+            const auto* record = find_record_with_guid(encoded.value(),
+                model::metamodel::descriptor_for(model::ControlKind::calendar_field).guid);
+            expect(record && record->items[2].items[1].items[test.slot].is_list,
+                "Calendar color must occupy its observed information slot");
+            const auto decoded = form_stream::decode_document(encoded.value(), "CalendarColors");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                "Calendar information color must decode without losing neighboring fields");
+            if (!decoded) continue;
+            const auto actual = decoded.value().get_prop_val(owner, model::PropertyId::from_name(test.name));
+            expect(actual.value && std::get<model::ColorValue>(*actual.value) == color,
+                "Calendar information color must preserve RGB, automatic and named style variants");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "Calendar information color XML must serialize");
+            if (!xml) continue;
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "Calendar information color XML must parse");
+            if (!parsed) continue;
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                "Calendar information colors must rebuild the same stream from named XML");
         }
     }
 }
@@ -12996,7 +13340,9 @@ int main() {
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_named_events_round_trip_and_rejections();
         test_calendar_group_progress_track_common_base_font_border_color();
+        test_all_named_base_color_pairs_public_xml_round_trip();
         test_text_document_field_persisted_profile_and_rejections();
+        test_calendar_information_named_colors();
         test_calendar_field_begin_display_period();
         test_calendar_field_scalar_properties();
         test_calendar_field_captured_begin_period_record_decode();

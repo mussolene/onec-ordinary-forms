@@ -25,6 +25,13 @@ UsualGroup поддерживает Font и BorderColor, TrackBar поддерж
 Именованный FontValue различает отсутствие bold, явно false и true;
 остальные неподтвержденные переопределения автоматического шрифта отклоняются.
 
+Общие TextColor, BackColor, FieldTextColor, FieldBackColor, ButtonTextColor и
+ButtonBackColor поддерживаются там, где пара контрол/свойство подтверждена
+платформой. В этой серии закрыты 32 пары и три информационных цвета календаря:
+HolidayColor, SelectionBackColor, SelectionTextColor. ColorValue сохраняет opaque
+RGB, automatic и подтвержденные именованные styles; alpha и неизвестные styles
+отклоняются. Неизвестные соседние поля не маскируются нормализацией цветов.
+
 CalendarField сохраняет обе границы периода отображения (Date либо Undefined),
 ShowCurrentDate, CalendarNavigation, EnableStartDrag и EnableDrag. Дата,
 совпадающая со служебным значением Undefined, явно отклоняется. CurrentDate
