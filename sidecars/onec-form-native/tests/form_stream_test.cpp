@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <exception>
 #include <functional>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -173,6 +174,17 @@ Value* find_record_with_guid(Value& value, std::string_view guid) {
         if (auto* found = find_record_with_guid(item, guid)) return found;
     }
     return nullptr;
+}
+
+list_stream::ListValue* bounded_list_item(
+    list_stream::ListValue& value,
+    std::initializer_list<std::size_t> path) noexcept {
+    auto* current = &value;
+    for (const auto index : path) {
+        if (!current->is_list || index >= current->items.size()) return nullptr;
+        current = &current->items[index];
+    }
+    return current;
 }
 
 list_stream::ListValue& captured_column_packet(list_stream::ListValue& payload) {
@@ -6417,12 +6429,125 @@ void test_radio_button_basic_observed_record_and_rejections() {
         "unobserved RadioButton data header must fail closed");
 
     auto multilingual = changed_encoded.value();
-    auto& multilingual_caption = multilingual.items[1].items[2].items[2].items[4]
-        .items[2].items[2].items[0].items[2];
-    multilingual_caption = list_stream::parse(value_codec::encode_localized_string(
-        model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
-    expect(!form_stream::decode_document(multilingual, "RadioButtonCodec"),
-        "multilingual RadioButton Caption must be rejected without loss");
+    auto* multilingual_radio_record = find_record_with_guid(multilingual,
+        model::metamodel::descriptor_for(model::ControlKind::radio_button).guid);
+    expect(multilingual_radio_record != nullptr, "RadioButton record must remain locatable for caption mutation");
+    auto* multilingual_caption = multilingual_radio_record == nullptr ? nullptr :
+        bounded_list_item(*multilingual_radio_record, {2, 2, 0, 2});
+    expect(multilingual_caption != nullptr, "RadioButton Caption slot must be reached with bounds checks");
+    const model::LocalizedStringValue radio_translations{{{"ru", "Текст"}, {"en", "Text"}}};
+    *multilingual_caption = list_stream::parse(value_codec::encode_localized_string(radio_translations));
+    const auto multilingual_decoded = form_stream::decode_document(multilingual, "RadioButtonCodec");
+    expect(multilingual_decoded.ok(), "multilingual RadioButton Caption must decode");
+    const auto* multilingual_radio = multilingual_decoded.value().find_control(model::ObjectId{103});
+    const auto* multilingual_property = multilingual_radio == nullptr ? nullptr :
+        multilingual_radio->properties().find(model::PropertyId::from_name("Caption"));
+    expect(multilingual_property &&
+               std::get<model::LocalizedStringValue>(multilingual_property->value) == radio_translations,
+        "multilingual RadioButton Caption must preserve both language values");
+    const auto multilingual_reencoded = form_stream::encode_document(multilingual_decoded.value());
+    expect(multilingual_reencoded.ok() && list_stream::dump_compact(multilingual_reencoded.value()) ==
+               list_stream::dump_compact(multilingual),
+        "multilingual RadioButton Caption must re-encode without loss");
+}
+
+void test_multilingual_caption_round_trip_for_supported_controls() {
+    const model::LocalizedStringValue translations{{{"ru", "Заголовок"}, {"en", "Caption"}}};
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "LocalizedCaptions";
+    form.children = {
+        model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}},
+        model::ControlRef{model::ObjectId{4}}, model::ControlRef{model::ObjectId{5}},
+        model::ControlRef{model::ObjectId{6}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainEntry boolean_entry;
+    boolean_entry.term = model::TypeDomainTerm::boolean;
+    document.add_attribute(model::Attribute{model::ObjectId{7}, "Flag",
+        model::TypeDomainPatternValue{{boolean_entry}}});
+
+    const auto add_captioned = [&](model::ControlNode control) {
+        const auto id = control.id;
+        document.add_control(std::move(control));
+        expect(document.set_prop_val({model::ObjectCategory::control, id},
+                   model::PropertyId::from_name("Caption"), translations) ==
+                   model::PropertyMutationStatus::applied,
+            "localized Caption must be accepted through SetPropVal for every selected control");
+    };
+    add_captioned(model::ControlNode{model::ObjectId{2}, "Group", model::UsualGroupPayload{}});
+    add_captioned(model::ControlNode{model::ObjectId{3}, "Button", model::ButtonPayload{}});
+    add_captioned(model::ControlNode{model::ObjectId{4}, "Radio", model::RadioButtonPayload{}});
+    add_captioned(model::ControlNode{model::ObjectId{5}, "Label", model::LabelDecorationPayload{}});
+    model::ControlNode check_box{model::ObjectId{6}, "FlagControl", model::CheckBoxPayload{}};
+    check_box.data_path = model::DataPath{model::AttributeRef{model::ObjectId{7}}, {}};
+    add_captioned(std::move(check_box));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "five translated ordinary control captions must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+
+    auto encoded_for_inspection = encoded.value();
+    for (const auto [kind, id] : {
+             std::pair{model::ControlKind::usual_group, model::ObjectId{2}},
+             std::pair{model::ControlKind::button, model::ObjectId{3}},
+             std::pair{model::ControlKind::radio_button, model::ObjectId{4}},
+             std::pair{model::ControlKind::label_decoration, model::ObjectId{5}},
+             std::pair{model::ControlKind::check_box, model::ObjectId{6}},
+         }) {
+        const auto* descriptor = model::metamodel::find_property(kind, "Caption");
+        expect(descriptor && descriptor->value_codec == model::metamodel::ValueCodec::localized_text &&
+                   descriptor->storage_codec == model::metamodel::StorageCodec::control_info,
+            "each selected Caption must use its existing typed control-info descriptor");
+        auto* record = find_record_with_guid(encoded_for_inspection,
+            model::metamodel::descriptor_for(kind).guid);
+        expect(record != nullptr, "serialized form must contain each selected control record");
+        const list_stream::ListValue* caption_slot = nullptr;
+        switch (kind) {
+            case model::ControlKind::usual_group:
+            case model::ControlKind::button:
+            case model::ControlKind::label_decoration:
+                caption_slot = bounded_list_item(*record, {2, 1, 2});
+                break;
+            case model::ControlKind::radio_button:
+                caption_slot = bounded_list_item(*record, {2, 2, 0, 2});
+                break;
+            case model::ControlKind::check_box:
+                caption_slot = bounded_list_item(*record, {2, 1, 0, 2});
+                break;
+            default:
+                break;
+        }
+        expect(caption_slot && list_stream::dump_compact(*caption_slot) ==
+                   value_codec::encode_localized_string(translations),
+            "each named Caption must serialize both translations into its known slot using bounds-checked access");
+    }
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "LocalizedCaptions");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "all five translated ordinary control captions must decode completely");
+    for (const auto [kind, id] : {
+             std::pair{model::ControlKind::usual_group, model::ObjectId{2}},
+             std::pair{model::ControlKind::button, model::ObjectId{3}},
+             std::pair{model::ControlKind::radio_button, model::ObjectId{4}},
+             std::pair{model::ControlKind::label_decoration, model::ObjectId{5}},
+             std::pair{model::ControlKind::check_box, model::ObjectId{6}},
+         }) {
+        const auto* control = decoded.value().find_control(id);
+        const auto* caption = control == nullptr ? nullptr : control->properties().find(
+            model::PropertyId::from_name("Caption"));
+        expect(control && control->kind() == kind && caption &&
+                   std::get<model::LocalizedStringValue>(caption->value) == translations,
+            "decoded named Caption must preserve ru and en values for every selected owner");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "translated control captions must serialize as named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named XML translations must parse for the five supported Caption properties");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "the five named multilingual Caption properties must survive XML rebuild without storage drift");
 }
 
 void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() {
@@ -14318,6 +14443,7 @@ int main() {
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
+        test_multilingual_caption_round_trip_for_supported_controls();
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();

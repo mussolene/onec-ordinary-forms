@@ -226,7 +226,7 @@ void test_descriptors() {
         "RadioButton Enabled must declare its editable Boolean true default");
     expect(radio_caption && radio_caption->persistence == PersistenceClass::persisted_editable &&
                radio_caption->storage_codec == StorageCodec::control_info &&
-               radio_caption->value_codec == ValueCodec::string &&
+               radio_caption->value_codec == ValueCodec::localized_text &&
                radio_caption->default_value.kind == DefaultKind::string &&
                radio_caption->default_value.canonical.empty(),
         "RadioButton Caption must declare its editable empty string default");
@@ -829,6 +829,12 @@ void test_shared_control_default_classifications() {
                classified(ControlKind::splitter, "Enabled", StorageCodec::control_base,
                    DefaultKind::boolean, "true", ValueCodec::boolean),
         "shared Enabled rule must retain the common control-base classification");
+    for (const auto kind : {ControlKind::usual_group, ControlKind::button, ControlKind::radio_button,
+             ControlKind::label_decoration, ControlKind::check_box}) {
+        expect(classified(kind, "Caption", StorageCodec::control_info,
+                   DefaultKind::string, "", ValueCodec::localized_text),
+            "the selected ordinary control Caption properties must use the shared localized_text codec");
+    }
     expect(classified(ControlKind::progress_bar, "Enabled", StorageCodec::control_base,
                DefaultKind::boolean, "true", ValueCodec::boolean) &&
                classified(ControlKind::label_decoration, "Enabled", StorageCodec::control_base,

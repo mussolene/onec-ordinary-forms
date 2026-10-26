@@ -605,7 +605,7 @@ model::PropertyValue explicit_localized_text(
         return value->value;
     }
     fail("OOF1122", std::string(property_path) + "/" + std::string(name),
-        "plain or localized text", "different value type", "ToolTip has the wrong model value type");
+        "plain or localized text", "different value type", "Localized text property has the wrong model value type");
 }
 
 LV canonical_style_record(std::uint32_t version) {
@@ -1421,7 +1421,7 @@ LV canonical_command_bar_properties(bool enabled, model::PropertyValue tool_tip,
 }
 
 
-LV canonical_usual_group_properties(bool enabled, std::string_view caption, model::PropertyValue tool_tip,
+LV canonical_usual_group_properties(bool enabled, model::PropertyValue caption, model::PropertyValue tool_tip,
     const model::ColorValue* border_color = nullptr, const model::FontValue* font = nullptr,
     const model::BorderValue* border = nullptr, bool transparent = false) {
     auto base = parse_constant(
@@ -1437,7 +1437,7 @@ LV canonical_usual_group_properties(bool enabled, std::string_view caption, mode
     auto group_properties = list({
         std::move(base),
         raw("8"),
-        encoded_localized(caption),
+        encoded_localized_text(caption, "$/UsualGroup/Caption"),
         border == nullptr ? encode_control_border(control_border_default(model::ControlKind::usual_group),
             "$/UsualGroup/Border", model::ControlKind::usual_group) :
             encode_control_border(*border, "$/UsualGroup/Border", model::ControlKind::usual_group),
@@ -1494,7 +1494,7 @@ LV canonical_splitter_properties(bool enabled, std::int32_t orientation, model::
 
 LV canonical_button_properties(
     bool enabled,
-    std::string_view caption,
+    model::PropertyValue caption,
     std::int32_t horizontal_align,
     std::int32_t vertical_align,
     std::int32_t picture_location,
@@ -1510,7 +1510,7 @@ LV canonical_button_properties(
     auto properties = list({
         canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font),
         raw("14"),
-        encoded_localized(caption),
+        encoded_localized_text(caption, "$/Button/Caption"),
         raw(std::to_string(horizontal_align)),
         raw(std::to_string(vertical_align)),
         raw("0"),
@@ -1534,7 +1534,7 @@ LV canonical_button_properties(
 }
 
 LV canonical_label_properties(
-    std::string_view caption,
+    model::PropertyValue caption,
     std::int32_t horizontal_align,
     const CommonControlBaseFields& common) {
     auto base_properties = parse_constant(
@@ -1546,7 +1546,7 @@ LV canonical_label_properties(
     return list({
         std::move(base_properties),
         raw("11"),
-        encoded_localized(caption),
+        encoded_localized_text(caption, "$/LabelDecoration/Caption"),
         raw(std::to_string(horizontal_align)),
         raw("1"),
         raw("0"),
@@ -1570,7 +1570,7 @@ LV canonical_radio_button_info(
     const model::TypeDomainPatternValue& value_type,
     std::optional<model::DecimalValue> selection_value,
     bool enabled,
-    std::string_view caption,
+    model::PropertyValue caption,
     model::PropertyValue tool_tip,
     const model::FontValue* font = nullptr,
     const model::ColorValue* border_color = nullptr,
@@ -1582,7 +1582,7 @@ LV canonical_radio_button_info(
         canonical_button_base(enabled, tool_tip, border_color, nullptr, nullptr, font, "$/RadioButton",
             model::ControlKind::radio_button, transparent),
         raw("7"),
-        encoded_localized(caption),
+        encoded_localized_text(caption, "$/RadioButton/Caption"),
         raw(std::to_string(title_location)),
         raw(std::to_string(horizontal_align)),
         raw(std::to_string(vertical_align)),
@@ -1650,7 +1650,7 @@ LV canonical_html_document_field_data(std::int32_t output) {
     });
 }
 
-LV canonical_check_box_info(bool enabled, std::string_view caption, model::PropertyValue tool_tip,
+LV canonical_check_box_info(bool enabled, model::PropertyValue caption, model::PropertyValue tool_tip,
     const model::FontValue* font = nullptr, const model::ColorValue* border_color = nullptr,
     bool transparent = false, std::int32_t title_location = 1,
     std::int32_t horizontal_align = 0, std::int32_t vertical_align = 1) {
@@ -1661,7 +1661,7 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, model::Prope
                 canonical_button_base(enabled, tool_tip, border_color, nullptr, nullptr, font, "$/CheckBox",
                     model::ControlKind::check_box, transparent),
                 raw("7"),
-                encoded_localized(caption),
+                encoded_localized_text(caption, "$/CheckBox/Caption"),
                 raw(std::to_string(title_location)),
                 raw(std::to_string(horizontal_align)),
                 raw(std::to_string(vertical_align)),
@@ -4753,14 +4753,14 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     const auto& font = *common.font;
     const auto border = decode_control_border(properties.items[3], child_path(properties_path, 3),
         model::ControlKind::usual_group);
-    const std::string caption = decoded_single_language_text(properties.items[2], child_path(properties_path, 2));
+    const auto caption = decoded_localized_text(properties.items[2], child_path(properties_path, 2));
     auto normalized = properties;
     auto normalized_base = base;
     normalized_base.items[12] = encoded_localized_text(tool_tip, child_path(base_path, 12));
     normalized_base.items[5] = raw("0");
     normalize_named_control_colors(normalized_base, model::ControlKind::usual_group, base_path);
     normalized.items[0] = std::move(normalized_base);
-    normalized.items[2] = encoded_localized(caption);
+    normalized.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
     normalized.items[3] = encode_control_border(border, child_path(properties_path, 3),
         model::ControlKind::usual_group);
     if (list_stream::dump_compact(normalized) != list_stream::dump_compact(
@@ -4786,7 +4786,8 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     apply_common_control_base(control.properties(), common, default_font);
     if (border != control_border_default(model::ControlKind::usual_group))
         control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
-    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (caption != model::PropertyValue{std::string{}})
+        control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -4832,7 +4833,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     if (list_stream::dump_compact(normalized_base) != list_stream::dump_compact(
         canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, base_path, "Button");
-    const std::string caption = decoded_single_language_text(
+    const auto caption = decoded_localized_text(
         properties.items[2],
         child_path(properties_path, 2));
     const auto horizontal_align = integer_atom<std::int32_t>(
@@ -4922,7 +4923,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         name,
         model::ButtonPayload{},
     };
-    if (!caption.empty()) {
+    if (caption != model::PropertyValue{std::string{}}) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
     apply_common_control_base(control.properties(), common);
@@ -5231,7 +5232,7 @@ DecodedControl decode_radio_button(
         model::ControlKind::radio_button);
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
-    const std::string caption = decoded_single_language_text(
+    const auto caption = decoded_localized_text(
         properties.items[2], child_path(properties_path, 2));
     const auto title_location = integer_atom<std::int32_t>(properties.items[3], child_path(properties_path, 3));
     const auto horizontal_align = integer_atom<std::int32_t>(properties.items[4], child_path(properties_path, 4));
@@ -5260,7 +5261,7 @@ DecodedControl decode_radio_button(
     normalize_named_control_colors(normalized_base, model::ControlKind::radio_button, base_path);
     normalize_named_control_border(normalized_base, model::ControlKind::radio_button, base_path);
     normalized_properties.items[0] = std::move(normalized_base);
-    normalized_properties.items[2] = encoded_localized(caption);
+    normalized_properties.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
     normalized_info.items[2].items[0] = std::move(normalized_properties);
     normalized_info.items[5] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
@@ -5299,7 +5300,8 @@ DecodedControl decode_radio_button(
         control.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
             model::EnumerationValue{"VerticalAlign", std::string(members[vertical_align])});
     }
-    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (caption != model::PropertyValue{std::string{}})
+        control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (selection_value) control.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), *selection_value);
     if (first_in_group) control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
     if (!value_type.entries.empty()) control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), value_type);
@@ -5507,7 +5509,7 @@ DecodedControl decode_label(
             model::ControlKind::label_decoration, model::ControlKind::label_decoration,
             model::ControlKind::label_decoration});
     require_raw_constant(properties.items[1], "11", child_path(properties_path, 1));
-    const std::string caption = decoded_single_language_text(
+    const auto caption = decoded_localized_text(
         properties.items[2], child_path(properties_path, 2));
     const std::int32_t horizontal_align = integer_atom<std::int32_t>(
         properties.items[3], child_path(properties_path, 3));
@@ -5525,7 +5527,7 @@ DecodedControl decode_label(
     normalize_named_control_border(normalized_base_properties, model::ControlKind::label_decoration,
         base_properties_path);
     normalized_properties.items[0] = std::move(normalized_base_properties);
-    normalized_properties.items[2] = encoded_localized(caption);
+    normalized_properties.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
     auto canonical_common = common;
     canonical_common.named_border_control.reset();
     canonical_common.border.reset();
@@ -5562,7 +5564,7 @@ DecodedControl decode_label(
         name,
         model::LabelDecorationPayload{},
     };
-    if (!caption.empty()) {
+    if (caption != model::PropertyValue{std::string{}}) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
     apply_common_control_base(control.properties(), common);
@@ -6655,7 +6657,7 @@ DecodedControl decode_check_box(
     const auto& tool_tip = common.tool_tip;
     const auto& font = *common.font;
     const auto& border_color = *common.border_color;
-    const std::string caption = decoded_single_language_text(
+    const auto caption = decoded_localized_text(
         properties.items[2], child_path(properties_path, 2));
     const auto title_location = integer_atom<std::int32_t>(properties.items[3], child_path(properties_path, 3));
     const auto horizontal_align = integer_atom<std::int32_t>(properties.items[4], child_path(properties_path, 4));
@@ -6677,7 +6679,8 @@ DecodedControl decode_check_box(
     normalized_info.items[1].items[0].items[0].items[5] = raw("0");
     normalized_info.items[1].items[0].items[0].items[12] = encoded_localized_text(
         tool_tip, child_path(child_path(child_path(info_path, 1), 0), 0) + "/12");
-    normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
+    normalized_info.items[1].items[0].items[2] = encoded_localized_text(
+        caption, child_path(child_path(child_path(info_path, 1), 0), 2));
     normalized_info.items[2] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color, false,
@@ -6715,7 +6718,8 @@ DecodedControl decode_check_box(
         control.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
             model::EnumerationValue{"VerticalAlign", std::string(members[vertical_align])});
     }
-    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (caption != model::PropertyValue{std::string{}})
+        control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
         std::move(named_events)};
@@ -8281,7 +8285,7 @@ LV encode_button(
         {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
             "PictureLocation", "PictureSize", "MenuMode", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font", "Shortcut", "Picture"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
-    const std::string caption = explicit_string(control.properties(), "Caption");
+    const auto caption = explicit_localized_text(control.properties(), "Caption", "$/Button");
     const auto tool_tip = explicit_localized_text(control.properties(), "ToolTip", "$/Button");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor");
     const auto button_text_color = explicit_control_color(control.properties(), "ButtonTextColor");
@@ -8555,7 +8559,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     }
     require_allowed_properties(
         control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
-    const std::string caption = explicit_string(control.properties(), "Caption");
+    const auto caption = explicit_localized_text(control.properties(), "Caption", "$/LabelDecoration");
     CommonControlBaseFields common{
         explicit_bool(control.properties(), "Enabled", true),
         explicit_localized_text(control.properties(), "ToolTip", "$/LabelDecoration"),
@@ -8804,7 +8808,7 @@ LV encode_check_box(
             "CheckBox DataPath must target a Boolean attribute");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
-    const std::string caption = explicit_string(control.properties(), "Caption");
+    const auto caption = explicit_localized_text(control.properties(), "Caption", "$/CheckBox");
     const auto tool_tip = explicit_localized_text(control.properties(), "ToolTip", "$/CheckBox");
     const auto font = explicit_control_font(control.properties(), "$/CheckBox/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "CheckBox");
@@ -8969,7 +8973,7 @@ LV encode_radio_button(
         }
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
-    const std::string caption = explicit_string(control.properties(), "Caption");
+    const auto caption = explicit_localized_text(control.properties(), "Caption", "$/RadioButton");
     const auto tool_tip = explicit_localized_text(control.properties(), "ToolTip", "$/RadioButton");
     const auto font = explicit_control_font(control.properties(), "$/RadioButton/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "RadioButton");
@@ -10739,7 +10743,7 @@ Result<list_stream::ListValue> encode_document(
                         {"Caption", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"},
                         child_path(path, ordinal) + "/UsualGroup");
                     const bool enabled = explicit_bool(control->properties(), "Enabled", true);
-                    const auto caption = explicit_string(control->properties(), "Caption");
+                    const auto caption = explicit_localized_text(control->properties(), "Caption", "$/UsualGroup");
                     const auto tool_tip = explicit_localized_text(control->properties(), "ToolTip", "$/UsualGroup");
                     const bool transparent = explicit_bool(control->properties(), "Transparent", false);
                     const auto border_color = explicit_control_color(control->properties(), "BorderColor", "UsualGroup");

@@ -734,6 +734,7 @@ void apply_proven_storage_overrides(
     auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];
     classify_property(usual_group, "Font", StorageCodec::control_base, DefaultKind::font, "automatic,bold=true");
     classify_property(usual_group, "Caption", StorageCodec::control_info, DefaultKind::string, "");
+    std::ranges::find(usual_group, "Caption", &PropertyDescriptor::api_name)->value_codec = ValueCodec::localized_text;
     classify_property(usual_group, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
     for (const auto kind : {ControlKind::check_box, ControlKind::choice_field, ControlKind::label_decoration,
              ControlKind::picture_decoration, ControlKind::radio_button}) {
@@ -777,6 +778,7 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::string,
         "");
+    std::ranges::find(button, "Caption", &PropertyDescriptor::api_name)->value_codec = ValueCodec::localized_text;
     classify_property(
         button,
         "MultiLine",
@@ -840,6 +842,7 @@ void apply_proven_storage_overrides(
 
     auto& radio_button = properties[static_cast<std::size_t>(ControlKind::radio_button)];
     classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
+    std::ranges::find(radio_button, "Caption", &PropertyDescriptor::api_name)->value_codec = ValueCodec::localized_text;
     classify_property(radio_button, "SelectionValue", StorageCodec::control_info, DefaultKind::undefined, "undefined");
     std::ranges::find(radio_button, "SelectionValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::decimal;
     classify_property(radio_button, "TitleLocation", StorageCodec::control_info,
@@ -887,6 +890,8 @@ void apply_proven_storage_overrides(
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(label_decoration, "Caption", StorageCodec::control_info,
         DefaultKind::string, "");
+    std::ranges::find(label_decoration, "Caption", &PropertyDescriptor::api_name)->value_codec =
+        ValueCodec::localized_text;
     classify_property(label_decoration, "Font", StorageCodec::control_base,
         DefaultKind::font, "automatic");
     classify_property(
@@ -916,6 +921,7 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::string,
         "");
+    std::ranges::find(check_box, "Caption", &PropertyDescriptor::api_name)->value_codec = ValueCodec::localized_text;
     classify_property(check_box, "TitleLocation", StorageCodec::control_info,
         DefaultKind::enumeration, "TitleRight");
     classify_property(check_box, "HorizontalAlign", StorageCodec::control_info,

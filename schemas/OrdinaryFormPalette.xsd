@@ -137,7 +137,7 @@
               <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
               <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="localized-text"/>
               <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
               <Property name="Buttons" apiName="Buttons" russianName="Кнопки" russianType="КнопкиКоманднойПанели" valueCodec="command-bar-buttons"/>
               <Property name="MultiLine" apiName="MultiLine" russianName="МногострочныйРежим" russianType="Булево" valueCodec="boolean"/>
@@ -188,7 +188,7 @@
               <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
               <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="localized-text"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="localized-text"/>
               <Property name="TitleLocation" apiName="TitleLocation" russianName="ПоложениеЗаголовка" russianType="ПоложениеЗаголовка" valueCodec="enumeration"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
@@ -245,7 +245,7 @@
               <Property name="SelectionValue" apiName="SelectionValue" russianName="ВыбираемоеЗначение" russianType="Совпадает с описанием типа первого в группе переключателя" valueCodec="decimal"/>
               <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="localized-text"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="localized-text"/>
               <Property name="TitleLocation" apiName="TitleLocation" russianName="ПоложениеЗаголовка" russianType="ПоложениеЗаголовка" valueCodec="enumeration"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
@@ -324,7 +324,7 @@
           <Control name="UsualGroup" apiName="GroupBox" russianName="РамкаГруппы" children="controls">
             <Properties>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="localized-text"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="localized-text"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
@@ -719,7 +719,7 @@
               <Property name="Hyperlink" apiName="Hyperlink" russianName="Гиперссылка" russianType="Булево" valueCodec="boolean"/>
               <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="localized-text"/>
               <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="localized-text"/>
               <Property name="LabelPictureLocation" apiName="LabelPictureLocation" russianName="ПоложениеКартинкиНадписи" russianType="ПоложениеКартинкиНадписи" valueCodec="enumeration"/>

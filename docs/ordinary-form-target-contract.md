@@ -52,6 +52,11 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 сохраняют Transparent. PictureDecoration поддерживает Font и BorderColor через
 те же именованные типы значений, что и остальные подтвержденные владельцы.
 
+Caption для Button, CheckBox, RadioButton, UsualGroup и LabelDecoration
+поддерживает обычную строку и именованные переводы. Для непустых ru/en эти пять
+типов прошли полный цикл Designer и проверку значений при запуске. Пустые
+переводы и другие сочетания языков требуют отдельного подтверждения.
+
 PictureDecoration также сохраняет Hyperlink, UseContextMenu, Zoomable,
 EnableStartDrag, EnableDrag, NonselectedPictureText и PictureSize. Поддержаны
 шесть режимов PictureSize: RealSize, Stretch, Proportionally, Tile, AutoSize и

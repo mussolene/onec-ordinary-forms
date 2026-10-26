@@ -1956,7 +1956,7 @@
       <xs:element name="VerticalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2027,7 +2027,7 @@
       <xs:element name="VerticalAlign" type="ControlVerticalAlignValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalAlign" type="IndicatorHorizontalAlignValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleLocation" type="IndicatorTitleLocationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2101,7 +2101,7 @@
       <xs:element name="SelectionValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalAlign" type="IndicatorHorizontalAlignValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleLocation" type="IndicatorTitleLocationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2194,7 +2194,7 @@
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
@@ -2748,7 +2748,7 @@
       <xs:element name="Hyperlink" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
