@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -227,6 +228,7 @@ struct EventDescriptor {
     PersistenceClass persistence = PersistenceClass::unclassified;
     StorageCodec storage_codec = StorageCodec::unclassified;
     std::string_view storage_tag;
+    std::optional<std::uint32_t> storage_event_id{};
 };
 
 struct StandardPictureDescriptor {

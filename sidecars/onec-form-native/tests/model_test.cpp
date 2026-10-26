@@ -738,6 +738,20 @@ void test_help_metamodel() {
             button_click->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
             button_click->storage_codec == StorageCodec::event_record,
         "Button.Click must retain its proven storage identity and codec");
+    constexpr std::array calendar_event_storage{
+        std::pair{"Selection", 1U}, std::pair{"DragStart", 3U}, std::pair{"DragEnd", 5U},
+        std::pair{"Drag", 6U}, std::pair{"OnActivateDate", 0U}, std::pair{"OnPeriodOutput", 2U},
+        std::pair{"OnChange", 2147483647U}, std::pair{"DragCheck", 4U},
+    };
+    std::set<std::uint32_t> calendar_storage_ids;
+    for (const auto& [name, storage_id] : calendar_event_storage) {
+        const auto* descriptor = find_event(ControlKind::calendar_field, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                descriptor->storage_codec == StorageCodec::event_record &&
+                descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
+                descriptor->storage_event_id == storage_id && calendar_storage_ids.insert(storage_id).second,
+            std::string("CalendarField.") + name + " must declare its proven event storage identity");
+    }
 }
 
 void test_shared_control_default_classifications() {

@@ -978,6 +978,28 @@ void apply_proven_storage_overrides(
     click->persistence = PersistenceClass::persisted_editable;
     click->storage_codec = StorageCodec::event_record;
     click->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+
+    constexpr std::array calendar_event_storage{
+        std::pair{"Selection", 1U},
+        std::pair{"DragStart", 3U},
+        std::pair{"DragEnd", 5U},
+        std::pair{"Drag", 6U},
+        std::pair{"OnActivateDate", 0U},
+        std::pair{"OnPeriodOutput", 2U},
+        std::pair{"OnChange", 2147483647U},
+        std::pair{"DragCheck", 4U},
+    };
+    auto& calendar_events = events[static_cast<std::size_t>(ControlKind::calendar_field)];
+    for (const auto& [name, storage_id] : calendar_event_storage) {
+        const auto event = std::ranges::find(calendar_events, std::string_view{name}, &EventDescriptor::api_name);
+        if (event == calendar_events.end()) {
+            throw std::logic_error("missing CalendarField event for proven storage override");
+        }
+        event->persistence = PersistenceClass::persisted_editable;
+        event->storage_codec = StorageCodec::event_record;
+        event->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+        event->storage_event_id = storage_id;
+    }
 }
 
 }  // namespace

@@ -7,6 +7,7 @@
 #include <limits>
 #include <optional>
 #include <map>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -6529,6 +6530,149 @@ void test_calendar_field_enabled_round_trip_and_rejections() {
         "valid unknown CalendarField profile leaf must warn and preserve Enabled=false");
 }
 
+void test_calendar_field_named_events_round_trip_and_rejections() {
+    constexpr std::array event_storage{
+        std::pair{"Selection", 1U}, std::pair{"DragStart", 3U}, std::pair{"DragEnd", 5U},
+        std::pair{"Drag", 6U}, std::pair{"OnActivateDate", 0U}, std::pair{"OnPeriodOutput", 2U},
+        std::pair{"OnChange", 2147483647U}, std::pair{"DragCheck", 4U},
+    };
+    const auto make_document = [](std::span<const std::pair<const char*, unsigned int>> events,
+                                  bool wrong_owner = false, bool empty_handler = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CalendarEvents";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode calendar{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+        for (std::size_t index = 0; index < events.size(); ++index) {
+            const model::ObjectId event_id{100 + index};
+            calendar.events.push_back(model::EventRef{event_id});
+            document.add_event(model::Event{event_id, events[index].first,
+                empty_handler ? "" : std::string("Handle") + events[index].first,
+                wrong_owner ? model::EventOwner{model::FormRef{model::ObjectId{1}}} :
+                    model::EventOwner{model::ControlRef{model::ObjectId{2}}}});
+        }
+        document.add_control(std::move(calendar));
+        return document;
+    };
+    const auto event_collection = [](auto& stream) -> auto& {
+        return stream.items[1].items[2].items[2].items[1].items[2].items[2];
+    };
+    const auto empty = form_stream::encode_document(make_document(
+        std::span<const std::pair<const char*, unsigned int>>{}));
+    expect(empty.ok() && list_stream::dump_compact(event_collection(empty.value())) == "{0}",
+        "CalendarField without named events must keep the canonical empty event collection");
+
+    for (const auto& event : event_storage) {
+        const std::array one{event};
+        const auto source_document = make_document(one);
+        const auto encoded = form_stream::encode_document(source_document);
+        expect(encoded.ok(), encoded ? "single CalendarField event must encode" :
+            encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+        const auto& records = event_collection(encoded.value());
+        expect(records.items.size() == 2 && records.items[1].items[0].atom == std::to_string(event.second),
+            "CalendarField event storage ID must match runtime evidence");
+        expect(records.items[1].items[1].atom == "e1692cc2-605b-4535-84dd-28440238746c",
+            "CalendarField event must use the observed event tag");
+        const auto decoded = form_stream::decode_document(encoded.value(), "CalendarEvents");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "known CalendarField event must decode without reconstruction warning");
+        const auto* calendar = decoded.value().find_control(model::ObjectId{2});
+        expect(calendar && calendar->events.size() == 1, "decoded CalendarField event reference must be restored");
+        const auto* restored_event = decoded.value().find_event(calendar->events.front().id());
+        expect(restored_event && restored_event->name == event.first &&
+                restored_event->handler == std::string("Handle") + event.first &&
+                std::holds_alternative<model::ControlRef>(restored_event->owner) &&
+                std::get<model::ControlRef>(restored_event->owner).id() == calendar->id,
+            "decoded CalendarField event must retain its public name, handler, and owner");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "CalendarField named event must serialize to public XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "CalendarField named event XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(encoded.value()) == list_stream::dump_compact(rebuilt.value()),
+            "CalendarField named event must survive XML and binary-model round-trip");
+    }
+
+    const auto all_encoded = form_stream::encode_document(make_document(event_storage));
+    expect(all_encoded.ok(), "all proven CalendarField events must encode together");
+    const auto& all_records = event_collection(all_encoded.value());
+    expect(all_records.items.size() == 9, "CalendarField event collection must contain all eight records");
+    constexpr std::array sorted_storage_ids{0U, 1U, 2U, 3U, 4U, 5U, 6U, 2147483647U};
+    for (std::size_t index = 0; index < sorted_storage_ids.size(); ++index) {
+        expect(all_records.items[index + 1].items[0].atom == std::to_string(sorted_storage_ids[index]),
+            "CalendarField event records must encode in deterministic numeric storage-ID order");
+    }
+    const auto all_decoded = form_stream::decode_document(all_encoded.value(), "CalendarEvents");
+    expect(all_decoded.ok() && all_decoded.value().reconstruction_complete(),
+        "all CalendarField events must decode completely");
+    const auto* decoded_calendar = all_decoded.value().find_control(model::ObjectId{2});
+    expect(decoded_calendar && decoded_calendar->events.size() == event_storage.size(),
+        "all CalendarField named event references must restore");
+    for (std::size_t index = 0; index < event_storage.size(); ++index) {
+        const auto* event = all_decoded.value().find_event(decoded_calendar->events[index].id());
+        expect(event && event->name == event_storage[index].first,
+            "decoded CalendarField events must follow descriptor order rather than storage order");
+    }
+    const auto all_xml = source::serialize_form_xml(all_decoded.value());
+    expect(all_xml.ok(), "all CalendarField events must serialize as named XML");
+    const auto all_parsed = source::parse_form_xml(all_xml.value());
+    expect(all_parsed.ok(), "all CalendarField event XML must parse");
+    const auto all_rebuilt = form_stream::encode_document(all_parsed.value());
+    expect(all_rebuilt.ok() && list_stream::dump_compact(all_encoded.value()) ==
+            list_stream::dump_compact(all_rebuilt.value()),
+        "all CalendarField events must survive XML and binary-model round-trip");
+
+    const auto single = form_stream::encode_document(make_document(std::span(event_storage).first(1)));
+    expect(single.ok(), "CalendarField event rejection fixture must encode");
+    const auto reject_mutation = [&](auto mutate, std::string_view message) {
+        auto malformed = single.value();
+        mutate(event_collection(malformed));
+        expect(!form_stream::decode_document(malformed, "CalendarEvents"), message);
+    };
+    reject_mutation([](auto& collection) { collection.items[0] = list_stream::ListValue::raw_atom("2"); },
+        "CalendarField event count mismatch must fail closed");
+    reject_mutation([](auto& collection) { collection.items[1].items[1] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); },
+        "CalendarField event tag mismatch must fail closed");
+    reject_mutation([](auto& collection) { collection.items[1].items[0] = list_stream::ListValue::raw_atom("99"); },
+        "unknown CalendarField event ID must fail closed");
+    reject_mutation([](auto& collection) {
+        collection.items[0] = list_stream::ListValue::raw_atom("2");
+        collection.items.push_back(collection.items[1]);
+    }, "duplicate CalendarField event ID must fail closed");
+    reject_mutation([](auto& collection) {
+        collection.items[1].items[2].items[1] = list_stream::ListValue::string_atom("");
+    }, "empty CalendarField Action handler must fail closed");
+    reject_mutation([](auto& collection) {
+        collection.items[1].items[2].items[0] = list_stream::ListValue::raw_atom("4");
+    }, "wrong CalendarField Action type must fail closed");
+    reject_mutation([](auto& collection) {
+        collection.items[1].items[2].items[1] = list_stream::ListValue::raw_atom("not-a-string");
+    }, "wrong CalendarField Action handler type must fail closed");
+    reject_mutation([](auto& collection) {
+        collection.items[1].items[2].items[2].items[1] = list_stream::ListValue::string_atom("unexpected");
+    }, "unproven CalendarField Action metadata must fail closed");
+
+    model::Form progress_form;
+    progress_form.id = model::ObjectId{1};
+    progress_form.name = "ProgressEvents";
+    progress_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument progress_document(std::move(progress_form));
+    model::ControlNode progress{model::ObjectId{2}, "Progress", model::ProgressBarPayload{}};
+    progress.events.push_back(model::EventRef{model::ObjectId{100}});
+    progress_document.add_event(model::Event{model::ObjectId{100}, "OnChange", "HandleChange",
+        model::ControlRef{model::ObjectId{2}}});
+    progress_document.add_control(std::move(progress));
+    expect(!form_stream::encode_document(progress_document),
+        "unrepresented ProgressBar events must be rejected instead of being silently lost");
+
+    auto wrong_owner = make_document(std::span(event_storage).first(1), true);
+    expect(!form_stream::encode_document(wrong_owner),
+        "CalendarField event with a mismatched owner must fail closed");
+    auto empty_handler = make_document(std::span(event_storage).first(1), false, true);
+    expect(!form_stream::encode_document(empty_handler), "empty CalendarField event handler must fail closed");
+}
+
 void test_calendar_field_begin_display_period() {
     const auto* descriptor = model::metamodel::find_property(
         model::ControlKind::calendar_field, "BeginOfDisplayPeriod");
@@ -8355,12 +8499,9 @@ void test_calendar_field_observed_record_decode() {
     auto changed_events = stream.value();
     auto& events_slot = changed_events.items[1].items[2].items[2].items[2].items[2].items[2];
     events_slot = list_stream::parse("{1}");
-    const auto partial_events = form_stream::decode_document(changed_events, "ObservedCalendar");
-    expect(partial_events.ok() && !partial_events.value().reconstruction_complete() &&
-               std::any_of(partial_events.diagnostics().begin(), partial_events.diagnostics().end(),
-                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
-               partial_events.value().find_control(model::ObjectId{4}) != nullptr,
-        "valid unknown CalendarField event profile must warn and preserve its control");
+    const auto invalid_events = form_stream::decode_document(changed_events, "ObservedCalendar");
+    expect(!invalid_events && invalid_events.diagnostics().front().code == "OOF1102",
+        "CalendarField event table with a declared but missing entry must fail closed");
 }
 
 void test_button_label_input_field_round_trip() {
@@ -12498,6 +12639,7 @@ int main() {
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
+        test_calendar_field_named_events_round_trip_and_rejections();
         test_text_document_field_persisted_profile_and_rejections();
         test_calendar_field_begin_display_period();
         test_calendar_field_captured_begin_period_record_decode();

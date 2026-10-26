@@ -2259,6 +2259,126 @@ DecodedAction decode_action(const LV& payload, ActionMetadataPolicy policy, std:
     return {handler, incomplete_profile};
 }
 
+struct DecodedControlEvent {
+    std::string name;
+    std::string handler;
+};
+
+const model::metamodel::EventDescriptor* find_event_by_storage_id(
+    model::ControlKind kind, std::uint32_t storage_id) {
+    for (const auto& descriptor : model::metamodel::event_descriptors(kind)) {
+        if (descriptor.storage_event_id == storage_id) return &descriptor;
+    }
+    return nullptr;
+}
+
+LV encode_control_event_collection(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    std::string_view path) {
+    struct EncodedEvent {
+        std::uint32_t storage_id;
+        std::string_view tag;
+        std::string_view handler;
+    };
+    std::vector<EncodedEvent> encoded;
+    std::unordered_set<std::uint64_t> reference_ids;
+    std::unordered_set<std::uint32_t> storage_ids;
+    std::unordered_set<std::string_view> names;
+    encoded.reserve(control.events.size());
+    for (const auto& reference : control.events) {
+        const auto event_path = child_path(path, encoded.size());
+        if (!reference_ids.insert(reference.id().value()).second) {
+            fail("OOF1122", event_path, "unique event reference", std::to_string(reference.id().value()),
+                "Control event reference is duplicated");
+        }
+        const auto* event = document.find_event(reference.id());
+        if (event == nullptr || !std::holds_alternative<model::ControlRef>(event->owner) ||
+            std::get<model::ControlRef>(event->owner).id() != control.id) {
+            fail("OOF1122", event_path, "event owned by this control", std::to_string(reference.id().value()),
+                "Control event reference does not resolve to an event owned by the control");
+        }
+        const auto* descriptor = model::metamodel::find_event(control.kind(), event->name);
+        if (descriptor == nullptr || descriptor->persistence != model::metamodel::PersistenceClass::persisted_editable ||
+            descriptor->storage_codec != model::metamodel::StorageCodec::event_record ||
+            descriptor->storage_tag.empty() || !descriptor->storage_event_id) {
+            fail("OOF1122", event_path, "persisted event descriptor with numeric storage ID", event->name,
+                "Control event has no proven storage descriptor");
+        }
+        if (event->handler.empty()) {
+            fail("OOF1122", event_path, "non-empty event handler", "empty", "Control event handler cannot be empty");
+        }
+        if (!names.insert(event->name).second || !storage_ids.insert(*descriptor->storage_event_id).second) {
+            fail("OOF1122", event_path, "unique event name and storage ID", event->name,
+                "Control event is duplicated");
+        }
+        encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event->handler});
+    }
+    std::ranges::sort(encoded, {}, &EncodedEvent::storage_id);
+    std::vector<LV> items;
+    items.reserve(encoded.size() + 1);
+    items.push_back(raw(std::to_string(encoded.size())));
+    for (const auto& event : encoded) {
+        const auto event_path = child_path(path, items.size());
+        items.push_back(list({raw(std::to_string(event.storage_id)), raw(std::string(event.tag)),
+            encode_action(event.handler, ActionMetadataPolicy::empty, child_path(event_path, 2))}));
+    }
+    return list(std::move(items));
+}
+
+std::vector<DecodedControlEvent> decode_control_event_collection(
+    const LV& value, std::string_view path, model::ControlKind kind) {
+    require_list(value, path);
+    if (value.items.empty()) {
+        fail("OOF1103", child_path(path, 0), "event count", "missing", "Control event table has no count");
+    }
+    const auto count = integer_atom<std::uint32_t>(value.items[0], child_path(path, 0));
+    require_arity(value, static_cast<std::size_t>(count) + 1, path);
+    const auto descriptors = model::metamodel::event_descriptors(kind);
+    const auto supported_count = std::ranges::count_if(descriptors, [](const auto& descriptor) {
+        return descriptor.persistence == model::metamodel::PersistenceClass::persisted_editable &&
+            descriptor.storage_codec == model::metamodel::StorageCodec::event_record &&
+            !descriptor.storage_tag.empty() && descriptor.storage_event_id.has_value();
+    });
+    if (count > supported_count) {
+        fail("OOF1114", child_path(path, 0), "supported event count", std::to_string(count),
+            "Control event table exceeds the supported event count");
+    }
+    std::vector<std::pair<const model::metamodel::EventDescriptor*, std::string>> decoded;
+    std::unordered_set<std::uint32_t> storage_ids;
+    std::unordered_set<std::string_view> names;
+    decoded.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto event_path = child_path(path, index + 1);
+        const auto& record = value.items[index + 1];
+        require_arity(record, 3, event_path);
+        const auto storage_id = integer_atom<std::uint32_t>(record.items[0], child_path(event_path, 0));
+        if (!storage_ids.insert(storage_id).second) {
+            fail("OOF1114", child_path(event_path, 0), "unique event storage ID", std::to_string(storage_id),
+                "Control event storage ID is duplicated");
+        }
+        const auto* descriptor = find_event_by_storage_id(kind, storage_id);
+        if (descriptor == nullptr || descriptor->persistence != model::metamodel::PersistenceClass::persisted_editable ||
+            descriptor->storage_codec != model::metamodel::StorageCodec::event_record ||
+            descriptor->storage_tag.empty() || !descriptor->storage_event_id) {
+            fail("OOF1114", child_path(event_path, 0), "known persisted event storage ID", std::to_string(storage_id),
+                "Control event storage ID is unsupported");
+        }
+        if (!names.insert(descriptor->api_name).second) {
+            fail("OOF1114", child_path(event_path, 0), "unique control event", std::string(descriptor->api_name),
+                "Control event is duplicated");
+        }
+        require_raw_constant(record.items[1], descriptor->storage_tag, child_path(event_path, 1));
+        const auto action = decode_action(record.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2));
+        decoded.emplace_back(descriptor, action.handler);
+    }
+    std::ranges::sort(decoded, {}, [](const auto& event) { return event.first->order; });
+    std::vector<DecodedControlEvent> result;
+    result.reserve(decoded.size());
+    for (auto& [descriptor, handler] : decoded) result.push_back({std::string(descriptor->api_name), std::move(handler)});
+    return result;
+}
+
 LV encode_menu_action(const model::CommandBarAction& action, std::string_view path) {
     if (action.handler.empty()) {
         fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
@@ -3510,6 +3630,7 @@ struct DecodedControl {
     IncomingAnchorLists incoming;
     std::optional<model::PictureAsset> picture_asset;
     std::vector<model::PictureAsset> menu_assets;
+    std::vector<DecodedControlEvent> named_events{};
 };
 
 struct DecodedChartInfo {
@@ -6190,6 +6311,10 @@ DecodedControl decode_calendar_field(
     const auto common = decode_common_control_base(base_properties, child_path(properties_path, 0),
         CommonControlBaseCapabilities{false, false});
     const bool enabled = common.enabled;
+    auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
+        model::ControlKind::calendar_field);
+    LV profile_info = info;
+    profile_info.items[2] = list({raw("0")});
     require_arity(properties, 14, properties_path);
     const auto begin_path = child_path(properties_path, 5);
     const auto begin_atom = raw_atom(properties.items[5], begin_path);
@@ -6205,7 +6330,7 @@ DecodedControl decode_calendar_field(
         fail("OOF1122", "$/2/3", "single DateTime Attribute for CalendarField",
             linked_attribute->name, "CalendarField DataPath TypeDomain is unsupported");
     }
-    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_calendar_field_info(enabled, begin_atom, common.tool_tip)))
+    if (list_stream::dump_compact(profile_info) != list_stream::dump_compact(canonical_calendar_field_info(enabled, begin_atom, common.tool_tip)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CalendarField");
 
     const auto geometry_path = child_path(path, 3);
@@ -6237,7 +6362,8 @@ DecodedControl decode_calendar_field(
             model::DateValue{value_codec::date_from_platform(begin_atom)});
     }
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 LV canonical_dendrogram_data(std::int32_t orientation) {
@@ -8210,7 +8336,7 @@ LV encode_calendar_field(
             "CalendarField is outside the supported profile");
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8242,11 +8368,13 @@ LV encode_calendar_field(
                 "CalendarField BeginOfDisplayPeriod has the wrong value type");
         }
     }
+    auto info = canonical_calendar_field_info(enabled, begin_period, explicit_string(control.properties(), "ToolTip"));
+    info.items[2] = encode_control_event_collection(document, control, "$/CalendarField/Events");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_calendar_field_info(enabled, begin_period, explicit_string(control.properties(), "ToolTip")),
+        std::move(info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -9535,6 +9663,20 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
 
         for (auto& decoded_control : pending_controls) {
+            for (const auto& named_event : decoded_control.named_events) {
+                if (synthetic_event_offset >=
+                    std::numeric_limits<std::uint64_t>::max() - event_id_base) {
+                    fail("OOF1120", "$/1/1/1", "allocatable event ID", "uint64 max", "Synthetic event ID overflows");
+                }
+                const model::ObjectId event_id{event_id_base + ++synthetic_event_offset};
+                decoded_control.control.events.push_back(model::EventRef{event_id});
+                document.add_event(model::Event{
+                    event_id,
+                    named_event.name,
+                    named_event.handler,
+                    model::ControlRef{decoded_control.control.id},
+                });
+            }
             if (decoded_control.click_handler) {
                 if (synthetic_event_offset >=
                     std::numeric_limits<std::uint64_t>::max() - event_id_base) {
