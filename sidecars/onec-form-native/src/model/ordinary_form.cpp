@@ -1263,6 +1263,14 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
 
     for (const auto& event : collections_.events) {
+        if (event.handler.empty()) {
+            add_violation(
+                report,
+                InvariantCode::invalid_property,
+                event.id,
+                event.id,
+                "event handler must not be empty");
+        }
         std::visit(
             [&](const auto& owner) {
                 using Owner = std::remove_cvref_t<decltype(owner)>;

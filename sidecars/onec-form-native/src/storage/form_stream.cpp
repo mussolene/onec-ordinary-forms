@@ -2593,64 +2593,48 @@ bool is_single_value_table_type_domain(const model::TypeDomainPatternValue& valu
     return value.entries.size() == 1 && value.entries.front() == expected;
 }
 
-enum class ActionMetadataPolicy { handler_derived, empty };
-
-struct DecodedAction {
-    std::string handler;
-    bool incomplete_profile = false;
-};
-
-LV encode_action(std::string_view handler, ActionMetadataPolicy policy, std::string_view path) {
+LV encode_action(std::string_view handler, std::string_view path) {
     if (handler.empty()) {
         fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
     }
-    const auto name = policy == ActionMetadataPolicy::handler_derived ? handler : std::string_view{};
+    const auto name = handler;
     const auto presentation = encoded_localized(name);
     return list({raw("3"), string_value(std::string(handler)), list({
         raw("1"), string_value(std::string(name)), presentation, presentation, presentation,
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"), parse_constant("{0,0,0}")})});
 }
 
-DecodedAction decode_action(const LV& payload, ActionMetadataPolicy policy, std::string_view path) {
-    require_arity(payload, 3, path);
-    require_raw_constant(payload.items[0], "3", child_path(path, 0));
-    const auto handler = string_atom(payload.items[1], child_path(path, 1));
-    if (handler.empty()) {
-        fail("OOF1115", child_path(path, 1), "non-empty Action handler", "empty", "Action handler cannot be empty");
+LV encode_menu_action(const model::CommandBarAction& action, std::string_view path);
+model::CommandBarAction decode_menu_action(const LV& payload, std::string_view path);
+
+LV encode_event_action(const model::Event& event, std::string_view path) {
+    model::CommandBarAction action;
+    action.handler = event.handler;
+    if (event.action_metadata) {
+        action.name = event.action_metadata->name;
+        action.text = event.action_metadata->text;
+        action.tooltip = event.action_metadata->tooltip;
+        action.description = event.action_metadata->description;
     }
-    const auto& metadata = payload.items[2];
-    const auto metadata_path = child_path(path, 2);
-    require_arity(metadata, 7, metadata_path);
-    // Build the exact defaults through the same invariant boundary used by the writer.
-    const auto expected = encode_action(handler, policy, path).items[2];
-    require_exact(metadata.items[0], expected.items[0], child_path(metadata_path, 0), "Action metadata version is unsupported");
-    const auto metadata_name = string_atom(metadata.items[1], child_path(metadata_path, 1));
-    bool incomplete_profile = false;
-    if (policy == ActionMetadataPolicy::handler_derived) {
-        incomplete_profile = metadata_name != handler;
-    } else {
-        require_exact(metadata.items[1], expected.items[1], child_path(metadata_path, 1),
-            "Action name must be empty");
-    }
-    for (std::size_t index = 2; index <= 4; ++index) {
-        const auto field_path = child_path(metadata_path, index);
-        if (policy == ActionMetadataPolicy::handler_derived) {
-            // Preserve the existing localized-string reader and its line-ending normalization.
-            const auto presentation = decoded_single_language_text(metadata.items[index], field_path);
-            if (presentation != handler) incomplete_profile = true;
-        } else {
-            require_exact(metadata.items[index], expected.items[index], field_path, "Action presentation must be empty");
-        }
-    }
-    require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5), "Action style record is unsupported");
-    require_exact(metadata.items[6], expected.items[6], child_path(metadata_path, 6), "Action tail record is unsupported");
-    return {handler, incomplete_profile};
+    return encode_menu_action(action, path);
 }
 
 struct DecodedControlEvent {
     std::string name;
     std::string handler;
+    std::optional<model::EventActionMetadata> action_metadata;
 };
+
+DecodedControlEvent decode_event_action(const LV& payload, std::string_view path, std::string_view name) {
+    auto action = decode_menu_action(payload, path);
+    std::optional<model::EventActionMetadata> metadata;
+    if (!action.name.empty() || !action.text.items.empty() || !action.tooltip.items.empty() ||
+        !action.description.items.empty()) {
+        metadata = model::EventActionMetadata{std::move(action.name), std::move(action.text),
+            std::move(action.tooltip), std::move(action.description)};
+    }
+    return {std::string(name), std::move(action.handler), std::move(metadata)};
+}
 
 const model::metamodel::EventDescriptor* find_event_by_storage_id(
     model::ControlKind kind, std::uint32_t storage_id) {
@@ -2667,7 +2651,7 @@ LV encode_control_event_collection(
     struct EncodedEvent {
         std::uint32_t storage_id;
         std::string_view tag;
-        std::string_view handler;
+        const model::Event* event;
     };
     std::vector<EncodedEvent> encoded;
     std::unordered_set<std::uint64_t> reference_ids;
@@ -2700,7 +2684,7 @@ LV encode_control_event_collection(
             fail("OOF1122", event_path, "unique event name and storage ID", event->name,
                 "Control event is duplicated");
         }
-        encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event->handler});
+        encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event});
     }
     std::ranges::sort(encoded, {}, &EncodedEvent::storage_id);
     std::vector<LV> items;
@@ -2709,7 +2693,7 @@ LV encode_control_event_collection(
     for (const auto& event : encoded) {
         const auto event_path = child_path(path, items.size());
         items.push_back(list({raw(std::to_string(event.storage_id)), raw(std::string(event.tag)),
-            encode_action(event.handler, ActionMetadataPolicy::empty, child_path(event_path, 2))}));
+            encode_event_action(*event.event, child_path(event_path, 2))}));
     }
     return list(std::move(items));
 }
@@ -2732,7 +2716,7 @@ std::vector<DecodedControlEvent> decode_control_event_collection(
         fail("OOF1114", child_path(path, 0), "supported event count", std::to_string(count),
             "Control event table exceeds the supported event count");
     }
-    std::vector<std::pair<const model::metamodel::EventDescriptor*, std::string>> decoded;
+    std::vector<std::pair<const model::metamodel::EventDescriptor*, DecodedControlEvent>> decoded;
     std::unordered_set<std::uint32_t> storage_ids;
     std::unordered_set<std::string_view> names;
     decoded.reserve(count);
@@ -2757,13 +2741,13 @@ std::vector<DecodedControlEvent> decode_control_event_collection(
                 "Control event is duplicated");
         }
         require_raw_constant(record.items[1], descriptor->storage_tag, child_path(event_path, 1));
-        const auto action = decode_action(record.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2));
-        decoded.emplace_back(descriptor, action.handler);
+        auto action = decode_event_action(record.items[2], child_path(event_path, 2), descriptor->api_name);
+        decoded.emplace_back(descriptor, std::move(action));
     }
     std::ranges::sort(decoded, {}, [](const auto& event) { return event.first->order; });
     std::vector<DecodedControlEvent> result;
     result.reserve(decoded.size());
-    for (auto& [descriptor, handler] : decoded) result.push_back({std::string(descriptor->api_name), std::move(handler)});
+    for (auto& entry : decoded) result.push_back(std::move(entry.second));
     return result;
 }
 
@@ -2788,6 +2772,12 @@ LV encode_menu_action(const model::CommandBarAction& action, std::string_view pa
 }
 
 model::LocalizedStringValue decode_action_localized(const LV& value, std::string_view path) {
+    static_assert(model::max_localized_text_items * 6 < list_stream::max_list_tokens);
+    if (value.items.size() >= 2 &&
+        integer_atom<std::uint32_t>(value.items[1], child_path(path, 1)) > model::max_localized_text_items) {
+        fail("OOF1108", std::string(path), "at most 65536 translations", "too many translations",
+            "Localized action value exceeds the translation limit");
+    }
     model::LocalizedStringValue decoded;
     try {
         list_stream::ListInStream in(value);
@@ -2827,8 +2817,8 @@ model::CommandBarAction decode_menu_action(const LV& payload, std::string_view p
     return action;
 }
 
-LV canonical_event_table(std::optional<std::string_view> handler) {
-    if (!handler) {
+LV canonical_event_table(const model::Event* event) {
+    if (!event) {
         return list({raw("0")});
     }
     const auto* descriptor = model::metamodel::find_event(model::ControlKind::button, "Click");
@@ -2836,12 +2826,12 @@ LV canonical_event_table(std::optional<std::string_view> handler) {
         throw std::logic_error("Button.Click has no executable storage tag");
     }
     return list({raw("1"), list({raw("0"), raw(std::string(descriptor->storage_tag)),
-        encode_action(*handler, ActionMetadataPolicy::handler_derived, "$/Button/Events/Click")})});
+        event->action_metadata ? encode_event_action(*event, "$/Button/Events/Click") :
+            encode_action(event->handler, "$/Button/Events/Click")})});
 }
 
-std::optional<std::string> decode_button_event(
-    const LV& value, std::string_view path, std::uint64_t raw_id,
-    Diagnostics& warnings, bool& reconstruction_complete) {
+std::optional<DecodedControlEvent> decode_button_event(
+    const LV& value, std::string_view path) {
     require_list(value, path);
     if (value.items.empty()) {
         fail("OOF1103", child_path(path, 0), "event count", "missing", "Event table has no count");
@@ -2873,15 +2863,19 @@ std::optional<std::string> decode_button_event(
         descriptor->storage_tag,
         child_path(event_path, 1));
 
-    const auto action = decode_action(event_record.items[2], ActionMetadataPolicy::handler_derived,
-        child_path(event_path, 2));
-    if (action.incomplete_profile)
-        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(event_path, 2), "Button");
-    return action.handler;
+    const auto action_path = child_path(event_path, 2);
+    auto action = decode_menu_action(event_record.items[2], action_path);
+    std::optional<model::EventActionMetadata> metadata;
+    const auto expected = encode_action(action.handler, action_path);
+    if (list_stream::dump_compact(event_record.items[2]) != list_stream::dump_compact(expected)) {
+        metadata = model::EventActionMetadata{std::move(action.name), std::move(action.text),
+            std::move(action.tooltip), std::move(action.description)};
+    }
+    return DecodedControlEvent{"Click", std::move(action.handler), std::move(metadata)};
 }
 
 LV encode_form_events(const model::OrdinaryFormDocument& document) {
-    struct EncodedEvent { std::uint32_t storage_id; std::string_view tag; std::string_view handler; };
+    struct EncodedEvent { std::uint32_t storage_id; std::string_view tag; const model::Event* event; };
     std::vector<EncodedEvent> encoded;
     std::unordered_set<std::uint64_t> reference_ids;
     std::unordered_set<std::uint32_t> storage_ids;
@@ -2900,7 +2894,7 @@ LV encode_form_events(const model::OrdinaryFormDocument& document) {
             fail("OOF1122", "$/Form/Events", "known persisted Form event", event->name, "Form event has no proven storage descriptor");
         if (!names.insert(event->name).second || !storage_ids.insert(*descriptor->storage_event_id).second)
             fail("OOF1122", "$/Form/Events", "unique event name and storage ID", event->name, "Form event is duplicated");
-        encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event->handler});
+        encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event});
     }
     std::ranges::sort(encoded, {}, &EncodedEvent::storage_id);
     std::vector<LV> items;
@@ -2909,7 +2903,7 @@ LV encode_form_events(const model::OrdinaryFormDocument& document) {
     for (const auto& event : encoded) {
         const auto event_path = child_path("$/Form/Events", items.size());
         items.push_back(list({raw(std::to_string(event.storage_id)), raw(std::string(event.tag)),
-            encode_action(event.handler, ActionMetadataPolicy::empty, child_path(event_path, 2))}));
+            encode_event_action(*event.event, child_path(event_path, 2))}));
     }
     return list(std::move(items));
 }
@@ -2921,7 +2915,7 @@ std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string
     require_arity(value, static_cast<std::size_t>(count) + 1, path);
     const auto descriptors = model::metamodel::form_event_descriptors();
     if (count > descriptors.size()) fail("OOF1114", std::string(path), "supported Form event count", std::to_string(count), "Form event count is unsupported");
-    std::vector<std::pair<const model::metamodel::EventDescriptor*, std::string>> decoded;
+    std::vector<std::pair<const model::metamodel::EventDescriptor*, DecodedControlEvent>> decoded;
     std::unordered_set<std::uint32_t> storage_ids;
     std::unordered_set<std::string_view> names;
     for (std::size_t i = 0; i < count; ++i) {
@@ -2939,12 +2933,12 @@ std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string
         if (found == descriptors.end() || !names.insert(found->api_name).second)
             fail("OOF1114", event_path, "known unique Form event ID", std::to_string(id), "Form event ID is unsupported");
         require_raw_constant(record.items[1], found->storage_tag, child_path(event_path, 1));
-        const auto action = decode_action(record.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2));
-        decoded.emplace_back(&*found, action.handler);
+        auto action = decode_event_action(record.items[2], child_path(event_path, 2), found->api_name);
+        decoded.emplace_back(&*found, std::move(action));
     }
     std::ranges::sort(decoded, {}, [](const auto& event) { return event.first->order; });
     std::vector<DecodedControlEvent> result;
-    for (auto& [descriptor, handler] : decoded) result.push_back({std::string(descriptor->api_name), std::move(handler)});
+    for (auto& entry : decoded) result.push_back(std::move(entry.second));
     return result;
 }
 
@@ -4089,7 +4083,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
 
 struct DecodedControl {
     model::ControlNode control;
-    std::optional<std::string> click_handler;
+    std::optional<DecodedControlEvent> click_handler;
     IncomingAnchorLists incoming;
     std::optional<model::PictureAsset> picture_asset;
     std::vector<model::PictureAsset> menu_assets;
@@ -5064,7 +5058,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Button");
 
     const auto click_handler = decode_button_event(
-        info.items[2], child_path(info_path, 2), raw_id, warnings, reconstruction_complete);
+        info.items[2], child_path(info_path, 2));
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -8705,11 +8699,11 @@ void require_allowed_properties(
     });
 }
 
-std::optional<std::string_view> button_click_handler(
+const model::Event* button_click_handler(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control) {
     if (control.events.empty()) {
-        return std::nullopt;
+        return nullptr;
     }
     if (control.events.size() != 1) {
         fail("OOF1122", "$", "zero or one Button.Click event", std::to_string(control.events.size()), "Button has unsupported events");
@@ -8720,7 +8714,7 @@ std::optional<std::string_view> button_click_handler(
         std::get<model::ControlRef>(event->owner).id() != control.id) {
         fail("OOF1122", "$", "owned Button.Click event", "different event", "Button event cannot be encoded");
     }
-    return event->handler;
+    return event;
 }
 
 LV encode_button(
@@ -10972,7 +10966,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 fail("OOF1120", "$/4", "allocatable Form event ID", "uint64 max", "Synthetic event ID overflows");
             const model::ObjectId event_id{event_id_base + ++synthetic_event_offset};
             form.events.push_back(model::EventRef{event_id});
-            document.add_event(model::Event{event_id, named_event.name, named_event.handler, model::FormRef{form.id}});
+            document.add_event(model::Event{event_id, named_event.name, named_event.handler, model::FormRef{form.id}, named_event.action_metadata});
         }
 
         for (auto& decoded_control : pending_controls) {
@@ -10988,6 +10982,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     named_event.name,
                     named_event.handler,
                     model::ControlRef{decoded_control.control.id},
+                    named_event.action_metadata,
                 });
             }
             if (decoded_control.click_handler) {
@@ -11000,8 +10995,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                 document.add_event(model::Event{
                     event_id,
                     "Click",
-                    *decoded_control.click_handler,
+                    decoded_control.click_handler->handler,
                     model::ControlRef{decoded_control.control.id},
+                    decoded_control.click_handler->action_metadata,
                 });
             }
             if (decoded_control.picture_asset) {

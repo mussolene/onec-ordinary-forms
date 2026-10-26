@@ -1933,6 +1933,31 @@ void test_property_applicability_and_type_validation() {
 }
 
 void test_event_sequence_invariants() {
+    const auto validate_handler = [](bool control_owner, std::string handler) {
+        Form form;
+        form.id = ObjectId{1};
+        if (control_owner) form.children.push_back(ControlRef{ObjectId{10}});
+        else form.events.push_back(EventRef{ObjectId{40}});
+        OrdinaryFormDocument document(std::move(form));
+        if (control_owner) {
+            ControlNode button{ObjectId{10}, "Button", ButtonPayload{}};
+            button.events.push_back(EventRef{ObjectId{40}});
+            document.add_control(std::move(button));
+            document.add_event(Event{ObjectId{40}, "Click", std::move(handler), ControlRef{ObjectId{10}}});
+        } else {
+            document.add_event(Event{ObjectId{40}, "OnOpen", std::move(handler), FormRef{ObjectId{1}}});
+        }
+        return document.validate();
+    };
+    for (const bool control_owner : {false, true}) {
+        expect(validate_handler(control_owner, "").has(InvariantCode::invalid_property),
+            "empty event handler must be rejected for form and control owners");
+        expect(validate_handler(control_owner, " Handle Event ").ok(),
+            "non-empty event handler containing spaces must remain valid");
+        expect(validate_handler(control_owner, " ").ok(),
+            "whitespace-only event handler must remain valid");
+    }
+
     Form form;
     form.id = ObjectId{1};
     form.children.push_back(ControlRef{ObjectId{10}});

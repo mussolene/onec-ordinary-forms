@@ -1880,6 +1880,76 @@ void test_gantt_named_collections_roundtrip_and_rejections() {
         "Gantt dates must reject nonnumeric years");
 }
 
+void test_event_action_metadata_xml() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><Events><OnOpen id="3">  Обработчик &amp; Ω  <Action name="Open"><Text><Item language="ru">Заголовок</Item><Item language="en">Title</Item></Text><ToolTip/><Description><Item language="ru"></Item></Description></Action></OnOpen></Events><ChildItems><Button id="2" name="Button"><Position/><Events><Click id="4">Click<Action name="Run"><Text/><ToolTip/><Description/></Action></Click></Events></Button></ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "event action metadata must parse for form and control");
+    const auto* event = parsed.value().find_event(model::ObjectId{3});
+    const auto* click = parsed.value().find_event(model::ObjectId{4});
+    expect(event && event->handler == "  Обработчик & Ω  " && event->action_metadata &&
+               event->action_metadata->name == "Open" && event->action_metadata->text.items ==
+                   std::vector<model::LocalizedStringItem>{{"ru", "Заголовок"}, {"en", "Title"}} &&
+               event->action_metadata->tooltip.items.empty() &&
+               event->action_metadata->description.items == std::vector<model::LocalizedStringItem>{{"ru", ""}},
+        "handler text, translations, empty collection and empty translation must remain distinct");
+    expect(click && click->handler == "Click" && click->action_metadata && click->action_metadata->name == "Run",
+        "control event metadata must parse");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), "event action metadata must serialize");
+    const auto restored = source::parse_form_xml(serialized.value());
+    expect(restored.ok(), "serialized event action metadata must parse");
+    const auto* roundtrip = restored.value().find_event(model::ObjectId{3});
+    expect(roundtrip && roundtrip->handler == event->handler && roundtrip->action_metadata == event->action_metadata,
+        "mixed content must preserve exact direct handler text and metadata");
+    const auto legacy = source::parse_form_xml(R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><Events><OnOpen id="3">Handler</OnOpen></Events></Form>)XML");
+    expect(legacy.ok() && !legacy.value().find_event(model::ObjectId{3})->action_metadata,
+        "legacy event must remain supported without metadata");
+    const auto legacy_xml = source::serialize_form_xml(legacy.value());
+    expect(legacy_xml.ok() && legacy_xml.value().find("<OnOpen id=\"3\">Handler</OnOpen>") != std::string::npos,
+        "legacy event XML must remain unchanged");
+    const auto wrap = [](std::string_view value) {
+        return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><Events><OnOpen id=\"3\">Handler") +
+            std::string(value) + "</OnOpen></Events></Form>";
+    };
+    const auto pretty = source::parse_form_xml(wrap("<Action name=\"A\"><Text/><ToolTip/><Description/></Action>\n  "));
+    expect(pretty.ok() && pretty.value().find_event(model::ObjectId{3})->handler == "Handler",
+        "formatting whitespace after Action must not become handler text");
+    expect(!source::parse_form_xml(wrap("<Action name=\"A\"><Text/><ToolTip/><Description/></Action>Bad")),
+        "non-whitespace text after Action must be rejected");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><Events><OnOpen id="3"/></Events></Form>)XML"),
+        "empty legacy handler must be rejected");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><Events><OnOpen id="3"><Action name="A"><Text/><ToolTip/><Description/></Action></OnOpen></Events></Form>)XML"),
+        "empty handler with Action must be rejected");
+    const auto spaces = source::parse_form_xml(R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><Events><OnOpen id="3">  </OnOpen></Events></Form>)XML");
+    expect(spaces.ok() && spaces.value().find_event(model::ObjectId{3})->handler == "  ",
+        "legacy handler whitespace must be preserved");
+    std::string too_many = "<Action name=\"A\"><Text>";
+    for (std::size_t i = 0; i <= model::max_localized_text_items; ++i) {
+        too_many += "<Item language=\"ru\"/>";
+    }
+    too_many += "</Text><ToolTip/><Description/></Action>";
+    expect(!source::parse_form_xml(wrap(too_many)), "event action must reject excessive translations before accumulation");
+    model::Form oversized_form;
+    oversized_form.id = model::ObjectId{1};
+    oversized_form.name = "Main";
+    oversized_form.events.push_back(model::EventRef{model::ObjectId{3}});
+    model::OrdinaryFormDocument oversized_document(std::move(oversized_form));
+    model::EventActionMetadata oversized_action;
+    oversized_action.name = "A";
+    oversized_action.text.items.resize(model::max_localized_text_items + 1);
+    oversized_document.add_event(model::Event{model::ObjectId{3}, "OnOpen", "Handler", model::FormRef{model::ObjectId{1}}, std::move(oversized_action)});
+    expect(!source::serialize_form_xml(oversized_document), "event action serialization must reject excessive translations");
+    expect(!source::parse_form_xml(wrap("<Unknown/>")), "unknown event child must be rejected");
+    expect(!source::parse_form_xml(wrap("<Action name=\"A\"><Text/><ToolTip/><Description/><Description/></Action>")),
+        "duplicate action field must be rejected");
+    expect(!source::parse_form_xml(wrap("<Action name=\"A\"><Text/><ToolTip/><Description/></Action><Action name=\"B\"><Text/><ToolTip/><Description/></Action>")),
+        "duplicate action must be rejected");
+    expect(!source::parse_form_xml(wrap("<Action name=\"A\">unexpected<Text/><ToolTip/><Description/></Action>")),
+        "unexpected action text must be rejected");
+    expect(!source::parse_form_xml(wrap("<Action name=\"A\"><Text><Item language=\"ru\">1</Item><Item language=\"ru\">2</Item></Text><ToolTip/><Description/></Action>")),
+        "duplicate action translation must be rejected");
+}
+
 void test_event_owner_invariant() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -2512,6 +2582,7 @@ int main() {
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();
         test_strict_rejections();
+        test_event_action_metadata_xml();
         test_event_owner_invariant();
         test_button_foreign_enum_default_is_retained();
         test_standard_picture_xml_reference_roundtrip();

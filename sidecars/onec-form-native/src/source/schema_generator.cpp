@@ -598,12 +598,19 @@ void append_value_types(std::string& output) {
     <xs:restriction base="ObjectIdType"/>
   </xs:simpleType>
 
-  <xs:complexType name="EventHandlerType">
-    <xs:simpleContent>
-      <xs:extension base="xs:string">
-        <xs:attribute name="id" type="ObjectIdType" use="required"/>
-      </xs:extension>
-    </xs:simpleContent>
+  <xs:complexType name="EventActionMetadataType">
+    <xs:sequence>
+      <xs:element name="Text" type="LocalizedStringValueType"/>
+      <xs:element name="ToolTip" type="LocalizedStringValueType"/>
+      <xs:element name="Description" type="LocalizedStringValueType"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="EventHandlerType" mixed="true">
+    <xs:sequence>
+      <xs:element name="Action" type="EventActionMetadataType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
   </xs:complexType>
 )XSD";
 

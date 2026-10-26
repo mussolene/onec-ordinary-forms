@@ -1066,10 +1066,15 @@ void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
 
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
     xmlNodePtr handler = schema_component(schema, "complexType", "EventHandlerType");
-    xmlNodePtr simple_content = direct_child(handler, "simpleContent");
-    xmlNodePtr extension = direct_child(simple_content, "extension");
-    expect(attribute(extension, "base") == "xs:string", "event handler content drift");
-    xmlNodePtr id = direct_child_with_attribute(extension, "attribute", "name", "id");
+    expect(attribute(handler, "mixed") == "true", "event handler must support mixed content");
+    xmlNodePtr action = direct_child_with_attribute(direct_child(handler, "sequence"), "element", "name", "Action");
+    expect_element_shape(action, "Action", "EventActionMetadataType", "0", "1");
+    xmlNodePtr metadata = schema_component(schema, "complexType", "EventActionMetadataType");
+    const auto fields = direct_children(direct_child(metadata, "sequence"), "element");
+    expect(fields.size() == 3 && attribute(fields[0], "name") == "Text" &&
+           attribute(fields[1], "name") == "ToolTip" && attribute(fields[2], "name") == "Description",
+        "event action metadata fields drift");
+    xmlNodePtr id = direct_child_with_attribute(handler, "attribute", "name", "id");
     expect(attribute(id, "type") == "ObjectIdType", "event ID type drift");
     expect(attribute(id, "use") == "required", "event ID must be required");
 

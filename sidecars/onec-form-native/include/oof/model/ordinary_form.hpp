@@ -616,11 +616,20 @@ struct Command {
 
 using EventOwner = std::variant<FormRef, ControlRef>;
 
+struct EventActionMetadata {
+    std::string name;
+    LocalizedStringValue text;
+    LocalizedStringValue tooltip;
+    LocalizedStringValue description;
+    friend bool operator==(const EventActionMetadata&, const EventActionMetadata&) = default;
+};
+
 struct Event {
     ObjectId id{};
     std::string name;
     std::string handler;
     EventOwner owner{FormRef{}};
+    std::optional<EventActionMetadata> action_metadata = std::nullopt;
 };
 
 enum class ControlKind : std::uint8_t {

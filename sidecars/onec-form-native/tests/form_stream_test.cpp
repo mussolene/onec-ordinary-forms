@@ -2087,30 +2087,28 @@ void test_shared_action_metadata_policies_and_rejections() {
             "each owner must retain its exact independent Action literal");
         auto cross_policy = encoded.value();
         action_at(cross_policy).items[2] = (owner == 1 ? empty : derived).items[2];
-        if (owner == 0) {
-            expect(!form_stream::decode_document(cross_policy, "Actions"), "Form.OnClose metadata from another owner policy must reject");
-        } else if (owner == 1) {
-            const auto partial_button = form_stream::decode_document(cross_policy, "Actions");
-            expect(partial_button.ok() && !partial_button.value().reconstruction_complete() &&
-                       std::any_of(partial_button.diagnostics().begin(), partial_button.diagnostics().end(),
-                           [](const auto& diagnostic) {
-                               return diagnostic.code == "OOF1140" &&
-                                   diagnostic.severity == oof::DiagnosticSeverity::warning;
-                           }) &&
-                       partial_button.value().find_event(
-                           partial_button.value().find_control(model::ObjectId{2})->events.front().id())->handler == "Handler",
-                "valid Button action metadata differences must warn while retaining its handler");
+        const auto cross_decoded = form_stream::decode_document(cross_policy, "Actions");
+        expect(cross_decoded.ok() && cross_decoded.value().reconstruction_complete(),
+            "each action owner must accept explicit metadata independently");
+        if (owner == 0 || owner == 1) {
+            const auto& refs = owner == 0 ? cross_decoded.value().form().events :
+                cross_decoded.value().find_control(model::ObjectId{2})->events;
+            const auto* event = cross_decoded.value().find_event(refs.front().id());
+            expect(event && event->handler == "Handler" && event->action_metadata &&
+                event->action_metadata->name == (owner == 0 ? "Handler" : ""),
+                "cross-owner Action metadata and handler must remain explicit");
         } else {
-            const auto independent_menu_metadata = form_stream::decode_document(cross_policy, "Actions");
-            const auto* decoded_button = independent_menu_metadata
-                ? independent_menu_metadata.value().find_control(model::ObjectId{2}) : nullptr;
+            const auto* decoded_button = cross_decoded.value().find_control(model::ObjectId{2});
             const auto* decoded_payload = decoded_button
                 ? std::get_if<model::ButtonPayload>(&decoded_button->payload) : nullptr;
             expect(decoded_payload && decoded_payload->buttons.front().action &&
                 decoded_payload->buttons.front().action->name == "Handler" &&
                 decoded_payload->buttons.front().action->text.items == std::vector<model::LocalizedStringItem>{{"ru", "Handler"}},
-                "menu Action metadata must round-trip independently of event owner policies");
+                "menu Action metadata must remain independent of event metadata");
         }
+        const auto cross_rebuilt = form_stream::encode_document(cross_decoded.value());
+        expect(cross_rebuilt.ok() && list_stream::dump_compact(cross_rebuilt.value()) ==
+            list_stream::dump_compact(cross_policy), "cross-owner Action metadata must round-trip without drift");
         for (unsigned field = 0; field < 7; ++field) {
             auto bad = encoded.value();
             action_at(bad).items[2].items[field] = list_stream::ListValue::raw_atom("999");
@@ -2163,11 +2161,8 @@ void test_button_click_action_metadata_warning_round_trip() {
     action.items[2].items[2] = list_stream::parse(R"({1,1,{"ru","Different presentation"}})");
 
     const auto decoded = form_stream::decode_document(changed, "ButtonActionMetadata");
-    expect(decoded.ok() && !decoded.value().reconstruction_complete() &&
-               std::any_of(decoded.diagnostics().begin(), decoded.diagnostics().end(), [](const auto& diagnostic) {
-                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
-               }),
-        "valid Button action metadata differences must return an incomplete model with OOF1140");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "valid Button action metadata must decode completely");
     const auto* decoded_button = decoded.value().find_control(model::ObjectId{2});
     const auto* click = decoded_button && !decoded_button->events.empty()
         ? decoded.value().find_event(decoded_button->events.front().id()) : nullptr;
@@ -2182,19 +2177,12 @@ void test_button_click_action_metadata_warning_round_trip() {
                *std::get_if<std::string>(&caption->value) == "Run",
         "Button identity, Click handler and owner, geometry, and Caption must survive the profile warning");
 
-    const auto xml = source::serialize_form_xml(decoded.value());
-    expect(xml.ok() && xml.value().find("reconstructionComplete=\"false\"") != std::string::npos &&
-               xml.value().find("RunHandler") != std::string::npos,
-        "partial Button event model must serialize to named XML with completeness metadata");
-    const auto parsed = source::parse_form_xml(xml.value());
-    expect(parsed.ok() && !parsed.value().reconstruction_complete(),
-        "Button event XML parsing must retain incompleteness");
-    const auto rebuilt = oof::save_form_bin(parsed.value());
-    expect(rebuilt.ok() && !rebuilt.value().empty() &&
-               std::any_of(rebuilt.diagnostics().begin(), rebuilt.diagnostics().end(), [](const auto& diagnostic) {
-                   return diagnostic.severity == oof::DiagnosticSeverity::warning;
-               }),
-        "partial Button event XML must build Form.bin while reporting omitted unsupported profile metadata");
+    expect(click->action_metadata && click->action_metadata->name == "OtherActionName" &&
+        click->action_metadata->text.items == model::LocalizedStringValue{{{"ru", "Different presentation"}}}.items,
+        "Button action name and text must survive");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(changed),
+        "Button action metadata must round-trip");
 
     for (unsigned metadata_field = 1; metadata_field <= 4; ++metadata_field) {
         auto varied = encoded.value();
@@ -2215,12 +2203,13 @@ void test_button_click_action_metadata_warning_round_trip() {
         const auto* varied_button = partial ? partial.value().find_control(model::ObjectId{2}) : nullptr;
         const auto* varied_event = varied_button && !varied_button->events.empty()
             ? partial.value().find_event(varied_button->events.front().id()) : nullptr;
-        expect(partial.ok() && !partial.value().reconstruction_complete() &&
-                   std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
-                       return diagnostic.code == "OOF1140" &&
-                           diagnostic.severity == oof::DiagnosticSeverity::warning;
-                   }) && varied_event != nullptr && varied_event->handler == "RunHandler",
-            "each valid Button Action name or presentation mismatch must warn and retain its handler");
+        const auto rebuilt_variation = partial ? form_stream::encode_document(partial.value()) :
+            form_stream::encode_document(seed);
+        expect(partial.ok() && partial.value().reconstruction_complete() && varied_event != nullptr &&
+                   varied_event->handler == "RunHandler" && varied_event->action_metadata &&
+                   rebuilt_variation.ok() && list_stream::dump_compact(rebuilt_variation.value()) ==
+                       list_stream::dump_compact(varied),
+            "each Button action metadata field must survive independently");
     }
 
     auto invalid_version = changed;
@@ -2414,9 +2403,42 @@ void test_form_named_events() {
     auto unknown = encoded.value();
     unknown.items[4].items[1].items[0] = list_stream::ListValue::raw_atom("70099");
     expect(!form_stream::decode_document(unknown, "NamedFormEvents"), "unknown Form event ID must fail");
-    auto metadata = encoded.value();
-    metadata.items[4].items[1].items[2].items[2].items[1] = list_stream::ListValue::string_atom("unexpected");
-    expect(!form_stream::decode_document(metadata, "NamedFormEvents"), "incompatible Form action metadata must fail");
+    const model::EventActionMetadata expected_metadata{
+        "HandleBeforeOpen", {{{"ru", "Текст\nстрока"}, {"en", "Text\r\nline"}}},
+        {{{"en", "Hint\ronly"}, {"de", ""}}}, {{{"ru", "Описание"}, {"en", "Description"}}}};
+    model::Form metadata_form; metadata_form.id = model::ObjectId{1}; metadata_form.name = "Metadata";
+    metadata_form.events.emplace_back(model::ObjectId{100});
+    metadata_form.events.emplace_back(model::ObjectId{101});
+    model::OrdinaryFormDocument metadata_document(std::move(metadata_form));
+    metadata_document.add_event(model::Event{model::ObjectId{100}, "BeforeOpen", "HandleBeforeOpen",
+        model::FormRef{model::ObjectId{1}}, expected_metadata});
+    metadata_document.add_event(model::Event{model::ObjectId{101}, "OnOpen", "HandleOnOpen",
+        model::FormRef{model::ObjectId{1}}});
+    const auto encoded_metadata = form_stream::encode_document(metadata_document);
+    expect(encoded_metadata.ok(), "Form action metadata must encode");
+    const auto decoded_metadata = form_stream::decode_document(encoded_metadata.value());
+    expect(decoded_metadata.ok(), "Form action metadata must decode");
+    const auto& metadata_events = decoded_metadata.value().form().events;
+    const auto* first = decoded_metadata.value().find_event(metadata_events[0].id());
+    const auto* second = decoded_metadata.value().find_event(metadata_events[1].id());
+    expect(first && first->action_metadata == expected_metadata, "all action metadata values must survive independently");
+    expect(second && !second->action_metadata && second->handler == "HandleOnOpen",
+        "empty metadata must stay absent and unrelated events must survive");
+    const auto reencoded_metadata = form_stream::encode_document(decoded_metadata.value());
+    expect(reencoded_metadata.ok() && list_stream::dump_compact(reencoded_metadata.value()) ==
+        list_stream::dump_compact(encoded_metadata.value()), "Form action metadata must round-trip without line-ending changes");
+    auto malformed = encoded_metadata.value();
+    malformed.items[4].items[1].items[2].items[2].items[5] = list_stream::parse("{0}");
+    expect(!form_stream::decode_document(malformed), "unknown action style must fail");
+    malformed = encoded_metadata.value();
+    malformed.items[4].items[1].items[2].items[2].items[2] = list_stream::parse("{1,1,\"ru\"}");
+    expect(!form_stream::decode_document(malformed), "malformed localized action metadata must fail");
+    malformed = encoded_metadata.value();
+    malformed.items[4].items[1].items[2].items[2].items[2] = list_stream::parse("{1,65537}");
+    expect(!form_stream::decode_document(malformed), "excessive localized action count must fail before allocation");
+    malformed = encoded_metadata.value();
+    malformed.items[4].items[1].items[2].items[2].items[6] = list_stream::parse("{1}");
+    expect(!form_stream::decode_document(malformed), "unknown action tail must fail");
 }
 
 void test_button_multiline_round_trip_and_validation() {
@@ -8127,9 +8149,15 @@ void test_calendar_field_named_events_round_trip_and_rejections() {
     reject_mutation([](auto& collection) {
         collection.items[1].items[2].items[1] = list_stream::ListValue::raw_atom("not-a-string");
     }, "wrong CalendarField Action handler type must fail closed");
-    reject_mutation([](auto& collection) {
-        collection.items[1].items[2].items[2].items[1] = list_stream::ListValue::string_atom("unexpected");
-    }, "unproven CalendarField Action metadata must fail closed");
+    auto calendar_metadata = single.value();
+    event_collection(calendar_metadata).items[1].items[2].items[2].items[1] =
+        list_stream::ListValue::string_atom("CalendarAction");
+    const auto metadata_decoded = form_stream::decode_document(calendar_metadata, "CalendarEvents");
+    expect(metadata_decoded.ok() && metadata_decoded.value().reconstruction_complete(),
+        "CalendarField Action metadata must decode completely");
+    const auto metadata_rebuilt = form_stream::encode_document(metadata_decoded.value());
+    expect(metadata_rebuilt.ok() && list_stream::dump_compact(metadata_rebuilt.value()) ==
+        list_stream::dump_compact(calendar_metadata), "CalendarField Action metadata must round-trip");
 
     model::Form progress_form;
     progress_form.id = model::ObjectId{1};
@@ -13510,13 +13538,15 @@ void test_two_input_fields_round_trip() {
         ? partial_action_text.value().find_control(model::ObjectId{5}) : nullptr;
     const auto* partial_action_event = partial_action_button && !partial_action_button->events.empty()
         ? partial_action_text.value().find_event(partial_action_button->events.front().id()) : nullptr;
-    expect(partial_action_text.ok() && !partial_action_text.value().reconstruction_complete() &&
-               std::any_of(partial_action_text.diagnostics().begin(), partial_action_text.diagnostics().end(),
-                   [](const auto& diagnostic) {
-                       return diagnostic.code == "OOF1140" &&
-                           diagnostic.severity == oof::DiagnosticSeverity::warning;
-                   }) && partial_action_event != nullptr && partial_action_event->handler == "RunProbe",
-        "valid noncanonical Button Action presentation must warn while retaining its handler");
+    expect(partial_action_text.ok() && partial_action_text.value().reconstruction_complete() &&
+        partial_action_event != nullptr && partial_action_event->handler == "RunProbe" &&
+        partial_action_event->action_metadata &&
+        partial_action_event->action_metadata->text.items ==
+            std::vector<model::LocalizedStringItem>{{"ru", "different presentation"}},
+        "Button Action presentation must be retained with its handler");
+    const auto rebuilt_action = form_stream::encode_document(partial_action_text.value());
+    expect(rebuilt_action.ok() && list_stream::dump_compact(rebuilt_action.value()) ==
+        list_stream::dump_compact(unsupported_action_text), "Button Action presentation must round-trip");
 }
 
 void test_two_button_sibling_index() {
@@ -15271,6 +15301,23 @@ void test_chart_named_events() {
         const auto encoded = form_stream::encode_document(make_document(series_count, point_count, std::span(events)));
         expect(encoded.ok(), "Chart event rejection fixture must encode");
         const auto flag = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count + 94;
+        auto designer = encoded.value();
+        auto& action_metadata = find_chart_record(designer)->items[3].items[flag + 1].items[1].items[2].items[2];
+        action_metadata.items[1] = list_stream::ListValue::string_atom("HandleSelection");
+        action_metadata.items[2] = list_stream::parse("{1,1,{\"ru\",\"Handle den\"}}");
+        action_metadata.items[3] = action_metadata.items[2];
+        action_metadata.items[4] = action_metadata.items[2];
+        const auto decoded_designer = form_stream::decode_document(designer);
+        expect(decoded_designer.ok(), "Designer control action metadata must decode");
+        const auto* designer_chart = decoded_designer.value().find_control(model::ObjectId{2});
+        const auto* designer_event = decoded_designer.value().find_event(designer_chart->events[0].id());
+        const model::EventActionMetadata designer_expected{"HandleSelection", {{{"ru", "Handle den"}}},
+            {{{"ru", "Handle den"}}}, {{{"ru", "Handle den"}}}};
+        expect(designer_event && designer_event->action_metadata == designer_expected,
+            "Designer action fields must survive on their control event");
+        const auto designer_reencoded = form_stream::encode_document(decoded_designer.value());
+        expect(designer_reencoded.ok() && list_stream::dump_compact(designer_reencoded.value()) ==
+            list_stream::dump_compact(designer), "Designer action metadata must round-trip");
         const auto reject = [&](auto mutate, const char* message) {
             auto bad = encoded.value(); mutate(find_chart_record(bad)->items[3], flag);
             expect(!form_stream::decode_document(bad), message);

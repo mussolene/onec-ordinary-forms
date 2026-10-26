@@ -1352,6 +1352,54 @@ public:
 private:
     std::uint64_t next_page_id_{1};
 
+    std::pair<std::string, std::optional<model::EventActionMetadata>> parse_event_content(xmlNodePtr node) {
+        std::string handler;
+        std::optional<model::EventActionMetadata> metadata;
+        for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
+            if (child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) {
+                const std::string text = node_text(child);
+                if (!metadata) {
+                    handler += text;
+                } else if (text.find_first_not_of(" \t\r\n") != std::string::npos) {
+                    fail("OOF2003", child, {}, "handler", "only XML whitespace after Action", text,
+                        "Event handler text cannot follow Action");
+                }
+            } else if (child->type == XML_ELEMENT_NODE) {
+                if (node_name(child) != "Action" || metadata) {
+                    fail("OOF2003", child, {}, node_name(child), "at most one Action", node_name(child), "Invalid event child");
+                }
+                model::EventActionMetadata action;
+                action.name = required_attribute(child, "name");
+                std::set<std::string> fields;
+                for (xmlNodePtr field : element_children(child)) {
+                    const std::string name = node_name(field);
+                    if (!fields.insert(name).second) {
+                        fail("OOF2003", field, {}, name, "one Action field", name, "Duplicate Action field");
+                    }
+                    std::size_t item_count = 0;
+                    for (xmlNodePtr item = field->children; item != nullptr; item = item->next) {
+                        if (item->type == XML_ELEMENT_NODE && ++item_count > model::max_localized_text_items) {
+                            fail("OOF2003", field, {}, name, "at most 65536 translations", "too many translations",
+                                "Event action exceeds the translation limit");
+                        }
+                    }
+                    if (name == "Text") action.text = parse_localized_string(field);
+                    else if (name == "ToolTip") action.tooltip = parse_localized_string(field);
+                    else if (name == "Description") action.description = parse_localized_string(field);
+                    else fail("OOF2003", field, {}, name, "Text, ToolTip, or Description", name, "Unknown Action field");
+                }
+                if (fields.size() != 3) {
+                    fail("OOF2003", child, {}, "Action", "Text, ToolTip, and Description", "incomplete", "Action requires all localized values");
+                }
+                metadata = std::move(action);
+            }
+        }
+        if (handler.empty()) {
+            fail("OOF2003", node, {}, "handler", "nonempty handler", "empty", "Event handler must not be empty");
+        }
+        return {std::move(handler), std::move(metadata)};
+    }
+
     std::vector<model::EventRef> parse_form_events(xmlNodePtr node, model::ObjectId owner) {
         std::vector<model::EventRef> references;
         for (xmlNodePtr event_node : element_children(node)) {
@@ -1365,12 +1413,9 @@ private:
                 event_node,
                 "id",
                 object_id_text(owner));
-            objects_.events.push_back({
-                id,
-                std::string(descriptor->api_name),
-                node_text(event_node),
-                model::FormRef{owner},
-            });
+            auto [handler, metadata] = parse_event_content(event_node);
+            objects_.events.push_back({id, std::string(descriptor->api_name), std::move(handler),
+                model::FormRef{owner}, std::move(metadata)});
             references.push_back(model::EventRef{id});
         }
         return references;
@@ -1393,12 +1438,9 @@ private:
                 event_node,
                 "id",
                 object_id_text(owner));
-            objects_.events.push_back({
-                id,
-                std::string(descriptor->api_name),
-                node_text(event_node),
-                model::ControlRef{owner},
-            });
+            auto [handler, metadata] = parse_event_content(event_node);
+            objects_.events.push_back({id, std::string(descriptor->api_name), std::move(handler),
+                model::ControlRef{owner}, std::move(metadata)});
             references.push_back(model::EventRef{id});
         }
         return references;
@@ -2423,7 +2465,8 @@ public:
         output_.push_back('<');
         output_.append(name);
         append_attributes(attributes);
-        output_ += ">\n";
+        output_.push_back('>');
+        if (!mixed_) output_.push_back('\n');
         ++depth_;
     }
 
@@ -2432,7 +2475,8 @@ public:
         indent();
         output_ += "</";
         output_.append(name);
-        output_ += ">\n";
+        output_.push_back('>');
+        if (!mixed_) output_.push_back('\n');
     }
 
     void empty(std::string_view name, const XmlAttributes& attributes = {}) {
@@ -2440,7 +2484,8 @@ public:
         output_.push_back('<');
         output_.append(name);
         append_attributes(attributes);
-        output_ += "/>\n";
+        output_ += "/>";
+        if (!mixed_) output_.push_back('\n');
     }
 
     void text(
@@ -2456,7 +2501,27 @@ public:
         append_xml_escaped(output_, value, false);
         output_ += "</";
         output_.append(name);
+        output_.push_back('>');
+        if (!mixed_) output_.push_back('\n');
+    }
+
+    void open_mixed(std::string_view name, std::string_view value, const XmlAttributes& attributes) {
+        indent();
+        output_.push_back('<');
+        output_.append(name);
+        append_attributes(attributes);
+        output_.push_back('>');
+        append_xml_escaped(output_, value, false);
+        ++depth_;
+        mixed_ = true;
+    }
+
+    void close_mixed(std::string_view name) {
+        --depth_;
+        output_ += "</";
+        output_.append(name);
         output_ += ">\n";
+        mixed_ = false;
     }
 
     [[nodiscard]] std::string take() {
@@ -2465,7 +2530,7 @@ public:
 
 private:
     void indent() {
-        output_.append(depth_ * 2, ' ');
+        if (!mixed_) output_.append(depth_ * 2, ' ');
     }
 
     void append_attributes(const XmlAttributes& attributes) {
@@ -2480,6 +2545,7 @@ private:
 
     std::string output_;
     std::size_t depth_ = 0;
+    bool mixed_ = false;
 };
 
 [[noreturn]] void serialization_fail(
@@ -3105,10 +3171,24 @@ private:
         }
         writer_.open(container_name);
         for (const auto& [descriptor, event] : ordered) {
-            writer_.text(
-                descriptor->xml_name,
-                event->handler,
-                {{"id", object_id_text(event->id)}});
+            if (!event->action_metadata) {
+                writer_.text(descriptor->xml_name, event->handler, {{"id", object_id_text(event->id)}});
+                continue;
+            }
+            const auto& action = *event->action_metadata;
+            for (const auto* value : {&action.text, &action.tooltip, &action.description}) {
+                if (value->items.size() > model::max_localized_text_items) {
+                    serialization_fail(std::string(owner_id), "Action", "at most 65536 translations",
+                        "too many translations", "Event action exceeds the translation limit");
+                }
+            }
+            writer_.open_mixed(descriptor->xml_name, event->handler, {{"id", object_id_text(event->id)}});
+            writer_.open("Action", {{"name", action.name}});
+            write_localized("Text", action.text, owner_id);
+            write_localized("ToolTip", action.tooltip, owner_id);
+            write_localized("Description", action.description, owner_id);
+            writer_.close("Action");
+            writer_.close_mixed(descriptor->xml_name);
         }
         writer_.close(container_name);
     }
