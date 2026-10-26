@@ -14809,6 +14809,116 @@ void test_embedded_chart_typed_variants_and_guards() {
     }
 }
 
+void test_chart_named_boolean_properties() {
+    constexpr std::array cases{
+        std::pair{"Transparent", false}, std::pair{"AutoSeriesText", true},
+        std::pair{"AutoPointText", true}, std::pair{"Outline", false}, std::pair{"Light", true},
+        std::pair{"Gradient", false}, std::pair{"SeriesInRows", true}, std::pair{"HideBaseValue", false},
+        std::pair{"AutoTransposition", false}, std::pair{"GaugeChartValuesScaleLabelsArcDirection", false},
+        std::pair{"AutoMaxValue", true}, std::pair{"AutoMinValue", true}, std::pair{"TransparentLabel", true},
+    };
+    const auto make_document = [&](std::size_t series_count, std::size_t point_count,
+                                   std::optional<std::size_t> selected, bool invert, bool wrong_type = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "ChartFlags";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload chart;
+        for (std::size_t s = 0; s < series_count; ++s) {
+            model::ChartSeries series;
+            series.id = model::ObjectId{10 + s};
+            series.text = "Series" + std::to_string(s);
+            series.color.kind = model::ColorKind::absolute;
+            series.color.red = static_cast<std::uint8_t>(s + 1);
+            series.marker = {"ChartMarkerType", "Auto"};
+            chart.series.push_back(std::move(series));
+        }
+        for (std::size_t p = 0; p < point_count; ++p) {
+            model::ChartPoint point;
+            point.id = model::ObjectId{20 + p};
+            point.text = "Point" + std::to_string(p);
+            point.color.kind = model::ColorKind::absolute;
+            point.color.blue = static_cast<std::uint8_t>(p + 1);
+            chart.points.push_back(std::move(point));
+        }
+        for (const auto& series : chart.series) for (const auto& point : chart.points)
+            chart.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode control{model::ObjectId{2}, "Chart", std::move(chart)};
+        for (std::size_t i = 0; i < cases.size(); ++i) {
+            if (!selected || *selected == i) control.properties().set_explicit(
+                model::PropertyId::from_name(cases[i].first), invert ? !cases[i].second : cases[i].second);
+        }
+        if (wrong_type) control.properties().set_explicit(model::PropertyId::from_name("Transparent"), std::string("wrong"));
+        document.add_control(std::move(control));
+        return document;
+    };
+    for (const auto& [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
+        for (std::size_t index = 0; index <= cases.size(); ++index) {
+            for (const bool invert : {false, true}) {
+                const auto document = make_document(series_count, point_count,
+                    index == cases.size() ? std::nullopt : std::optional<std::size_t>{index}, invert);
+                auto encoded = form_stream::encode_document(document);
+                expect(encoded.ok(), "Chart Boolean properties must encode");
+                const auto* encoded_chart = find_chart_record(encoded.value());
+                expect(encoded_chart != nullptr, "encoded Chart must exist");
+                const auto middle = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+                constexpr std::array<std::size_t, 12> offsets{20, 43, 44, 50, 53, 54, 55, 56, 64, 74, 77, 79};
+                for (std::size_t i = 0; i < cases.size(); ++i) {
+                    const bool expected = (index == cases.size() || index == i) && invert ? !cases[i].second : cases[i].second;
+                    const auto position = middle + (i == 12 ? 103 + 3 * series_count * point_count : offsets[i]);
+                    const bool stored = i == 6 ? !expected : expected;
+                    expect(encoded_chart->items[3].items[position].atom == (stored ? "1" : "0"),
+                        "Chart property must use the platform-observed native position and polarity");
+                }
+                const auto limits = middle + 126 + 3 * series_count * point_count + series_count;
+                for (const auto [case_index, slot] : {std::pair{10U, 3U}, std::pair{11U, 4U}}) {
+                    const bool expected = (index == cases.size() || index == case_index) && invert ? false : true;
+                    expect(encoded_chart->items[3].items[limits].items[slot].atom == (expected ? "0" : "2"),
+                        "Chart automatic limit must update its platform-observed companion");
+                }
+                const auto decoded = form_stream::decode_document(encoded.value());
+                expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart Boolean properties must decode completely");
+                const auto* control = decoded.value().find_control(model::ObjectId{2});
+                expect(control != nullptr, "decoded Chart must exist");
+                const auto& chart = std::get<model::ChartPayload>(control->payload);
+                expect(chart.series.size() == series_count && chart.points.size() == point_count &&
+                    chart.values.size() == series_count * point_count, "Chart data must survive Boolean properties");
+                for (std::size_t i = 0; i < cases.size(); ++i) {
+                    const auto* property = control->properties().find(model::PropertyId::from_name(cases[i].first));
+                    const bool expected = (index == cases.size() || index == i) && invert ? !cases[i].second : cases[i].second;
+                    expect((property ? std::get<bool>(property->value) : cases[i].second) == expected,
+                        "Chart Boolean property value must survive native decoding");
+                }
+                const auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "Chart Boolean properties must serialize to named XML");
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "Chart Boolean properties must parse from named XML");
+                const auto rebuilt = form_stream::encode_document(parsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                    "Chart Boolean properties must round-trip with data");
+            }
+        }
+        auto damaged = form_stream::encode_document(make_document(series_count, point_count, std::nullopt, true));
+        expect(damaged.ok(), "Chart paired limit fixture must encode");
+        auto* record = find_chart_record(damaged.value());
+        expect(record != nullptr, "Chart record must exist");
+        const auto middle = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+        const auto limits = middle + 126 + 3 * series_count * point_count + series_count;
+        for (const auto slot : {3U, 4U}) {
+            auto wrong = damaged.value();
+            find_chart_record(wrong)->items[3].items[limits].items[slot] = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(wrong), "Chart auto-limit paired field must match");
+        }
+        auto unknown = damaged.value();
+        find_chart_record(unknown)->items[3].items[middle + 21] = list_stream::ListValue::raw_atom("777");
+        const auto partial = form_stream::decode_document(unknown);
+        expect(!partial.ok() || !partial.value().reconstruction_complete(), "unknown Chart field must not be silently discarded");
+    }
+    expect(!form_stream::encode_document(make_document(0, 0, std::nullopt, true, true)),
+        "Chart Boolean property must reject wrong type");
+}
+
 void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
       <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><Title>Новая диаграмма</Title><Series>)XML";
@@ -15035,7 +15145,8 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
 
     auto optional_profile = encoded.value();
     record = find_chart_record(optional_profile);
-    record->items[3].items[68] = list_stream::ListValue::raw_atom("1");
+    // This field is still outside the named Chart profile; slot 68 is Outline.
+    record->items[3].items[40] = list_stream::ListValue::raw_atom("0");
     const auto partial = form_stream::decode_document(optional_profile, "Main");
     expect(partial.ok() && !partial.value().reconstruction_complete() &&
         std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
@@ -16144,6 +16255,7 @@ int main() {
         test_independent_tab_order_observed_geometry_and_guards();
         test_chart_value_tooltip_named_pair_and_xml_text();
         test_embedded_chart_typed_variants_and_guards();
+        test_chart_named_boolean_properties();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();

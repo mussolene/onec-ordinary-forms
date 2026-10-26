@@ -4092,6 +4092,7 @@ struct DecodedControl {
 struct DecodedChartInfo {
     model::ChartPayload payload;
     std::string title;
+    model::PropertySet properties;
 };
 
 DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
@@ -6050,7 +6051,30 @@ void apply_chart_render_cache(const LV& actual, LV& expected,
     for (const auto offset : render_cache_offsets) normalize(render_start + offset);
 }
 
-LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
+struct ChartBooleanProperty {
+    std::string_view name;
+    std::size_t offset;
+    bool default_value;
+    bool inverted;
+};
+
+constexpr std::array chart_boolean_properties{
+    ChartBooleanProperty{"Transparent", 20, false, false},
+    ChartBooleanProperty{"AutoSeriesText", 43, true, false},
+    ChartBooleanProperty{"AutoPointText", 44, true, false},
+    ChartBooleanProperty{"Outline", 50, false, false},
+    ChartBooleanProperty{"Light", 53, true, false},
+    ChartBooleanProperty{"Gradient", 54, false, false},
+    ChartBooleanProperty{"SeriesInRows", 55, true, true},
+    ChartBooleanProperty{"HideBaseValue", 56, false, false},
+    ChartBooleanProperty{"AutoTransposition", 64, false, false},
+    ChartBooleanProperty{"GaugeChartValuesScaleLabelsArcDirection", 74, false, false},
+    ChartBooleanProperty{"AutoMaxValue", 77, true, false},
+    ChartBooleanProperty{"AutoMinValue", 79, true, false},
+};
+
+LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
+    const model::PropertySet& properties = {}) {
     const auto series_count = chart.series.size();
     const auto point_count = chart.points.size();
     const auto expected = chart_info_item_count(series_count, point_count, "$/Chart/Info");
@@ -6146,6 +6170,17 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
     }
     append(canonical_chart_tail_defaults());
     if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
+    const auto middle_start = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+    for (const auto& spec : chart_boolean_properties) {
+        const bool value = explicit_bool(properties, spec.name, spec.default_value);
+        info.at(middle_start + spec.offset) = raw(value != spec.inverted ? "1" : "0");
+    }
+    info.at(middle_start + 103 + 3 * expected_cell_count) =
+        raw(explicit_bool(properties, "TransparentLabel", true) ? "1" : "0");
+    auto& limits = info.at(middle_start + 126 + 3 * expected_cell_count + series_count);
+    require_arity(limits, 5, "$/Chart/Info/Limits");
+    limits.items.at(3) = raw(explicit_bool(properties, "AutoMaxValue", true) ? "0" : "2");
+    limits.items.at(4) = raw(explicit_bool(properties, "AutoMinValue", true) ? "0" : "2");
     return list(std::move(info));
 }
 
@@ -6157,14 +6192,15 @@ LV encode_chart(const model::ControlNode& control, const GeometryContext& contex
         fail("OOF1122", "$/Chart", "Chart payload with nonempty dimensions and positive ID", control.name, "Chart is outside the supported profile");
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
-        control.properties().size() > 1 ||
-        (control.properties().size() == 1 && !control.properties().contains(model::PropertyId::from_name("Title"))) ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Chart", "Chart named collections and plain Position", control.name, "Chart uses a storage concept outside the supported profile");
     }
+    require_allowed_properties(control.properties(), {"Title", "Transparent", "AutoSeriesText", "AutoPointText",
+        "Outline", "Light", "Gradient", "SeriesInRows", "HideBaseValue", "AutoTransposition",
+        "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6173,7 +6209,7 @@ LV encode_chart(const model::ControlNode& control, const GeometryContext& contex
         title = *text;
     }
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
-        list({raw("11")}), encode_chart_info(*chart, title),
+        list({raw("11")}), encode_chart_info(*chart, title, control.properties()),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")})});
@@ -6306,7 +6342,26 @@ DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
         summary_marker.member == "Auto" ? "1" : "3", summary_marker_cache_path);
     payload.summary_series.marker = summary_marker;
     payload.summary_series.color = summary_color;
-    const auto expected_info = encode_chart_info(payload, title);
+    model::PropertySet properties;
+    for (const auto& spec : chart_boolean_properties) {
+        const auto index = middle_start + spec.offset;
+        const bool stored = bool_atom(at(info, index, info_path), child_path(info_path, index));
+        const bool value = stored != spec.inverted;
+        if (value != spec.default_value) properties.set_explicit(model::PropertyId::from_name(spec.name), value);
+    }
+    const auto transparent_label_index = middle_start + 103 + 3 * series_size * static_cast<std::size_t>(point_count);
+    const bool transparent_label = bool_atom(at(info, transparent_label_index, info_path), child_path(info_path, transparent_label_index));
+    if (!transparent_label) properties.set_explicit(model::PropertyId::from_name("TransparentLabel"), false);
+    const auto limit_index = middle_start + 126 + 3 * series_size * static_cast<std::size_t>(point_count) + series_size;
+    const auto limit_path = child_path(info_path, limit_index);
+    const auto& limits = at(info, limit_index, info_path);
+    require_arity(limits, 5, limit_path);
+    for (const auto& [name, slot] : {std::pair{"AutoMaxValue", 3U}, std::pair{"AutoMinValue", 4U}}) {
+        const auto* entry = properties.find(model::PropertyId::from_name(name));
+        const bool enabled = entry == nullptr || std::get<bool>(entry->value);
+        require_raw_constant(limits.items[slot], enabled ? "0" : "2", child_path(limit_path, slot));
+    }
+    const auto expected_info = encode_chart_info(payload, title, properties);
     const auto render_start = cells_end + data_defaults.size() + series_size + 1 + style_defaults.size() +
         static_cast<std::size_t>(point_count) + series_size + 1;
     auto normalized_expected_info = expected_info;
@@ -6334,7 +6389,7 @@ DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
     if (list_stream::dump_compact(info) != list_stream::dump_compact(normalized_expected_info)) {
         warn_incomplete_profile(warnings, reconstruction_complete, id, info_path, "Chart");
     }
-    return {std::move(payload), title};
+    return {std::move(payload), title, std::move(properties)};
 }
 
 DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context,
@@ -6349,6 +6404,7 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
     model::ControlNode control{model::ObjectId{id},
         string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)),
         std::move(decoded.payload)};
+    control.properties() = std::move(decoded.properties);
     if (!decoded.title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), decoded.title);
     const auto expected_metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
     require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");

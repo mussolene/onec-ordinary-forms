@@ -672,6 +672,16 @@ void apply_proven_storage_overrides(
     classify_property(spreadsheet_properties, "ShowSelection", StorageCodec::control_info, DefaultKind::enumeration,
         "SpreadsheetDocumentSelectionShowModeType.WhenActive");
 
+    auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+    for (const auto name : {"Transparent", "Outline", "Gradient", "HideBaseValue", "AutoTransposition",
+             "GaugeChartValuesScaleLabelsArcDirection"}) {
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::boolean, "false");
+    }
+    for (const auto name : {"AutoMaxValue", "AutoMinValue", "AutoSeriesText", "AutoPointText", "Light",
+             "SeriesInRows", "TransparentLabel"}) {
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::boolean, "true");
+    }
+
     classify_shared_control_property("Enabled", StorageCodec::control_base, DefaultKind::boolean, "true", {
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,

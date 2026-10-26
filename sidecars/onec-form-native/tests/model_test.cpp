@@ -36,6 +36,28 @@ void test_descriptors() {
 
     const auto descriptors = control_descriptors();
     expect(descriptors.size() == 26, "metamodel must contain exactly 26 descriptors");
+    for (const auto& [name, default_value] : std::array{
+             std::pair{std::string_view{"Transparent"}, std::string_view{"false"}},
+             std::pair{std::string_view{"AutoSeriesText"}, std::string_view{"true"}},
+             std::pair{std::string_view{"AutoPointText"}, std::string_view{"true"}},
+             std::pair{std::string_view{"Outline"}, std::string_view{"false"}},
+             std::pair{std::string_view{"Light"}, std::string_view{"true"}},
+             std::pair{std::string_view{"Gradient"}, std::string_view{"false"}},
+             std::pair{std::string_view{"SeriesInRows"}, std::string_view{"true"}},
+             std::pair{std::string_view{"HideBaseValue"}, std::string_view{"false"}},
+             std::pair{std::string_view{"AutoTransposition"}, std::string_view{"false"}},
+             std::pair{std::string_view{"GaugeChartValuesScaleLabelsArcDirection"}, std::string_view{"false"}},
+             std::pair{std::string_view{"AutoMaxValue"}, std::string_view{"true"}},
+             std::pair{std::string_view{"AutoMinValue"}, std::string_view{"true"}},
+             std::pair{std::string_view{"TransparentLabel"}, std::string_view{"true"}}}) {
+        const auto* descriptor = find_property(ControlKind::chart, name);
+        expect(descriptor && descriptor->value_codec == ValueCodec::boolean &&
+                   descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::control_info &&
+                   descriptor->default_value.kind == DefaultKind::boolean &&
+                   descriptor->default_value.canonical == default_value,
+            std::string("Chart Boolean descriptor must preserve its observed default: ") + std::string(name));
+    }
     const auto* begin_period = find_property(ControlKind::calendar_field, "BeginOfDisplayPeriod");
     expect(begin_period != nullptr && begin_period->value_codec == ValueCodec::date &&
                begin_period->persistence == PersistenceClass::persisted_editable &&
