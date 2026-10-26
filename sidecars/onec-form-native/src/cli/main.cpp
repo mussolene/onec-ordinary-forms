@@ -62,7 +62,38 @@ std::vector<std::string_view> positional_arguments(int argc, char** argv) {
 
 void print_json_string(std::ostream& output, std::string_view value) {
     output << '"';
-    for (const unsigned char byte : value) {
+    constexpr char hex[] = "0123456789ABCDEF";
+    const auto byte_at = [&value](std::size_t index) {
+        return static_cast<unsigned char>(value[index]);
+    };
+    const auto continuation = [&value, &byte_at](std::size_t index) {
+        return index < value.size() && (byte_at(index) & 0xc0U) == 0x80U;
+    };
+    for (std::size_t index = 0; index < value.size(); ++index) {
+        const unsigned char byte = byte_at(index);
+        if (byte >= 0x80U) {
+            std::size_t length = 0;
+            if (byte >= 0xc2U && byte <= 0xdfU && continuation(index + 1)) {
+                length = 2;
+            } else if (byte >= 0xe0U && byte <= 0xefU && continuation(index + 1) &&
+                       continuation(index + 2) && (byte != 0xe0U || byte_at(index + 1) >= 0xa0U) &&
+                       (byte != 0xedU || byte_at(index + 1) <= 0x9fU)) {
+                length = 3;
+            } else if (byte >= 0xf0U && byte <= 0xf4U && continuation(index + 1) &&
+                       continuation(index + 2) && continuation(index + 3) &&
+                       (byte != 0xf0U || byte_at(index + 1) >= 0x90U) &&
+                       (byte != 0xf4U || byte_at(index + 1) <= 0x8fU)) {
+                length = 4;
+            }
+            if (length != 0) {
+                output.write(value.data() + index, static_cast<std::streamsize>(length));
+                index += length - 1;
+            } else {
+                // Preserve invalid filesystem and argv bytes as visibly escaped text.
+                output << "\\\\x" << hex[byte >> 4] << hex[byte & 0x0fU];
+            }
+            continue;
+        }
         switch (byte) {
             case '"': output << "\\\""; break;
             case '\\': output << "\\\\"; break;
@@ -73,8 +104,8 @@ void print_json_string(std::ostream& output, std::string_view value) {
             case '\t': output << "\\t"; break;
             default:
                 if (byte < 0x20) {
-                    constexpr char hex[] = "0123456789abcdef";
-                    output << "\\u00" << hex[byte >> 4] << hex[byte & 0x0f];
+                    constexpr char json_hex[] = "0123456789abcdef";
+                    output << "\\u00" << json_hex[byte >> 4] << json_hex[byte & 0x0f];
                 } else {
                     output << static_cast<char>(byte);
                 }
