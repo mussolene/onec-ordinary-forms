@@ -237,6 +237,10 @@ struct StandardPictureDescriptor {
 };
 
 struct MetamodelCoverage {
+    std::string_view target_platform_version = "8.5.1.1343";
+    std::size_t target_control_count = 0;
+    std::size_t excluded_control_count = 0;
+    std::size_t excluded_control_property_occurrences = 0;
     std::size_t control_count = 0;
     std::size_t control_property_occurrences = 0;
     std::size_t unique_control_property_names = 0;

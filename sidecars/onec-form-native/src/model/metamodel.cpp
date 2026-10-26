@@ -668,25 +668,27 @@ void apply_proven_storage_overrides(
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::calendar_field, ControlKind::text_document_field, ControlKind::input_field,
+        ControlKind::label_decoration,
     });
     classify_shared_control_property("Enabled", StorageCodec::control_info, DefaultKind::boolean, "true", {
-        ControlKind::progress_bar, ControlKind::track_bar, ControlKind::label_decoration,
+        ControlKind::progress_bar, ControlKind::track_bar,
     });
     classify_shared_control_property("ToolTip", StorageCodec::control_base, DefaultKind::string, "", {
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
-        ControlKind::input_field,
+        ControlKind::input_field, ControlKind::calendar_field, ControlKind::label_decoration,
     });
     classify_shared_control_property("ToolTip", StorageCodec::control_info, DefaultKind::string, "", {
-        ControlKind::progress_bar, ControlKind::track_bar, ControlKind::label_decoration,
+        ControlKind::progress_bar, ControlKind::track_bar,
     });
     classify_shared_control_property("BorderColor", StorageCodec::control_base, DefaultKind::color,
-        "automatic", {ControlKind::panel, ControlKind::command_bar, ControlKind::button,
+        "automatic", {ControlKind::panel, ControlKind::command_bar, ControlKind::button, ControlKind::check_box,
             ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,
             ControlKind::text_document_field});
     classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
         ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
+        ControlKind::choice_field, ControlKind::command_bar,
     });
 
     auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];
@@ -1204,16 +1206,24 @@ struct Metamodel::Impl {
 
         coverage.control_count = controls.size();
         for (std::size_t index = 0; index < control_kind_count; ++index) {
+            // ActiveX remains in the help catalog, outside the declared product target.
+            const bool excluded = controls[index].kind == ControlKind::active_x_control;
+            if (excluded) {
+                ++coverage.excluded_control_count;
+                coverage.excluded_control_property_occurrences += properties[index].size();
+            } else {
+                ++coverage.target_control_count;
+            }
             coverage.control_property_occurrences += properties[index].size();
             coverage.control_event_occurrences += events[index].size();
             for (const auto& descriptor : properties[index]) {
                 index_property(properties_by_name[index], properties_by_id[index], descriptor);
-                account_property(descriptor);
+                if (!excluded) account_property(descriptor);
                 unique_property_names.insert(descriptor.api_name);
             }
             for (const auto& descriptor : events[index]) {
                 index_event(events_by_name[index], descriptor);
-                account_event(descriptor);
+                if (!excluded) account_event(descriptor);
                 unique_event_names.insert(descriptor.api_name);
             }
         }
@@ -1249,7 +1259,8 @@ struct Metamodel::Impl {
             index_event(form_events_by_name, descriptor);
             account_event(descriptor);
         }
-        coverage.release_ready = coverage.control_count == control_kind_count &&
+        coverage.release_ready = coverage.target_control_count == control_kind_count - 1 &&
+                                 coverage.excluded_control_count == 1 &&
                                  coverage.property_id_collisions == 0 &&
                                  coverage.unclassified_properties == 0 &&
                                  coverage.unclassified_events == 0 &&

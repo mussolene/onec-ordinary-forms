@@ -1065,10 +1065,12 @@ LV canonical_command_bar_base(bool enabled, std::string_view tool_tip,
                               const model::ColorValue* button_text_color = nullptr,
                               const model::ColorValue* back_color = nullptr,
                               const model::BorderValue* border = nullptr, bool transparent = false,
-                              const model::ColorValue* button_back_color = nullptr) {
+                              const model::ColorValue* button_back_color = nullptr,
+                              const model::FontValue* font = nullptr) {
     auto value = parse_constant(R"OOF({19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}})OOF");
     encode_common_control_base(value,
-        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt,
+        CommonControlBaseFields{enabled, std::string(tool_tip),
+            font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
             border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
         "$/CommandBar");
     value.items[5] = raw(transparent ? "1" : "0");
@@ -1124,9 +1126,11 @@ LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
                                      const model::BorderValue* border = nullptr, bool auto_fill = false,
                                      bool transparent = false, std::int32_t orientation = 2,
                                      std::int32_t buttons_alignment = 0,
-                                     const model::ColorValue* button_back_color = nullptr) {
+                                     const model::ColorValue* button_back_color = nullptr,
+                                     const model::FontValue* font = nullptr) {
     std::vector<LV> properties(14, raw("0"));
-    properties[0] = canonical_command_bar_base(enabled, tool_tip, border_color, button_text_color, back_color, border, transparent, button_back_color);
+    properties[0] = canonical_command_bar_base(enabled, tool_tip, border_color, button_text_color,
+        back_color, border, transparent, button_back_color, font);
     // Slot 1 observed canonical default.
     properties[1] = raw("9");
     properties[2] = raw(std::to_string(orientation));
@@ -1299,19 +1303,22 @@ LV canonical_radio_button_info(
 }
 
 LV canonical_control_base_properties(bool enabled, std::string_view tool_tip,
-    const model::ColorValue* border_color = nullptr, std::string_view control_path = "$/ProgressBar");
+    const model::ColorValue* border_color = nullptr, std::string_view control_path = "$/ProgressBar",
+    const model::FontValue* font = nullptr);
 
 LV canonical_choice_field_info(
     bool enabled,
     std::string_view tool_tip,
-    const model::ColorValue& border_color) {
+    const model::ColorValue& border_color,
+    const model::FontValue* font = nullptr) {
     auto properties = parse_constant(R"OOF(
 {{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
 )OOF");
     if (properties.items.size() != 46 || properties.items[0].items.size() != 21) {
         throw std::logic_error("canonical ChoiceField info profile is malformed");
     }
-    properties.items[0] = canonical_control_base_properties(enabled, tool_tip, &border_color, "$/ChoiceField");
+    properties.items[0] = canonical_control_base_properties(
+        enabled, tool_tip, &border_color, "$/ChoiceField", font);
     return list({raw("2"), std::move(properties), list({raw("0")})});
 }
 
@@ -1328,12 +1335,12 @@ LV canonical_html_document_field_data(std::int32_t output) {
 }
 
 LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip,
-    const model::FontValue* font = nullptr) {
+    const model::FontValue* font = nullptr, const model::ColorValue* border_color = nullptr) {
     return list({
         raw("1"),
         list({
             list({
-                canonical_button_base(enabled, tool_tip, nullptr, nullptr, nullptr, font, "$/CheckBox"),
+                canonical_button_base(enabled, tool_tip, border_color, nullptr, nullptr, font, "$/CheckBox"),
                 raw("7"),
                 encoded_localized(caption),
                 raw("1"),
@@ -1355,20 +1362,24 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
 }
 
 // The remaining fixed CalendarField values come from one controlled synthetic Add sample.
-// Their domain meanings are unknown; this profile exposes only Enabled and BeginOfDisplayPeriod.
-LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "00010101000000") {
+// Other profile fields remain unrepresented; named common properties use the shared base codec.
+LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "00010101000000",
+    std::string_view tool_tip = {}) {
     const LV zero_record = list({raw("0")});
     const LV canonical_4_4_record = list({raw("4"), raw("4"), zero_record, raw("4")});
     const LV canonical_neg7_record = list({raw("4"), raw("3"), list({raw("-7")}), raw("3")});
     const LV canonical_neg21_record = list({raw("4"), raw("3"), list({raw("-21")}), raw("3")});
     const LV canonical_neg18_record = list({raw("3"), raw("1"), list({raw("-18")}), raw("0"), raw("0"), raw("0")});
-    const LV base_properties = list({
+    LV base_properties = list({
         raw("19"), raw(enabled ? "1" : "0"), canonical_4_4_record, canonical_4_4_record,
         list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), raw("0"),
         canonical_4_4_record, canonical_4_4_record, canonical_4_4_record, canonical_neg7_record, canonical_neg21_record,
         canonical_neg18_record, list({raw("1"), raw("0")}), raw("0"), raw("0"), raw("100"),
         raw("2"), raw("2"), raw("1"), raw("2"), canonical_4_4_record,
     });
+    encode_common_control_base(base_properties,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt, std::nullopt},
+        "$/CalendarField");
     const LV properties = list({
         base_properties, raw("9"),
         list({raw("4"), raw("3"), list({raw("-16")}), raw("3")}),
@@ -4142,10 +4153,11 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true});
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
     const auto& border_color = *common.border_color;
+    const auto& font = *common.font;
     const auto button_text_color = decode_control_color(base.items[10], child_path(base_path, 10));
     const auto back_color = decode_control_color(base.items[2], child_path(base_path, 2));
     const bool transparent = bool_atom(base.items[5], child_path(base_path, 5));
@@ -4193,7 +4205,8 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     normalized.items[10] = raw("9d0a2e40-b978-11d4-84b6-008048da06df");
     normalized.items[11] = raw("0");
     const auto expected = canonical_command_bar_properties(enabled, tool_tip, {}, empty_document, raw_id, secondary,
-        &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color);
+        &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation,
+        buttons_alignment, &button_back_color, &font);
     const auto& expected_base = expected.items[0];
     const auto base_mismatch = std::mismatch(normalized.items[0].items.begin(), normalized.items[0].items.end(),
         expected_base.items.begin(), expected_base.items.end(), [](const auto& left, const auto& right) {
@@ -5619,13 +5632,15 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
 }
 
 LV canonical_control_base_properties(bool enabled, std::string_view tool_tip,
-    const model::ColorValue* border_color, std::string_view control_path) {
+    const model::ColorValue* border_color, std::string_view control_path,
+    const model::FontValue* font) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
         "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
         "{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
     encode_common_control_base(properties,
-        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt,
+        CommonControlBaseFields{enabled, std::string(tool_tip),
+            font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
             border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
         control_path);
     return properties;
@@ -5988,17 +6003,18 @@ DecodedControl decode_check_box(
     require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{true, false});
+    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{true, true});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
     const auto& font = *common.font;
+    const auto& border_color = *common.border_color;
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[0].items[12] = encoded_localized(tool_tip);
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
-        canonical_check_box_info(enabled, caption, tool_tip, &font)))
+        canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CheckBox");
 
     const auto geometry_path = child_path(path, 3);
@@ -6056,17 +6072,18 @@ DecodedControl decode_choice_field(
     require_raw_constant(info_properties.items[1], "31", child_path(info_properties_path, 1));
     const auto& base_properties = info_properties.items[0];
     const auto base_path = child_path(info_properties_path, 0);
-    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{false, true});
+    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{true, true});
     const bool enabled = common.enabled;
     const auto& border_color = *common.border_color;
     const auto& tool_tip = common.tool_tip;
+    const auto& font = *common.font;
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
         "ChoiceField cannot contain storage children");
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[6] =
         encode_control_color(border_color, child_path(base_path, 6));
     normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
-    const LV canonical_info = canonical_choice_field_info(enabled, tool_tip, border_color);
+    const LV canonical_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font);
     require_list_stream_shape(normalized_info, canonical_info, info_path,
         "ChoiceField profile with valid record arity and atom types");
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
@@ -6163,9 +6180,9 @@ DecodedControl decode_calendar_field(
             "CalendarField property record is incomplete");
     }
     const auto& base_properties = properties.items[0];
-    require_arity(base_properties, 21, child_path(properties_path, 0));
-    require_raw_constant(base_properties.items[0], "19", child_path(child_path(properties_path, 0), 0));
-    const bool enabled = bool_atom(base_properties.items[1], child_path(child_path(properties_path, 0), 1));
+    const auto common = decode_common_control_base(base_properties, child_path(properties_path, 0),
+        CommonControlBaseCapabilities{false, false});
+    const bool enabled = common.enabled;
     require_arity(properties, 14, properties_path);
     const auto begin_path = child_path(properties_path, 5);
     const auto begin_atom = raw_atom(properties.items[5], begin_path);
@@ -6181,7 +6198,7 @@ DecodedControl decode_calendar_field(
         fail("OOF1122", "$/2/3", "single DateTime Attribute for CalendarField",
             linked_attribute->name, "CalendarField DataPath TypeDomain is unsupported");
     }
-    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_calendar_field_info(enabled, begin_atom)))
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_calendar_field_info(enabled, begin_atom, common.tool_tip)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CalendarField");
 
     const auto geometry_path = child_path(path, 3);
@@ -6206,7 +6223,7 @@ DecodedControl decode_calendar_field(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
     if (linked_attribute != nullptr) control.data_path = model::DataPath{
         model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    apply_common_control_base(control.properties(), common);
     if (begin_atom != "00010101000000") {
         control.properties().set_explicit(
             model::PropertyId::from_name("BeginOfDisplayPeriod"),
@@ -7578,7 +7595,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
     if (!control.events.empty() || control.data_path || !control.children.empty())
         fail("OOF1122", "$/CommandBar", "CommandBar without events, DataPath, or child controls",
             control.name, "CommandBar uses a storage concept outside the supported profile");
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor", "Border", "AutoFill", "Transparent", "ButtonBackColor", "Orientation", "ButtonsAlignment"}, "$/CommandBar");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor", "Border", "AutoFill", "Transparent", "ButtonBackColor", "Orientation", "ButtonsAlignment", "Font"}, "$/CommandBar");
     require_allowed_properties(control.extension_properties, {"ActionSource"}, "$/CommandBar");
     std::uint32_t action_source = std::numeric_limits<std::uint32_t>::max();
     if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("ActionSource"))) {
@@ -7608,6 +7625,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
         ? explicit_control_color(control.properties(), "BackColor", "CommandBar") : model::ColorValue{};
     const auto button_back_color = control.properties().contains(model::PropertyId::from_name("ButtonBackColor"))
         ? explicit_control_color(control.properties(), "ButtonBackColor", "CommandBar") : model::ColorValue{};
+    const auto font = explicit_control_font(control.properties(), "$/CommandBar/Font");
     const auto auto_fill = explicit_bool(control.properties(), "AutoFill", false);
     const auto transparent = explicit_bool(control.properties(), "Transparent", false);
     const auto orientation = explicit_enum_storage_value(control.properties(), "CommandBar", "Orientation", "Orientation", 2,
@@ -7621,7 +7639,8 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
         border = *typed_border;
     }
     const auto properties = canonical_command_bar_properties(enabled, tool_tip, payload->buttons, document, control.id.value(),
-        explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color);
+        explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color,
+        &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color, &font);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     const auto info = list({raw("2"), properties});
     const auto metadata = list({raw("14"), string_value(control.name), raw(std::to_string(action_source)), raw("0"), raw("0"), raw("0")});
@@ -7938,7 +7957,7 @@ LV encode_check_box(
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font"}, "$/CheckBox");
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor"}, "$/CheckBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
@@ -7952,11 +7971,12 @@ LV encode_check_box(
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto font = explicit_control_font(control.properties(), "$/CheckBox/Font");
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor", "CheckBox");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_check_box_info(enabled, caption, tool_tip, &font),
+        canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -7980,7 +8000,7 @@ LV encode_choice_field(
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip"}, "$/ChoiceField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font"}, "$/ChoiceField");
     if (control.data_path) {
         const auto* attribute = document.find_attribute(control.data_path->attribute.id());
         if (attribute == nullptr) {
@@ -7995,11 +8015,12 @@ LV encode_choice_field(
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "ChoiceField");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto font = explicit_control_font(control.properties(), "$/ChoiceField/Font");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_choice_field_info(enabled, tool_tip, border_color),
+        canonical_choice_field_info(enabled, tool_tip, border_color, &font),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -8191,7 +8212,7 @@ LV encode_calendar_field(
             "single DateTime Attribute", attribute->name,
             "CalendarField DataPath must target a DateTime attribute");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "BeginOfDisplayPeriod"}, "$/CalendarField");
+    require_allowed_properties(control.properties(), {"Enabled", "BeginOfDisplayPeriod", "ToolTip"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     std::string begin_period = "00010101000000";
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("BeginOfDisplayPeriod"))) {
@@ -8212,7 +8233,7 @@ LV encode_calendar_field(
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_calendar_field_info(enabled, begin_period),
+        canonical_calendar_field_info(enabled, begin_period, explicit_string(control.properties(), "ToolTip")),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

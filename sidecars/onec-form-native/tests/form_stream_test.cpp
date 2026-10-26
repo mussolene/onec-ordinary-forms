@@ -2632,6 +2632,134 @@ void test_check_box_font_round_trip_and_validation() {
         "unsupported WindowsFont CheckBox value must be rejected without fallback");
 }
 
+void test_check_box_border_color_round_trip_and_validation() {
+    const auto make_document = [](std::optional<model::ColorValue> border_color) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CheckBoxBorderColor";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue boolean_type;
+        model::TypeDomainEntry boolean_entry;
+        boolean_entry.term = model::TypeDomainTerm::boolean;
+        boolean_type.entries.push_back(boolean_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Flag", boolean_type});
+        model::ControlNode check_box{model::ObjectId{2}, "FlagControl", model::CheckBoxPayload{}};
+        check_box.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        if (border_color) {
+            check_box.properties().set_explicit(model::PropertyId::from_name("BorderColor"), *border_color);
+        }
+        document.add_control(std::move(check_box));
+        return document;
+    };
+    const auto check_box_base = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[0];
+    };
+
+    const auto default_encoded = form_stream::encode_document(make_document(std::nullopt));
+    const auto automatic_encoded = form_stream::encode_document(make_document(model::ColorValue{}));
+    expect(default_encoded.ok() && automatic_encoded.ok(), "default and automatic CheckBox BorderColor must encode");
+    expect(list_stream::dump_compact(default_encoded.value()) == list_stream::dump_compact(automatic_encoded.value()),
+        "explicit automatic CheckBox BorderColor must normalize to default storage");
+    const auto automatic_decoded = form_stream::decode_document(automatic_encoded.value(), "CheckBoxBorderColor");
+    expect(automatic_decoded.ok() && !automatic_decoded.value().find_control(model::ObjectId{2})->properties().find(
+        model::PropertyId::from_name("BorderColor")), "automatic CheckBox BorderColor must remain implicit");
+
+    model::ColorValue rgb;
+    rgb.kind = model::ColorKind::absolute;
+    rgb.red = 17;
+    rgb.green = 83;
+    rgb.blue = 201;
+    const auto encoded = form_stream::encode_document(make_document(rgb));
+    expect(encoded.ok(), "RGB CheckBox BorderColor must encode");
+    expect(list_stream::dump_compact(check_box_base(encoded.value()).items[6]) ==
+               "{4,0,{" + std::to_string((201U << 16) | (83U << 8) | 17U) + "},0}",
+        "CheckBox BorderColor must use the observed common base color slot");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CheckBoxBorderColor");
+    const auto* property = decoded ? decoded.value().find_control(model::ObjectId{2})->properties().find(
+        model::PropertyId::from_name("BorderColor")) : nullptr;
+    expect(decoded.ok() && property && std::get<model::ColorValue>(property->value) == rgb,
+        "RGB CheckBox BorderColor must survive native decode");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "RGB CheckBox BorderColor XML must serialize");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "RGB CheckBox BorderColor XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "named XML must rebuild the RGB CheckBox BorderColor record");
+
+    auto wrong_type = make_document(std::nullopt);
+    expect(wrong_type.set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+               model::PropertyId::from_name("BorderColor"), true) == model::PropertyMutationStatus::invalid_value,
+        "wrongly typed CheckBox BorderColor must fail closed in the public property API");
+}
+
+void test_choice_and_command_bar_font_round_trip_and_validation() {
+    const auto make_document = [](model::ControlKind kind, std::optional<model::FontValue> font) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = kind == model::ControlKind::choice_field ? "ChoiceFieldFont" : "CommandBarFont";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode control = kind == model::ControlKind::choice_field
+            ? model::ControlNode{model::ObjectId{2}, "Choices", model::ChoiceFieldPayload{}}
+            : model::ControlNode{model::ObjectId{2}, "Tools", model::CommandBarPayload{}};
+        if (font) control.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
+        document.add_control(std::move(control));
+        return document;
+    };
+    const auto common_base = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        const auto& record = encoded.items[1].items[2].items[2].items[1];
+        return record.items[2].items[1].items[0];
+    };
+
+    model::FontValue automatic;
+    model::FontValue absolute;
+    absolute.kind = model::FontKind::absolute;
+    absolute.face_name = "Arial";
+    absolute.height = 12;
+    absolute.bold = true;
+    model::FontValue style;
+    style.kind = model::FontKind::style_reference;
+    style.style = model::QualifiedName{"StyleFonts.TextFont"};
+    for (const auto kind : {model::ControlKind::choice_field, model::ControlKind::command_bar}) {
+        const std::string control_name = kind == model::ControlKind::choice_field ? "ChoiceField" : "CommandBar";
+        const auto default_encoded = form_stream::encode_document(make_document(kind, std::nullopt));
+        const auto explicit_default = form_stream::encode_document(make_document(kind, automatic));
+        expect(default_encoded.ok() && explicit_default.ok() &&
+                list_stream::dump_compact(default_encoded.value()) == list_stream::dump_compact(explicit_default.value()),
+            control_name + " automatic Font must normalize to canonical default storage");
+        const auto decoded_default = form_stream::decode_document(explicit_default.value(), control_name);
+        expect(decoded_default.ok() && !decoded_default.value().find_control(model::ObjectId{2})->properties().find(
+            model::PropertyId::from_name("Font")), control_name + " automatic Font must remain implicit");
+
+        for (const auto& font : {absolute, style}) {
+            const auto encoded = form_stream::encode_document(make_document(kind, font));
+            expect(encoded.ok(), control_name + " supported Font variant must encode");
+            expect(list_stream::dump_compact(common_base(encoded.value()).items[4]) ==
+                    list_stream::dump_compact(list_stream::parse(value_codec::encode_font(font))), control_name + " Font must use common base slot 4");
+            const auto decoded = form_stream::decode_document(encoded.value(), control_name);
+            const auto* property = decoded ? decoded.value().find_control(model::ObjectId{2})->properties().find(
+                model::PropertyId::from_name("Font")) : nullptr;
+            expect(decoded.ok() && decoded.value().reconstruction_complete() && property &&
+                    std::get<model::FontValue>(property->value) == font,
+                control_name + " named Font must survive native decode without incompleteness");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), control_name + " Font XML must serialize");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), control_name + " Font XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                control_name + " Font must survive named XML reconstruction");
+        }
+
+        auto wrong_type = make_document(kind, std::nullopt);
+        expect(wrong_type.set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+                   model::PropertyId::from_name("Font"), std::int64_t{12}) == model::PropertyMutationStatus::invalid_value,
+            control_name + " wrongly typed Font must fail closed in the public property API");
+    }
+}
+
 void test_button_colors_round_trip_and_validation() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -6200,17 +6328,36 @@ void test_calendar_field_enabled_round_trip_and_rejections() {
                !decoded_calendar->position.visible.value(),
         "CalendarField Position and Visible must survive storage round-trip in the sibling owner context");
 
-    model::Form unsupported_form;
-    unsupported_form.id = model::ObjectId{1};
-    unsupported_form.name = "UnsupportedCalendar";
-    unsupported_form.children = {model::ControlRef{model::ObjectId{2}}};
-    model::OrdinaryFormDocument unsupported_document(std::move(unsupported_form));
-    model::ControlNode unsupported_calendar{
-        model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
-    unsupported_calendar.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("unproven"));
-    unsupported_document.add_control(std::move(unsupported_calendar));
-    expect_failure(form_stream::encode_document(unsupported_document), "OOF1122", "$/CalendarField",
-        "unproven CalendarField ToolTip must fail closed");
+    const auto* tip_descriptor = model::metamodel::find_property(model::ControlKind::calendar_field, "ToolTip");
+    expect(tip_descriptor && tip_descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+               tip_descriptor->storage_codec == model::metamodel::StorageCodec::control_base &&
+               tip_descriptor->default_value.kind == model::metamodel::DefaultKind::string &&
+               tip_descriptor->default_value.canonical.empty(),
+        "CalendarField ToolTip must use the common persisted string descriptor with an empty default");
+    for (const std::string& tip : {std::string{}, std::string("Calendar hint"), std::string("Календарь \"дата\"\nСтрока 2")}) {
+        auto with_tip = document;
+        expect(with_tip.set_prop_val({model::ObjectCategory::control, model::ObjectId{3}},
+                   model::PropertyId::from_name("ToolTip"), tip) == model::PropertyMutationStatus::applied,
+            "CalendarField ToolTip must be writable through the public property API");
+        const auto storage = form_stream::encode_document(with_tip);
+        expect(storage.ok(), "CalendarField ToolTip must encode through the common base");
+        const auto read = form_stream::decode_document(storage.value(), "CalendarForm");
+        expect(read.ok() && read.value().reconstruction_complete(), "known CalendarField ToolTip must not create incompleteness");
+        const auto* property = read.value().find_control(model::ObjectId{3})->properties().find(model::PropertyId::from_name("ToolTip"));
+        expect(tip.empty() ? property == nullptr : property && std::get<std::string>(property->value) == tip,
+            "CalendarField ToolTip must preserve text and omit the empty default");
+        const auto xml = source::serialize_form_xml(read.value());
+        expect(xml.ok(), "CalendarField ToolTip must serialize as named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "CalendarField ToolTip XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(storage.value()) == list_stream::dump_compact(rebuilt.value()),
+            "CalendarField ToolTip must survive the named XML cycle");
+    }
+    auto wrong_tip = document;
+    expect(wrong_tip.set_prop_val({model::ObjectCategory::control, model::ObjectId{3}},
+               model::PropertyId::from_name("ToolTip"), true) == model::PropertyMutationStatus::invalid_value,
+        "CalendarField ToolTip must reject a non-string value in the public property API");
 
     auto changed_date_atom = encoded.value();
     auto& calendar_record = changed_date_atom.items[1].items[2].items[2].items[2];
@@ -12178,6 +12325,8 @@ int main() {
         test_check_box_tooltip_round_trip_and_validation();
         test_choice_field_static_profile_round_trip_and_validation();
         test_check_box_font_round_trip_and_validation();
+        test_check_box_border_color_round_trip_and_validation();
+        test_choice_and_command_bar_font_round_trip_and_validation();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();

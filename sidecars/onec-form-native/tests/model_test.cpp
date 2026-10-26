@@ -182,13 +182,13 @@ void test_descriptors() {
     const auto* label_enabled = find_property(ControlKind::label_decoration, "Enabled");
     const auto* label_tool_tip = find_property(ControlKind::label_decoration, "ToolTip");
     expect(label_enabled && label_enabled->persistence == PersistenceClass::persisted_editable &&
-               label_enabled->storage_codec == StorageCodec::control_info &&
+               label_enabled->storage_codec == StorageCodec::control_base &&
                label_enabled->value_codec == ValueCodec::boolean &&
                label_enabled->default_value.kind == DefaultKind::boolean &&
                label_enabled->default_value.canonical == "true",
         "LabelDecoration Enabled must declare its editable Boolean true default");
     expect(label_tool_tip && label_tool_tip->persistence == PersistenceClass::persisted_editable &&
-               label_tool_tip->storage_codec == StorageCodec::control_info &&
+               label_tool_tip->storage_codec == StorageCodec::control_base &&
                label_tool_tip->value_codec == ValueCodec::string &&
                label_tool_tip->default_value.kind == DefaultKind::string &&
                label_tool_tip->default_value.canonical.empty(),
@@ -535,6 +535,9 @@ void test_help_metamodel() {
     using namespace oof::model::metamodel;
 
     const MetamodelCoverage& coverage = metamodel_coverage();
+    expect(coverage.target_platform_version == "8.5.1.1343" && coverage.target_control_count == 25 &&
+               coverage.excluded_control_count == 1 && coverage.excluded_control_property_occurrences == 2,
+        "coverage target must explicitly exclude ActiveX without changing the help catalog");
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
         coverage.control_property_occurrences == 423,
@@ -756,20 +759,28 @@ void test_shared_control_default_classifications() {
         "shared Enabled rule must retain the common control-base classification");
     expect(classified(ControlKind::progress_bar, "Enabled", StorageCodec::control_info,
                DefaultKind::boolean, "true", ValueCodec::boolean) &&
-               classified(ControlKind::label_decoration, "ToolTip", StorageCodec::control_info,
+               classified(ControlKind::label_decoration, "Enabled", StorageCodec::control_base,
+                   DefaultKind::boolean, "true", ValueCodec::boolean) &&
+               classified(ControlKind::label_decoration, "ToolTip", StorageCodec::control_base,
                    DefaultKind::string, "", ValueCodec::string),
-        "shared Enabled and ToolTip defaults must retain control-info exceptions");
+        "LabelDecoration Enabled and ToolTip must use the common control-base slots");
     expect(classified(ControlKind::choice_field, "BorderColor", StorageCodec::control_base,
                DefaultKind::color, "automatic", ValueCodec::color) &&
+               classified(ControlKind::check_box, "BorderColor", StorageCodec::control_base,
+                   DefaultKind::color, "automatic", ValueCodec::color) &&
                classified(ControlKind::text_document_field, "Font", StorageCodec::control_base,
+                   DefaultKind::font, "automatic", ValueCodec::font) &&
+               classified(ControlKind::choice_field, "Font", StorageCodec::control_base,
+                   DefaultKind::font, "automatic", ValueCodec::font) &&
+               classified(ControlKind::command_bar, "Font", StorageCodec::control_base,
                    DefaultKind::font, "automatic", ValueCodec::font),
-        "shared BorderColor and Font rules must retain their named codecs and defaults");
+        "shared BorderColor and Font rules must retain named codecs and defaults");
 
     const auto* unproven_enabled = find_property(ControlKind::panel, "Enabled");
-    const auto* unproven_border = find_property(ControlKind::check_box, "BorderColor");
     expect(unproven_enabled && unproven_enabled->persistence == PersistenceClass::unclassified &&
-               unproven_border && unproven_border->persistence == PersistenceClass::unclassified,
-        "shared classification rules must not classify unproven control properties");
+               classified(ControlKind::check_box, "BorderColor", StorageCodec::control_base,
+                   DefaultKind::color, "automatic", ValueCodec::color),
+        "only proven shared properties are classified");
 }
 
 void test_variant_coverage() {
