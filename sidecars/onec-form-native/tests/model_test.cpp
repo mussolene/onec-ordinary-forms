@@ -816,6 +816,21 @@ void test_help_metamodel() {
     expect(
         find_event(ControlKind::input_field, "OnChange") != nullptr,
         "InputField OnChange event must be executable metamodel data");
+    constexpr std::array field_event_ids{
+        std::pair{"StartListChoice", 1U}, std::pair{"StartChoice", 2U}, std::pair{"Clearing", 3U},
+        std::pair{"Tuning", 4U}, std::pair{"Opening", 5U}, std::pair{"ChoiceProcessing", 7U},
+        std::pair{"OnChange", 2147483647U}, std::pair{"TextEditEnd", 10U}, std::pair{"AutoCompleteText", 11U},
+    };
+    for (const auto kind : {ControlKind::choice_field, ControlKind::input_field}) {
+        for (const auto& [name, id] : field_event_ids) {
+            if (kind == ControlKind::choice_field && (id == 10U || id == 11U)) continue;
+            const auto* event = find_event(kind, name);
+            expect(event && event->persistence == PersistenceClass::persisted_editable &&
+                event->storage_codec == StorageCodec::event_record && event->storage_event_id == id &&
+                event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c",
+                std::string(name) + " must have its observed field event descriptor");
+        }
+    }
     const auto* form_close = find_form_event("OnClose");
     expect(form_close != nullptr && form_close->persistence == PersistenceClass::persisted_editable &&
         form_close->storage_codec == StorageCodec::event_record &&

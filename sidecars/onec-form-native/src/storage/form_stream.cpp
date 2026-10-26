@@ -6817,9 +6817,10 @@ DecodedControl decode_choice_field(
     const bool read_only = bool_atom(info_properties.items[13], child_path(info_properties_path, 13));
     const auto choice_list_height = integer_atom<std::int32_t>(info_properties.items[31], child_path(info_properties_path, 31));
     const auto choice_list_width = integer_atom<std::int32_t>(info_properties.items[32], child_path(info_properties_path, 32));
-    require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
-        "ChoiceField cannot contain storage children");
+    auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
+        model::ControlKind::choice_field);
     auto normalized_info = info;
+    normalized_info.items[2] = list({raw("0")});
     normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::choice_field,
         child_path(child_path(info_path, 1), 0));
     normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::choice_field,
@@ -6871,7 +6872,8 @@ DecodedControl decode_choice_field(
     if (choice_list_width != 0) control.properties().set_explicit(
         model::PropertyId::from_name("ChoiceListWidth"), static_cast<std::int64_t>(choice_list_width));
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 DecodedControl decode_text_document_field(
@@ -7855,7 +7857,10 @@ DecodedControl decode_input_field(
         info, info_path, InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width};
+    auto named_events = decode_control_event_collection(info.items[4], child_path(info_path, 4),
+        model::ControlKind::input_field);
     LV normalized_info = info;
+    normalized_info.items[4] = list({raw("0")});
     normalize_named_control_colors(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
         child_path(child_path(child_path(info_path, 2), 0), 0));
     normalize_named_control_border(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
@@ -7911,7 +7916,8 @@ DecodedControl decode_input_field(
         }
     }
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 model::TableColumn decode_table_column(
@@ -8913,7 +8919,7 @@ LV encode_choice_field(
             "ChoiceField is outside the supported profile");
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
-        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8950,6 +8956,7 @@ LV encode_choice_field(
     auto choice_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font, transparent,
         choice_button, clear_button, spin_button, open_button, read_only,
         choice_list_height, choice_list_width);
+    choice_info.items.at(2) = encode_control_event_collection(document, control, "$/ChoiceField/Events");
     encode_named_control_colors(choice_info.items[1].items[0], model::ControlKind::choice_field,
         control.properties(), "$/ChoiceField");
     encode_named_control_border(choice_info.items[1].items[0], model::ControlKind::choice_field,
@@ -9277,7 +9284,7 @@ LV encode_input_field(
         fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at its ChildItems index", control.name, "InputField is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -9321,6 +9328,7 @@ LV encode_input_field(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     auto input_info = canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags,
         text_values, layout_values, &font, &border_color);
+    input_info.items.at(4) = encode_control_event_collection(document, control, "$/InputField/Events");
     encode_named_control_colors(input_info.items[2].items[0].items[0], model::ControlKind::input_field,
         control.properties(), "$/InputField");
     encode_named_control_border(input_info.items[2].items[0].items[0], model::ControlKind::input_field,

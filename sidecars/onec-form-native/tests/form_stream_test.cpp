@@ -834,6 +834,39 @@ void test_table_column_choice_and_check_box_profiles() {
                columns_after[2].control.kind == model::ControlKind::check_box,
         "Table Column editor GUID and typed payload must roundtrip for all supported kinds");
 
+    for (const auto column_index : {std::size_t{0}, std::size_t{1}}) {
+        const auto kind = column_index == 0 ? model::ControlKind::input_field : model::ControlKind::choice_field;
+        model::Form form;
+        form.id = model::ObjectId{1}; form.name = "StandaloneEditorEvent";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument standalone(std::move(form));
+        model::ControlNode field{model::ObjectId{2}, "Field", model::ChoiceFieldPayload{}};
+        if (kind == model::ControlKind::input_field) {
+            field.payload = model::InputFieldPayload{};
+            model::TypeDomainEntry entry;
+            entry.term = model::TypeDomainTerm::string; entry.string.length = 20;
+            standalone.add_attribute(model::Attribute{model::ObjectId{3}, "Value", model::TypeDomainPatternValue{{entry}}});
+            field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        }
+        field.events.push_back(model::EventRef{model::ObjectId{100}});
+        standalone.add_event(model::Event{model::ObjectId{100}, "OnChange", "HandleChange",
+            model::ControlRef{model::ObjectId{2}}});
+        standalone.add_control(std::move(field));
+        const auto standalone_stream = form_stream::encode_document(standalone);
+        expect(standalone_stream.ok(), "standalone field with event must encode");
+        const auto* standalone_record = find_record_with_guid(standalone_stream.value(),
+            model::metamodel::descriptor_for(kind).guid);
+        expect(standalone_record != nullptr, "standalone field record must exist");
+        const auto slot = kind == model::ControlKind::input_field ? 4U : 2U;
+        const auto& standalone_events = standalone_record->items.at(2).items.at(slot);
+        auto embedded_event = encoded.value();
+        auto editor = table_column_editor_info(embedded_event, column_index);
+        editor.items.at(slot) = standalone_events;
+        replace_table_column_editor_info(embedded_event, column_index, editor);
+        expect(!form_stream::decode_document(embedded_event, "TableEditorEvent"),
+            "embedded InputField and ChoiceField events must not be silently accepted or lost");
+    }
+
     auto mismatched_guid = encoded.value();
     auto* table_record = find_record_with_guid(
         mismatched_guid, model::metamodel::descriptor_for(model::ControlKind::table).guid);
@@ -7908,6 +7941,100 @@ void test_calendar_field_named_events_round_trip_and_rejections() {
         "CalendarField event with a mismatched owner must fail closed");
     auto empty_handler = make_document(std::span(event_storage).first(1), false, true);
     expect(!form_stream::encode_document(empty_handler), "empty CalendarField event handler must fail closed");
+}
+
+void test_choice_and_input_named_events() {
+    constexpr std::array events{
+        std::pair{"StartListChoice", 1U}, std::pair{"StartChoice", 2U}, std::pair{"Clearing", 3U},
+        std::pair{"Tuning", 4U}, std::pair{"Opening", 5U}, std::pair{"ChoiceProcessing", 7U},
+        std::pair{"OnChange", 2147483647U}, std::pair{"TextEditEnd", 10U}, std::pair{"AutoCompleteText", 11U},
+    };
+    for (const auto kind : {model::ControlKind::choice_field, model::ControlKind::input_field}) {
+        const std::size_t count = kind == model::ControlKind::choice_field ? 7 : events.size();
+        const auto make_document = [&](std::span<const std::pair<const char*, unsigned int>> selected, bool wrong_owner = false) {
+            model::Form form;
+            form.id = model::ObjectId{1}; form.name = "FieldEvents";
+            form.children = {model::ControlRef{model::ObjectId{2}}};
+            model::OrdinaryFormDocument document(std::move(form));
+            model::ControlNode control{model::ObjectId{2}, "Field", model::ChoiceFieldPayload{}};
+            if (kind == model::ControlKind::input_field) {
+                control.payload = model::InputFieldPayload{};
+                model::TypeDomainPatternValue type;
+                model::TypeDomainEntry entry;
+                entry.term = model::TypeDomainTerm::string; entry.string.length = 20;
+                type.entries.push_back(entry);
+                document.add_attribute(model::Attribute{model::ObjectId{3}, "Value", type});
+                control.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+            }
+            for (std::size_t i = 0; i < selected.size(); ++i) {
+                const model::ObjectId id{100 + i};
+                control.events.push_back(model::EventRef{id});
+                document.add_event(model::Event{id, selected[i].first, std::string("Handle") + selected[i].first,
+                    wrong_owner ? model::EventOwner{model::FormRef{model::ObjectId{1}}} :
+                        model::EventOwner{model::ControlRef{model::ObjectId{2}}}});
+            }
+            document.add_control(std::move(control));
+            return document;
+        };
+        const auto collection = [&](auto& stream) -> auto& {
+            auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(kind).guid);
+            expect(record != nullptr, "encoded field record must exist");
+            return record->items.at(2).items.at(kind == model::ControlKind::choice_field ? 2 : 4);
+        };
+        const auto check = [&](std::span<const std::pair<const char*, unsigned int>> selected) {
+            const auto encoded = form_stream::encode_document(make_document(selected));
+            expect(encoded.ok(), "field events must encode");
+            const auto& records = collection(encoded.value());
+            expect(records.items.size() == selected.size() + 1, "event count must match");
+            for (const auto& [name, id] : selected) {
+                expect(std::ranges::any_of(records.items.begin() + 1, records.items.end(), [&](const auto& record) {
+                    return record.items.at(0).atom == std::to_string(id) &&
+                        record.items.at(1).atom == "e1692cc2-605b-4535-84dd-28440238746c";
+                }), std::string(name) + " must have the observed storage identity");
+            }
+            const auto decoded = form_stream::decode_document(encoded.value(), "FieldEvents");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "field events must decode completely");
+            const auto* field = decoded.value().find_control(model::ObjectId{2});
+            expect(field && field->events.size() == selected.size(), "all field event references must survive");
+            for (const auto& [name, id] : selected) {
+                static_cast<void>(id);
+                expect(std::ranges::any_of(field->events, [&](const auto& reference) {
+                    const auto* event = decoded.value().find_event(reference.id());
+                    return event && event->name == name && event->handler == std::string("Handle") + name &&
+                        std::holds_alternative<model::ControlRef>(event->owner) &&
+                        std::get<model::ControlRef>(event->owner).id() == field->id;
+                }), std::string(name) + " must retain its handler and owner");
+            }
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "field events must serialize as named XML");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "field event XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                "field events must round-trip through XML and native storage");
+        };
+        check({});
+        for (std::size_t i = 0; i < count; ++i) check(std::span(events).subspan(i, 1));
+        check(std::span(events).first(count));
+        const auto single = form_stream::encode_document(make_document(std::span(events).first(1)));
+        expect(single.ok(), "event rejection fixture must encode");
+        auto unknown = single.value();
+        collection(unknown).items.at(1).items.at(0) = list_stream::ListValue::raw_atom("99");
+        expect(!form_stream::decode_document(unknown, "UnknownFieldEvent"), "unknown event ID must fail");
+        auto duplicate = single.value();
+        auto& duplicate_events = collection(duplicate);
+        duplicate_events.items.at(0) = list_stream::ListValue::raw_atom("2");
+        duplicate_events.items.push_back(duplicate_events.items.at(1));
+        expect(!form_stream::decode_document(duplicate, "DuplicateFieldEvent"), "duplicate event ID must fail");
+        expect(!form_stream::encode_document(make_document(std::span(events).first(1), true)), "foreign owner must fail");
+        auto neighbor = single.value();
+        auto* record = find_record_with_guid(neighbor, model::metamodel::descriptor_for(kind).guid);
+        auto& base = kind == model::ControlKind::choice_field ? record->items.at(2).items.at(1).items.at(0) :
+            record->items.at(2).items.at(2).items.at(0).items.at(0);
+        base.items.at(15) = list_stream::ListValue::raw_atom("99");
+        const auto partial = form_stream::decode_document(neighbor, "FieldEventUnknownNeighbor");
+        expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown neighbor must remain incomplete");
+    }
 }
 
 void test_check_box_radio_button_track_bar_named_on_change_events() {
@@ -15304,6 +15431,7 @@ int main() {
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_named_events_round_trip_and_rejections();
+        test_choice_and_input_named_events();
         test_check_box_radio_button_track_bar_named_on_change_events();
         test_common_control_font_and_border_color();
         test_all_named_base_color_pairs_public_xml_round_trip();

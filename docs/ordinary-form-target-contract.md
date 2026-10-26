@@ -61,6 +61,9 @@ Shortcut. Сочетание F2 с Alt и Ctrl проверено при отк�
 LabelDecoration также сохраняет VerticalAlign, MarkNegatives и ScrollingText.
 Для ScrollingText проверены DontUse, Slow, Normal, Fast и VeryFast; внутренний
 код 1 отклоняется. Визуальное отображение этих свойств отдельно не проверено.
+InputField и ChoiceField сохраняют общие события выбора, открытия, очистки,
+настройки и изменения; InputField также сохраняет AutoCompleteText и TextEditEnd.
+Редакторы колонок таблицы сохраняют прежние ограничения.
 Обработчики LabelDecoration.Click и PictureDecoration.Click сохраняются как
 именованные события; их назначения проверены после выгрузки и повторного
 открытия. Фактический щелчок и вызов обработчиков в интерфейсе еще не проверены.
