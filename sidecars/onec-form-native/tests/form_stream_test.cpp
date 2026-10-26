@@ -14919,6 +14919,101 @@ void test_chart_named_boolean_properties() {
         "Chart Boolean property must reject wrong type");
 }
 
+void test_chart_named_events() {
+    constexpr std::array events{std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}};
+    const auto make_document = [&](std::size_t series_count, std::size_t point_count,
+                                   std::span<const std::pair<const char*, unsigned int>> selected,
+                                   bool wrong_owner = false) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "ChartEvents";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload chart;
+        for (std::size_t i = 0; i < series_count; ++i) {
+            model::ChartSeries item; item.id = model::ObjectId{10 + i}; item.text = "Series" + std::to_string(i);
+            item.color.kind = model::ColorKind::absolute; item.color.red = static_cast<std::uint8_t>(i + 1);
+            item.marker = {"ChartMarkerType", "Auto"}; chart.series.push_back(std::move(item));
+        }
+        for (std::size_t i = 0; i < point_count; ++i) {
+            model::ChartPoint item; item.id = model::ObjectId{20 + i}; item.text = "Point" + std::to_string(i);
+            item.color.kind = model::ColorKind::absolute; item.color.blue = static_cast<std::uint8_t>(i + 1);
+            chart.points.push_back(std::move(item));
+        }
+        for (const auto& series : chart.series) for (const auto& point : chart.points)
+            chart.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode control{model::ObjectId{2}, "Chart", std::move(chart)};
+        control.properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
+        control.properties().set_explicit(model::PropertyId::from_name("AutoMaxValue"), false);
+        for (std::size_t i = 0; i < selected.size(); ++i) {
+            const model::ObjectId id{100 + i}; control.events.push_back(model::EventRef{id});
+            document.add_event(model::Event{id, selected[i].first, std::string("Handle") + selected[i].first,
+                wrong_owner ? model::EventOwner{model::FormRef{model::ObjectId{1}}} :
+                    model::EventOwner{model::ControlRef{model::ObjectId{2}}}});
+        }
+        document.add_control(std::move(control));
+        return document;
+    };
+    for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
+        for (std::size_t count = 0; count <= events.size(); ++count) {
+            for (std::size_t start = 0; start + count <= events.size(); ++start) {
+                auto encoded = form_stream::encode_document(make_document(series_count, point_count, std::span(events).subspan(start, count)));
+                expect(encoded.ok(), encoded ? "Chart events must encode" :
+                    encoded.diagnostics().front().code + ": " + encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+                const auto* record = find_chart_record(encoded.value());
+                const auto flag = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count + 94;
+                const auto& info = record->items[3];
+                expect(info.items[flag].atom == (count ? "1" : "0"), "Chart event flag must match event presence");
+                if (count) {
+                    const auto& collection = info.items[flag + 1];
+                    expect(collection.items.size() == count + 1, "Chart event count must match");
+                    for (std::size_t i = 0; i < count; ++i) {
+                        expect(collection.items[i + 1].items[0].atom == std::to_string(events[start + i].second) &&
+                            collection.items[i + 1].items[1].atom == "e1692cc2-605b-4535-84dd-28440238746c",
+                            "Chart event identity must match platform");
+                    }
+                }
+                const auto decoded = form_stream::decode_document(encoded.value());
+                expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart events must decode completely");
+                const auto* chart = decoded.value().find_control(model::ObjectId{2});
+                expect(chart && chart->events.size() == count, "Chart event references must survive");
+                const auto& data = std::get<model::ChartPayload>(chart->payload);
+                expect(data.series.size() == series_count && data.points.size() == point_count &&
+                    data.values.size() == series_count * point_count, "Chart data must survive events");
+                for (std::size_t i = 0; i < count; ++i) {
+                    const auto* event = decoded.value().find_event(chart->events[i].id());
+                    expect(event && event->name == events[start + i].first &&
+                        event->handler == std::string("Handle") + events[start + i].first &&
+                        std::holds_alternative<model::ControlRef>(event->owner) &&
+                        std::get<model::ControlRef>(event->owner).id() == chart->id, "Chart event must retain owner and handler");
+                }
+                const auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "Chart event XML must serialize");
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "Chart event XML must parse");
+                const auto rebuilt = form_stream::encode_document(parsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                    "Chart event XML/native roundtrip must preserve data");
+            }
+        }
+        const auto encoded = form_stream::encode_document(make_document(series_count, point_count, std::span(events)));
+        expect(encoded.ok(), "Chart event rejection fixture must encode");
+        const auto flag = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count + 94;
+        const auto reject = [&](auto mutate, const char* message) {
+            auto bad = encoded.value(); mutate(find_chart_record(bad)->items[3], flag);
+            expect(!form_stream::decode_document(bad), message);
+        };
+        reject([](auto& info, auto i) { info.items[i] = list_stream::ListValue::raw_atom("2"); }, "invalid event flag must fail");
+        reject([](auto& info, auto i) { info.items[i+1].items[0] = list_stream::ListValue::raw_atom("3"); }, "invalid event count must fail");
+        reject([](auto& info, auto i) { info.items[i+1].items[1].items[0] = list_stream::ListValue::raw_atom("99"); }, "unknown event ID must fail");
+        reject([](auto& info, auto i) { info.items[i+1].items[2].items[0] = list_stream::ListValue::raw_atom("0"); }, "duplicate event ID must fail");
+        reject([](auto& info, auto i) { info.items[i+1].items[1].items[1] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); }, "invalid event tag must fail");
+        auto partial = encoded.value(); find_chart_record(partial)->items[3].items[flag - 73] = list_stream::ListValue::raw_atom("777");
+        const auto result = form_stream::decode_document(partial);
+        expect(!result.ok() || !result.value().reconstruction_complete(), "unknown Chart neighbor must not be silently lost");
+        expect(!form_stream::encode_document(make_document(series_count, point_count, std::span(events).first(1), true)),
+            "Chart event with foreign owner must fail");
+    }
+}
+
 void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
       <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><Title>Новая диаграмма</Title><Series>)XML";
@@ -16256,6 +16351,7 @@ int main() {
         test_chart_value_tooltip_named_pair_and_xml_text();
         test_embedded_chart_typed_variants_and_guards();
         test_chart_named_boolean_properties();
+        test_chart_named_events();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();

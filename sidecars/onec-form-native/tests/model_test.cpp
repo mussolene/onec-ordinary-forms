@@ -958,6 +958,13 @@ void test_help_metamodel() {
             descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
             descriptor->storage_event_id == id, std::string(name) + " must have its proven event descriptor");
     }
+    for (const auto& [name, id] : std::array{std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}}) {
+        const auto* descriptor = find_event(ControlKind::chart, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == StorageCodec::event_record &&
+            descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
+            descriptor->storage_event_id == id, std::string(name) + " must have its observed Chart event descriptor");
+    }
     for (const auto name : {"Enabled", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}) {
         const auto* descriptor = find_property(ControlKind::spreadsheet_document_field, name);
         expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&

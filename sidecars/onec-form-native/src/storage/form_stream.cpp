@@ -4093,6 +4093,7 @@ struct DecodedChartInfo {
     model::ChartPayload payload;
     std::string title;
     model::PropertySet properties;
+    std::vector<DecodedControlEvent> events;
 };
 
 DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
@@ -6185,14 +6186,14 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
 }
 
 
-LV encode_chart(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_chart(const model::OrdinaryFormDocument& document, const model::ControlNode& control, const GeometryContext& context) {
     const auto* chart = std::get_if<model::ChartPayload>(&control.payload);
     if (chart == nullptr || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Chart", "Chart payload with nonempty dimensions and positive ID", control.name, "Chart is outside the supported profile");
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -6208,16 +6209,25 @@ LV encode_chart(const model::ControlNode& control, const GeometryContext& contex
         if (text == nullptr) fail("OOF1121", "$/Chart/Title", "string Title", "different value kind", "Chart Title has the wrong type");
         title = *text;
     }
+    auto info = encode_chart_info(*chart, title, control.properties());
+    if (!control.events.empty()) {
+        auto event_table = encode_control_event_collection(document, control, "$/Chart/Events");
+        const auto middle = std::size_t{5} + 11 * (chart->series.size() + 1) + 2 + 11 * chart->points.size();
+        const auto flag = middle + 94;
+        info.items.at(flag) = raw("1");
+        info.items.insert(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1), std::move(event_table));
+    }
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
-        list({raw("11")}), encode_chart_info(*chart, title, control.properties()),
+        list({raw("11")}), std::move(info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")})});
 }
 
-DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
+DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& info_path,
     std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete) {
-    require_list(info, info_path);
+    require_list(stored_info, info_path);
+    LV info = stored_info;
     if (info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(info), "Chart Info is truncated");
     require_raw_constant(at(info, 0, info_path), "75", child_path(info_path, 0));
     const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
@@ -6229,7 +6239,19 @@ DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
     if (points_count_offset >= info.items.size()) fail("OOF1102", info_path, "point count after Series records", describe(info), "Chart Info is truncated");
     const auto point_count = integer_atom<std::uint32_t>(at(info, points_count_offset, info_path), child_path(info_path, points_count_offset));
     const auto expected = chart_info_item_count(static_cast<std::size_t>(series_count), static_cast<std::size_t>(point_count), info_path);
-    if (info.items.size() != expected) fail("OOF1102", info_path, "supported dense Chart collection cardinality", std::to_string(info.items.size()), "Chart Info dimensions are unsupported");
+    const auto event_flag_index = points_count_offset + 1 + static_cast<std::size_t>(point_count) * 11 + 94;
+    const bool has_events = bool_atom(at(info, event_flag_index, info_path), child_path(info_path, event_flag_index));
+    if (info.items.size() != expected + (has_events ? 1U : 0U))
+        fail("OOF1102", info_path, "supported dense Chart collection cardinality", std::to_string(info.items.size()), "Chart Info dimensions are unsupported");
+    std::vector<DecodedControlEvent> chart_events;
+    if (has_events) {
+        chart_events = decode_control_event_collection(at(info, event_flag_index + 1, info_path),
+            child_path(info_path, event_flag_index + 1), model::ControlKind::chart);
+        if (chart_events.empty()) fail("OOF1114", child_path(info_path, event_flag_index + 1),
+            "nonempty Chart event collection", "empty", "Chart event flag requires events");
+        info.items.erase(info.items.begin() + static_cast<std::ptrdiff_t>(event_flag_index + 1));
+        info.items[event_flag_index] = raw("0");
+    }
     model::ChartPayload payload;
     for (std::size_t index = 0; index < series_count; ++index) {
         const auto row_offset = std::size_t{5} + index * 11;
@@ -6389,7 +6411,7 @@ DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
     if (list_stream::dump_compact(info) != list_stream::dump_compact(normalized_expected_info)) {
         warn_incomplete_profile(warnings, reconstruction_complete, id, info_path, "Chart");
     }
-    return {std::move(payload), title, std::move(properties)};
+    return {std::move(payload), title, std::move(properties), std::move(chart_events)};
 }
 
 DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context,
@@ -6410,7 +6432,7 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
     require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");
     const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);
     control.position = geometry.position;
-    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
+    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}, std::move(decoded.events)};
 }
 
 LV canonical_control_base_properties(bool enabled, model::PropertyValue tool_tip,
@@ -11095,7 +11117,7 @@ Result<list_stream::ListValue> encode_document(
                 const GeometryContext context{owner, page_index, static_cast<std::uint32_t>(ordinal)};
                 LV record;
                 if (control->kind() == model::ControlKind::chart) {
-                    record = encode_chart(*control, context);
+                    record = encode_chart(document, *control, context);
                 } else if (control->kind() == model::ControlKind::command_bar) {
                     record = encode_command_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::gantt_chart) {

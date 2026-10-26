@@ -1237,6 +1237,8 @@ void apply_proven_storage_overrides(
         std::pair{"DragCheck", 4U}, std::pair{"DragEnd", 5U}, std::pair{"Drag", 6U},
         std::pair{"OnChangeAreaContent", 7U},
     };
+    constexpr std::array chart_events{std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}};
+    classify_control_events(ControlKind::chart, chart_events);
     classify_control_events(ControlKind::spreadsheet_document_field, spreadsheet_events);
     classify_control_events(ControlKind::picture_decoration, picture_drag_events);
     classify_control_events(ControlKind::list_box, list_box_events);
