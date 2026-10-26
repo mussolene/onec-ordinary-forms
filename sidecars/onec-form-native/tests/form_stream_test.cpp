@@ -6769,6 +6769,82 @@ void test_form_caption_localized_text_round_trip_and_rejections() {
     }
 }
 
+void test_form_auto_title_boolean_round_trip_and_validation() {
+    const auto make_document = [] {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "FormAutoTitle";
+        return model::OrdinaryFormDocument(std::move(form));
+    };
+    const model::OrdinaryFormDocument::ObjectKey form_key{
+        model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("AutoTitle");
+    const auto* descriptor = model::metamodel::find_form_property("AutoTitle");
+    expect(descriptor && descriptor->value_codec == model::metamodel::ValueCodec::boolean &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::root_record &&
+               descriptor->default_value.kind == model::metamodel::DefaultKind::boolean &&
+               descriptor->default_value.canonical == "true",
+        "Form.AutoTitle must use the Boolean root record descriptor and proven true default");
+
+    auto defaults = make_document();
+    const auto default_value = defaults.get_prop_val(form_key, property);
+    expect(default_value.status == model::PropertyReadStatus::proven_default &&
+               default_value.value == std::optional<model::PropertyValue>{true},
+        "Form.AutoTitle must return its true default");
+    const auto default_stream = form_stream::encode_document(defaults);
+    expect(default_stream.ok(), "default Form.AutoTitle must encode");
+    const auto* default_slot = bounded_list_item(default_stream.value(), {5});
+    expect(default_slot && !default_slot->is_list && default_slot->atom == "1",
+        "default Form.AutoTitle must occupy the existing root slot as one");
+    const auto default_decoded = form_stream::decode_document(default_stream.value(), "FormAutoTitle");
+    expect(default_decoded.ok() &&
+               default_decoded.value().get_prop_val(form_key, property).status ==
+                   model::PropertyReadStatus::proven_default,
+        "decoding the default root slot must preserve implicit true");
+
+    for (const bool value : {true, false}) {
+        auto document = make_document();
+        expect(document.set_prop_val(form_key, property, value) == model::PropertyMutationStatus::applied,
+            "Form.AutoTitle setter must accept explicit true and false");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "explicit Form.AutoTitle must encode");
+        const auto* slot = bounded_list_item(encoded.value(), {5});
+        expect(slot && !slot->is_list && slot->atom == (value ? "1" : "0"),
+            "Form.AutoTitle must write its explicit Boolean to the known root slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "FormAutoTitle");
+        const auto read = decoded ? decoded.value().get_prop_val(form_key, property) : model::PropertyReadResult{};
+        expect(decoded.ok() && read.value == std::optional<model::PropertyValue>{value},
+            "Form.AutoTitle must preserve the Boolean value through storage");
+        const auto storage_rebuilt = form_stream::encode_document(decoded.value());
+        expect(storage_rebuilt.ok() && list_stream::dump_compact(storage_rebuilt.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "Form.AutoTitle must survive decode and re-encode without stream drift");
+        const auto xml = source::serialize_form_xml(document);
+        expect(xml.ok() && (value ? xml.value().find("<AutoTitle>") == std::string::npos
+                                 : xml.value().find("<AutoTitle>false</AutoTitle>") != std::string::npos),
+            "Form.AutoTitle must omit its default and serialize false as a named XML property");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "named Form.AutoTitle XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "named Form.AutoTitle XML must rebuild the exact stream");
+    }
+
+    auto invalid_type = make_document();
+    expect(invalid_type.set_prop_val(form_key, property, std::string("true")) ==
+               model::PropertyMutationStatus::invalid_value,
+        "Form.AutoTitle must reject non-Boolean model values");
+    auto malformed = default_stream.value();
+    auto* malformed_slot = bounded_list_item(malformed, {5});
+    expect(malformed_slot != nullptr, "Form.AutoTitle root slot must be bounds-checkable");
+    if (malformed_slot) {
+        *malformed_slot = list_stream::ListValue::raw_atom("invalid");
+        expect(!form_stream::decode_document(malformed, "MalformedFormAutoTitle"),
+            "Form.AutoTitle must reject a malformed root atom");
+    }
+}
+
 void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() {
     const auto numeric_type = [](std::uint32_t digits, std::uint32_t fraction, bool non_negative) {
         model::TypeDomainEntry entry;
@@ -14665,6 +14741,7 @@ int main() {
         test_radio_button_basic_observed_record_and_rejections();
         test_multilingual_caption_round_trip_for_supported_controls();
         test_form_caption_localized_text_round_trip_and_rejections();
+        test_form_auto_title_boolean_round_trip_and_validation();
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();

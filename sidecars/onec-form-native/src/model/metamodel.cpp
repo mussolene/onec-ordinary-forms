@@ -1113,6 +1113,12 @@ void apply_proven_storage_overrides(
         ValueCodec::localized_text;
     classify_property(
         form_properties,
+        "AutoTitle",
+        StorageCodec::root_record,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        form_properties,
         "Width",
         StorageCodec::root_record,
         DefaultKind::integer,

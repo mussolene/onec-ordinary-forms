@@ -59,9 +59,9 @@ Caption для Button, CheckBox, RadioButton, UsualGroup и LabelDecoration
 типов прошли полный цикл Designer и проверку значений при запуске. Пустые
 переводы и другие сочетания языков требуют отдельного подтверждения.
 Caption самой формы также поддерживает именованные переводы; непустые ru/en
-прошли проверку Designer и запуск на синтетической форме. AutoTitle в этом
-запуске по умолчанию был включен, а установка true и false работала. Его
-хранение и влияние на отображаемый заголовок пока не подтверждены.
+прошли проверку Designer и запуск на синтетической форме. Form.AutoTitle
+сохраняется как булево свойство с default true; значение false проверяется на
+формах с заданным и пустым заголовком.
 
 PictureDecoration также сохраняет Hyperlink, UseContextMenu, Zoomable,
 EnableStartDrag, EnableDrag, NonselectedPictureText и PictureSize. Поддержаны

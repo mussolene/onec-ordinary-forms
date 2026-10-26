@@ -770,6 +770,12 @@ void test_help_metamodel() {
             form_caption_descriptor->default_value.kind == DefaultKind::string &&
             form_caption_descriptor->default_value.canonical.empty(),
         "Form Caption must use the existing localized_text codec, root record, and empty string default");
+    const auto* auto_title_descriptor = find_form_property("AutoTitle");
+    expect(auto_title_descriptor && auto_title_descriptor->value_codec == ValueCodec::boolean &&
+               auto_title_descriptor->storage_codec == StorageCodec::root_record &&
+               auto_title_descriptor->default_value.kind == DefaultKind::boolean &&
+               auto_title_descriptor->default_value.canonical == "true",
+        "Form AutoTitle must use the existing Boolean root-record descriptor and true default");
     expect(
         find_event(ControlKind::input_field, "OnChange") != nullptr,
         "InputField OnChange event must be executable metamodel data");
@@ -1300,6 +1306,17 @@ void test_document_property_api() {
                document.get_prop_val(form_caption, PropertyId::from_name("Caption")).value ==
                    PropertyValue{std::string{}},
         "reset must restore the proven empty Form.Caption default");
+    expect(document.get_prop_val(form_caption, PropertyId::from_name("AutoTitle")).status ==
+               PropertyReadStatus::proven_default &&
+               document.get_prop_val(form_caption, PropertyId::from_name("AutoTitle")).value ==
+                   PropertyValue{true} &&
+               document.set_prop_val(form_caption, PropertyId::from_name("AutoTitle"), false) ==
+                   PropertyMutationStatus::applied &&
+               document.get_prop_val(form_caption, PropertyId::from_name("AutoTitle")).value ==
+                   PropertyValue{false} &&
+               document.reset_prop_val(form_caption, PropertyId::from_name("AutoTitle")) ==
+                   PropertyMutationStatus::reset,
+        "Form AutoTitle must expose true default, accept false, and reset through the descriptor API");
 
     expect(document.get_prop_val(
                OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{999}},

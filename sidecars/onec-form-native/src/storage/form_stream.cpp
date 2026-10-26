@@ -9903,7 +9903,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             form_extension = descriptor.kind;
         }
         const auto form_close_handler = decode_form_close_events(payload.items[4], "$/4");
-        require_raw_constant(payload.items[5], "1", "$/5");
+        const bool auto_title = bool_atom(payload.items[5], "$/5");
         require_raw_constant(payload.items[6], "4", "$/6");
         require_raw_constant(payload.items[7], "1", "$/7");
         require_raw_constant(payload.items[8], "0", "$/8");
@@ -10005,6 +10005,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         form.panel = std::move(root_owner.panel);
         if (caption != model::PropertyValue{std::string{}}) {
             form.properties.set_explicit(model::PropertyId::from_name("Caption"), caption);
+        }
+        if (!auto_title) {
+            form.properties.set_explicit(model::PropertyId::from_name("AutoTitle"), false);
         }
         if (width != default_form_width) {
             form.properties.set_explicit(
@@ -10630,11 +10633,12 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "Width", "Height"},
+            {"Caption", "AutoTitle", "Width", "Height"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
             document.form().properties, "Caption", "$/Form");
+        const bool auto_title = explicit_bool(document.form().properties, "AutoTitle", true);
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -11014,7 +11018,7 @@ Result<list_stream::ListValue> encode_document(
             encoded_attributes_result.value(),
             std::move(encoded_extension),
             encode_form_close_events(document),
-            raw("1"),
+            raw(auto_title ? "1" : "0"),
             raw("4"),
             raw("1"),
             raw("0"),
