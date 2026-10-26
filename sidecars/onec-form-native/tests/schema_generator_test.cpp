@@ -506,7 +506,7 @@ void expect_property_element(
             "unclassified property must use the rejecting type");
     } else {
         if (descriptor.control_kind == oof::model::ControlKind::calendar_field &&
-            descriptor.api_name == "BeginOfDisplayPeriod") {
+            (descriptor.api_name == "BeginOfDisplayPeriod" || descriptor.api_name == "EndOfDisplayPeriod")) {
             expect(
                 type == "CalendarBeginDateValueType",
                 "calendar begin date must use its bounded date type");
@@ -553,12 +553,14 @@ void test_date_values(xmlSchemaPtr schema) {
     expect(
         validate_document(schema, calendar_instance()) == 0,
         "omitted calendar date properties must retain their schema defaults");
-    expect(valid("CurrentDate", "2031-11-07T23:45:10"),
+    expect(valid("EndOfDisplayPeriod", "2031-11-07T23:45:10"),
            "canonical local date-time must validate");
-    expect(valid("CurrentDate", "2024-02-29T00:00:00"),
+    expect(valid("EndOfDisplayPeriod", "2024-02-29T00:00:00"),
            "Gregorian leap-day midnight must validate");
-    expect(valid("CurrentDate", "0001-01-01T00:00:00"),
-           "earliest local date-time must remain valid for generic date properties");
+    expect(invalid("EndOfDisplayPeriod", "0001-01-01T00:00:00"),
+           "calendar end date must reject the Undefined sentinel as an explicit date");
+    expect(invalid("CurrentDate", "2024-02-29T00:00:00"),
+           "runtime-only CurrentDate must not appear in public XML");
     expect(valid("BeginOfDisplayPeriod", "undefined"),
            "undefined must remain valid for the calendar begin date");
     expect(valid("BeginOfDisplayPeriod", "2031-11-07T23:45:10"),
@@ -569,7 +571,7 @@ void test_date_values(xmlSchemaPtr schema) {
            "query literal limits must not restrict the observed calendar date contract");
     expect(valid("BeginOfDisplayPeriod", "0001-01-01T00:00:01"),
            "calendar begin date must accept values after its lower bound");
-    expect(invalid("CurrentDate", "2023-02-29T00:00:00"),
+    expect(invalid("EndOfDisplayPeriod", "2023-02-29T00:00:00"),
            "invalid Gregorian leap day must be rejected");
 
     constexpr std::array invalid_lexemes{
@@ -588,7 +590,7 @@ void test_date_values(xmlSchemaPtr schema) {
         "2031-11-07T23:45:10suffix",
     };
     for (const std::string_view value : invalid_lexemes) {
-        for (const std::string_view property : {"CurrentDate", "BeginOfDisplayPeriod"}) {
+        for (const std::string_view property : {"EndOfDisplayPeriod", "BeginOfDisplayPeriod"}) {
             expect(invalid(property, value),
                    "noncanonical local date-time lexeme must be rejected: " +
                        std::string(property) + ": " + std::string(value));
@@ -872,8 +874,7 @@ void test_control_surfaces_and_property_order(
             for (const auto& descriptor : metamodel.properties_for(control.kind)) {
                 if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
                     expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
-                } else if (control.kind == oof::model::ControlKind::choice_field &&
-                    descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only) {
+                } else if (descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only) {
                     continue;
                 } else {
                     expect_property_element(descriptor, elements[cursor++]);

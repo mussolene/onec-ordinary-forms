@@ -25,6 +25,13 @@ UsualGroup поддерживает Font и BorderColor, TrackBar поддерж
 Именованный FontValue различает отсутствие bold, явно false и true;
 остальные неподтвержденные переопределения автоматического шрифта отклоняются.
 
+CalendarField сохраняет обе границы периода отображения (Date либо Undefined),
+ShowCurrentDate, CalendarNavigation, EnableStartDrag и EnableDrag. Дата,
+совпадающая со служебным значением Undefined, явно отклоняется. CurrentDate
+является временным выбранным значением модели в памяти. Явные runtime-only
+свойства отклоняются при чтении и записи публичного XML, исключены из XSD и
+не записываются в Form.bin. Текущее значение нельзя молча выдать за default.
+
 CalendarField поддерживает восемь именованных событий: Selection, DragStart,
 DragEnd, Drag, OnActivateDate, OnPeriodOutput, OnChange и DragCheck. События
 хранятся в Events самого контрола как имена обработчиков. Кодек проверяет

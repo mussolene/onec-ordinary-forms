@@ -6,6 +6,7 @@
 - Добавлены CalendarField.ToolTip, CheckBox.BorderColor, ChoiceField.Font и CommandBar.Font через общие кодеки; значения проверены getters и строгим Designer.
 - Добавлены RadioButton.Font/BorderColor, InputField.Font/BorderColor и ListBox.BorderColor; сохранены профили типов, привязок и редактора таблицы.
 - Общие Font/BorderColor расширены на CalendarField, ProgressBar и UsualGroup; TrackBar поддерживает BorderColor. Учтен полужирный default UsualGroup и явно заданный bold автоматического шрифта.
+- CalendarField сохраняет конец периода отображения и четыре флага поведения; CurrentDate явно классифицирован как временное значение. Исправлено чтение именованных style defaults цвета и нормализация default шрифта UsualGroup в XML.
 - Добавлены все восемь именованных событий CalendarField с проверкой владельцев, дубликатов и структуры действий.
 - Запись XML, модуля, ресурсов и BIN использует приватную подготовку файлов и откат при ошибке установки; существующие режимы доступа сохраняются.
 

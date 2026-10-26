@@ -2067,7 +2067,6 @@
       <xs:element name="Wrap" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="VerticalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChooseType" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectedText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MarkNegatives" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChoiceListHeight" type="xs:int" minOccurs="0" maxOccurs="1"/>
@@ -2086,7 +2085,6 @@
       <xs:element name="MinValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TypeRestriction" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
@@ -2463,7 +2461,7 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="SelectedDates" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="EndOfDisplayPeriod" type="DateValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EndOfDisplayPeriod" type="CalendarBeginDateValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BeginOfDisplayPeriod" type="CalendarBeginDateValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowCurrentDate" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CalendarNavigation" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2472,7 +2470,6 @@
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CurrentDate" type="DateValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HolidayColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectionTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

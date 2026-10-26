@@ -607,8 +607,11 @@ void test_typed_values_and_canonicalization() {
         parsed.diagnostics().front().code + ":" + parsed.diagnostics().front().message);
     input = parsed.value().find_control(model::ObjectId{4});
     const model::ControlNode* calendar = parsed.value().find_control(model::ObjectId{5});
-    const auto* date = calendar->properties().find(model::PropertyId::from_name("EndOfDisplayPeriod"));
-    expect(date != nullptr && std::holds_alternative<model::UndefinedValue>(date->value), "Date|Undefined union must retain Undefined");
+    const auto date = parsed.value().get_prop_val(
+        {model::ObjectCategory::control, calendar->id}, model::PropertyId::from_name("EndOfDisplayPeriod"));
+    expect(date.status == model::PropertyReadStatus::proven_default && date.value &&
+            std::holds_alternative<model::UndefinedValue>(*date.value),
+        "Date|Undefined union must expose the proven Undefined default");
 
     auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok(), "typed values must serialize");
@@ -2270,10 +2273,58 @@ void test_chart_summary_series_color_xml() {
         "duplicate SummarySeries must fail");
 }
 
+void test_runtime_properties_are_not_public_xml() {
+    for (const auto fragment : {
+             R"XML(<CalendarField id="2" name="C"><Position/><CurrentDate>2026-12-25T00:00:00</CurrentDate></CalendarField>)XML",
+             R"XML(<InputField id="2" name="I"><Position/><ChoiceIncomplete>false</ChoiceIncomplete></InputField>)XML",
+             R"XML(<InputField id="2" name="I"><Position/><MarkIncomplete>false</MarkIncomplete></InputField>)XML"}) {
+        const std::string xml = std::string(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems>)XML") +
+            fragment + "</ChildItems></Form>";
+        expect(!source::parse_form_xml(xml), "runtime-only properties must fail at the public XML boundary");
+    }
+    auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/></CalendarField></ChildItems></Form>)XML");
+    expect(parsed.ok(), "runtime boundary fixture must parse");
+    if (!parsed) return;
+    expect(parsed.value().set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+               model::PropertyId::from_name("CurrentDate"), model::DateValue{"2026-12-25T00:00:00"}) ==
+               model::PropertyMutationStatus::applied_runtime_only,
+        "runtime-only properties remain available in the in-memory object model");
+    expect(!source::serialize_form_xml(parsed.value()),
+        "XML writer must reject explicit runtime state instead of silently losing it");
+}
+
+void test_named_style_color_defaults() {
+    const auto parsed = oof::source::parse_form_xml(
+        R"XML(<Form id="1" name="ColorDefaults" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="OwnButton"><Position/></Button></ChildItems></Form>)XML");
+    expect(parsed.ok(), "style-color default fixture must parse");
+    if (!parsed) return;
+    auto document = parsed.value();
+    const oof::model::OrdinaryFormDocument::ObjectKey owner{oof::model::ObjectCategory::control, oof::model::ObjectId{2}};
+    for (const auto name : {"ButtonTextColor", "ButtonBackColor"}) {
+        const auto property = oof::model::PropertyId::from_name(name);
+        const auto value = document.get_prop_val(owner, property);
+        expect(value.status == oof::model::PropertyReadStatus::proven_default && value.value,
+            "named style-color defaults must be materialized, not reported as unknown");
+        if (!value.value) continue;
+        const auto* color = std::get_if<oof::model::ColorValue>(&*value.value);
+        expect(color && color->kind == oof::model::ColorKind::style_reference &&
+                std::get<oof::model::QualifiedName>(color->style).value == std::string("StyleColors.") + name,
+            "style-color default must retain its qualified public name");
+        expect(document.set_prop_val(owner, property, *value.value) == oof::model::PropertyMutationStatus::applied,
+            "style-color default must remain editable through the typed property API");
+    }
+    const auto xml = oof::source::serialize_form_xml(document);
+    expect(xml.ok() && xml.value().find("<ButtonTextColor") == std::string::npos &&
+            xml.value().find("<ButtonBackColor") == std::string::npos,
+        "explicit values equal to proven style-color defaults must be omitted from XML");
+}
+
 }  // namespace
 
 int main() {
     try {
+        test_named_style_color_defaults();
+        test_runtime_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
         test_chart_summary_series_color_xml();

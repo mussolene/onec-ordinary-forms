@@ -1264,7 +1264,7 @@ void test_attribute_allocator_is_separate_from_control_ids() {
         model::ButtonPayload{},
     });
 
-    const auto encoded = form_stream::encode_document(document);
+    auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), "attribute and control ID spaces must encode independently");
     expect(encoded.value().items[1].items[1].items[1].atom == "4",
         "form header max ID must include control ID 4");
@@ -6962,18 +6962,187 @@ void test_calendar_field_begin_display_period() {
     expect(!form_stream::encode_document(sentinel_document),
         "explicit Date colliding with the Undefined storage sentinel must fail");
 
-    for (const std::string_view unsupported : {"EndOfDisplayPeriod", "CurrentDate"}) {
-        model::Form unsupported_form;
-        unsupported_form.id = model::ObjectId{1}; unsupported_form.name = "UnsupportedCalendarDate";
-        unsupported_form.children = {model::ControlRef{model::ObjectId{4}}};
-        model::OrdinaryFormDocument unsupported_document(std::move(unsupported_form));
-        model::ControlNode unsupported_calendar{model::ObjectId{4}, "Calendar", model::CalendarFieldPayload{}};
-        unsupported_calendar.properties().set_explicit(model::PropertyId::from_name(unsupported),
-            model::DateValue{"2024-02-29T00:00:00"});
-        unsupported_document.add_control(std::move(unsupported_calendar));
-        expect(!form_stream::encode_document(unsupported_document),
-            "unsupported CalendarField date properties must remain outside this storage allowlist");
+    model::Form runtime_only_form;
+    runtime_only_form.id = model::ObjectId{1}; runtime_only_form.name = "RuntimeOnlyCalendarDate";
+    runtime_only_form.children = {model::ControlRef{model::ObjectId{4}}};
+    model::OrdinaryFormDocument runtime_only_document(std::move(runtime_only_form));
+    model::ControlNode runtime_only_calendar{model::ObjectId{4}, "Calendar", model::CalendarFieldPayload{}};
+    runtime_only_calendar.properties().set_explicit(model::PropertyId::from_name("CurrentDate"),
+        model::DateValue{"2024-02-29T00:00:00"});
+    runtime_only_document.add_control(std::move(runtime_only_calendar));
+    const auto runtime_only_encoded = form_stream::encode_document(runtime_only_document);
+    expect(!runtime_only_encoded && !runtime_only_encoded.diagnostics().empty() &&
+               runtime_only_encoded.diagnostics().front().message.find("runtime-only") != std::string::npos,
+        "explicit runtime-only CalendarField CurrentDate must be clearly rejected from persisted Form.bin");
+}
+
+void test_calendar_field_scalar_properties() {
+    const auto make_document = [](bool explicit_defaults) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CalendarScalars";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode calendar{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+        if (explicit_defaults) {
+            calendar.properties().set_explicit(model::PropertyId::from_name("BeginOfDisplayPeriod"),
+                model::UndefinedValue{});
+            calendar.properties().set_explicit(model::PropertyId::from_name("EndOfDisplayPeriod"),
+                model::UndefinedValue{});
+            calendar.properties().set_explicit(model::PropertyId::from_name("ShowCurrentDate"), true);
+            calendar.properties().set_explicit(model::PropertyId::from_name("CalendarNavigation"), true);
+            calendar.properties().set_explicit(model::PropertyId::from_name("EnableStartDrag"), false);
+            calendar.properties().set_explicit(model::PropertyId::from_name("EnableDrag"), false);
+        }
+        document.add_control(std::move(calendar));
+        return document;
+    };
+    const auto default_stream = form_stream::encode_document(make_document(false));
+    const auto explicit_defaults = form_stream::encode_document(make_document(true));
+    expect(default_stream.ok() && explicit_defaults.ok() &&
+               list_stream::dump_compact(default_stream.value()) == list_stream::dump_compact(explicit_defaults.value()),
+        "CalendarField explicit scalar defaults and Undefined dates must normalize to canonical storage");
+    if (!default_stream || !explicit_defaults) return;
+    const auto decoded_defaults = form_stream::decode_document(default_stream.value(), "CalendarScalarsDefault");
+    const auto* default_calendar = decoded_defaults ? decoded_defaults.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(decoded_defaults.ok() && decoded_defaults.value().reconstruction_complete() && default_calendar &&
+               default_calendar->properties().find(model::PropertyId::from_name("BeginOfDisplayPeriod")) == nullptr &&
+               default_calendar->properties().find(model::PropertyId::from_name("EndOfDisplayPeriod")) == nullptr &&
+               default_calendar->properties().find(model::PropertyId::from_name("ShowCurrentDate")) == nullptr &&
+               default_calendar->properties().find(model::PropertyId::from_name("CalendarNavigation")) == nullptr &&
+               default_calendar->properties().find(model::PropertyId::from_name("EnableStartDrag")) == nullptr &&
+               default_calendar->properties().find(model::PropertyId::from_name("EnableDrag")) == nullptr,
+        "CalendarField scalar defaults must decode as implicit named defaults");
+
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "CalendarScalarsRoundTrip";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode calendar{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+    calendar.properties().set_explicit(model::PropertyId::from_name("BeginOfDisplayPeriod"),
+        model::DateValue{"2024-02-29T00:00:00"});
+    calendar.properties().set_explicit(model::PropertyId::from_name("EndOfDisplayPeriod"),
+        model::DateValue{"2031-11-07T23:45:10"});
+    calendar.properties().set_explicit(model::PropertyId::from_name("ShowCurrentDate"), false);
+    calendar.properties().set_explicit(model::PropertyId::from_name("CalendarNavigation"), false);
+    calendar.properties().set_explicit(model::PropertyId::from_name("EnableStartDrag"), true);
+    calendar.properties().set_explicit(model::PropertyId::from_name("EnableDrag"), true);
+    model::FontValue font;
+    font.kind = model::FontKind::absolute;
+    font.face_name = "Arial";
+    font.height = 12;
+    font.bold = true;
+    calendar.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+    model::ColorValue border_color;
+    border_color.kind = model::ColorKind::absolute;
+    border_color.red = 23;
+    border_color.green = 81;
+    border_color.blue = 149;
+    calendar.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    calendar.events.push_back(model::EventRef{model::ObjectId{100}});
+    document.add_event(model::Event{model::ObjectId{100}, "Selection", "HandleSelection",
+        model::ControlRef{model::ObjectId{2}}});
+    document.add_control(std::move(calendar));
+
+    auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "combined CalendarField scalars, events, Font, and BorderColor must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    if (!encoded) return;
+    auto* record = find_record_with_guid(encoded.value(),
+        model::metamodel::descriptor_for(model::ControlKind::calendar_field).guid);
+    expect(record && record->items[2].items[1].items[5].atom == "20240229000000" &&
+               record->items[2].items[1].items[6].atom == "20311107234510" &&
+               record->items[2].items[1].items[7].atom == "0" &&
+               record->items[2].items[1].items[8].atom == "0" &&
+               record->items[2].items[1].items[10].atom == "1" &&
+               record->items[2].items[1].items[11].atom == "1",
+        "CalendarField named scalar values must occupy their observed control-info slots");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CalendarScalarsRoundTrip");
+    const auto* decoded_calendar = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto explicit_value = [&](std::string_view name) -> const model::PropertyEntry* {
+        return decoded_calendar ? decoded_calendar->properties().find(model::PropertyId::from_name(name)) : nullptr;
+    };
+    expect(decoded.ok() && decoded.value().reconstruction_complete() && decoded_calendar &&
+               std::get<model::DateValue>(explicit_value("BeginOfDisplayPeriod")->value).canonical ==
+                   "2024-02-29T00:00:00" &&
+               std::get<model::DateValue>(explicit_value("EndOfDisplayPeriod")->value).canonical ==
+                   "2031-11-07T23:45:10" &&
+               std::get<bool>(explicit_value("ShowCurrentDate")->value) == false &&
+               std::get<bool>(explicit_value("CalendarNavigation")->value) == false &&
+               std::get<bool>(explicit_value("EnableStartDrag")->value) &&
+               std::get<bool>(explicit_value("EnableDrag")->value) &&
+               std::get<model::FontValue>(explicit_value("Font")->value) == font &&
+               std::get<model::ColorValue>(explicit_value("BorderColor")->value) == border_color &&
+               decoded_calendar->events.size() == 1,
+        "CalendarField scalar properties must round-trip together with events, Font, and BorderColor");
+
+    auto unknown_neighbor = encoded.value();
+    auto* unknown_record = find_record_with_guid(unknown_neighbor,
+        model::metamodel::descriptor_for(model::ControlKind::calendar_field).guid);
+    unknown_record->items[2].items[1].items[9] = list_stream::ListValue::raw_atom("7");
+    const auto partial = form_stream::decode_document(unknown_neighbor, "CalendarScalarsNeighbor");
+    const auto* partial_calendar = partial ? partial.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* partial_end = partial_calendar ? partial_calendar->properties().find(
+        model::PropertyId::from_name("EndOfDisplayPeriod")) : nullptr;
+    expect(partial.ok() && !partial.value().reconstruction_complete() && partial_end &&
+               std::get<model::DateValue>(partial_end->value).canonical == "2031-11-07T23:45:10",
+        "unknown neighboring CalendarField fields must still warn while preserving named scalar values");
+
+    for (const std::string_view property_name : {"BeginOfDisplayPeriod", "EndOfDisplayPeriod"}) {
+        model::Form sentinel_form;
+        sentinel_form.id = model::ObjectId{1};
+        sentinel_form.name = "CalendarDateSentinel";
+        sentinel_form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument sentinel_document(std::move(sentinel_form));
+        model::ControlNode sentinel_calendar{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+        sentinel_calendar.properties().set_explicit(model::PropertyId::from_name(property_name),
+            model::DateValue{"0001-01-01T00:00:00"});
+        sentinel_document.add_control(std::move(sentinel_calendar));
+        expect(!form_stream::encode_document(sentinel_document),
+            std::string("CalendarField ") + std::string(property_name) + " must reject the Undefined date sentinel");
     }
+    model::Form wrong_type_form;
+    wrong_type_form.id = model::ObjectId{1};
+    wrong_type_form.name = "CalendarWrongType";
+    wrong_type_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument wrong_type_document(std::move(wrong_type_form));
+    model::ControlNode wrong_type_calendar{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+    wrong_type_calendar.properties().set_explicit(model::PropertyId::from_name("EndOfDisplayPeriod"),
+        std::string("not a date"));
+    wrong_type_document.add_control(std::move(wrong_type_calendar));
+    expect(!form_stream::encode_document(wrong_type_document),
+        "CalendarField EndOfDisplayPeriod must reject wrong value types");
+
+    auto invalid_end = encoded.value();
+    auto* invalid_end_record = find_record_with_guid(invalid_end,
+        model::metamodel::descriptor_for(model::ControlKind::calendar_field).guid);
+    invalid_end_record->items[2].items[1].items[6] = list_stream::ListValue::raw_atom("20230229000000");
+    const auto invalid_end_decoded = form_stream::decode_document(invalid_end, "CalendarInvalidEnd");
+    expect(!invalid_end_decoded && invalid_end_decoded.diagnostics().front().code == "OOF1122",
+        "CalendarField EndOfDisplayPeriod must reject invalid stored date atoms");
+
+    model::Form runtime_only_form;
+    runtime_only_form.id = model::ObjectId{1};
+    runtime_only_form.name = "CalendarRuntimeDate";
+    runtime_only_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument runtime_only_document(std::move(runtime_only_form));
+    runtime_only_document.add_control(
+        model::ControlNode{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}});
+    const model::OrdinaryFormDocument::ObjectKey calendar_key{
+        model::ObjectCategory::control, model::ObjectId{2}};
+    expect(runtime_only_document.set_prop_val(calendar_key, model::PropertyId::from_name("CurrentDate"),
+               model::DateValue{"2024-02-29T00:00:00"}) == model::PropertyMutationStatus::applied_runtime_only,
+        "runtime-only CalendarField CurrentDate must remain writable through the named property API");
+    const auto current_date = runtime_only_document.get_prop_val(
+        calendar_key, model::PropertyId::from_name("CurrentDate"));
+    expect(current_date.value && std::get<model::DateValue>(*current_date.value).canonical ==
+               "2024-02-29T00:00:00",
+        "runtime-only CalendarField CurrentDate must retain its selected date in the object model");
+    const auto runtime_only = form_stream::encode_document(runtime_only_document);
+    expect(!runtime_only && !runtime_only.diagnostics().empty() &&
+               runtime_only.diagnostics().front().message.find("runtime-only") != std::string::npos,
+        "CalendarField CurrentDate must fail explicitly when written into persisted Form.bin");
 }
 
 void test_fresh_progress_bar_runtime_record_and_rejections() {
@@ -12829,6 +12998,7 @@ int main() {
         test_calendar_group_progress_track_common_base_font_border_color();
         test_text_document_field_persisted_profile_and_rejections();
         test_calendar_field_begin_display_period();
+        test_calendar_field_scalar_properties();
         test_calendar_field_captured_begin_period_record_decode();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();

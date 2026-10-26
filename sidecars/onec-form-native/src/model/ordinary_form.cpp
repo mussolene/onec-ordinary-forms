@@ -227,6 +227,15 @@ std::optional<PropertyValue> materialize_default(
             return std::nullopt;
         case DefaultKind::color:
             if (value.canonical == "automatic") return PropertyValue{ColorValue{}};
+            if (value.canonical == "StyleColors.ButtonTextColor" ||
+                value.canonical == "StyleColors.ButtonBackColor" ||
+                value.canonical == "StyleColors.ButtonBorderColor" ||
+                value.canonical == "StyleColors.BorderColor") {
+                ColorValue color;
+                color.kind = ColorKind::style_reference;
+                color.style = QualifiedName{std::string(value.canonical)};
+                return PropertyValue{color};
+            }
             return std::nullopt;
         case DefaultKind::font:
             if (value.canonical == "automatic") return PropertyValue{FontValue{}};

@@ -1372,7 +1372,9 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
 // Other profile fields remain unrepresented; named common properties use the shared base codec.
 LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "00010101000000",
     std::string_view tool_tip = {}, const model::FontValue* font = nullptr,
-    const model::ColorValue* border_color = nullptr) {
+    const model::ColorValue* border_color = nullptr, std::string_view end_period = "00010101000000",
+    bool show_current_date = true, bool calendar_navigation = true,
+    bool enable_start_drag = false, bool enable_drag = false) {
     const LV zero_record = list({raw("0")});
     const LV canonical_4_4_record = list({raw("4"), raw("4"), zero_record, raw("4")});
     const LV canonical_neg7_record = list({raw("4"), raw("3"), list({raw("-7")}), raw("3")});
@@ -1395,8 +1397,9 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
         list({raw("4"), raw("3"), list({raw("-16")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-14")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-15")}), raw("3")}),
-        raw(std::string(begin_period)), raw("00010101000000"),
-        raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"),
+        raw(std::string(begin_period)), raw(std::string(end_period)),
+        raw(show_current_date ? "1" : "0"), raw(calendar_navigation ? "1" : "0"), raw("0"),
+        raw(enable_start_drag ? "1" : "0"), raw(enable_drag ? "1" : "0"), raw("0"), raw("1"),
     });
     return list({raw("1"), properties, zero_record});
 }
@@ -6341,20 +6344,31 @@ DecodedControl decode_calendar_field(
     require_arity(properties, 14, properties_path);
     const auto begin_path = child_path(properties_path, 5);
     const auto begin_atom = raw_atom(properties.items[5], begin_path);
-    if (begin_atom != "00010101000000") {
+    const auto end_path = child_path(properties_path, 6);
+    const auto end_atom = raw_atom(properties.items[6], end_path);
+    const auto validate_calendar_date = [](std::string_view atom, std::string_view path,
+        std::string_view property_name) {
+        if (atom == "00010101000000") return;
         try {
-            (void)value_codec::date_from_platform(begin_atom);
+            (void)value_codec::date_from_platform(atom);
         } catch (const std::exception& error) {
-            fail("OOF1122", begin_path, "local Gregorian date atom YYYYMMDDHHMMSS", begin_atom,
-                std::string("CalendarField BeginOfDisplayPeriod is invalid: ") + error.what());
+            fail("OOF1122", std::string(path), "local Gregorian date atom YYYYMMDDHHMMSS", std::string(atom),
+                std::string("CalendarField ") + std::string(property_name) + " is invalid: " + error.what());
         }
-    }
+    };
+    validate_calendar_date(begin_atom, begin_path, "BeginOfDisplayPeriod");
+    validate_calendar_date(end_atom, end_path, "EndOfDisplayPeriod");
+    const bool show_current_date = bool_atom(properties.items[7], child_path(properties_path, 7));
+    const bool calendar_navigation = bool_atom(properties.items[8], child_path(properties_path, 8));
+    const bool enable_start_drag = bool_atom(properties.items[10], child_path(properties_path, 10));
+    const bool enable_drag = bool_atom(properties.items[11], child_path(properties_path, 11));
     if (linked_attribute != nullptr && !is_single_date_time_type_domain(linked_attribute->type)) {
         fail("OOF1122", "$/2/3", "single DateTime Attribute for CalendarField",
             linked_attribute->name, "CalendarField DataPath TypeDomain is unsupported");
     }
     if (list_stream::dump_compact(profile_info) != list_stream::dump_compact(
-            canonical_calendar_field_info(enabled, begin_atom, common.tool_tip, &font, &border_color)))
+            canonical_calendar_field_info(enabled, begin_atom, common.tool_tip, &font, &border_color,
+                end_atom, show_current_date, calendar_navigation, enable_start_drag, enable_drag)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CalendarField");
 
     const auto geometry_path = child_path(path, 3);
@@ -6385,6 +6399,19 @@ DecodedControl decode_calendar_field(
             model::PropertyId::from_name("BeginOfDisplayPeriod"),
             model::DateValue{value_codec::date_from_platform(begin_atom)});
     }
+    if (end_atom != "00010101000000") {
+        control.properties().set_explicit(
+            model::PropertyId::from_name("EndOfDisplayPeriod"),
+            model::DateValue{value_codec::date_from_platform(end_atom)});
+    }
+    if (!show_current_date) control.properties().set_explicit(
+        model::PropertyId::from_name("ShowCurrentDate"), false);
+    if (!calendar_navigation) control.properties().set_explicit(
+        model::PropertyId::from_name("CalendarNavigation"), false);
+    if (enable_start_drag) control.properties().set_explicit(
+        model::PropertyId::from_name("EnableStartDrag"), true);
+    if (enable_drag) control.properties().set_explicit(
+        model::PropertyId::from_name("EnableDrag"), true);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
         std::move(named_events)};
@@ -8380,28 +8407,46 @@ LV encode_calendar_field(
             "single DateTime Attribute", attribute->name,
             "CalendarField DataPath must target a DateTime attribute");
     }
+    if (control.properties().find(model::PropertyId::from_name("CurrentDate")) != nullptr) {
+        fail("OOF1122", "$/CalendarField/CurrentDate", "runtime-only property without persisted representation",
+            "explicit value", "CalendarField CurrentDate is runtime-only and cannot be written to persisted Form.bin");
+    }
     require_allowed_properties(control.properties(),
-        {"Enabled", "BeginOfDisplayPeriod", "ToolTip", "Font", "BorderColor"}, "$/CalendarField");
+        {"Enabled", "BeginOfDisplayPeriod", "EndOfDisplayPeriod", "ShowCurrentDate", "CalendarNavigation",
+         "EnableStartDrag", "EnableDrag", "ToolTip", "Font", "BorderColor"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const bool show_current_date = explicit_bool(control.properties(), "ShowCurrentDate", true);
+    const bool calendar_navigation = explicit_bool(control.properties(), "CalendarNavigation", true);
+    const bool enable_start_drag = explicit_bool(control.properties(), "EnableStartDrag", false);
+    const bool enable_drag = explicit_bool(control.properties(), "EnableDrag", false);
     const auto font = explicit_control_font(control.properties(), "$/CalendarField/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "CalendarField");
-    std::string begin_period = "00010101000000";
-    if (const auto* entry = control.properties().find(model::PropertyId::from_name("BeginOfDisplayPeriod"))) {
-        if (std::holds_alternative<model::UndefinedValue>(entry->value)) {
-            begin_period = "00010101000000";
-        } else if (const auto* date = std::get_if<model::DateValue>(&entry->value)) {
-            begin_period = value_codec::date_to_platform(date->canonical);
-            if (begin_period == "00010101000000") {
-                fail("OOF1122", "$/CalendarField/BeginOfDisplayPeriod", "date distinct from Undefined sentinel",
-                    date->canonical, "CalendarField date collides with the Undefined storage sentinel");
+    const auto calendar_date_atom = [&](std::string_view property_name) {
+        std::string atom = "00010101000000";
+        if (const auto* entry = control.properties().find(model::PropertyId::from_name(property_name))) {
+            if (std::holds_alternative<model::UndefinedValue>(entry->value)) {
+                atom = "00010101000000";
+            } else if (const auto* date = std::get_if<model::DateValue>(&entry->value)) {
+                atom = value_codec::date_to_platform(date->canonical);
+                if (atom == "00010101000000") {
+                    fail("OOF1122", std::string("$/CalendarField/") + std::string(property_name),
+                        "date distinct from Undefined sentinel", date->canonical,
+                        std::string("CalendarField ") + std::string(property_name) +
+                            " collides with the Undefined storage sentinel");
+                }
+            } else {
+                fail("OOF1122", std::string("$/CalendarField/") + std::string(property_name),
+                    "Date or Undefined", "different value kind",
+                    std::string("CalendarField ") + std::string(property_name) + " has the wrong value type");
             }
-        } else {
-            fail("OOF1122", "$/CalendarField/BeginOfDisplayPeriod", "Date or Undefined", "different value kind",
-                "CalendarField BeginOfDisplayPeriod has the wrong value type");
         }
-    }
+        return atom;
+    };
+    const std::string begin_period = calendar_date_atom("BeginOfDisplayPeriod");
+    const std::string end_period = calendar_date_atom("EndOfDisplayPeriod");
     auto info = canonical_calendar_field_info(enabled, begin_period,
-        explicit_string(control.properties(), "ToolTip"), &font, &border_color);
+        explicit_string(control.properties(), "ToolTip"), &font, &border_color, end_period,
+        show_current_date, calendar_navigation, enable_start_drag, enable_drag);
     info.items[2] = encode_control_event_collection(document, control, "$/CalendarField/Events");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
     return list({

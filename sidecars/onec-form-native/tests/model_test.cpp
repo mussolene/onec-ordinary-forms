@@ -43,6 +43,27 @@ void test_descriptors() {
                begin_period->default_value.kind == DefaultKind::undefined &&
                begin_period->default_value.canonical == "undefined",
         "CalendarField BeginOfDisplayPeriod must be a classified Date property with Undefined default");
+    const auto* end_period = find_property(ControlKind::calendar_field, "EndOfDisplayPeriod");
+    expect(end_period != nullptr && end_period->value_codec == ValueCodec::date &&
+               end_period->persistence == PersistenceClass::persisted_editable &&
+               end_period->storage_codec == StorageCodec::control_info &&
+               end_period->default_value.kind == DefaultKind::undefined &&
+               end_period->default_value.canonical == "undefined",
+        "CalendarField EndOfDisplayPeriod must be a classified Date property with Undefined default");
+    for (const auto& [name, default_value] : std::array{
+             std::pair{std::string_view{"ShowCurrentDate"}, std::string_view{"true"}},
+             std::pair{std::string_view{"CalendarNavigation"}, std::string_view{"true"}},
+             std::pair{std::string_view{"EnableStartDrag"}, std::string_view{"false"}},
+             std::pair{std::string_view{"EnableDrag"}, std::string_view{"false"}}}) {
+        const auto* descriptor = find_property(ControlKind::calendar_field, name);
+        expect(descriptor && descriptor->value_codec == ValueCodec::boolean &&
+                   descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::control_info &&
+                   descriptor->default_value.kind == DefaultKind::boolean &&
+                   descriptor->default_value.canonical == default_value,
+            std::string("CalendarField ") + std::string(name) +
+                " must use its persisted Boolean descriptor and observed default");
+    }
     const auto* gantt_auto = find_property(ControlKind::gantt_chart, "AutoFullInterval");
     const auto* gantt_begin = find_property(ControlKind::gantt_chart, "FullIntervalBegin");
     const auto* gantt_end = find_property(ControlKind::gantt_chart, "FullIntervalEnd");
@@ -708,9 +729,12 @@ void test_help_metamodel() {
     expect(find_property(ControlKind::calendar_field, "Visible") != nullptr &&
                find_property(ControlKind::calendar_field, "Visible")->surface == PropertySurface::panel_placement,
         "CalendarField Visible must remain on the shared Position surface");
-    expect(find_property(ControlKind::calendar_field, "CurrentDate")->persistence == PersistenceClass::unclassified &&
-               find_property(ControlKind::calendar_field, "CurrentDate")->storage_codec == StorageCodec::unclassified,
-        "CalendarField CurrentDate must remain outside this persisted property slice");
+    const auto* calendar_current_date = find_property(ControlKind::calendar_field, "CurrentDate");
+    expect(calendar_current_date && calendar_current_date->value_codec == ValueCodec::date &&
+               calendar_current_date->persistence == PersistenceClass::runtime_only &&
+               calendar_current_date->storage_codec == StorageCodec::none &&
+               calendar_current_date->default_value.kind == DefaultKind::none,
+        "CalendarField CurrentDate must be runtime-only, non-persisted, and have no permanent default");
     expect(
         find_property(ControlKind::input_field, "Top")->value_codec == ValueCodec::integer32,
         "typed Position coordinates must be 32-bit integer codecs in the metamodel");

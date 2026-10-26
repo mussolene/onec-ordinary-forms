@@ -850,6 +850,43 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::undefined,
         "undefined");
+    classify_property(
+        calendar_field,
+        "EndOfDisplayPeriod",
+        StorageCodec::control_info,
+        DefaultKind::undefined,
+        "undefined");
+    classify_property(
+        calendar_field,
+        "ShowCurrentDate",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        calendar_field,
+        "CalendarNavigation",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        calendar_field,
+        "EnableStartDrag",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "false");
+    classify_property(
+        calendar_field,
+        "EnableDrag",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "false");
+    if (const auto current_date = std::ranges::find(
+            calendar_field, "CurrentDate", &PropertyDescriptor::api_name);
+        current_date != calendar_field.end()) {
+        current_date->persistence = PersistenceClass::runtime_only;
+        current_date->storage_codec = StorageCodec::none;
+        current_date->default_value = {DefaultKind::none, {}};
+    }
 
     auto& list_box = properties[static_cast<std::size_t>(ControlKind::list_box)];
     classify_property(list_box, "ShowPicture", StorageCodec::control_info, DefaultKind::boolean, "false");

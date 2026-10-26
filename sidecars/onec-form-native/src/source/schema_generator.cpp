@@ -129,7 +129,7 @@ std::string_view xsd_type(ValueCodec codec) {
 
 std::string_view xsd_type(const PropertyDescriptor& property) {
     if (property.control_kind == model::ControlKind::calendar_field &&
-        property.api_name == "BeginOfDisplayPeriod") {
+        (property.api_name == "BeginOfDisplayPeriod" || property.api_name == "EndOfDisplayPeriod")) {
         return "CalendarBeginDateValueType";
     }
     if (property.control_kind == model::ControlKind::command_bar) {
@@ -960,8 +960,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
                 if (control.kind == model::ControlKind::table && property.api_name == "Columns") {
                     output +=
                         "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
-                } else if (control.kind == model::ControlKind::choice_field &&
-                    property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+                } else if (property.persistence == model::metamodel::PersistenceClass::runtime_only) {
                     continue;
                 } else {
                     append_property_element(output, property, "      ");

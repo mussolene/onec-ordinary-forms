@@ -1089,9 +1089,13 @@ bool equals_descriptor_default(
             return color.kind == model::ColorKind::style_reference && style != nullptr &&
                 style->value == canonical;
         }
-        case mm::DefaultKind::font:
-            return canonical == "automatic" && std::holds_alternative<model::FontValue>(value) &&
-                std::get<model::FontValue>(value) == model::FontValue{};
+        case mm::DefaultKind::font: {
+            if (!std::holds_alternative<model::FontValue>(value)) return false;
+            model::FontValue expected;
+            if (canonical == "automatic,bold=true") expected.bold = true;
+            else if (canonical != "automatic") return false;
+            return std::get<model::FontValue>(value) == expected;
+        }
         case mm::DefaultKind::border:
             return canonical == "WithoutBorder:0" && std::holds_alternative<model::BorderValue>(value) &&
                 std::get<model::BorderValue>(value) == model::BorderValue{};
@@ -1910,6 +1914,10 @@ private:
                     metamodel_.property(descriptor->kind, name);
                 if (property == nullptr) {
                     fail("OOF2003", child, id_text, name, "declared control property", name, "Control property is not declared by the executable metamodel");
+                }
+                if (property->persistence == mm::PersistenceClass::runtime_only) {
+                    fail("OOF2003", child, id_text, name, "persisted control property", name,
+                        "Runtime-only control properties cannot appear in public Form.xml");
                 }
                 model::PropertyValue value =
                     parse_property_value(child, property->value_codec, id_text);
@@ -2989,6 +2997,11 @@ private:
                 continue;
             }
             const model::PropertyEntry* entry = properties.find(descriptor.id);
+            if (entry != nullptr && descriptor.persistence == mm::PersistenceClass::runtime_only) {
+                serialization_fail(std::string(object_id), std::string(descriptor.xml_name),
+                    "persisted property", "runtime-only value",
+                    "Runtime-only properties cannot be serialized into public Form.xml");
+            }
             if (entry != nullptr && !equals_descriptor_default(descriptor, entry->value)) {
                 write_property(descriptor, entry->value, object_id);
             }
