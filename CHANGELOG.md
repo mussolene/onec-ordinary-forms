@@ -2,6 +2,9 @@
 
 ## 1.0.0 - Не выпущен
 
+- Добавлено сохранение пяти событий GanttChart, HTMLDocumentField,
+  GeographicalSchemaField и GraphicalSchemaField.
+
 - Для Dendrogram добавлено сохранение событий Selection и DetailProcessing.
 
 - Для Chart добавлены локализованные форматы подписей значений и процентов

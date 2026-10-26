@@ -15041,6 +15041,90 @@ void test_chart_named_integer_and_delimiter_properties() {
     }
 }
 
+void test_complex_control_named_events() {
+    struct Case { model::ControlKind kind; const char* tag; const char* first; const char* second; };
+    constexpr std::array cases{
+        Case{model::ControlKind::gantt_chart, "GanttChart", "OnIntervalEditEnd", nullptr},
+        Case{model::ControlKind::html_document_field, "HTMLDocumentField", "DocumentComplete", nullptr},
+        Case{model::ControlKind::geographical_schema_field, "GeographicalSchemaField", "Selection", nullptr},
+        Case{model::ControlKind::graphical_schema_field, "GraphicalSchemaField", "Selection", "OnActivate"},
+    };
+    for (const auto& spec : cases) {
+        for (const bool populated : {false, true}) {
+            if (populated && spec.kind != model::ControlKind::gantt_chart) continue;
+            for (unsigned mask = 0; mask <= (spec.second ? 3U : 1U); ++mask) {
+                std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><)XML";
+                xml += std::string(spec.tag) + " id=\"2\" name=\"Item\"><Position/>";
+                if (populated) xml += R"XML(<Series><GanttSeries id="10"><Value>S</Value><Text>Series</Text></GanttSeries></Series><Points><GanttPoint id="11"><Value>P</Value><Text>Point</Text></GanttPoint></Points><Intervals><GanttInterval pointRef="11" seriesRef="10"><StartDate>2027-01-10T00:00:00</StartDate><EndDate>2027-01-12T00:00:00</EndDate><Text>Interval</Text></GanttInterval></Intervals>)XML";
+                if (mask) {
+                    xml += "<Events>";
+                    if (mask & 1U) xml += "<" + std::string(spec.first) + " id=\"100\">Handler1</" + spec.first + ">";
+                    if (mask & 2U) xml += "<" + std::string(spec.second) + " id=\"101\">Handler2</" + spec.second + ">";
+                    xml += "</Events>";
+                }
+                xml += "</" + std::string(spec.tag) + "></ChildItems></Form>";
+                const auto parsed = source::parse_form_xml(xml);
+                expect(parsed.ok(), "complex control event fixture must parse");
+                const auto encoded = form_stream::encode_document(parsed.value());
+                expect(encoded.ok(), "complex control event fixture must encode");
+                auto native = encoded.value();
+                const auto find_record = [&](auto&& self, list_stream::ListValue& node) -> list_stream::ListValue* {
+                    if (node.is_list && (node.items.size() == 6 || node.items.size() == 7) && !node.items[0].is_list &&
+                        node.items[0].atom == model::metamodel::descriptor_for(spec.kind).guid) return &node;
+                    for (auto& child : node.items) if (auto* found = self(self, child)) return found;
+                    return nullptr;
+                };
+                auto* record = find_record(find_record, native);
+                expect(record != nullptr, "complex control record must exist");
+                auto* table = spec.kind == model::ControlKind::gantt_chart ?
+                    (mask ? &record->items[2].items[1].items[2].items[113] : nullptr) :
+                    spec.kind == model::ControlKind::html_document_field ? &record->items[2].items[2] :
+                    spec.kind == model::ControlKind::geographical_schema_field ? &record->items[3].items[3] : &record->items[2].items[3];
+                if (table) {
+                    expect(table->items.size() == 1 + ((mask & 1U) ? 1U : 0U) + ((mask & 2U) ? 1U : 0U), "event table count must match");
+                    if (mask) expect(table->items[1].items[0].atom == (spec.kind == model::ControlKind::gantt_chart ? "2" : ((mask & 1U) ? "0" : "1")) &&
+                        table->items[1].items[1].atom == "e1692cc2-605b-4535-84dd-28440238746c", "event ID and GUID must match platform");
+                }
+                const auto decoded = form_stream::decode_document(encoded.value());
+                expect(decoded.ok() && decoded.value().reconstruction_complete(), "complex control events must decode completely");
+                const auto* control = decoded.value().find_control(model::ObjectId{2});
+                expect(control && control->events.size() == ((mask & 1U) ? 1U : 0U) + ((mask & 2U) ? 1U : 0U), "event count must round trip");
+                for (const auto& ref : control->events) {
+                    const auto* event = decoded.value().find_event(ref.id());
+                    expect(event && std::holds_alternative<model::ControlRef>(event->owner) && std::get<model::ControlRef>(event->owner).id() == control->id &&
+                        ((event->name == spec.first && event->handler == "Handler1") || (spec.second && event->name == spec.second && event->handler == "Handler2")), "event owner, name and handler must round trip");
+                }
+                if (populated) expect(std::get<model::GanttChartPayload>(control->payload).intervals.size() == 1, "Gantt interval must survive with event");
+                const auto rendered = source::serialize_form_xml(decoded.value());
+                expect(rendered.ok(), "event XML must serialize");
+                const auto xml_again = source::parse_form_xml(rendered.value());
+                expect(xml_again.ok(), "event XML must parse again");
+                const auto rebuilt = form_stream::encode_document(xml_again.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "event XML/native cycle must preserve records");
+                if (mask) {
+                    const auto reject = [&](auto mutate, const char* message) {
+                        auto bad = encoded.value(); auto* r = find_record(find_record, bad);
+                        auto& t = spec.kind == model::ControlKind::gantt_chart ? r->items[2].items[1].items[2].items[113] :
+                            spec.kind == model::ControlKind::html_document_field ? r->items[2].items[2] :
+                            spec.kind == model::ControlKind::geographical_schema_field ? r->items[3].items[3] : r->items[2].items[3];
+                        mutate(t); expect(!form_stream::decode_document(bad), message);
+                    };
+                    reject([](auto& t) { t.items[1].items[0] = list_stream::ListValue::raw_atom("99"); }, "unknown event ID must fail");
+                    reject([](auto& t) { t.items[1].items[1] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); }, "wrong event GUID must fail");
+                    reject([](auto& t) { t.items[0] = list_stream::ListValue::raw_atom("9"); }, "malformed event count must fail");
+                    if (mask == 3U) reject([](auto& t) { t.items[2].items[0] = list_stream::ListValue::raw_atom("0"); }, "duplicate event ID must fail");
+                    if (spec.kind == model::ControlKind::gantt_chart) {
+                        reject([](auto& t) { t = list_stream::parse("{0}"); }, "empty Gantt event table with event flag must fail");
+                        auto bad_flag = encoded.value();
+                        find_record(find_record, bad_flag)->items[2].items[1].items[2].items[112] = list_stream::ListValue::raw_atom("2");
+                        expect(!form_stream::decode_document(bad_flag), "invalid Gantt event flag must fail");
+                    }
+                }
+            }
+        }
+    }
+}
+
 void test_dendrogram_named_events() {
     const auto find_record = [](auto&& self, list_stream::ListValue& node) -> list_stream::ListValue* {
         if (node.is_list && node.items.size() == 6 && !node.items[0].is_list &&
@@ -16544,6 +16628,7 @@ int main() {
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();
+        test_complex_control_named_events();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();

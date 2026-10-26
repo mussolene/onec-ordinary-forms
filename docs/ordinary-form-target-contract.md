@@ -59,6 +59,10 @@ Chart сохраняет локализованные ValueLabelFormat и Percen
 Chart сохраняет LabelDelimiter, MaxSeriesCount, MaxSeriesPercent,
 BeginGaugeAngle, EndGaugeAngle, GaugeThickness и GaugeBushThickness.
 Числовые границы проверяются при чтении и записи.
+GanttChart сохраняет OnIntervalEditEnd, HTMLDocumentField сохраняет
+DocumentComplete, GeographicalSchemaField сохраняет Selection, а
+GraphicalSchemaField сохраняет Selection и OnActivate. Назначения проверены
+в 1С и строгой выгрузкой Designer; вызов через интерфейс отдельно не проверен.
 Dendrogram сохраняет события Selection и DetailProcessing вместе с узлами
 и связями. Назначения проверены платформой; вызов событий интерфейсом
 отдельно не проверен.

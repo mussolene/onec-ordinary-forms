@@ -1017,6 +1017,17 @@ void test_help_metamodel() {
             descriptor->storage_codec == StorageCodec::event_record && descriptor->storage_event_id == id &&
             descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c", "spreadsheet event descriptor must match the platform");
     }
+    for (const auto& [kind, name, id] : std::array{
+             std::tuple{ControlKind::gantt_chart, "OnIntervalEditEnd", 2U},
+             std::tuple{ControlKind::html_document_field, "DocumentComplete", 0U},
+             std::tuple{ControlKind::geographical_schema_field, "Selection", 0U},
+             std::tuple{ControlKind::graphical_schema_field, "Selection", 0U},
+             std::tuple{ControlKind::graphical_schema_field, "OnActivate", 1U}}) {
+        const auto* event = find_event(kind, name);
+        expect(event && event->persistence == PersistenceClass::persisted_editable &&
+            event->storage_codec == StorageCodec::event_record && event->storage_event_id == id &&
+            event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c", "complex control event descriptor must match platform");
+    }
     constexpr std::array calendar_event_storage{
         std::pair{"Selection", 1U}, std::pair{"DragStart", 3U}, std::pair{"DragEnd", 5U},
         std::pair{"Drag", 6U}, std::pair{"OnActivateDate", 0U}, std::pair{"OnPeriodOutput", 2U},

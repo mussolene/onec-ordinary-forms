@@ -4105,6 +4105,34 @@ struct DecodedChartInfo {
 
 DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
     std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete);
+std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path);
+
+std::vector<DecodedControlEvent> extract_embedded_chart_events(
+    LV& chart, const std::string& path, model::ControlKind kind) {
+    require_arity(chart, 3, path);
+    auto& info = chart.items[2];
+    const auto info_path = child_path(path, 2);
+    require_list(info, info_path);
+    const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
+    const auto series_size = static_cast<std::size_t>(series_count);
+    if (series_size >= std::numeric_limits<std::size_t>::max() / 11)
+        fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Embedded Chart Series count overflows its offset");
+    const auto points_offset = std::size_t{5} + 11 * (series_size + 1) + 1;
+    const auto point_count = integer_atom<std::uint32_t>(at(info, points_offset, info_path), child_path(info_path, points_offset));
+    const auto expected_count = chart_info_item_count(series_size, static_cast<std::size_t>(point_count), info_path);
+    const auto flag = points_offset + 1 + 11 * static_cast<std::size_t>(point_count) + 94;
+    const bool has_events = bool_atom(at(info, flag, info_path), child_path(info_path, flag));
+    if (info.items.size() != expected_count + (has_events ? 1U : 0U))
+        fail("OOF1102", info_path, "supported embedded Chart cardinality", std::to_string(info.items.size()), "Embedded Chart Info dimensions are unsupported");
+    std::vector<DecodedControlEvent> events;
+    if (has_events) {
+        events = decode_control_event_collection(at(info, flag + 1, info_path), child_path(info_path, flag + 1), kind);
+        if (events.empty()) fail("OOF1114", child_path(info_path, flag + 1), "nonempty event collection", "empty", "Embedded Chart event flag requires events");
+        info.items.erase(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1));
+        info.items[flag] = raw("0");
+    }
+    return events;
+}
 
 // Общий блок диаграммы проверяется тем же кодеком у всех его владельцев.
 void validate_embedded_chart_info(const LV& actual, const LV& expected,
@@ -4156,11 +4184,15 @@ DecodedControl decode_default_complex_control(
     const auto id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
     if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", child_path(path, 1), "positive int64 control ID", std::to_string(id), "Default complex control ID is invalid");
+    std::vector<DecodedControlEvent> named_events;
     if (kind == model::ControlKind::graphical_schema_field) {
         require_arity(record.items[2], 6, child_path(path, 2));
         require_arity(record.items[2].items[0], 21, child_path(child_path(path, 2), 0));
         require_raw_constant(record.items[2].items[0].items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
-        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_graphical_schema_field_info()))
+        auto normalized_info = record.items[2];
+        named_events = decode_control_event_collection(normalized_info.items[3], child_path(child_path(path, 2), 3), kind);
+        normalized_info.items[3] = list({raw("0")});
+        if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_graphical_schema_field_info()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GraphicalSchemaField");
     } else if (kind == model::ControlKind::pivot_chart) {
         require_arity(record.items[2], 13, child_path(path, 2));
@@ -4172,7 +4204,11 @@ DecodedControl decode_default_complex_control(
         require_raw_constant(record.items[2].items[0], "19", child_path(child_path(path, 2), 0));
         if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_geographical_schema_field_info()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GeographicalSchemaField");
-        if (list_stream::dump_compact(record.items[3]) != list_stream::dump_compact(canonical_geographical_schema()))
+        auto normalized_schema = record.items[3];
+        require_arity(normalized_schema, 5, child_path(path, 3));
+        named_events = decode_control_event_collection(normalized_schema.items[3], child_path(child_path(path, 3), 3), kind);
+        normalized_schema.items[3] = list({raw("0")});
+        if (list_stream::dump_compact(normalized_schema) != list_stream::dump_compact(canonical_geographical_schema()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 3), "GeographicalSchemaField");
     }
     auto geometry = decode_geometry(record.items[geometry_slot], child_path(path, geometry_slot), context);
@@ -4193,7 +4229,7 @@ DecodedControl decode_default_complex_control(
         : model::ControlPayload{model::GeographicalSchemaFieldPayload{}};
     model::ControlNode control{model::ObjectId{id}, name, std::move(payload)};
     control.position = std::move(geometry.position);
-    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
 
 LV canonical_empty_gantt_info() {
@@ -4686,9 +4722,12 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     LV normalized = info;
     normalized.items[2] = expected.items[2];
     normalized.items[3] = expected.items[3];
+    auto event_normalized = info;
+    auto named_events = extract_embedded_chart_events(event_normalized.items[1], child_path(info_path, 1),
+        model::ControlKind::gantt_chart);
     LV expected_with_platform_layout = expected;
-    normalize_gantt_runtime_layout_values(info, expected_with_platform_layout, info_path);
-    validate_embedded_chart_info(info.items[1], expected_with_platform_layout.items[1],
+    normalize_gantt_runtime_layout_values(event_normalized, expected_with_platform_layout, info_path);
+    validate_embedded_chart_info(event_normalized.items[1], expected_with_platform_layout.items[1],
         child_path(info_path, 1), id, "GanttChart", warnings, reconstruction_complete);
     normalized.items[1] = expected_with_platform_layout.items[1];
     for (const auto offset : {std::size_t{12}, std::size_t{13}, std::size_t{14}}) {
@@ -4720,7 +4759,7 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     control.name = name;
     const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     control.position = geometry.position;
-    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
+    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}, std::move(named_events)};
 }
 
 DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context, model::ObjectId form_id,
@@ -5592,6 +5631,9 @@ DecodedControl decode_html_document_field(
     }
     auto normalized_data = data;
     normalized_data.items[6] = raw("0");
+    auto named_events = decode_control_event_collection(data.items[2], child_path(data_path, 2),
+        model::ControlKind::html_document_field);
+    normalized_data.items[2] = list({raw("0")});
     require_exact(normalized_data, canonical_html_document_field_data(0), data_path,
         "HTMLDocumentField contains an unproven property or storage variation");
 
@@ -5619,7 +5661,7 @@ DecodedControl decode_html_document_field(
             model::EnumerationValue{"Output", std::string(members[static_cast<std::size_t>(output)])});
     }
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
 
 DecodedControl decode_label(
@@ -7711,28 +7753,7 @@ DecodedControl decode_dendrogram(
     normalized_data.items[3] = expected_data.items[3];
     auto embedded_chart = record.items[2].items[1];
     const auto embedded_path = child_path(data_path, 1);
-    require_arity(embedded_chart, 3, embedded_path);
-    auto& info = embedded_chart.items[2];
-    const auto info_path = child_path(embedded_path, 2);
-    require_list(info, info_path);
-    const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
-    const auto series_size = static_cast<std::size_t>(series_count);
-    if (series_size >= std::numeric_limits<std::size_t>::max() / 11)
-        fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Embedded Chart Series count overflows its offset");
-    const auto points_offset = std::size_t{5} + 11 * (series_size + 1) + 1;
-    const auto point_count = integer_atom<std::uint32_t>(at(info, points_offset, info_path), child_path(info_path, points_offset));
-    const auto expected_count = chart_info_item_count(series_size, static_cast<std::size_t>(point_count), info_path);
-    const auto flag = points_offset + 1 + 11 * static_cast<std::size_t>(point_count) + 94;
-    const bool has_events = bool_atom(at(info, flag, info_path), child_path(info_path, flag));
-    if (info.items.size() != expected_count + (has_events ? 1U : 0U))
-        fail("OOF1102", info_path, "supported embedded Chart cardinality", std::to_string(info.items.size()), "Embedded Chart Info dimensions are unsupported");
-    std::vector<DecodedControlEvent> named_events;
-    if (has_events) {
-        named_events = decode_control_event_collection(at(info, flag + 1, info_path), child_path(info_path, flag + 1), model::ControlKind::dendrogram);
-        if (named_events.empty()) fail("OOF1114", child_path(info_path, flag + 1), "nonempty Dendrogram event collection", "empty", "Dendrogram event flag requires events");
-        info.items.erase(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1));
-        info.items[flag] = raw("0");
-    }
+    auto named_events = extract_embedded_chart_events(embedded_chart, embedded_path, model::ControlKind::dendrogram);
     validate_embedded_chart_info(embedded_chart, expected_data.items[1],
         child_path(data_path, 1), raw_id, "Dendrogram", warnings, reconstruction_complete);
     normalized_data.items[1] = expected_data.items[1];
@@ -9451,14 +9472,14 @@ LV encode_radio_button(
     });
 }
 
-LV encode_html_document_field(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_html_document_field(const model::OrdinaryFormDocument& document, const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::html_document_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "HTMLDocumentField with positive int64 ID", control.name,
             "HTMLDocumentField is outside the supported profile");
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -9470,10 +9491,12 @@ LV encode_html_document_field(const model::ControlNode& control, const GeometryC
         control.properties(), "HTMLDocumentField", "Output", "Output", 0,
         {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}});
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::html_document_field);
+    auto data = canonical_html_document_field_data(output);
+    data.items[2] = encode_control_event_collection(document, control, "$/HTMLDocumentField/Events");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_html_document_field_data(output),
+        std::move(data),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -9499,24 +9522,26 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}), list({raw("0")})});
 }
 
-LV encode_default_complex_control(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_default_complex_control(const model::OrdinaryFormDocument& document, const model::ControlNode& control, const GeometryContext& context) {
     const auto& descriptor = model::metamodel::descriptor_for(control.kind());
     const std::string path = "$/" + std::string(descriptor.public_name);
     if (control.id.value() == 0 || control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", path, "positive int64 control ID", std::to_string(control.id.value()), "Default complex control ID is invalid");
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty())
+        !control.children.empty() || (control.kind() == model::ControlKind::pivot_chart && !control.events.empty()))
         fail("OOF1122", path, "named default complex control without DataPath, events, extensions, or children", control.name,
             "Default complex control uses an unsupported storage concept");
     require_allowed_properties(control.properties(), {}, path);
     std::vector<LV> fields{raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value()))};
     if (control.kind() == model::ControlKind::graphical_schema_field) {
         fields.push_back(canonical_graphical_schema_field_info());
+        fields.back().items[3] = encode_control_event_collection(document, control, path + "/Events");
     } else if (control.kind() == model::ControlKind::pivot_chart) {
         fields.push_back(canonical_default_pivot_chart_info());
     } else {
         fields.push_back(canonical_geographical_schema_field_info());
         fields.push_back(canonical_geographical_schema());
+        fields.back().items[3] = encode_control_event_collection(document, control, path + "/Events");
     }
     fields.push_back(encode_geometry(control.position, context, IncomingAnchorLists{}));
     fields.push_back(list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}));
@@ -11215,7 +11240,7 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_command_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::gantt_chart) {
                     if (control->id.value() == 0 || control->id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
-                        control->name.empty() || control->data_path || !control->children.empty() || !control->events.empty() ||
+                        control->name.empty() || control->data_path || !control->children.empty() ||
                         !control->extension_properties.empty() || control->position.default_control.is_explicit() ||
                         control->position.z_order.is_explicit() ||
                         control->position.collapse.is_explicit() || !control->position.bindings.dimensions.empty())
@@ -11224,8 +11249,17 @@ Result<list_stream::ListValue> encode_document(
                     require_allowed_properties(control->properties(), {"AutoFullInterval", "FullIntervalBegin", "FullIntervalEnd"},
                         child_path(path, ordinal) + "/GanttChart");
                     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
+                    auto gantt_info = encode_gantt_chart_info(*control);
+                    if (!control->events.empty()) {
+                        auto& chart_info = gantt_info.items.at(1).items.at(2);
+                        constexpr std::size_t flag = 112;
+                        require_raw_constant(chart_info.items.at(flag), "0", "$/GanttChart/Events");
+                        chart_info.items.at(flag) = raw("1");
+                        chart_info.items.insert(chart_info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1),
+                            encode_control_event_collection(document, *control, "$/GanttChart/Events"));
+                    }
                     record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
-                        encode_gantt_chart_info(*control),
+                        std::move(gantt_info),
                         encode_geometry(control->position, context, IncomingAnchorLists{}),
                         list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
                         list({raw("0")})});
@@ -11271,7 +11305,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::radio_button) {
                     record = encode_radio_button(document, *control, context);
                 } else if (control->kind() == model::ControlKind::html_document_field) {
-                    record = encode_html_document_field(*control, context);
+                    record = encode_html_document_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
                     record = encode_picture_decoration(*control, document, context);
                 } else if (control->kind() == model::ControlKind::splitter) {
@@ -11289,7 +11323,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::graphical_schema_field ||
                            control->kind() == model::ControlKind::geographical_schema_field ||
                            control->kind() == model::ControlKind::pivot_chart) {
-                    record = encode_default_complex_control(*control, context);
+                    record = encode_default_complex_control(document, *control, context);
                 } else if (control->kind() == model::ControlKind::input_field) {
                     record = encode_input_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::check_box) {
