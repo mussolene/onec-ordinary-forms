@@ -796,6 +796,12 @@ void test_help_metamodel() {
                label_click->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
                label_click->storage_event_id.has_value() && *label_click->storage_event_id == 0,
         "LabelDecoration.Click must use the shared event record descriptor and observed storage ID zero");
+    const auto* picture_click = find_event(ControlKind::picture_decoration, "Click");
+    expect(picture_click && picture_click->persistence == PersistenceClass::persisted_editable &&
+               picture_click->storage_codec == StorageCodec::event_record &&
+               picture_click->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
+               picture_click->storage_event_id.has_value() && *picture_click->storage_event_id == 0,
+        "PictureDecoration.Click must use the shared event record descriptor and observed storage ID zero");
     constexpr std::array calendar_event_storage{
         std::pair{"Selection", 1U}, std::pair{"DragStart", 3U}, std::pair{"DragEnd", 5U},
         std::pair{"Drag", 6U}, std::pair{"OnActivateDate", 0U}, std::pair{"OnPeriodOutput", 2U},

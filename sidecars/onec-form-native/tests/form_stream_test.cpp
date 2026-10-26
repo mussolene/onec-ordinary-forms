@@ -6108,8 +6108,137 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
     event_picture->events.push_back(model::EventRef{model::ObjectId{3}});
     event_document.add_event(model::Event{
         model::ObjectId{3}, "Click", "PictureClick", model::ControlRef{model::ObjectId{2}}});
-    expect_failure(form_stream::encode_document(event_document), "OOF1122", "$/PictureDecoration",
-        "unimplemented PictureDecoration events must be rejected");
+    expect(form_stream::encode_document(event_document).ok(),
+        "owned PictureDecoration.Click must use the shared event collection codec");
+}
+
+void test_picture_decoration_click_event_round_trip_and_guards() {
+    const auto make_document = [](bool include_event, bool event_owner_is_control = true,
+                                  std::uint64_t reference_id = 3, std::string handler = "PictureHandler") {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "PictureClick";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode picture{
+            model::ObjectId{2}, "Picture", model::PictureDecorationPayload{}};
+        if (include_event) {
+            picture.events = {model::EventRef{model::ObjectId{reference_id}}};
+            const model::EventOwner owner = event_owner_is_control
+                ? model::EventOwner{model::ControlRef{model::ObjectId{2}}}
+                : model::EventOwner{model::FormRef{model::ObjectId{1}}};
+            document.add_event(model::Event{model::ObjectId{3}, "Click", std::move(handler), owner});
+        }
+        document.add_control(std::move(picture));
+        return document;
+    };
+    constexpr std::string_view click_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+    const auto* descriptor = model::metamodel::find_event(model::ControlKind::picture_decoration, "Click");
+    expect(descriptor && descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::event_record &&
+               descriptor->storage_tag == click_tag && descriptor->storage_event_id.has_value() &&
+               *descriptor->storage_event_id == 0,
+        "PictureDecoration.Click must expose its shared event descriptor and observed numeric ID zero");
+
+    auto without_event = make_document(false);
+    const auto absent_encoded = form_stream::encode_document(without_event);
+    expect(absent_encoded.ok(), "PictureDecoration without Click must encode");
+    auto absent_inspection = absent_encoded.value();
+    auto* absent_record = find_record_with_guid(
+        absent_inspection, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+    const auto* absent_events = absent_record ? bounded_list_item(*absent_record, {2, 2}) : nullptr;
+    expect(absent_events && list_stream::dump_compact(*absent_events) == "{0}",
+        "PictureDecoration without an event must keep the empty event collection");
+    const auto absent_decoded = form_stream::decode_document(absent_encoded.value(), "PictureClick");
+    const auto* absent_picture = absent_decoded ? absent_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(absent_decoded.ok() && absent_picture && absent_picture->events.empty(),
+        "PictureDecoration without Click must decode without synthetic events");
+
+    const auto document = make_document(true);
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "owned PictureDecoration.Click event must encode through the document-aware codec");
+    auto inspection = encoded.value();
+    auto* record = find_record_with_guid(
+        inspection, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+    const auto* event_collection = record ? bounded_list_item(*record, {2, 2}) : nullptr;
+    expect(event_collection && event_collection->items.size() == 2 &&
+               event_collection->items[0].atom == "1" && event_collection->items[1].is_list &&
+               event_collection->items[1].items.size() == 3 &&
+               event_collection->items[1].items[0].atom == "0" &&
+               event_collection->items[1].items[1].atom == click_tag &&
+               event_collection->items[1].items[2].items.size() == 3 &&
+               event_collection->items[1].items[2].items[1].atom == "PictureHandler" &&
+               list_stream::dump_compact(event_collection->items[1].items[2]) ==
+                   R"({3,"PictureHandler",{1,"",{1,0},{1,0},{1,0},{4,0,{0},"",-1,-1,1,0,""},{0,0,0}}})",
+        "PictureDecoration.Click must serialize with numeric ID zero, the shared tag, and its handler");
+    const auto decoded = form_stream::decode_document(encoded.value(), "PictureClick");
+    const auto* picture = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* event = picture && !picture->events.empty()
+        ? decoded.value().find_event(picture->events.front().id()) : nullptr;
+    const auto* owner = event ? std::get_if<model::ControlRef>(&event->owner) : nullptr;
+    expect(decoded.ok() && picture && picture->events.size() == 1 && event && event->name == "Click" &&
+               event->handler == "PictureHandler" && owner && owner->id() == picture->id,
+        "decoded Click must retain its PictureDecoration owner and handler");
+    const auto storage_rebuilt = form_stream::encode_document(decoded.value());
+    expect(storage_rebuilt.ok() && list_stream::dump_compact(storage_rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "PictureDecoration.Click must survive exact stream decode and re-encode");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("Click") != std::string::npos &&
+               xml.value().find("PictureHandler") != std::string::npos,
+        "PictureDecoration.Click must serialize as a named XML event");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named PictureDecoration.Click XML must parse");
+    const auto xml_rebuilt = form_stream::encode_document(parsed.value());
+    expect(xml_rebuilt.ok() && list_stream::dump_compact(xml_rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "PictureDecoration.Click must rebuild the exact stream from named XML");
+
+    expect(!form_stream::encode_document(make_document(true, false)),
+        "PictureDecoration.Click owned by a different object must be rejected");
+    expect(!form_stream::encode_document(make_document(true, true, 99)),
+        "PictureDecoration.Click with a missing referenced event ID must be rejected");
+    expect(!form_stream::encode_document(make_document(true, true, 3, "")),
+        "PictureDecoration.Click with an empty handler must be rejected");
+
+    {
+        auto bad = encoded.value();
+        auto* bad_record = find_record_with_guid(
+            bad, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+        auto* events = bad_record ? bounded_list_item(*bad_record, {2, 2}) : nullptr;
+        auto* id = events ? bounded_list_item(*events, {1, 0}) : nullptr;
+        expect(id != nullptr, "PictureDecoration event ID must be accessed with bounds checks");
+        if (id) {
+            *id = list_stream::ListValue::raw_atom("1");
+            expect(!form_stream::decode_document(bad, "PictureClickBadId"),
+                "unknown PictureDecoration event ID must be rejected");
+        }
+    }
+    {
+        auto bad = encoded.value();
+        auto* bad_record = find_record_with_guid(
+            bad, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+        auto* events = bad_record ? bounded_list_item(*bad_record, {2, 2}) : nullptr;
+        auto* tag = events ? bounded_list_item(*events, {1, 1}) : nullptr;
+        expect(tag != nullptr, "PictureDecoration event tag must be accessed with bounds checks");
+        if (tag) {
+            *tag = list_stream::ListValue::raw_atom("unsupported-tag");
+            expect(!form_stream::decode_document(bad, "PictureClickBadTag"),
+                "PictureDecoration event with an unsupported tag must be rejected");
+        }
+    }
+    {
+        auto bad = encoded.value();
+        auto* bad_record = find_record_with_guid(
+            bad, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+        auto* handler = bad_record ? bounded_list_item(*bad_record, {2, 2, 1, 2, 1}) : nullptr;
+        expect(handler != nullptr, "PictureDecoration event handler must be accessed with bounds checks");
+        if (handler) {
+            *handler = list_stream::ListValue::string_atom("");
+            expect(!form_stream::decode_document(bad, "PictureClickEmptyHandler"),
+                "PictureDecoration event with an empty handler must be rejected");
+        }
+    }
 }
 
 void test_splitter_observed_record_and_named_codec() {
@@ -14862,6 +14991,7 @@ int main() {
         test_label_enabled_and_tooltip_round_trip();
         test_common_control_tooltip_localized_text_round_trip_and_rejections();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
+        test_picture_decoration_click_event_round_trip_and_guards();
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();

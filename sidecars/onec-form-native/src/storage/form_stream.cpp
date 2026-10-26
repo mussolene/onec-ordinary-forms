@@ -5061,8 +5061,8 @@ DecodedControl decode_picture_decoration(
     if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
         canonical_picture_properties(enabled, tool_tip, nullptr, nullptr, false, picture_info)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "PictureDecoration");
-    require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
-        "PictureDecoration events are unsupported");
+    auto named_events = decode_control_event_collection(
+        info.items[2], child_path(info_path, 2), model::ControlKind::picture_decoration);
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -5122,7 +5122,8 @@ DecodedControl decode_picture_decoration(
                 model::QualifiedName{*picture->standard_name}});
     }
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {},
+        std::move(named_events)};
 }
 
 DecodedControl decode_splitter(
@@ -8441,7 +8442,7 @@ LV encode_picture_decoration(
             "PictureDecoration is outside the supported profile");
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8509,10 +8510,11 @@ LV encode_picture_decoration(
     } else if (picture_asset != nullptr) {
         picture_properties.items[4].items[2] = encode_button_picture(*picture_asset, "$/PictureDecoration/Picture");
     }
+    auto picture_events = encode_control_event_collection(document, control, "$/PictureDecoration/Events");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("1"), std::move(picture_properties), list({raw("0")})}),
+        list({raw("1"), std::move(picture_properties), std::move(picture_events)}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

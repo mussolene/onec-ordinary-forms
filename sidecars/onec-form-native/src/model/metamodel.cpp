@@ -1155,6 +1155,19 @@ void apply_proven_storage_overrides(
     label_click->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
     label_click->storage_event_id = 0U;
 
+    auto& picture_events = events[static_cast<std::size_t>(ControlKind::picture_decoration)];
+    const auto picture_click = std::ranges::find(
+        picture_events,
+        std::string_view{"Click"},
+        &EventDescriptor::api_name);
+    if (picture_click == picture_events.end()) {
+        throw std::logic_error("missing PictureDecoration.Click event for proven storage override");
+    }
+    picture_click->persistence = PersistenceClass::persisted_editable;
+    picture_click->storage_codec = StorageCodec::event_record;
+    picture_click->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+    picture_click->storage_event_id = 0U;
+
     constexpr std::array calendar_event_storage{
         std::pair{"Selection", 1U},
         std::pair{"DragStart", 3U},
