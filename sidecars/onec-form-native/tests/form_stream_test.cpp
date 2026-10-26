@@ -445,13 +445,83 @@ void test_table_read_only_runtime_flags() {
     auto unknown_flag = captured_table_payload();
     auto* record = find_record_with_guid(unknown_flag,
         model::metamodel::descriptor_for(model::ControlKind::table).guid);
-    record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom("117644835");
+    record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom("117644837");
     const auto partial_flag = form_stream::decode_document(unknown_flag, "UnknownTableFlag");
     expect(partial_flag.ok() && !partial_flag.value().reconstruction_complete() &&
                std::ranges::any_of(partial_flag.diagnostics(), [](const auto& diagnostic) {
                    return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
                }),
         "valid unmodelled Table flag bits must warn and mark reconstruction incomplete");
+}
+
+void test_table_boolean_properties() {
+    struct Case { std::string_view name; bool default_value; std::uint32_t mask; bool inverted; std::size_t slot; int false_code; int true_code; };
+    constexpr std::array cases{
+        Case{"AutoInsertNewRow", false, 0x8000U, false, 0, 0, 0}, Case{"Footer", false, 0x2U, false, 0, 0, 0},
+        Case{"Header", true, 0x1U, false, 0, 0, 0}, Case{"EnableStartDrag", false, 0x4000U, false, 0, 0, 0},
+        Case{"EnableDrag", false, 0x1000000U, true, 0, 0, 0},
+        Case{"ChangeSettingOfColumns", true, 0x2000000U, false, 0, 0, 0},
+        Case{"ChangePositionOfColumns", true, 0x4000000U, false, 0, 0, 0},
+        Case{"ChangeRowSet", true, 0, false, 22, 0, 1}, Case{"HorizontalLines", true, 0, false, 34, 2, 1},
+        Case{"VerticalLines", true, 0, false, 35, 2, 1}, Case{"UseAlternationRowColor", false, 0, false, 38, 2, 1},
+    };
+    auto seed = form_stream::decode_document(captured_table_payload(), "TableBoolean");
+    expect(seed.ok(), "Table Boolean fixture must decode");
+    const auto table = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table != seed.value().collections().controls.end(), "fixture must contain Table");
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, table->id};
+    const auto baseline = form_stream::encode_document(seed.value());
+    expect(baseline.ok(), "default Table fixture must encode");
+    for (const auto& spec : cases) {
+        const auto property = model::PropertyId::from_name(spec.name);
+        const auto def = seed.value().get_prop_val(key, property);
+        expect(def.status == model::PropertyReadStatus::proven_default && def.value &&
+            *def.value == model::PropertyValue{spec.default_value}, std::string(spec.name) + " must expose its default");
+        for (const bool value : {false, true}) {
+            auto document = seed.value();
+            expect(document.set_prop_val(key, property, value) == model::PropertyMutationStatus::applied,
+                std::string(spec.name) + " must accept both Boolean values");
+            const auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), encoded ? "Table Boolean must encode" : encoded.diagnostics().front().message);
+            const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            expect(record != nullptr, "Table record must exist");
+            const auto& values = record->items.at(2).items.at(2).items.at(1);
+            if (spec.mask) {
+                const auto flags = static_cast<std::uint32_t>(std::stoul(values.items.at(1).atom));
+                expect(((flags & spec.mask) != 0) == (value != spec.inverted), std::string(spec.name) + " must use its observed bit");
+            } else {
+                expect(values.items.at(spec.slot).atom == std::to_string(value ? spec.true_code : spec.false_code),
+                    std::string(spec.name) + " must use its observed native code");
+            }
+            if (value == spec.default_value) expect(list_stream::dump_compact(encoded.value()) == list_stream::dump_compact(baseline.value()),
+                std::string(spec.name) + " explicit default must match omitted default");
+            const auto decoded = form_stream::decode_document(encoded.value(), "TableBoolean");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), std::string(spec.name) + " must decode completely");
+            const auto actual = decoded.value().get_prop_val(key, property);
+            expect(actual.value && *actual.value == model::PropertyValue{value}, std::string(spec.name) + " must round-trip");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "Table Boolean XML must serialize");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "Table Boolean XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                std::string(spec.name) + " XML/native round-trip must be exact");
+            expect(document.set_prop_val(key, property, std::string("invalid")) == model::PropertyMutationStatus::invalid_value,
+                std::string(spec.name) + " must reject an invalid type");
+        }
+        if (!spec.mask) {
+            auto bad = baseline.value();
+            auto* record = find_record_with_guid(bad, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            record->items.at(2).items.at(2).items.at(1).items.at(spec.slot) = list_stream::ListValue::raw_atom("99");
+            expect(!form_stream::decode_document(bad, "InvalidTableBoolean"), std::string(spec.name) + " must reject invalid native codes");
+        }
+    }
+    auto unknown = baseline.value();
+    auto* record = find_record_with_guid(unknown, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    record->items.at(2).items.at(2).items.at(1).items.at(1) = list_stream::ListValue::raw_atom("117643813");
+    const auto partial = form_stream::decode_document(unknown, "UnknownTableBit");
+    expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown Table flag bits must remain incomplete");
 }
 
 void test_table_named_common_properties() {
@@ -1066,7 +1136,7 @@ void test_table_input_field_value_type_round_trip() {
     auto residual_table = encoded.value();
     table_record = find_record_with_guid(residual_table,
         model::metamodel::descriptor_for(model::ControlKind::table).guid);
-    table_record->items[2].items[2].items[1].items[38] = list_stream::ListValue::raw_atom("3");
+    table_record->items[2].items[2].items[1].items[37] = list_stream::ListValue::raw_atom("1");
     auto partial_table = form_stream::decode_document(residual_table, "TableResidualProfile");
     expect(partial_table.ok() && !partial_table.value().reconstruction_complete() &&
                std::ranges::any_of(partial_table.diagnostics(), [](const auto& diagnostic) {
@@ -7969,6 +8039,10 @@ void test_table_named_events() {
         table.properties().set_explicit(model::PropertyId::from_name("ToolTip"),
             model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}});
         table.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+        for (const auto name : {"AutoInsertNewRow", "Footer", "EnableStartDrag", "EnableDrag", "UseAlternationRowColor"})
+            table.properties().set_explicit(model::PropertyId::from_name(name), true);
+        for (const auto name : {"Header", "ChangeSettingOfColumns", "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines"})
+            table.properties().set_explicit(model::PropertyId::from_name(name), false);
         for (const auto kind : {model::ControlKind::input_field, model::ControlKind::choice_field, model::ControlKind::check_box}) {
             model::TableColumn column;
             column.name = std::string(model::metamodel::descriptor_for(kind).public_name);
@@ -8019,6 +8093,14 @@ void test_table_named_events() {
             !std::get<bool>(table->properties().find(model::PropertyId::from_name("ReadOnly"))->value) &&
             std::get<bool>(table->extension_properties.find(model::PropertyId::from_name("FirstInGroup"))->value),
             "Table properties must coexist with events");
+        for (const auto name : {"AutoInsertNewRow", "Footer", "EnableStartDrag", "EnableDrag", "UseAlternationRowColor"}) {
+            const auto* value = table->properties().find(model::PropertyId::from_name(name));
+            expect(value && std::get<bool>(value->value), std::string(name) + " must coexist with Table events");
+        }
+        for (const auto name : {"Header", "ChangeSettingOfColumns", "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines"}) {
+            const auto* value = table->properties().find(model::PropertyId::from_name(name));
+            expect(value && !std::get<bool>(value->value), std::string(name) + " must coexist with Table events");
+        }
         const auto* tooltip = table->properties().find(model::PropertyId::from_name("ToolTip"));
         expect(tooltip && std::get<model::LocalizedStringValue>(tooltip->value) ==
             model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}},
@@ -15500,6 +15582,7 @@ int main() {
         test_captured_table_column_record();
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();
+        test_table_boolean_properties();
         test_table_first_in_group_observed_metadata();
         test_table_first_in_group_fresh_model_xml_bin();
         test_table_column_name_and_data_path_runtime_slots();

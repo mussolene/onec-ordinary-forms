@@ -158,6 +158,18 @@ void test_descriptors() {
                    descriptor->storage_codec == StorageCodec::control_base,
             std::string("Table.") + name + " must expose a persisted common-base descriptor");
     }
+    for (const auto& [name, default_value] : std::array{
+             std::pair{"AutoInsertNewRow", "false"}, std::pair{"Footer", "false"}, std::pair{"Header", "true"},
+             std::pair{"EnableStartDrag", "false"}, std::pair{"EnableDrag", "false"},
+             std::pair{"ChangeSettingOfColumns", "true"}, std::pair{"ChangePositionOfColumns", "true"},
+             std::pair{"ChangeRowSet", "true"}, std::pair{"HorizontalLines", "true"},
+             std::pair{"VerticalLines", "true"}, std::pair{"UseAlternationRowColor", "false"}}) {
+        const auto* property = find_property(ControlKind::table, name);
+        expect(property && property->persistence == PersistenceClass::persisted_editable &&
+            property->storage_codec == StorageCodec::control_info && property->value_codec == ValueCodec::boolean &&
+            property->default_value.kind == DefaultKind::boolean && property->default_value.canonical == default_value,
+            std::string("Table.") + name + " must expose its Boolean default and storage descriptor");
+    }
     const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
     const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
     const auto* tool_tip = find_property(ControlKind::button, "ToolTip");

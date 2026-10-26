@@ -55,6 +55,9 @@ CheckBox сохраняет булевое ThreeState с исходным зна
 колонки таблицы сохраняет прежние ограничения.
 Table сохраняет Enabled, ToolTip, Font, BorderColor и FieldBackColor через
 общий механизм свойств; ограничения редакторов колонок остаются прежними.
+Table сохраняет AutoInsertNewRow, Footer, Header, EnableStartDrag, EnableDrag,
+ChangeSettingOfColumns, ChangePositionOfColumns, ChangeRowSet, HorizontalLines,
+VerticalLines и UseAlternationRowColor. ChoiceMode пока не поддерживается.
 Table также сохраняет 21 именованное событие. OnCurrentParentChange остается
 неподдерживаемым до отдельной проверки; вызов событий в интерфейсе не проверен.
 LabelDecoration сохраняет Hyperlink и Shortcut, PictureDecoration сохраняет

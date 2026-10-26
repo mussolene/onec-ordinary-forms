@@ -3342,6 +3342,35 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
             string_value(column.data_path), string_value(""), string_value(""), raw("0")})});
 }
 
+struct TableBooleanFlag {
+    std::string_view name;
+    std::uint32_t mask;
+    bool inverted;
+    bool default_value;
+};
+constexpr std::array table_boolean_flags{
+    TableBooleanFlag{"AutoInsertNewRow", 0x8000U, false, false},
+    TableBooleanFlag{"Footer", 0x2U, false, false},
+    TableBooleanFlag{"Header", 0x1U, false, true},
+    TableBooleanFlag{"EnableStartDrag", 0x4000U, false, false},
+    TableBooleanFlag{"EnableDrag", 0x1000000U, true, false},
+    TableBooleanFlag{"ChangeSettingOfColumns", 0x2000000U, false, true},
+    TableBooleanFlag{"ChangePositionOfColumns", 0x4000000U, false, true},
+};
+struct TableBooleanSlot {
+    std::string_view name;
+    std::size_t slot;
+    bool default_value;
+    int false_code;
+    int true_code;
+};
+constexpr std::array table_boolean_slots{
+    TableBooleanSlot{"ChangeRowSet", 22, true, 0, 1},
+    TableBooleanSlot{"HorizontalLines", 34, true, 2, 1},
+    TableBooleanSlot{"VerticalLines", 35, true, 2, 1},
+    TableBooleanSlot{"UseAlternationRowColor", 38, false, 2, 1},
+};
+
 LV canonical_table_control_info(
     const model::TypeDomainPatternValue& source_type,
     const std::vector<model::TableColumn>& columns,
@@ -8181,6 +8210,26 @@ DecodedControl decode_table(
         child_path(child_path(child_path(info_path, 2), 1), 1));
     const bool read_only = (flags & 0x400U) == 0;
     if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+    auto& normalized_table_properties = normalized_info.items[2].items[1];
+    auto normalized_flags = flags;
+    constexpr std::uint32_t default_flags = 117643809U;
+    for (const auto& spec : table_boolean_flags) {
+        const bool value = ((flags & spec.mask) != 0) != spec.inverted;
+        if (value != spec.default_value) control.properties().set_explicit(model::PropertyId::from_name(spec.name), value);
+        normalized_flags = (normalized_flags & ~spec.mask) | (default_flags & spec.mask);
+    }
+    normalized_table_properties.items.at(1) = raw(std::to_string(normalized_flags));
+    const auto table_properties_path = child_path(child_path(info_path, 2), 1);
+    for (const auto& spec : table_boolean_slots) {
+        const auto slot_path = child_path(table_properties_path, spec.slot);
+        const auto code = integer_atom<int>(info.items[2].items[1].items.at(spec.slot), slot_path);
+        if (code != spec.false_code && code != spec.true_code)
+            fail("OOF1114", slot_path, "supported Table Boolean code", std::to_string(code),
+                "Table Boolean storage value is unsupported");
+        const bool value = code == spec.true_code;
+        if (value != spec.default_value) control.properties().set_explicit(model::PropertyId::from_name(spec.name), value);
+        normalized_table_properties.items.at(spec.slot) = raw(std::to_string(spec.default_value ? spec.true_code : spec.false_code));
+    }
     const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path);
     auto& normalized_base = normalized_info.items[2].items[0];
     const auto& canonical_base = canonical_info.items[2].items[0];
@@ -9361,7 +9410,9 @@ LV encode_table(
         fail("OOF1122", "$/Table", "named Table with direct DataPath and basic Position", control.name,
             "Table uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"ReadOnly", "Enabled", "ToolTip", "Font", "BorderColor", "FieldBackColor"}, "$/Table");
+    require_allowed_properties(control.properties(), {"ReadOnly", "Enabled", "ToolTip", "Font", "BorderColor", "FieldBackColor",
+        "AutoInsertNewRow", "Footer", "Header", "EnableStartDrag", "EnableDrag", "ChangeSettingOfColumns",
+        "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines", "UseAlternationRowColor"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -9378,6 +9429,18 @@ LV encode_table(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
     auto info = canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table");
     info.items.at(4) = encode_control_event_collection(document, control, "$/Table/Events");
+    auto& table_properties = info.items.at(2).items.at(1);
+    auto flags = integer_atom<std::uint32_t>(table_properties.items.at(1), "$/Table/Flags");
+    for (const auto& spec : table_boolean_flags) {
+        const bool value = explicit_bool(control.properties(), spec.name, spec.default_value);
+        const bool bit = value != spec.inverted;
+        flags = bit ? flags | spec.mask : flags & ~spec.mask;
+    }
+    table_properties.items.at(1) = raw(std::to_string(flags));
+    for (const auto& spec : table_boolean_slots) {
+        const bool value = explicit_bool(control.properties(), spec.name, spec.default_value);
+        table_properties.items.at(spec.slot) = raw(std::to_string(value ? spec.true_code : spec.false_code));
+    }
     auto& base = info.items.at(2).items.at(0);
     CommonControlBaseFields common{
         explicit_bool(control.properties(), "Enabled", true),

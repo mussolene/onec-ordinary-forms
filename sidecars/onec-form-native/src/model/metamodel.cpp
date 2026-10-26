@@ -1011,6 +1011,10 @@ void apply_proven_storage_overrides(
 
     auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
     classify_property(table, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
+    for (const auto name : {"AutoInsertNewRow", "Footer", "EnableStartDrag", "EnableDrag", "UseAlternationRowColor"})
+        classify_property(table, name, StorageCodec::control_info, DefaultKind::boolean, "false");
+    for (const auto name : {"Header", "ChangeSettingOfColumns", "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines"})
+        classify_property(table, name, StorageCodec::control_info, DefaultKind::boolean, "true");
 
     auto& progress_bar = properties[static_cast<std::size_t>(ControlKind::progress_bar)];
     classify_property(progress_bar, "MaxValue", StorageCodec::control_info, DefaultKind::integer, "100");
