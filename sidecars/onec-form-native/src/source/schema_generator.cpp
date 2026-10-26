@@ -150,6 +150,8 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
         if (property.api_name == "VerticalAlign") return "ControlVerticalAlignValueType";
         if (property.api_name == "TitleLocation") return "IndicatorTitleLocationValueType";
     }
+    if (property.control_kind == model::ControlKind::picture_decoration && property.api_name == "PictureSize")
+        return "PictureSizeValueType";
     return xsd_type(property.value_codec);
 }
 
@@ -480,6 +482,15 @@ void append_value_types(std::string& output) {
     <xs:attribute name="member" use="required">
       <xs:simpleType><xs:restriction base="xs:string">
         <xs:enumeration value="TitleLeft"/><xs:enumeration value="TitleRight"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="PictureSizeValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="PictureSize"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="RealSize"/><xs:enumeration value="Stretch"/><xs:enumeration value="Proportionally"/><xs:enumeration value="Tile"/><xs:enumeration value="AutoSize"/><xs:enumeration value="ByFontSize"/>
       </xs:restriction></xs:simpleType>
     </xs:attribute>
   </xs:complexType>

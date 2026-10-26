@@ -8,6 +8,7 @@
 - Общие Font/BorderColor расширены на CalendarField, ProgressBar и UsualGroup; TrackBar поддерживает BorderColor. Учтен полужирный default UsualGroup и явно заданный bold автоматического шрифта.
 - Добавлены 35 цветовых свойств через общий именованный кодек; восстановлено чтение известных typed defaults перечислений, рамки, сочетания клавиш и SelectionValue.
 - CalendarField сохраняет конец периода отображения и четыре флага поведения; CurrentDate явно классифицирован как временное значение. Исправлено чтение именованных style defaults цвета и нормализация default шрифта UsualGroup в XML.
+- PictureDecoration сохраняет пять флагов, текст отсутствующей картинки и шесть режимов PictureSize; парные поля размера проверяются на совпадение.
 - Добавлены ChoiceField.ChoiceListHeight/ChoiceListWidth и InputField.ChoiceListWidth со знаковым целым кодеком и проверкой границ; редакторы колонок таблицы не расширены.
 - ChoiceField сохраняет флаги ChoiceButton, ClearButton, SpinButton, OpenButton и ReadOnly.
 - CheckBox и RadioButton сохраняют HorizontalAlign, VerticalAlign и TitleLocation с подтвержденными доменами перечислений в API и XSD.

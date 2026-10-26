@@ -479,6 +479,9 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
                 "indicator schema must reject Auto and Justify despite their shared enum membership");
         }
     }
+    verify_type("PictureSizeValueType", "PictureSize", {"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "ByFontSize"});
+    expect(element_type("PictureDecorationType", "PictureSize") == "PictureSizeValueType",
+        "picture sizing must use the observed finite enum domain");
     verify_type("ProgressBarSmoothingModeValueType", "ProgressBarSmoothingMode", {"Smooth", "Broken", "BrokenTilt"});
     verify_type("TrackBarMarkingAppearanceValueType", "TrackBarMarkingAppearance", {"DontShow", "TopLeft", "BottomRight", "BothSides"});
     expect(element_type("ProgressBarType", "ShowStyle") == "ProgressBarSmoothingModeValueType" &&

@@ -860,6 +860,16 @@ void apply_proven_storage_overrides(
         StorageCodec::picture_record,
         DefaultKind::none,
         "");
+    classify_property(picture_decoration, "Hyperlink", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(picture_decoration, "UseContextMenu", StorageCodec::control_info, DefaultKind::boolean, "true");
+    classify_property(picture_decoration, "Zoomable", StorageCodec::control_info, DefaultKind::boolean, "true");
+    classify_property(picture_decoration, "EnableStartDrag", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(picture_decoration, "EnableDrag", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(picture_decoration, "NonselectedPictureText", StorageCodec::control_info,
+        DefaultKind::string, "");
+    classify_property(picture_decoration, "PictureSize", StorageCodec::control_info,
+        DefaultKind::enumeration, "RealSize");
+    std::ranges::find(picture_decoration, "PictureSize", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
     auto& splitter = properties[static_cast<std::size_t>(ControlKind::splitter)];
     classify_property(splitter, "Orientation", StorageCodec::control_info, DefaultKind::enumeration, "Auto");

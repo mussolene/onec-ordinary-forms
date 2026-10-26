@@ -52,6 +52,14 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 сохраняют Transparent. PictureDecoration поддерживает Font и BorderColor через
 те же именованные типы значений, что и остальные подтвержденные владельцы.
 
+PictureDecoration также сохраняет Hyperlink, UseContextMenu, Zoomable,
+EnableStartDrag, EnableDrag, NonselectedPictureText и PictureSize. Поддержаны
+шесть режимов PictureSize: RealSize, Stretch, Proportionally, Tile, AutoSize и
+ByFontSize. Внутренние парные значения размера должны совпадать. Текст пока
+сохраняется только с пустой или единственной локализацией `ru`; другие локализации
+и несколько языков отклоняются до реализации общего локализованного значения.
+События и Shortcut PictureDecoration остаются отдельными задачами.
+
 UsualGroup и TrackBar сохраняют Transparent. ProgressBar сохраняет ShowPercent,
 ShowStyle (ProgressBarSmoothingMode.Smooth, Broken, BrokenTilt) и Orientation.
 TrackBar сохраняет MarkingAppearance (DontShow, TopLeft, BottomRight, BothSides)

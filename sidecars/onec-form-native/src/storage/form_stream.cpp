@@ -1399,13 +1399,31 @@ LV canonical_usual_group_properties(bool enabled, std::string_view caption, std:
     return list({raw("0"), std::move(group_properties)});
 }
 
+struct PictureDecorationInfoValues {
+    bool hyperlink = false;
+    bool use_context_menu = true;
+    bool zoomable = true;
+    bool enable_start_drag = false;
+    bool enable_drag = false;
+    std::string nonselected_picture_text;
+    std::int32_t picture_size = 0;
+};
+
 LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {},
     const model::FontValue* font = nullptr, const model::ColorValue* border_color = nullptr,
-    bool transparent = false) {
+    bool transparent = false, PictureDecorationInfoValues picture_info = {}) {
     auto properties = parse_constant(
         R"({{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},20,0,0,{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,2,0,0,1,2},{0,0,0},1,1,0,0,{1,0},0,1,1,1})");
     properties.items[0] = canonical_button_base(enabled, tool_tip, border_color, nullptr, nullptr, font,
         "$/PictureDecoration", model::ControlKind::picture_decoration, transparent);
+    properties.items[2] = raw(std::to_string(picture_info.picture_size));
+    properties.items[3] = raw(picture_info.hyperlink ? "1" : "0");
+    properties.items[4].items[1] = raw(std::to_string(picture_info.picture_size));
+    properties.items[6] = raw(picture_info.zoomable ? "1" : "0");
+    properties.items[7] = raw(picture_info.use_context_menu ? "1" : "0");
+    properties.items[8] = raw(picture_info.enable_start_drag ? "1" : "0");
+    properties.items[9] = raw(picture_info.enable_drag ? "1" : "0");
+    properties.items[10] = encoded_localized(picture_info.nonselected_picture_text);
     return properties;
 }
 
@@ -4957,6 +4975,26 @@ DecodedControl decode_picture_decoration(
     const std::string picture_slot_path = child_path(properties_path, 4);
     const auto& picture_slot = picture_properties.items[4];
     require_arity(picture_slot, 11, picture_slot_path);
+    PictureDecorationInfoValues picture_info;
+    picture_info.picture_size = integer_atom<std::int32_t>(
+        picture_properties.items[2], child_path(properties_path, 2));
+    const auto paired_picture_size = integer_atom<std::int32_t>(
+        picture_slot.items[1], child_path(picture_slot_path, 1));
+    if (paired_picture_size != picture_info.picture_size) {
+        fail("OOF1122", child_path(picture_slot_path, 1), "PictureSize matching control-info slot 2",
+            std::to_string(paired_picture_size), "PictureDecoration PictureSize pair disagrees");
+    }
+    if (picture_info.picture_size < 0 || (picture_info.picture_size > 4 && picture_info.picture_size != 7)) {
+        fail("OOF1114", child_path(properties_path, 2), "PictureSize storage value 0 through 4 or 7",
+            std::to_string(picture_info.picture_size), "PictureDecoration.PictureSize storage value is unsupported");
+    }
+    picture_info.hyperlink = bool_atom(picture_properties.items[3], child_path(properties_path, 3));
+    picture_info.zoomable = bool_atom(picture_properties.items[6], child_path(properties_path, 6));
+    picture_info.use_context_menu = bool_atom(picture_properties.items[7], child_path(properties_path, 7));
+    picture_info.enable_start_drag = bool_atom(picture_properties.items[8], child_path(properties_path, 8));
+    picture_info.enable_drag = bool_atom(picture_properties.items[9], child_path(properties_path, 9));
+    picture_info.nonselected_picture_text = decoded_single_language_text(
+        picture_properties.items[10], child_path(properties_path, 10));
     const auto picture = decode_button_picture(
         picture_slot.items[2], child_path(picture_slot_path, 2));
     auto normalized_properties = picture_properties;
@@ -4971,7 +5009,7 @@ DecodedControl decode_picture_decoration(
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[4].items[2] = canonical_button_picture();
     if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
-        canonical_picture_properties(enabled, tool_tip)))
+        canonical_picture_properties(enabled, tool_tip, nullptr, nullptr, false, picture_info)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "PictureDecoration");
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
         "PictureDecoration events are unsupported");
@@ -5006,6 +5044,23 @@ DecodedControl decode_picture_decoration(
         model::PictureDecorationPayload{},
     };
     apply_common_control_base(control.properties(), common);
+    if (picture_info.hyperlink) control.properties().set_explicit(
+        model::PropertyId::from_name("Hyperlink"), true);
+    if (!picture_info.use_context_menu) control.properties().set_explicit(
+        model::PropertyId::from_name("UseContextMenu"), false);
+    if (!picture_info.zoomable) control.properties().set_explicit(
+        model::PropertyId::from_name("Zoomable"), false);
+    if (picture_info.enable_start_drag) control.properties().set_explicit(
+        model::PropertyId::from_name("EnableStartDrag"), true);
+    if (picture_info.enable_drag) control.properties().set_explicit(
+        model::PropertyId::from_name("EnableDrag"), true);
+    if (!picture_info.nonselected_picture_text.empty()) control.properties().set_explicit(
+        model::PropertyId::from_name("NonselectedPictureText"), picture_info.nonselected_picture_text);
+    if (picture_info.picture_size != 0) {
+        static constexpr std::string_view members[] = {"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "", "", "ByFontSize"};
+        control.properties().set_explicit(model::PropertyId::from_name("PictureSize"),
+            model::EnumerationValue{"PictureSize", std::string(members[picture_info.picture_size])});
+    }
     if (picture && picture->standard_name) {
         control.properties().set_explicit(model::PropertyId::from_name("Picture"),
             model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
@@ -8327,12 +8382,23 @@ LV encode_picture_decoration(
             "PictureDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture", "TextColor", "BackColor", "Border",
-        "Font", "BorderColor", "Transparent"}, "$/PictureDecoration");
+        "Font", "BorderColor", "Transparent", "Hyperlink", "UseContextMenu", "Zoomable", "EnableStartDrag",
+        "EnableDrag", "NonselectedPictureText", "PictureSize"}, "$/PictureDecoration");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto font = explicit_control_font(control.properties(), "$/PictureDecoration/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "PictureDecoration");
     const bool transparent = explicit_bool(control.properties(), "Transparent", false);
+    const PictureDecorationInfoValues picture_info{
+        explicit_bool(control.properties(), "Hyperlink", false),
+        explicit_bool(control.properties(), "UseContextMenu", true),
+        explicit_bool(control.properties(), "Zoomable", true),
+        explicit_bool(control.properties(), "EnableStartDrag", false),
+        explicit_bool(control.properties(), "EnableDrag", false),
+        explicit_string(control.properties(), "NonselectedPictureText"),
+        explicit_enum_storage_value(control.properties(), "PictureDecoration", "PictureSize", "PictureSize", 0,
+            {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3}, {"AutoSize", 4}, {"ByFontSize", 7}}),
+    };
     const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
     const model::PictureAsset* picture_asset = nullptr;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
@@ -8364,7 +8430,8 @@ LV encode_picture_decoration(
         }
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
-    auto picture_properties = canonical_picture_properties(enabled, tool_tip, &font, &border_color, transparent);
+    auto picture_properties = canonical_picture_properties(enabled, tool_tip, &font, &border_color,
+        transparent, picture_info);
     encode_named_control_colors(picture_properties.items[0], model::ControlKind::picture_decoration,
         control.properties(), "$/PictureDecoration");
     encode_named_control_border(picture_properties.items[0], model::ControlKind::picture_decoration,

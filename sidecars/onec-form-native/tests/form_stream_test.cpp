@@ -5592,11 +5592,61 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
                    list_stream::dump_compact(picture_record(external_picture_encoded.value())),
         "PictureDecoration external GIF must re-encode canonically");
 
+    {
+        const auto property = model::PropertyId::from_name("NonselectedPictureText");
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
+        auto text_document = make_document(false, true, "");
+        const auto read_default = text_document.get_prop_val(key, property);
+        expect(read_default.status == model::PropertyReadStatus::proven_default && read_default.value &&
+                *read_default.value == model::PropertyValue{std::string{}},
+            "PictureDecoration NonselectedPictureText must expose an empty typed default");
+        expect(text_document.set_prop_val(key, property, std::string{}) == model::PropertyMutationStatus::applied,
+            "explicit empty NonselectedPictureText must be accepted");
+        const auto empty_text = form_stream::encode_document(text_document);
+        expect(empty_text.ok() && list_stream::dump_compact(empty_text.value()) ==
+                list_stream::dump_compact(implicit_default.value()),
+            "explicit empty NonselectedPictureText must use the canonical default record");
+        const std::string text = "Нет картинки Ω <пусто> & \"кавычки\"\nВторая\rстрока";
+        expect(text_document.set_prop_val(key, property, text) == model::PropertyMutationStatus::applied,
+            "Unicode NonselectedPictureText must be accepted");
+        const auto text_stream = form_stream::encode_document(text_document);
+        expect(text_stream.ok(), "NonselectedPictureText must encode");
+        const auto& text_slot = picture_record(text_stream.value()).items[2].items[1].items[10];
+        expect(list_stream::dump_compact(text_slot) == value_codec::encode_localized_string(
+                model::LocalizedStringValue{{{"ru", "Нет картинки Ω <пусто> & \"кавычки\"\r\nВторая\rстрока"}}}),
+            "NonselectedPictureText must use the observed localized slot and preserve text");
+        const auto text_decoded = form_stream::decode_document(text_stream.value(), "PictureText");
+        expect(text_decoded.ok() && text_decoded.value().reconstruction_complete(),
+            "known picture text must decode without a partial profile");
+        const auto read_text = text_decoded.value().get_prop_val(key, property);
+        expect(read_text.value && *read_text.value == model::PropertyValue{text},
+            "NonselectedPictureText must survive native storage with normalized line endings");
+        const auto text_xml = source::serialize_form_xml(text_decoded.value());
+        expect(text_xml.ok(), "picture text must serialize as named XML");
+        const auto text_parsed = source::parse_form_xml(text_xml.value());
+        expect(text_parsed.ok(), "picture text XML must parse");
+        const auto text_rebuilt = form_stream::encode_document(text_parsed.value());
+        expect(text_rebuilt.ok() && list_stream::dump_compact(text_rebuilt.value()) ==
+                list_stream::dump_compact(text_stream.value()),
+            "picture text must survive XML and native rebuild");
+        expect(text_document.set_prop_val(key, property, true) == model::PropertyMutationStatus::invalid_value,
+            "picture text must reject an incorrect API type");
+        auto malformed_text = text_stream.value();
+        mutable_picture_record(malformed_text).items[2].items[1].items[10] = list_stream::ListValue::raw_atom("invalid");
+        expect(!form_stream::decode_document(malformed_text, "MalformedPictureText"),
+            "malformed picture text localization must fail closed");
+        auto multilingual_text = text_stream.value();
+        mutable_picture_record(multilingual_text).items[2].items[1].items[10] = list_stream::parse(
+            value_codec::encode_localized_string(model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
+        expect(!form_stream::decode_document(multilingual_text, "MultilingualPictureText"),
+            "unsupported multilingual picture text must fail rather than lose a language");
+    }
+
     auto unknown_property_document = make_document(false, true, "");
     const_cast<model::ControlNode*>(unknown_property_document.find_control(model::ObjectId{2}))
-        ->properties().set_explicit(model::PropertyId::from_name("Zoomable"), true);
-    expect_failure(form_stream::encode_document(unknown_property_document), "OOF1122",
-        "$/PictureDecoration", "unimplemented non-default picture formatting must be rejected");
+        ->properties().set_explicit(model::PropertyId::from_name("UnknownProperty"), true);
+    expect_failure(form_stream::encode_document(unknown_property_document), "OOF1123",
+        "$", "unknown picture properties must fail model validation before storage");
 
     auto event_document = make_document(false, true, "");
     auto* event_picture = const_cast<model::ControlNode*>(event_document.find_control(model::ObjectId{2}));
@@ -8031,6 +8081,15 @@ void test_common_control_named_scalar_properties() {
         {model::ControlKind::choice_field, "ChoiceField", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::radio_button, "RadioButton", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::label_decoration, "LabelDecoration", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::picture_decoration, "PictureDecoration", "Hyperlink", false, {{false, 0}, {true, 1}}, 3, false},
+        {model::ControlKind::picture_decoration, "PictureDecoration", "UseContextMenu", true, {{false, 0}, {true, 1}}, 7, false},
+        {model::ControlKind::picture_decoration, "PictureDecoration", "Zoomable", true, {{false, 0}, {true, 1}}, 6, false},
+        {model::ControlKind::picture_decoration, "PictureDecoration", "EnableStartDrag", false, {{false, 0}, {true, 1}}, 8, false},
+        {model::ControlKind::picture_decoration, "PictureDecoration", "EnableDrag", false, {{false, 0}, {true, 1}}, 9, false},
+        {model::ControlKind::picture_decoration, "PictureDecoration", "PictureSize", enumeration("PictureSize", "RealSize"),
+            {{enumeration("PictureSize", "RealSize"), 0}, {enumeration("PictureSize", "Stretch"), 1},
+             {enumeration("PictureSize", "Proportionally"), 2}, {enumeration("PictureSize", "Tile"), 3},
+             {enumeration("PictureSize", "AutoSize"), 4}, {enumeration("PictureSize", "ByFontSize"), 7}}, 2, false},
         {model::ControlKind::picture_decoration, "PictureDecoration", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::usual_group, "UsualGroup", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::track_bar, "TrackBar", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
@@ -8107,6 +8166,21 @@ void test_common_control_named_scalar_properties() {
             const auto* block = spec.base ? base_block(*record) :
                 spec.nested_payload ? nested_block(*record) : &record->items[2].items[1];
             expect(block->items[spec.slot].atom == std::to_string(code), label + " must use its independently observed slot and code");
+            if (spec.kind == model::ControlKind::picture_decoration && spec.name == "PictureSize") {
+                expect(record->items[2].items[1].items[4].items[1].atom == std::to_string(code),
+                    label + " must write both observed sizing slots consistently");
+                auto mismatched = encoded.value();
+                auto* mismatched_record = find_record_with_guid(mismatched, model::metamodel::descriptor_for(spec.kind).guid);
+                mismatched_record->items[2].items[1].items[4].items[1] = list_stream::ListValue::raw_atom(code == 0 ? "2" : "0");
+                expect(!form_stream::decode_document(mismatched, "MismatchedPictureSize"),
+                    label + " must reject disagreement between valid sizing codes");
+                auto unsupported = encoded.value();
+                auto* unsupported_record = find_record_with_guid(unsupported, model::metamodel::descriptor_for(spec.kind).guid);
+                unsupported_record->items[2].items[1].items[2] = list_stream::ListValue::raw_atom("5");
+                unsupported_record->items[2].items[1].items[4].items[1] = list_stream::ListValue::raw_atom("5");
+                expect(!form_stream::decode_document(unsupported, "UnknownPictureSize"),
+                    label + " must reject matching but unsupported sizing codes");
+            }
             const auto decoded = form_stream::decode_document(encoded.value(), "Scalars");
             expect(decoded.ok() && decoded.value().reconstruction_complete(), label + " must decode completely");
             const auto read_value = decoded.value().get_prop_val(key, property);
@@ -8147,6 +8221,12 @@ void test_common_control_named_scalar_properties() {
                     label + " must reject int32 overflow without wrapping");
             expect(absent.value().set_prop_val(key, property, model::DecimalValue{"1.5"}) ==
                     model::PropertyMutationStatus::invalid_value, label + " must reject a fractional source value without truncation");
+        }
+        if (spec.kind == model::ControlKind::picture_decoration && spec.name == "PictureSize") {
+            for (const auto member : {"AutoSizeIgnoreScale", "RealSizeIgnoreScale"})
+                expect(absent.value().set_prop_val(key, property, model::EnumerationValue{"PictureSize", member}) ==
+                        model::PropertyMutationStatus::invalid_value,
+                    label + " must reject enum members rejected by the ordinary picture control");
         }
         if (std::holds_alternative<model::EnumerationValue>(spec.default_value)) {
             const auto type = std::get<model::EnumerationValue>(spec.default_value).type_name;

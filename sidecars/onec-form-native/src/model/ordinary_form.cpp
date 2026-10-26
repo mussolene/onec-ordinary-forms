@@ -130,6 +130,11 @@ bool property_value_matches(
                         return typed_value.type_name == "TitleLocation" &&
                             (typed_value.member == "TitleLeft" || typed_value.member == "TitleRight");
                 }
+                if (descriptor.control_kind == ControlKind::picture_decoration && descriptor.api_name == "PictureSize")
+                    return typed_value.type_name == "PictureSize" &&
+                        (typed_value.member == "RealSize" || typed_value.member == "Stretch" ||
+                         typed_value.member == "Proportionally" || typed_value.member == "Tile" ||
+                         typed_value.member == "AutoSize" || typed_value.member == "ByFontSize");
                 if (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") {
                     return typed_value.type_name == "DateSelectionMode" &&
                         (typed_value.member == "Single" || typed_value.member == "Multiple" || typed_value.member == "Interval");
@@ -172,6 +177,7 @@ bool property_api_enumeration_matches(
          (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||
         ((descriptor.control_kind == ControlKind::check_box || descriptor.control_kind == ControlKind::radio_button) &&
          (descriptor.api_name == "HorizontalAlign" || descriptor.api_name == "VerticalAlign" || descriptor.api_name == "TitleLocation")) ||
+        (descriptor.control_kind == ControlKind::picture_decoration && descriptor.api_name == "PictureSize") ||
         (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") ||
         (descriptor.control_kind == ControlKind::progress_bar &&
          (descriptor.api_name == "Orientation" || descriptor.api_name == "ShowStyle")) ||
