@@ -103,11 +103,21 @@ bool property_value_matches(
                         (typed_value.member == "Left" || typed_value.member == "Center" ||
                          typed_value.member == "Right");
                 }
-                if (descriptor.control_kind == ControlKind::command_bar &&
-                    descriptor.api_name == "Orientation") {
+                if ((descriptor.control_kind == ControlKind::command_bar ||
+                     descriptor.control_kind == ControlKind::progress_bar ||
+                     descriptor.control_kind == ControlKind::track_bar) && descriptor.api_name == "Orientation") {
                     return typed_value.type_name == "Orientation" &&
                         (typed_value.member == "Auto" || typed_value.member == "Horizontal" ||
                          typed_value.member == "Vertical");
+                }
+                if (descriptor.control_kind == ControlKind::progress_bar && descriptor.api_name == "ShowStyle") {
+                    return typed_value.type_name == "ProgressBarSmoothingMode" &&
+                        (typed_value.member == "Smooth" || typed_value.member == "Broken" || typed_value.member == "BrokenTilt");
+                }
+                if (descriptor.control_kind == ControlKind::track_bar && descriptor.api_name == "MarkingAppearance") {
+                    return typed_value.type_name == "TrackBarMarkingAppearance" &&
+                        (typed_value.member == "DontShow" || typed_value.member == "TopLeft" ||
+                         typed_value.member == "BottomRight" || typed_value.member == "BothSides");
                 }
                 if (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") {
                     return typed_value.type_name == "DateSelectionMode" &&
@@ -149,7 +159,11 @@ bool property_api_enumeration_matches(
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
     if ((descriptor.control_kind == ControlKind::command_bar &&
          (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||
-        (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode")) {
+        (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") ||
+        (descriptor.control_kind == ControlKind::progress_bar &&
+         (descriptor.api_name == "Orientation" || descriptor.api_name == "ShowStyle")) ||
+        (descriptor.control_kind == ControlKind::track_bar &&
+         (descriptor.api_name == "Orientation" || descriptor.api_name == "MarkingAppearance"))) {
         return property_value_matches(descriptor, PropertyValue{value});
     }
     if (descriptor.api_name == "HorizontalAlign") {

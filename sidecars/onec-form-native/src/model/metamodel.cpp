@@ -728,6 +728,7 @@ void apply_proven_storage_overrides(
     auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];
     classify_property(usual_group, "Font", StorageCodec::control_base, DefaultKind::font, "automatic,bold=true");
     classify_property(usual_group, "Caption", StorageCodec::control_info, DefaultKind::string, "");
+    classify_property(usual_group, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
     classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
@@ -955,6 +956,13 @@ void apply_proven_storage_overrides(
     std::ranges::find(progress_bar, "MinValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(progress_bar, "Step", StorageCodec::control_info, DefaultKind::integer, "1");
     std::ranges::find(progress_bar, "Step", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(progress_bar, "ShowStyle", StorageCodec::control_info,
+        DefaultKind::enumeration, "ProgressBarSmoothingMode.Smooth");
+    std::ranges::find(progress_bar, "ShowStyle", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    classify_property(progress_bar, "ShowPercent", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(progress_bar, "Orientation", StorageCodec::control_info,
+        DefaultKind::enumeration, "Orientation.Auto");
+    std::ranges::find(progress_bar, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
     auto& track_bar = properties[static_cast<std::size_t>(ControlKind::track_bar)];
     classify_property(track_bar, "MaxValue", StorageCodec::control_info, DefaultKind::integer, "100");
@@ -963,6 +971,13 @@ void apply_proven_storage_overrides(
     std::ranges::find(track_bar, "MinValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(track_bar, "Step", StorageCodec::control_info, DefaultKind::integer, "1");
     std::ranges::find(track_bar, "Step", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(track_bar, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
+    classify_property(track_bar, "MarkingAppearance", StorageCodec::control_info,
+        DefaultKind::enumeration, "TrackBarMarkingAppearance.BottomRight");
+    std::ranges::find(track_bar, "MarkingAppearance", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    classify_property(track_bar, "Orientation", StorageCodec::control_info,
+        DefaultKind::enumeration, "Orientation.Auto");
+    std::ranges::find(track_bar, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
     classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");

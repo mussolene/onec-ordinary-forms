@@ -48,6 +48,12 @@ LabelDecoration, ListBox, PictureDecoration, ProgressBar, RadioButton, TrackBar
 Multiple и Interval. SelectedDates является временной коллекцией; публичный XML
 и BIN не сохраняют ее содержимое.
 
+UsualGroup и TrackBar сохраняют Transparent. ProgressBar сохраняет ShowPercent,
+ShowStyle (ProgressBarSmoothingMode.Smooth, Broken, BrokenTilt) и Orientation.
+TrackBar сохраняет MarkingAppearance (DontShow, TopLeft, BottomRight, BothSides)
+и Orientation. Orientation допускает только Auto, Horizontal и Vertical.
+Числовые LargeStep и MarkingStep не входят в это расширение.
+
 CalendarField поддерживает восемь именованных событий: Selection, DragStart,
 DragEnd, Drag, OnActivateDate, OnPeriodOutput, OnChange и DragCheck. События
 хранятся в Events самого контрола как имена обработчиков. Кодек проверяет

@@ -1395,7 +1395,7 @@ void test_usual_group_named_record_round_trip_and_rejections() {
     property_form.children = {model::ControlRef{model::ObjectId{2}}};
     model::OrdinaryFormDocument property_document(std::move(property_form));
     model::ControlNode property_group{model::ObjectId{2}, "Group", model::UsualGroupPayload{}};
-    property_group.properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
+    property_group.properties().set_explicit(model::PropertyId::from_name("UnknownProperty"), true);
     property_document.add_control(std::move(property_group));
     expect(!form_stream::encode_document(property_document), "unverified UsualGroup properties must be rejected");
 
@@ -6987,7 +6987,7 @@ void test_calendar_group_progress_track_common_base_font_border_color() {
         if (unknown_neighbor.ok()) {
             auto* base = common_base(unknown_neighbor.value(), kind);
             expect(base != nullptr, "candidate common-base record must be locatable for profile validation");
-            if (base != nullptr) base->items[5] = list_stream::ListValue::raw_atom("7");
+            if (base != nullptr) base->items[15] = list_stream::ListValue::raw_atom("99");
             const auto partial = form_stream::decode_document(unknown_neighbor.value(), "CommonBaseWaveThreeNeighbor");
             const auto* decoded_color = partial ? property(partial.value(), "BorderColor") : nullptr;
             const auto* decoded_font = partial && supports_font ? property(partial.value(), "Font") : nullptr;
@@ -7065,7 +7065,7 @@ void test_calendar_group_progress_track_common_base_font_border_color() {
             "named base RGB colors must decode without losing other common base properties");
         auto neighbor_probe = encoded_rgb.value();
         auto* neighbor_base = common_base(neighbor_probe, test_case.kind);
-        if (neighbor_base != nullptr) neighbor_base->items[5] = list_stream::ListValue::raw_atom("7");
+        if (neighbor_base != nullptr) neighbor_base->items[15] = list_stream::ListValue::raw_atom("99");
         const auto partial = form_stream::decode_document(neighbor_probe, "NamedBaseColorNeighbor");
         const auto* retained_color = partial ? property(partial.value(), test_case.property) : nullptr;
         expect(partial.ok() && !partial.value().reconstruction_complete() && retained_color &&
@@ -7974,6 +7974,120 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
             record->items[2].items[1].items[9] = list_stream::ListValue::raw_atom("3");
             expect(!form_stream::decode_document(invalid_ordinal, "InvalidSelectionModeOrdinal"),
                 "Calendar SelectionMode must reject an unsupported native ordinal");
+        }
+    }
+}
+
+void test_group_progress_track_named_scalar_properties() {
+    struct ScalarCase {
+        model::ControlKind kind;
+        std::string_view owner;
+        std::string_view name;
+        model::PropertyValue default_value;
+        std::vector<std::pair<model::PropertyValue, int>> values;
+        std::size_t slot;
+        bool base;
+    };
+    const auto enumeration = [](std::string_view type, std::string_view member) -> model::PropertyValue {
+        return model::EnumerationValue{std::string(type), std::string(member)};
+    };
+    const std::vector<ScalarCase> cases{
+        {model::ControlKind::usual_group, "UsualGroup", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::track_bar, "TrackBar", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::progress_bar, "ProgressBar", "ShowPercent", false, {{false, 0}, {true, 1}}, 6, false},
+        {model::ControlKind::progress_bar, "ProgressBar", "ShowStyle", enumeration("ProgressBarSmoothingMode", "Smooth"),
+            {{enumeration("ProgressBarSmoothingMode", "Smooth"), 1}, {enumeration("ProgressBarSmoothingMode", "Broken"), 0},
+             {enumeration("ProgressBarSmoothingMode", "BrokenTilt"), 2}}, 5, false},
+        {model::ControlKind::progress_bar, "ProgressBar", "Orientation", enumeration("Orientation", "Auto"),
+            {{enumeration("Orientation", "Auto"), 2}, {enumeration("Orientation", "Horizontal"), 1},
+             {enumeration("Orientation", "Vertical"), 0}}, 7, false},
+        {model::ControlKind::track_bar, "TrackBar", "Orientation", enumeration("Orientation", "Auto"),
+            {{enumeration("Orientation", "Auto"), 2}, {enumeration("Orientation", "Horizontal"), 1},
+             {enumeration("Orientation", "Vertical"), 0}}, 7, false},
+        {model::ControlKind::track_bar, "TrackBar", "MarkingAppearance", enumeration("TrackBarMarkingAppearance", "BottomRight"),
+            {{enumeration("TrackBarMarkingAppearance", "DontShow"), 0}, {enumeration("TrackBarMarkingAppearance", "TopLeft"), 1},
+             {enumeration("TrackBarMarkingAppearance", "BottomRight"), 2}, {enumeration("TrackBarMarkingAppearance", "BothSides"), 3}}, 6, false},
+    };
+    for (const auto& spec : cases) {
+        const std::string label = std::string(spec.owner) + "." + std::string(spec.name);
+        const auto fixture = [&] {
+            return source::parse_form_xml(std::string("<Form id=\"1\" name=\"Scalars\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
+                std::string(spec.owner) + " id=\"2\" name=\"Control\"><Position/></" + std::string(spec.owner) + "></ChildItems></Form>");
+        };
+        auto absent = fixture();
+        expect(absent.ok(), label + " default XML must parse");
+        const auto property = model::PropertyId::from_name(spec.name);
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
+        const auto read_default = absent.value().get_prop_val(key, property);
+        expect(read_default.status == model::PropertyReadStatus::proven_default && read_default.value &&
+                *read_default.value == spec.default_value, label + " must expose its proven typed default");
+        const auto* descriptor = model::metamodel::find_property(spec.kind, spec.name);
+        expect(descriptor && descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+                descriptor->storage_codec == (spec.base ? model::metamodel::StorageCodec::control_base :
+                    model::metamodel::StorageCodec::control_info), label + " must classify its observed storage owner");
+        const auto absent_stream = form_stream::encode_document(absent.value());
+        expect(absent_stream.ok(), label + " default must encode");
+        expect(absent.value().set_prop_val(key, property, spec.default_value) == model::PropertyMutationStatus::applied,
+            label + " explicit default must be accepted");
+        const auto explicit_default = form_stream::encode_document(absent.value());
+        expect(explicit_default.ok() && list_stream::dump_compact(explicit_default.value()) ==
+                list_stream::dump_compact(absent_stream.value()), label + " explicit default must use canonical storage");
+        for (const auto& [value, code] : spec.values) {
+            auto document = fixture();
+            expect(document.value().set_prop_val(key, property, value) == model::PropertyMutationStatus::applied,
+                label + " known value must be accepted");
+            model::ColorValue color;
+            color.kind = model::ColorKind::absolute;
+            color.red = 17; color.green = 83; color.blue = 201;
+            expect(document.value().set_prop_val(key, model::PropertyId::from_name("BorderColor"), color) ==
+                    model::PropertyMutationStatus::applied, label + " must compose with BorderColor");
+            model::BorderValue border;
+            border.border_type = model::ControlBorderType::single; border.width = 2;
+            expect(document.value().set_prop_val(key, model::PropertyId::from_name("Border"), border) ==
+                    model::PropertyMutationStatus::applied, label + " must compose with Border");
+            const auto encoded = form_stream::encode_document(document.value());
+            expect(encoded.ok(), label + " named value must encode");
+            const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(spec.kind).guid);
+            const auto* block = &record->items[2].items[1];
+            if (spec.base) block = &block->items[0];
+            expect(block->items[spec.slot].atom == std::to_string(code), label + " must use its independently observed slot and code");
+            const auto decoded = form_stream::decode_document(encoded.value(), "Scalars");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), label + " must decode completely");
+            const auto read_value = decoded.value().get_prop_val(key, property);
+            expect(read_value.value && *read_value.value == value, label + " named value must survive storage");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), label + " named XML must serialize");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), label + " named XML must pass schema and model validation");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                label + " must survive XML/native rebuild without a baseline");
+            auto invalid = encoded.value();
+            auto* invalid_record = find_record_with_guid(invalid, model::metamodel::descriptor_for(spec.kind).guid);
+            auto* invalid_block = &invalid_record->items[2].items[1];
+            if (spec.base) invalid_block = &invalid_block->items[0];
+            invalid_block->items[spec.slot] = list_stream::ListValue::raw_atom("99");
+            expect(!form_stream::decode_document(invalid, "InvalidScalar"), label + " must reject invalid native scalar codes");
+            auto unknown = encoded.value();
+            auto* unknown_record = find_record_with_guid(unknown, model::metamodel::descriptor_for(spec.kind).guid);
+            unknown_record->items[2].items[1].items[0].items[15] = list_stream::ListValue::raw_atom("99");
+            const auto partial = form_stream::decode_document(unknown, "UnknownScalarNeighbor");
+            expect(partial.ok() && !partial.value().reconstruction_complete() &&
+                    partial.value().get_prop_val(key, property).value == read_value.value,
+                label + " unknown neighboring fields must warn without losing the named scalar");
+        }
+        expect(absent.value().set_prop_val(key, property, std::string("invalid")) == model::PropertyMutationStatus::invalid_value,
+            label + " must reject an incorrect API value type");
+        if (std::holds_alternative<model::EnumerationValue>(spec.default_value)) {
+            const auto type = std::get<model::EnumerationValue>(spec.default_value).type_name;
+            expect(absent.value().set_prop_val(key, property, model::EnumerationValue{type, "Unknown"}) ==
+                    model::PropertyMutationStatus::invalid_value, label + " must reject unknown enum members in the API");
+            expect(absent.value().set_prop_val(key, property, model::EnumerationValue{"OtherType", "Auto"}) ==
+                    model::PropertyMutationStatus::invalid_value, label + " must reject other enum types in the API");
+            const auto invalid_xml = std::string("<Form id=\"1\" name=\"InvalidScalar\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
+                std::string(spec.owner) + " id=\"2\" name=\"Control\"><Position/><" + std::string(spec.name) +
+                " type=\"" + type + "\" member=\"Unknown\"/></" + std::string(spec.owner) + "></ChildItems></Form>";
+            expect(!source::parse_form_xml(invalid_xml), label + " unknown enum members must fail public XML validation");
         }
     }
 }
@@ -13836,6 +13950,7 @@ int main() {
         test_calendar_field_begin_display_period();
         test_calendar_field_scalar_properties();
         test_named_borders_for_ordinary_controls_and_calendar_selection_mode();
+        test_group_progress_track_named_scalar_properties();
         test_calendar_field_captured_begin_period_record_decode();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();

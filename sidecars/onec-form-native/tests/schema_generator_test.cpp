@@ -462,6 +462,13 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
     verify_type("CommandBarButtonsAlignmentValueType", "CommandBarButtonAlignment", {"Left", "Center", "Right"});
     verify_type("CommandBarOrientationValueType", "Orientation", {"Auto", "Horizontal", "Vertical"});
     verify_type("CalendarDateSelectionModeValueType", "DateSelectionMode", {"Single", "Multiple", "Interval"});
+    verify_type("ProgressBarSmoothingModeValueType", "ProgressBarSmoothingMode", {"Smooth", "Broken", "BrokenTilt"});
+    verify_type("TrackBarMarkingAppearanceValueType", "TrackBarMarkingAppearance", {"DontShow", "TopLeft", "BottomRight", "BothSides"});
+    expect(element_type("ProgressBarType", "ShowStyle") == "ProgressBarSmoothingModeValueType" &&
+               element_type("TrackBarType", "MarkingAppearance") == "TrackBarMarkingAppearanceValueType" &&
+               element_type("ProgressBarType", "Orientation") == "CommandBarOrientationValueType" &&
+               element_type("TrackBarType", "Orientation") == "CommandBarOrientationValueType",
+        "new scalar enumerations must use closed schema types and reuse the existing orientation domain");
     expect(element_type("CalendarFieldType", "SelectionMode") == "CalendarDateSelectionModeValueType",
         "Calendar selection mode must use its closed property-scoped enum type");
     const auto calendar_mode = [](std::string_view type, std::string_view member) {

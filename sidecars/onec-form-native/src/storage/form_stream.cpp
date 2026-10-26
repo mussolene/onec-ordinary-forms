@@ -1066,6 +1066,7 @@ struct CommonControlBaseCapabilities {
     bool border_color = false;
     std::optional<model::ControlKind> named_color_control{};
     std::optional<model::ControlKind> named_border_control{};
+    std::optional<model::ControlKind> named_transparent_control{};
 };
 
 struct CommonControlBaseFields {
@@ -1076,6 +1077,8 @@ struct CommonControlBaseFields {
     std::vector<NamedBaseColor> named_colors{};
     std::optional<model::ControlKind> named_border_control{};
     std::optional<model::BorderValue> border{};
+    std::optional<model::ControlKind> named_transparent_control{};
+    bool transparent = false;
 };
 
 CommonControlBaseFields decode_common_control_base(
@@ -1090,6 +1093,10 @@ CommonControlBaseFields decode_common_control_base(
     if (capabilities.named_border_control) {
         fields.named_border_control = capabilities.named_border_control;
         fields.border = decode_control_border(base.items[11], child_path(path, 11), capabilities.named_border_control);
+    }
+    if (capabilities.named_transparent_control) {
+        fields.named_transparent_control = capabilities.named_transparent_control;
+        fields.transparent = bool_atom(base.items[5], child_path(path, 5));
     }
     if (capabilities.named_color_control) {
         for (const auto& spec : base_color_properties) {
@@ -1114,6 +1121,8 @@ void apply_common_control_base(
     if (fields.border && fields.named_border_control &&
         *fields.border != control_border_default(fields.named_border_control))
         properties.set_explicit(model::PropertyId::from_name("Border"), *fields.border);
+    if (fields.named_transparent_control && fields.transparent)
+        properties.set_explicit(model::PropertyId::from_name("Transparent"), true);
     for (const auto& color : fields.named_colors)
         properties.set_explicit(model::PropertyId::from_name(color.property), color.value);
 }
@@ -1197,6 +1206,8 @@ void encode_common_control_base(
         base.items[11] = encode_control_border(*fields.border, std::string(path) + "/Border",
             fields.named_border_control);
     }
+    if (fields.named_transparent_control)
+        base.items[5] = raw(fields.transparent ? "1" : "0");
 }
 
 model::FontValue explicit_control_font(const model::PropertySet& properties, std::string_view property_path) {
@@ -1362,16 +1373,17 @@ LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
 
 LV canonical_usual_group_properties(bool enabled, std::string_view caption, std::string_view tool_tip,
     const model::ColorValue* border_color = nullptr, const model::FontValue* font = nullptr,
-    const model::BorderValue* border = nullptr) {
+    const model::BorderValue* border = nullptr, bool transparent = false) {
     auto base = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,4,700,1,100},0,{4,4,{0},4},{4,4,{0},4},"
         "{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    encode_common_control_base(base,
-        CommonControlBaseFields{enabled, std::string(tool_tip),
-            font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
-            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
-        "$/UsualGroup");
+    CommonControlBaseFields common{enabled, std::string(tool_tip),
+        font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
+        border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}};
+    common.named_transparent_control = model::ControlKind::usual_group;
+    common.transparent = transparent;
+    encode_common_control_base(base, common, "$/UsualGroup");
     auto group_properties = list({
         std::move(base),
         raw("8"),
@@ -4633,7 +4645,8 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     require_arity(base, 21, base_path);
     require_raw_constant(base.items[0], "19", child_path(base_path, 0));
     const auto common = decode_common_control_base(base, base_path,
-        CommonControlBaseCapabilities{true, true, model::ControlKind::usual_group});
+        CommonControlBaseCapabilities{true, true, model::ControlKind::usual_group, std::nullopt,
+            model::ControlKind::usual_group});
     const bool enabled = common.enabled;
     const std::string& tool_tip = common.tool_tip;
     const auto& border_color = *common.border_color;
@@ -4644,6 +4657,7 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     auto normalized = properties;
     auto normalized_base = base;
     normalized_base.items[12] = encoded_localized(tool_tip);
+    normalized_base.items[5] = raw("0");
     normalize_named_control_colors(normalized_base, model::ControlKind::usual_group, base_path);
     normalized.items[0] = std::move(normalized_base);
     normalized.items[2] = encoded_localized(caption);
@@ -6024,22 +6038,27 @@ LV canonical_progress_bar_info(
     std::int32_t min_value = 0,
     std::int32_t step = 1,
     const model::FontValue* font = nullptr,
-    const model::ColorValue* border_color = nullptr) {
+    const model::ColorValue* border_color = nullptr,
+    std::int32_t show_style = 1,
+    bool show_percent = false,
+    std::int32_t orientation = 2) {
     return list({canonical_control_base_properties(enabled, tool_tip, border_color, "$/ProgressBar", font),
         raw("3"), raw(std::to_string(min_value)),
-        raw(std::to_string(max_value)), raw(std::to_string(step)), raw("1"), raw("0"), raw("2")});
+        raw(std::to_string(max_value)), raw(std::to_string(step)), raw(std::to_string(show_style)),
+        raw(show_percent ? "1" : "0"), raw(std::to_string(orientation))});
 }
 
 LV canonical_track_bar_properties(bool enabled, std::string_view tool_tip,
-    const model::ColorValue* border_color = nullptr) {
+    const model::ColorValue* border_color = nullptr, bool transparent = false) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
         "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
         "{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    encode_common_control_base(properties,
-        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt,
-            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
-        "$/TrackBar");
+    CommonControlBaseFields common{enabled, std::string(tool_tip), std::nullopt,
+        border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}};
+    common.named_transparent_control = model::ControlKind::track_bar;
+    common.transparent = transparent;
+    encode_common_control_base(properties, common, "$/TrackBar");
     return properties;
 }
 
@@ -6049,10 +6068,14 @@ LV canonical_track_bar_info(
     std::int32_t min_value = 0,
     std::int32_t max_value = 100,
     std::int32_t step = 1,
-    const model::ColorValue* border_color = nullptr) {
+    const model::ColorValue* border_color = nullptr,
+    bool transparent = false,
+    std::int32_t marking_appearance = 2,
+    std::int32_t orientation = 2) {
     return list({raw("1"),
-        list({canonical_track_bar_properties(enabled, tool_tip, border_color), raw("5"), raw(std::to_string(min_value)),
-            raw(std::to_string(max_value)), raw(std::to_string(step)), raw("10"), raw("2"), raw("2"),
+        list({canonical_track_bar_properties(enabled, tool_tip, border_color, transparent), raw("5"), raw(std::to_string(min_value)),
+            raw(std::to_string(max_value)), raw(std::to_string(step)), raw("10"),
+            raw(std::to_string(marking_appearance)), raw(std::to_string(orientation)),
             raw("5"), raw("100")}),
         list({raw("0")})});
 }
@@ -6141,6 +6164,15 @@ DecodedControl decode_progress_bar(
     const std::int32_t min_value = integer_atom<std::int32_t>(info_list.items[2], min_path);
     const std::int32_t max_value = integer_atom<std::int32_t>(info_list.items[3], max_path);
     const std::int32_t step = integer_atom<std::int32_t>(info_list.items[4], step_path);
+    const auto show_style = integer_atom<std::int32_t>(info_list.items[5], child_path(info_list_path, 5));
+    const bool show_percent = bool_atom(info_list.items[6], child_path(info_list_path, 6));
+    const auto orientation = integer_atom<std::int32_t>(info_list.items[7], child_path(info_list_path, 7));
+    if (show_style < 0 || show_style > 2)
+        fail("OOF1114", child_path(info_list_path, 5), "ProgressBarSmoothingMode storage value 0..2",
+            std::to_string(show_style), "ProgressBar ShowStyle value is unsupported");
+    if (orientation < 0 || orientation > 2)
+        fail("OOF1114", child_path(info_list_path, 7), "Orientation storage value 0..2",
+            std::to_string(orientation), "ProgressBar Orientation value is unsupported");
     auto normalized_properties = properties;
     normalized_properties.items[1] = raw("1");
     normalized_properties.items[12] = encoded_localized("");
@@ -6151,6 +6183,9 @@ DecodedControl decode_progress_bar(
     normalized_info.items[2] = raw("0");
     normalized_info.items[3] = raw("100");
     normalized_info.items[4] = raw("1");
+    normalized_info.items[5] = raw("1");
+    normalized_info.items[6] = raw("0");
+    normalized_info.items[7] = raw("2");
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
             canonical_progress_bar_info(true, "", 100, 0, 1, &font, &border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_list_path, "ProgressBar");
@@ -6179,6 +6214,17 @@ DecodedControl decode_progress_bar(
         model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
     if (step != 1) control.properties().set_explicit(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
+    if (show_style != 1) {
+        constexpr std::array<std::string_view, 3> members{"Broken", "Smooth", "BrokenTilt"};
+        control.properties().set_explicit(model::PropertyId::from_name("ShowStyle"),
+            model::EnumerationValue{"ProgressBarSmoothingMode", std::string(members[static_cast<std::size_t>(show_style)])});
+    }
+    if (show_percent) control.properties().set_explicit(model::PropertyId::from_name("ShowPercent"), true);
+    if (orientation != 2) {
+        constexpr std::array<std::string_view, 3> members{"Vertical", "Horizontal", "Auto"};
+        control.properties().set_explicit(model::PropertyId::from_name("Orientation"),
+            model::EnumerationValue{"Orientation", std::string(members[static_cast<std::size_t>(orientation)])});
+    }
     if (linked_attribute) control.data_path = model::DataPath{
         model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     control.position = std::move(decoded_geometry.position);
@@ -6212,7 +6258,8 @@ DecodedControl decode_track_bar(
     require_arity(properties, 21, properties_path);
     require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const auto common = decode_common_control_base(properties, properties_path,
-        CommonControlBaseCapabilities{false, true, model::ControlKind::track_bar, model::ControlKind::track_bar});
+        CommonControlBaseCapabilities{false, true, model::ControlKind::track_bar, model::ControlKind::track_bar,
+            model::ControlKind::track_bar});
     auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
         model::ControlKind::track_bar);
     const auto& border_color = *common.border_color;
@@ -6222,6 +6269,14 @@ DecodedControl decode_track_bar(
         info_payload.items[3], child_path(payload_path, 3));
     const std::int32_t step = integer_atom<std::int32_t>(
         info_payload.items[4], child_path(payload_path, 4));
+    const auto marking_appearance = integer_atom<std::int32_t>(info_payload.items[6], child_path(payload_path, 6));
+    const auto orientation = integer_atom<std::int32_t>(info_payload.items[7], child_path(payload_path, 7));
+    if (marking_appearance < 0 || marking_appearance > 3)
+        fail("OOF1114", child_path(payload_path, 6), "TrackBarMarkingAppearance storage value 0..3",
+            std::to_string(marking_appearance), "TrackBar MarkingAppearance value is unsupported");
+    if (orientation < 0 || orientation > 2)
+        fail("OOF1114", child_path(payload_path, 7), "Orientation storage value 0..2",
+            std::to_string(orientation), "TrackBar Orientation value is unsupported");
     if (max_value < 0) {
         fail("OOF1122", child_path(payload_path, 3), "non-negative TrackBar MaxValue",
             std::to_string(max_value), "TrackBar MaxValue below zero was clamped by the platform runtime");
@@ -6244,11 +6299,14 @@ DecodedControl decode_track_bar(
         child_path(child_path(info_path, 1), 0));
     normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::track_bar,
         child_path(child_path(info_path, 1), 0));
+    normalized_info.items[1].items[0].items[5] = raw("0");
     normalized_info.items[1].items[0].items[1] = raw("1");
     normalized_info.items[1].items[0].items[12] = encoded_localized("");
     normalized_info.items[1].items[2] = raw("0");
     normalized_info.items[1].items[3] = raw("100");
     normalized_info.items[1].items[4] = raw("1");
+    normalized_info.items[1].items[6] = raw("2");
+    normalized_info.items[1].items[7] = raw("2");
     normalized_info.items[2] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
             canonical_track_bar_info(true, "", 0, 100, 1, &border_color)))
@@ -6281,6 +6339,17 @@ DecodedControl decode_track_bar(
         model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
     if (step != 1) control.properties().set_explicit(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
+    if (marking_appearance != 2) {
+        constexpr std::array<std::string_view, 4> members{"DontShow", "TopLeft", "BottomRight", "BothSides"};
+        control.properties().set_explicit(model::PropertyId::from_name("MarkingAppearance"),
+            model::EnumerationValue{"TrackBarMarkingAppearance",
+                std::string(members[static_cast<std::size_t>(marking_appearance)])});
+    }
+    if (orientation != 2) {
+        constexpr std::array<std::string_view, 3> members{"Vertical", "Horizontal", "Auto"};
+        control.properties().set_explicit(model::PropertyId::from_name("Orientation"),
+            model::EnumerationValue{"Orientation", std::string(members[static_cast<std::size_t>(orientation)])});
+    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
         std::move(named_events)};
@@ -8303,7 +8372,8 @@ LV encode_progress_bar(
             "single numeric Attribute", attribute->name, "ProgressBar DataPath must target a single numeric attribute");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "Font", "BorderColor", "BackColor", "Border"}, "$/ProgressBar");
+        {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "Font", "BorderColor", "BackColor", "Border",
+            "ShowStyle", "ShowPercent", "Orientation"}, "$/ProgressBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto font = explicit_control_font(control.properties(), "$/ProgressBar/Font");
@@ -8311,9 +8381,14 @@ LV encode_progress_bar(
     const std::int32_t max_value = explicit_integer(control.properties(), "MaxValue", 100, "$/ProgressBar/MaxValue");
     const std::int32_t min_value = explicit_integer(control.properties(), "MinValue", 0, "$/ProgressBar/MinValue");
     const std::int32_t step = explicit_integer(control.properties(), "Step", 1, "$/ProgressBar/Step");
+    const std::int32_t show_style = explicit_enum_storage_value(control.properties(), "ProgressBar", "ShowStyle",
+        "ProgressBarSmoothingMode", 1, {{"Broken", 0}, {"Smooth", 1}, {"BrokenTilt", 2}});
+    const bool show_percent = explicit_bool(control.properties(), "ShowPercent", false);
+    const std::int32_t orientation = explicit_enum_storage_value(control.properties(), "ProgressBar", "Orientation",
+        "Orientation", 2, {{"Vertical", 0}, {"Horizontal", 1}, {"Auto", 2}});
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
     auto progress_info = canonical_progress_bar_info(enabled, tool_tip, max_value, min_value, step,
-        &font, &border_color);
+        &font, &border_color, show_style, show_percent, orientation);
     encode_named_control_colors(progress_info.items[0], model::ControlKind::progress_bar,
         control.properties(), "$/ProgressBar");
     encode_named_control_border(progress_info.items[0], model::ControlKind::progress_bar,
@@ -8354,7 +8429,8 @@ LV encode_track_bar(
             "TrackBar DataPath must target the supported numeric domain");
     }
     require_allowed_properties(
-        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "BorderColor", "TextColor", "BackColor", "ButtonBackColor", "Border"}, "$/TrackBar");
+        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "BorderColor", "TextColor", "BackColor",
+            "ButtonBackColor", "Border", "Transparent", "MarkingAppearance", "Orientation"}, "$/TrackBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "TrackBar");
@@ -8363,6 +8439,12 @@ LV encode_track_bar(
     const std::int32_t min_value = explicit_integer(
         control.properties(), "MinValue", 0, "$/TrackBar/MinValue");
     const std::int32_t step = explicit_integer(control.properties(), "Step", 1, "$/TrackBar/Step");
+    const bool transparent = explicit_bool(control.properties(), "Transparent", false);
+    const std::int32_t marking_appearance = explicit_enum_storage_value(control.properties(), "TrackBar",
+        "MarkingAppearance", "TrackBarMarkingAppearance", 2,
+        {{"DontShow", 0}, {"TopLeft", 1}, {"BottomRight", 2}, {"BothSides", 3}});
+    const std::int32_t orientation = explicit_enum_storage_value(control.properties(), "TrackBar", "Orientation",
+        "Orientation", 2, {{"Vertical", 0}, {"Horizontal", 1}, {"Auto", 2}});
     if (max_value < 0) {
         fail("OOF1122", "$/TrackBar/MaxValue", "non-negative TrackBar MaxValue", std::to_string(max_value),
             "TrackBar MaxValue below zero was clamped by the platform runtime");
@@ -8376,7 +8458,8 @@ LV encode_track_bar(
             "TrackBar Step values at or below zero were not accepted by the platform runtime");
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
-    auto track_info = canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step, &border_color);
+    auto track_info = canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step,
+        &border_color, transparent, marking_appearance, orientation);
     encode_named_control_colors(track_info.items[1].items[0], model::ControlKind::track_bar,
         control.properties(), "$/TrackBar");
     encode_named_control_border(track_info.items[1].items[0], model::ControlKind::track_bar,
@@ -10372,11 +10455,12 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "UsualGroup uses an unsupported storage concept");
                     }
                     require_allowed_properties(control->properties(),
-                        {"Caption", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border"},
+                        {"Caption", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"},
                         child_path(path, ordinal) + "/UsualGroup");
                     const bool enabled = explicit_bool(control->properties(), "Enabled", true);
                     const auto caption = explicit_string(control->properties(), "Caption");
                     const auto tool_tip = explicit_string(control->properties(), "ToolTip");
+                    const bool transparent = explicit_bool(control->properties(), "Transparent", false);
                     const auto border_color = explicit_control_color(control->properties(), "BorderColor", "UsualGroup");
                     const auto border = explicit_control_border(control->properties(), model::ControlKind::usual_group,
                         "$/UsualGroup/Border");
@@ -10385,7 +10469,7 @@ Result<list_stream::ListValue> encode_document(
                         font = explicit_control_font(control->properties(), "$/UsualGroup/Font");
                     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
                     auto group_properties = canonical_usual_group_properties(enabled, caption, tool_tip,
-                        &border_color, font ? &*font : nullptr, &border);
+                        &border_color, font ? &*font : nullptr, &border, transparent);
                     encode_named_control_colors(group_properties.items[1].items[0], model::ControlKind::usual_group,
                         control->properties(), "$/UsualGroup");
                     record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),

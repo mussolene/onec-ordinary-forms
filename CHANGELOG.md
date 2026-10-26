@@ -8,6 +8,7 @@
 - Общие Font/BorderColor расширены на CalendarField, ProgressBar и UsualGroup; TrackBar поддерживает BorderColor. Учтен полужирный default UsualGroup и явно заданный bold автоматического шрифта.
 - Добавлены 35 цветовых свойств через общий именованный кодек; восстановлено чтение известных typed defaults перечислений, рамки, сочетания клавиш и SelectionValue.
 - CalendarField сохраняет конец периода отображения и четыре флага поведения; CurrentDate явно классифицирован как временное значение. Исправлено чтение именованных style defaults цвета и нормализация default шрифта UsualGroup в XML.
+- Добавлены прозрачность UsualGroup и TrackBar, показ процентов и стиль ProgressBar, ориентация обоих контролов и разметка TrackBar; перечисления ограничены в модели и XSD.
 - Добавлены Border у 11 типов контролов с отдельным default и форматом UsualGroup, а также CalendarField.SelectionMode; SelectedDates явно исключен из сохраняемого XML как временная коллекция.
 - Добавлен OnChange для CheckBox, RadioButton и TrackBar с проверкой ссылок, владельца и структуры действий.
 - Добавлены все восемь именованных событий CalendarField с проверкой владельцев, дубликатов и структуры действий.

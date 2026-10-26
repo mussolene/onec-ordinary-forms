@@ -138,6 +138,13 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
         if (property.api_name == "ButtonsAlignment") return "CommandBarButtonsAlignmentValueType";
         if (property.api_name == "Orientation") return "CommandBarOrientationValueType";
     }
+    if (property.control_kind == model::ControlKind::progress_bar && property.api_name == "ShowStyle")
+        return "ProgressBarSmoothingModeValueType";
+    if (property.control_kind == model::ControlKind::track_bar && property.api_name == "MarkingAppearance")
+        return "TrackBarMarkingAppearanceValueType";
+    if ((property.control_kind == model::ControlKind::progress_bar ||
+         property.control_kind == model::ControlKind::track_bar) && property.api_name == "Orientation")
+        return "CommandBarOrientationValueType";
     return xsd_type(property.value_codec);
 }
 
@@ -423,6 +430,24 @@ void append_value_types(std::string& output) {
     <xs:attribute name="member" use="required">
       <xs:simpleType><xs:restriction base="xs:string">
         <xs:enumeration value="Single"/><xs:enumeration value="Multiple"/><xs:enumeration value="Interval"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ProgressBarSmoothingModeValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="ProgressBarSmoothingMode"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Smooth"/><xs:enumeration value="Broken"/><xs:enumeration value="BrokenTilt"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="TrackBarMarkingAppearanceValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="TrackBarMarkingAppearance"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="DontShow"/><xs:enumeration value="TopLeft"/><xs:enumeration value="BottomRight"/><xs:enumeration value="BothSides"/>
       </xs:restriction></xs:simpleType>
     </xs:attribute>
   </xs:complexType>
