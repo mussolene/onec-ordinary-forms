@@ -281,6 +281,15 @@ bool path_is_within(const std::filesystem::path& root, const std::filesystem::pa
     return !relative.empty() && *relative.begin() != ".." && !relative.is_absolute();
 }
 
+void reject_input_output_overlap(const std::filesystem::path& input, const std::filesystem::path& output) {
+    const auto canonical_input = std::filesystem::canonical(input);
+    const auto canonical_output = std::filesystem::weakly_canonical(output);
+    if (canonical_input == canonical_output ||
+        (std::filesystem::exists(output) && std::filesystem::equivalent(input, output))) {
+        throw std::runtime_error("output cannot overwrite an input file: " + output.string());
+    }
+}
+
 struct PendingWrite {
     PendingWrite(std::filesystem::path target, const std::vector<std::uint8_t>* contents)
         : output(std::move(target)), bytes(contents) {}
@@ -478,7 +487,8 @@ std::filesystem::path checked_sidecar_path(
     return resolved;
 }
 
-void load_picture_assets(oof::model::OrdinaryFormDocument& document, const std::filesystem::path& xml_path) {
+void load_picture_assets(oof::model::OrdinaryFormDocument& document, const std::filesystem::path& xml_path,
+                         const std::filesystem::path& output) {
     if (document.assets().empty()) return;
     const auto root = package_root_for(xml_path);
     if (!std::filesystem::is_directory(root)) {
@@ -486,7 +496,9 @@ void load_picture_assets(oof::model::OrdinaryFormDocument& document, const std::
     }
     std::uintmax_t remaining = max_input_bytes;
     for (const auto& asset : document.assets()) {
-        auto bytes = read_bytes(checked_sidecar_path(root, asset.relative_path, true), remaining);
+        const auto asset_path = checked_sidecar_path(root, asset.relative_path, true);
+        reject_input_output_overlap(asset_path, output);
+        auto bytes = read_bytes(asset_path, remaining);
         remaining -= bytes.size();
         document.set_asset_bytes(asset.id, std::move(bytes));
     }
@@ -518,8 +530,13 @@ int dump_form(
         print_diagnostics(xml.diagnostics(), json);
         return 1;
     }
-    check_output_file(output);
+    reject_input_output_overlap(input, output);
     const auto root = package_root_for(output);
+    reject_input_output_overlap(input, root / "Module.bsl");
+    for (const auto& asset : loaded.value().assets()) {
+        reject_input_output_overlap(input, root / asset.relative_path);
+    }
+    check_output_file(output);
     std::filesystem::create_directories(root);
     const auto module_path = checked_sidecar_path(root, "Module.bsl", false);
     const std::vector<std::uint8_t> xml_bytes(xml.value().begin(), xml.value().end());
@@ -539,13 +556,14 @@ int build_form(
     const std::filesystem::path& input,
     const std::filesystem::path& output,
     bool json) {
+    reject_input_output_overlap(input, output);
     auto parsed = oof::source::parse_form_xml(read_text(input));
     if (!parsed) {
         print_diagnostics(parsed.diagnostics(), json);
         return 1;
     }
     try {
-        load_picture_assets(parsed.value(), input);
+        load_picture_assets(parsed.value(), input, output);
     } catch (const std::exception& error) {
         print_diagnostics(cli_failure("OOF0006", input.string(), "accessible picture assets inside source package", {}, error.what()), json);
         return 1;
@@ -563,6 +581,7 @@ int build_form(
         return 1;
     }
     const auto checked_module_path = checked_sidecar_path(package_root_for(input), "Module.bsl", true);
+    reject_input_output_overlap(checked_module_path, output);
     parsed.value().set_module(oof::model::FormModule{read_text(checked_module_path)});
     const auto encoded = oof::save_form_bin(parsed.value());
     if (!encoded) {
