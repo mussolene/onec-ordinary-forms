@@ -152,6 +152,12 @@ void test_descriptors() {
                label_scrolling->default_value.kind == DefaultKind::enumeration &&
                label_scrolling->default_value.canonical == "ScrollingTextMode.DontUse",
         "LabelDecoration descriptors must expose typed control-info defaults");
+    for (const auto name : {"Enabled", "ToolTip", "Font", "BorderColor", "FieldBackColor"}) {
+        const auto* descriptor = find_property(ControlKind::table, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::control_base,
+            std::string("Table.") + name + " must expose a persisted common-base descriptor");
+    }
     const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
     const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
     const auto* tool_tip = find_property(ControlKind::button, "ToolTip");

@@ -634,7 +634,7 @@
               <Property name="InitialTreeView" apiName="InitialTreeView" russianName="НачальноеОтображениеДерева" russianType="НачальноеОтображениеДерева" valueCodec="enumeration"/>
               <Property name="InitialListView" apiName="InitialListView" russianName="НачальноеОтображениеСписка" russianType="НачальноеОтображениеСписка" valueCodec="enumeration"/>
               <Property name="Footer" apiName="Footer" russianName="Подвал" russianType="Булево" valueCodec="boolean"/>
-              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="localized-text"/>
               <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>

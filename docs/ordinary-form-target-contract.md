@@ -53,6 +53,8 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 те же именованные типы значений, что и остальные подтвержденные владельцы.
 CheckBox сохраняет булевое ThreeState с исходным значением false. Редактор
 колонки таблицы сохраняет прежние ограничения.
+Table сохраняет Enabled, ToolTip, Font, BorderColor и FieldBackColor через
+общий механизм свойств; ограничения редакторов колонок остаются прежними.
 LabelDecoration сохраняет Hyperlink и Shortcut, PictureDecoration сохраняет
 Shortcut. Сочетание F2 с Alt и Ctrl проверено при открытии формы в режиме
 гиперссылки; физическое нажатие клавиш еще не проверено.

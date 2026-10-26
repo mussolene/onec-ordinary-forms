@@ -2,6 +2,9 @@
 
 ## 1.0.0 - Не выпущен
 
+- Для Table добавлены Enabled, ToolTip, Font, BorderColor и FieldBackColor
+  через общий механизм свойств элементов.
+
 - Для LabelDecoration добавлены VerticalAlign, MarkNegatives и ScrollingText
   с проверенными значениями и значениями по умолчанию.
 

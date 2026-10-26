@@ -668,14 +668,14 @@ void apply_proven_storage_overrides(
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::calendar_field, ControlKind::text_document_field, ControlKind::input_field,
-        ControlKind::label_decoration, ControlKind::progress_bar, ControlKind::track_bar,
+        ControlKind::label_decoration, ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table,
     });
     const std::initializer_list<ControlKind> tool_tip_controls{
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::input_field, ControlKind::calendar_field, ControlKind::label_decoration,
-        ControlKind::progress_bar, ControlKind::track_bar,
+        ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table,
     };
     classify_shared_control_property("ToolTip", StorageCodec::control_base, DefaultKind::string, "",
         tool_tip_controls);
@@ -688,7 +688,7 @@ void apply_proven_storage_overrides(
             ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,
             ControlKind::text_document_field, ControlKind::radio_button, ControlKind::picture_decoration, ControlKind::list_box,
             ControlKind::input_field, ControlKind::calendar_field, ControlKind::usual_group,
-            ControlKind::progress_bar, ControlKind::track_bar});
+            ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table});
     classify_shared_control_property("TextColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
             ControlKind::picture_decoration, ControlKind::radio_button, ControlKind::track_bar});
@@ -701,7 +701,7 @@ void apply_proven_storage_overrides(
             ControlKind::track_bar});
     classify_shared_control_property("FieldBackColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::check_box, ControlKind::choice_field, ControlKind::input_field,
-            ControlKind::list_box, ControlKind::radio_button, ControlKind::calendar_field});
+            ControlKind::list_box, ControlKind::radio_button, ControlKind::calendar_field, ControlKind::table});
     classify_shared_control_property("ButtonTextColor", StorageCodec::control_base, DefaultKind::color,
         "StyleColors.ButtonTextColor", {ControlKind::choice_field, ControlKind::input_field,
             ControlKind::calendar_field});
@@ -711,7 +711,7 @@ void apply_proven_storage_overrides(
     classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
         ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
         ControlKind::choice_field, ControlKind::command_bar, ControlKind::radio_button, ControlKind::picture_decoration,
-        ControlKind::input_field, ControlKind::calendar_field, ControlKind::progress_bar,
+        ControlKind::input_field, ControlKind::calendar_field, ControlKind::progress_bar, ControlKind::table,
     });
 
     for (const auto kind : {ControlKind::calendar_field, ControlKind::check_box, ControlKind::choice_field,

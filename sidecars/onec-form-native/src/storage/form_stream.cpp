@@ -1067,6 +1067,7 @@ constexpr ControlColorPropertySpec base_color_properties[]{
     {model::ControlKind::track_bar, "TextColor", 3, ControlColorDefault::automatic},
     {model::ControlKind::track_bar, "BackColor", 2, ControlColorDefault::automatic},
     {model::ControlKind::track_bar, "ButtonBackColor", 9, ControlColorDefault::button_back},
+    {model::ControlKind::table, "FieldBackColor", 7, ControlColorDefault::automatic},
     {model::ControlKind::calendar_field, "ButtonTextColor", 10, ControlColorDefault::button_text},
     {model::ControlKind::calendar_field, "FieldTextColor", 8, ControlColorDefault::automatic},
     {model::ControlKind::calendar_field, "ButtonBackColor", 9, ControlColorDefault::button_back},
@@ -8164,12 +8165,19 @@ DecodedControl decode_table(
             stored_columns.items[index], child_path(columns_path, index), raw_id,
             warnings, reconstruction_complete));
     }
+    const auto base_path = child_path(child_path(info_path, 2), 0);
+    const auto common = decode_common_control_base(info.items[2].items[0], base_path,
+        CommonControlBaseCapabilities{true, true, model::ControlKind::table});
+    apply_common_control_base(control.properties(), common);
     LV normalized_info = info;
     const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
         child_path(child_path(child_path(info_path, 2), 1), 1));
     const bool read_only = (flags & 0x400U) == 0;
     if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path);
+    auto& normalized_base = normalized_info.items[2].items[0];
+    const auto& canonical_base = canonical_info.items[2].items[0];
+    for (const auto slot : {1U, 4U, 6U, 7U, 12U}) normalized_base.items.at(slot) = canonical_base.items.at(slot);
     auto& normalized_columns = normalized_info.items[2].items[1].items[23];
     const auto& canonical_columns = canonical_info.items[2].items[1].items[23];
     for (std::size_t index = 1; index < normalized_columns.items.size(); ++index) {
@@ -9343,7 +9351,7 @@ LV encode_table(
         fail("OOF1122", "$/Table", "named Table with direct DataPath and basic Position", control.name,
             "Table uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"ReadOnly"}, "$/Table");
+    require_allowed_properties(control.properties(), {"ReadOnly", "Enabled", "ToolTip", "Font", "BorderColor", "FieldBackColor"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -9358,9 +9366,18 @@ LV encode_table(
     }
     const auto& table = std::get<model::TablePayload>(control.payload);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
+    auto info = canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table");
+    auto& base = info.items.at(2).items.at(0);
+    CommonControlBaseFields common{
+        explicit_bool(control.properties(), "Enabled", true),
+        explicit_localized_text(control.properties(), "ToolTip", "$/Table"),
+        explicit_control_font(control.properties(), "$/Table/Font"),
+        explicit_control_color(control.properties(), "BorderColor", "Table")};
+    encode_common_control_base(base, common, "$/Table");
+    encode_named_control_colors(base, model::ControlKind::table, control.properties(), "$/Table");
     return list({
         raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
-        canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table"),
+        std::move(info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
         list({raw("0")})});

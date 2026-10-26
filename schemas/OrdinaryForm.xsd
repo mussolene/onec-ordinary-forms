@@ -2666,7 +2666,7 @@
       <xs:element name="InitialTreeView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="InitialListView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Footer" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>

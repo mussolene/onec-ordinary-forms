@@ -454,6 +454,117 @@ void test_table_read_only_runtime_flags() {
         "valid unmodelled Table flag bits must warn and mark reconstruction incomplete");
 }
 
+void test_table_named_common_properties() {
+    auto seed = form_stream::decode_document(captured_table_payload(), "TableCommon");
+    expect(seed.ok(), "captured Table fixture must decode");
+    const auto table_it = std::find_if(seed.value().collections().controls.begin(), seed.value().collections().controls.end(),
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table_it != seed.value().collections().controls.end(), "fixture must contain Table");
+    const auto table_id = table_it->id;
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, table_id};
+    model::FontValue font;
+    font.kind = model::FontKind::absolute;
+    font.face_name = "Arial";
+    font.height = 10;
+    model::ColorValue border{model::ColorKind::absolute, 12, 34, 56, 255, std::monostate{}};
+    model::ColorValue field{model::ColorKind::absolute, 78, 90, 123, 255, std::monostate{}};
+    const model::LocalizedStringValue tooltip{{{"ru", "Подсказка"}, {"en", "Hint"}}};
+    model::FontValue style_font;
+    style_font.kind = model::FontKind::style_reference;
+    style_font.style = model::QualifiedName{"StyleFonts.TextFont"};
+    model::ColorValue style_color;
+    style_color.kind = model::ColorKind::style_reference;
+    style_color.style = model::QualifiedName{"StyleColors.BorderColor"};
+    const std::vector<std::pair<std::string_view, model::PropertyValue>> properties{
+        {"Enabled", false}, {"ToolTip", tooltip}, {"Font", font}, {"BorderColor", border}, {"FieldBackColor", field},
+        {"ToolTip", std::string{"Hint"}}, {"Font", style_font}, {"BorderColor", style_color}, {"FieldBackColor", style_color}};
+    const std::vector<std::pair<std::string_view, model::PropertyValue>> defaults{
+        {"Enabled", true}, {"ToolTip", std::string{}}, {"Font", model::FontValue{}},
+        {"BorderColor", model::ColorValue{}}, {"FieldBackColor", model::ColorValue{}}};
+    const auto default_stream = form_stream::encode_document(seed.value());
+    expect(default_stream.ok(), "default Table must encode");
+    for (const auto& [name, value] : defaults) {
+        const auto property = model::PropertyId::from_name(name);
+        const auto actual = seed.value().get_prop_val(key, property);
+        expect(actual.status == model::PropertyReadStatus::proven_default && actual.value && *actual.value == value,
+            std::string(name) + " must expose the correct typed default");
+        auto explicit_default = seed.value();
+        expect(explicit_default.set_prop_val(key, property, value) == model::PropertyMutationStatus::applied,
+            std::string(name) + " explicit default must be accepted");
+        const auto encoded = form_stream::encode_document(explicit_default);
+        expect(encoded.ok() && list_stream::dump_compact(encoded.value()) == list_stream::dump_compact(default_stream.value()),
+            std::string(name) + " explicit and implicit defaults must match");
+    }
+    for (const auto& [name, value] : properties) {
+        auto single = seed.value();
+        expect(single.set_prop_val(key, model::PropertyId::from_name(name), value) == model::PropertyMutationStatus::applied,
+            std::string(name) + " must accept a supported value");
+        const auto native = form_stream::encode_document(single);
+        expect(native.ok(), std::string(name) + " must encode");
+        const auto decoded = form_stream::decode_document(native.value(), "TableCommonSingle");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), std::string(name) + " must decode completely");
+        const auto actual = decoded.value().get_prop_val(key, model::PropertyId::from_name(name));
+        expect(actual.value && *actual.value == value, std::string(name) + " must survive native storage");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<" + std::string(name)) != std::string::npos,
+            std::string(name) + " must use named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), std::string(name) + " named XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(native.value()),
+            std::string(name) + " must round-trip exactly");
+        expect(single.set_prop_val(key, model::PropertyId::from_name(name), std::int64_t{42}) ==
+            model::PropertyMutationStatus::invalid_value, std::string(name) + " must reject an incompatible type");
+    }
+    const std::vector<std::pair<std::string_view, model::PropertyValue>> combined_properties{
+        {"Enabled", false}, {"ToolTip", tooltip}, {"Font", font}, {"BorderColor", border}, {"FieldBackColor", field}};
+    auto combined = seed.value();
+    for (const auto& [name, value] : combined_properties)
+        expect(combined.set_prop_val(key, model::PropertyId::from_name(name), value) == model::PropertyMutationStatus::applied,
+            "Table properties must compose");
+    expect(combined.set_prop_val(key, model::PropertyId::from_name("ReadOnly"), false) == model::PropertyMutationStatus::applied,
+        "common properties must compose with ReadOnly");
+    auto combined_stream = form_stream::encode_document(combined);
+    expect(combined_stream.ok(), "combined Table properties must encode");
+    auto decoded_combined = form_stream::decode_document(combined_stream.value(), "TableCommonCombined");
+    expect(decoded_combined.ok() && decoded_combined.value().reconstruction_complete(), "combined Table properties must decode completely");
+    for (const auto& [name, value] : combined_properties) {
+        const auto actual = decoded_combined.value().get_prop_val(key, model::PropertyId::from_name(name));
+        expect(actual.value && *actual.value == value, std::string(name) + " must survive combined native decode");
+    }
+    const auto combined_xml = source::serialize_form_xml(decoded_combined.value());
+    expect(combined_xml.ok(), "combined Table properties must serialize as XML");
+    const auto combined_parsed = source::parse_form_xml(combined_xml.value());
+    expect(combined_parsed.ok(), "combined Table XML must parse");
+    for (const auto& [name, value] : combined_properties) {
+        const auto actual = combined_parsed.value().get_prop_val(key, model::PropertyId::from_name(name));
+        expect(actual.value && *actual.value == value, std::string(name) + " must survive combined XML round-trip");
+    }
+    const auto combined_rebuilt = form_stream::encode_document(combined_parsed.value());
+    expect(combined_rebuilt.ok() && list_stream::dump_compact(combined_rebuilt.value()) ==
+        list_stream::dump_compact(combined_stream.value()), "combined XML must rebuild the same native stream");
+    const auto* table = decoded_combined.value().find_control(table_id);
+    expect(table && table->properties().find(model::PropertyId::from_name("ReadOnly")) &&
+        !std::get<bool>(table->properties().find(model::PropertyId::from_name("ReadOnly"))->value),
+        "ReadOnly must remain intact");
+    auto unknown = combined_stream.value();
+    auto* record = find_record_with_guid(unknown, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(record != nullptr, "combined stream must contain Table");
+    record->items.at(2).items.at(2).items.at(0).items.at(15) = list_stream::ListValue::raw_atom("99");
+    const auto partial = form_stream::decode_document(unknown, "TableUnknownNeighbor");
+    expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown Table base state must remain incomplete");
+    auto malformed = combined_stream.value();
+    record = find_record_with_guid(malformed, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    record->items.at(2).items.at(2).items.at(0).items.at(1) = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(malformed, "TableInvalidEnabled"), "invalid Boolean storage must fail");
+    for (const auto slot : {4U, 6U, 7U, 12U}) {
+        auto bad = combined_stream.value();
+        auto* bad_record = find_record_with_guid(bad, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        bad_record->items.at(2).items.at(2).items.at(0).items.at(slot) = list_stream::ListValue::raw_atom("99");
+        expect(!form_stream::decode_document(bad, "TableMalformedCommon"), "malformed typed base field must fail");
+    }
+}
+
 void test_table_first_in_group_observed_metadata() {
     for (const bool first_in_group : {false, true}) {
         auto literal = captured_table_payload();
@@ -530,6 +641,8 @@ void test_table_first_in_group_fresh_model_xml_bin() {
         model::ControlNode table{model::ObjectId{3}, "Rows", model::TablePayload{}};
         table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
         table.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        table.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        table.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Table hint"));
         if (first_in_group) {
             table.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), *first_in_group);
         }
@@ -571,6 +684,9 @@ void test_table_first_in_group_fresh_model_xml_bin() {
             "fresh binary must retain true and normalize explicit/omitted false");
         expect(!std::get<bool>(table->properties().find(model::PropertyId::from_name("ReadOnly"))->value),
             "ReadOnly=false must coexist with FirstInGroup");
+        expect(!std::get<bool>(table->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+            std::get<std::string>(table->properties().find(model::PropertyId::from_name("ToolTip"))->value) == "Table hint",
+            "common properties must coexist with FirstInGroup and editor profiles");
         const auto& columns = std::get<model::TablePayload>(table->payload).columns;
         expect(columns.size() == 3 && columns[0].control.kind == model::ControlKind::input_field &&
                    columns[1].control.kind == model::ControlKind::choice_field &&
@@ -15136,6 +15252,7 @@ int main() {
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
         test_table_read_only_runtime_flags();
+        test_table_named_common_properties();
         test_table_first_in_group_observed_metadata();
         test_table_first_in_group_fresh_model_xml_bin();
         test_table_column_name_and_data_path_runtime_slots();
