@@ -2341,7 +2341,7 @@ void test_form_close_strict_action_guards() {
     overflow.items[1].items[1].items[1] = list_stream::ListValue::raw_atom("18446744073709551615");
     expect_failure(form_stream::decode_document(overflow, "CloseProbe"), "OOF1120", "$/4", "event ID boundary must reject before unsigned allocation wraps");
     for (const auto& event : std::vector<model::Event>{
-        {model::ObjectId{2}, "OnOpen", "OpenHandler", model::FormRef{model::ObjectId{1}}},
+        {model::ObjectId{2}, "Unknown", "OpenHandler", model::FormRef{model::ObjectId{1}}},
         {model::ObjectId{2}, "OnClose", "", model::FormRef{model::ObjectId{1}}},
         {model::ObjectId{2}, "OnClose", "CloseHandler", model::FormRef{model::ObjectId{99}}},
         {model::ObjectId{2}, "OnClose", "CloseHandler", model::ControlRef{model::ObjectId{1}}}}) {
@@ -2353,6 +2353,70 @@ void test_form_close_strict_action_guards() {
     multiple.add_event(model::Event{model::ObjectId{2}, "OnClose", "CloseHandler", model::FormRef{model::ObjectId{1}}});
     multiple.add_event(model::Event{model::ObjectId{3}, "OnClose", "OtherHandler", model::FormRef{model::ObjectId{1}}});
     expect(!form_stream::encode_document(multiple), "multiple form handlers must reject");
+}
+
+void test_form_named_events() {
+    constexpr std::array events{
+        std::pair{"BeforeOpen", 70000U}, std::pair{"OnOpen", 70001U},
+        std::pair{"BeforeClose", 70002U}, std::pair{"OnClose", 70003U},
+        std::pair{"ChoiceProcessing", 70004U}, std::pair{"ObjectActivationProcessing", 70005U},
+        std::pair{"NewObjectWriteProcessing", 70006U}, std::pair{"NotificationProcessing", 70007U},
+        std::pair{"OnReopen", 70008U}, std::pair{"RefreshDisplay", 70009U},
+        std::pair{"ExternalEvent", 70010U}, std::pair{"AddInDetachmentOnError", 70011U},
+        std::pair{"FillCheckProcessing", 70012U}};
+    const auto make_document = [](std::span<const std::pair<const char*, unsigned int>> selected) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "NamedFormEvents";
+        for (std::size_t i = 0; i < selected.size(); ++i) form.events.emplace_back(model::ObjectId{100 + i});
+        model::OrdinaryFormDocument document(std::move(form));
+        for (std::size_t i = 0; i < selected.size(); ++i)
+            document.add_event(model::Event{model::ObjectId{100 + i}, selected[i].first,
+                std::string("Handle") + selected[i].first, model::FormRef{model::ObjectId{1}}});
+        return document;
+    };
+    const auto check = [&](std::span<const std::pair<const char*, unsigned int>> selected) {
+        const auto encoded = form_stream::encode_document(make_document(selected));
+        expect(encoded.ok(), "named Form events must encode");
+        const auto& records = encoded.value().items[4];
+        expect(records.items.size() == selected.size() + 1, "Form event count must match");
+        for (const auto& [name, id] : selected) {
+            expect(std::ranges::any_of(records.items.begin() + 1, records.items.end(), [&](const auto& record) {
+                return record.items.at(0).atom == std::to_string(id) && record.items.at(1).atom == "e1692cc2-605b-4535-84dd-28440238746c";
+            }), std::string(name) + " must use its observed ID and tag");
+        }
+        const auto decoded = form_stream::decode_document(encoded.value(), "NamedFormEvents");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "Form events must decode completely");
+        expect(decoded.value().form().events.size() == selected.size(), "all Form events must survive");
+        for (const auto& [name, id] : selected) {
+            static_cast<void>(id);
+            expect(std::ranges::any_of(decoded.value().form().events, [&](const auto& ref) {
+                const auto* event = decoded.value().find_event(ref.id());
+                return event && event->name == name && event->handler == std::string("Handle") + name &&
+                    std::holds_alternative<model::FormRef>(event->owner) &&
+                    std::get<model::FormRef>(event->owner).id() == decoded.value().form().id;
+            }), std::string(name) + " must retain handler and owner");
+        }
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "Form events must serialize as named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "named Form event XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "Form events must round-trip through named XML");
+    };
+    check({});
+    for (std::size_t i = 0; i < events.size(); ++i) check(std::span(events).subspan(i, 1));
+    check(std::span(events));
+    auto encoded = form_stream::encode_document(make_document(std::span(events).first(2)));
+    expect(encoded.ok(), "Form event corruption fixture must encode");
+    auto duplicate = encoded.value();
+    duplicate.items[4].items[2].items[0] = duplicate.items[4].items[1].items[0];
+    expect(!form_stream::decode_document(duplicate, "NamedFormEvents"), "duplicate Form event ID must fail");
+    auto unknown = encoded.value();
+    unknown.items[4].items[1].items[0] = list_stream::ListValue::raw_atom("70099");
+    expect(!form_stream::decode_document(unknown, "NamedFormEvents"), "unknown Form event ID must fail");
+    auto metadata = encoded.value();
+    metadata.items[4].items[1].items[2].items[2].items[1] = list_stream::ListValue::string_atom("unexpected");
+    expect(!form_stream::decode_document(metadata, "NamedFormEvents"), "incompatible Form action metadata must fail");
 }
 
 void test_button_multiline_round_trip_and_validation() {
@@ -15986,6 +16050,7 @@ int main() {
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_form_close_strict_action_guards();
+        test_form_named_events();
         test_shared_action_metadata_policies_and_rejections();
         test_button_click_action_metadata_warning_round_trip();
         test_menu_action_values_and_optional_overrides_round_trip();

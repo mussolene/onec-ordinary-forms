@@ -1401,11 +1401,23 @@ struct Metamodel::Impl {
         panel_placement_properties = make_panel_placement_property_descriptors();
         form_properties = make_form_property_descriptors();
         form_events = make_form_event_descriptors();
-        auto close = std::ranges::find(form_events, std::string_view{"OnClose"}, &EventDescriptor::api_name);
-        if (close == form_events.end()) throw std::logic_error("missing Form.OnClose descriptor");
-        close->persistence = PersistenceClass::persisted_editable;
-        close->storage_codec = StorageCodec::event_record;
-        close->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+        constexpr std::array form_event_storage{
+            std::pair{"BeforeOpen", 70000U}, std::pair{"OnOpen", 70001U},
+            std::pair{"BeforeClose", 70002U}, std::pair{"OnClose", 70003U},
+            std::pair{"ChoiceProcessing", 70004U}, std::pair{"ObjectActivationProcessing", 70005U},
+            std::pair{"NewObjectWriteProcessing", 70006U}, std::pair{"NotificationProcessing", 70007U},
+            std::pair{"OnReopen", 70008U}, std::pair{"RefreshDisplay", 70009U},
+            std::pair{"ExternalEvent", 70010U}, std::pair{"AddInDetachmentOnError", 70011U},
+            std::pair{"FillCheckProcessing", 70012U},
+        };
+        for (const auto& [name, id] : form_event_storage) {
+            auto event = std::ranges::find(form_events, std::string_view{name}, &EventDescriptor::api_name);
+            if (event == form_events.end()) throw std::logic_error("missing Form event descriptor");
+            event->persistence = PersistenceClass::persisted_editable;
+            event->storage_codec = StorageCodec::event_record;
+            event->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+            event->storage_event_id = id;
+        }
 
 
         apply_proven_storage_overrides(

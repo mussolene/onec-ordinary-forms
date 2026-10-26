@@ -2873,38 +2873,72 @@ std::optional<std::string> decode_button_event(
     return action.handler;
 }
 
-LV encode_form_close_events(const model::OrdinaryFormDocument& document) {
-    const auto& references = document.form().events;
-    if (references.empty()) return list({raw("0")});
-    if (references.size() != 1) fail("OOF1122", "$/Form/Events", "zero or one owned Form.OnClose", std::to_string(references.size()), "Form event collection is unsupported");
-    const auto* event = document.find_event(references.front().id());
-    if (event == nullptr || event->name != "OnClose" || event->handler.empty() ||
-        !std::holds_alternative<model::FormRef>(event->owner) ||
-        std::get<model::FormRef>(event->owner).id() != document.form().id) {
-        fail("OOF1122", "$/Form/Events", "owned Form.OnClose with non-empty handler", "different event", "Form event cannot be encoded");
+LV encode_form_events(const model::OrdinaryFormDocument& document) {
+    struct EncodedEvent { std::uint32_t storage_id; std::string_view tag; std::string_view handler; };
+    std::vector<EncodedEvent> encoded;
+    std::unordered_set<std::uint64_t> reference_ids;
+    std::unordered_set<std::uint32_t> storage_ids;
+    std::unordered_set<std::string_view> names;
+    for (const auto& reference : document.form().events) {
+        if (!reference_ids.insert(reference.id().value()).second)
+            fail("OOF1122", "$/Form/Events", "unique event reference", std::to_string(reference.id().value()), "Form event reference is duplicated");
+        const auto* event = document.find_event(reference.id());
+        if (!event || event->handler.empty() || !std::holds_alternative<model::FormRef>(event->owner) ||
+            std::get<model::FormRef>(event->owner).id() != document.form().id)
+            fail("OOF1122", "$/Form/Events", "owned Form event with non-empty handler", "invalid", "Form event cannot be encoded");
+        const auto* descriptor = model::metamodel::find_form_event(event->name);
+        if (!descriptor || descriptor->persistence != model::metamodel::PersistenceClass::persisted_editable ||
+            descriptor->storage_codec != model::metamodel::StorageCodec::event_record ||
+            descriptor->storage_tag.empty() || !descriptor->storage_event_id)
+            fail("OOF1122", "$/Form/Events", "known persisted Form event", event->name, "Form event has no proven storage descriptor");
+        if (!names.insert(event->name).second || !storage_ids.insert(*descriptor->storage_event_id).second)
+            fail("OOF1122", "$/Form/Events", "unique event name and storage ID", event->name, "Form event is duplicated");
+        encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event->handler});
     }
-    const auto* descriptor = model::metamodel::find_form_event("OnClose");
-    if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
-        throw std::logic_error("Form.OnClose has no executable storage descriptor");
-    return list({raw("1"), list({raw("70003"), raw(std::string(descriptor->storage_tag)),
-        encode_action(event->handler, ActionMetadataPolicy::empty, "$/Form/Events/OnClose")})});
+    std::ranges::sort(encoded, {}, &EncodedEvent::storage_id);
+    std::vector<LV> items;
+    items.reserve(encoded.size() + 1);
+    items.push_back(raw(std::to_string(encoded.size())));
+    for (const auto& event : encoded) {
+        const auto event_path = child_path("$/Form/Events", items.size());
+        items.push_back(list({raw(std::to_string(event.storage_id)), raw(std::string(event.tag)),
+            encode_action(event.handler, ActionMetadataPolicy::empty, child_path(event_path, 2))}));
+    }
+    return list(std::move(items));
 }
 
-std::optional<std::string> decode_form_close_events(const LV& value, std::string_view path) {
+std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string_view path) {
     require_list(value, path);
     if (value.items.empty()) fail("OOF1103", std::string(path), "event count", "missing", "Form event table has no count");
     const auto count = integer_atom<std::uint32_t>(value.items[0], child_path(path, 0));
-    if (count == 0) { require_arity(value, 1, path); return std::nullopt; }
-    if (count != 1) fail("OOF1116", std::string(path), "zero or one Form.OnClose", std::to_string(count), "Multiple form events are unsupported");
-    require_arity(value, 2, path);
-    const auto& event = value.items[1]; const auto event_path = child_path(path, 1);
-    require_arity(event, 3, event_path);
-    require_raw_constant(event.items[0], "70003", child_path(event_path, 0));
-    const auto* descriptor = model::metamodel::find_form_event("OnClose");
-    if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
-        throw std::logic_error("Form.OnClose has no executable storage descriptor");
-    require_raw_constant(event.items[1], descriptor->storage_tag, child_path(event_path, 1));
-    return decode_action(event.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2)).handler;
+    require_arity(value, static_cast<std::size_t>(count) + 1, path);
+    const auto descriptors = model::metamodel::form_event_descriptors();
+    if (count > descriptors.size()) fail("OOF1114", std::string(path), "supported Form event count", std::to_string(count), "Form event count is unsupported");
+    std::vector<std::pair<const model::metamodel::EventDescriptor*, std::string>> decoded;
+    std::unordered_set<std::uint32_t> storage_ids;
+    std::unordered_set<std::string_view> names;
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto event_path = child_path(path, i + 1);
+        const auto& record = value.items[i + 1];
+        require_arity(record, 3, event_path);
+        const auto id = integer_atom<std::uint32_t>(record.items[0], child_path(event_path, 0));
+        if (!storage_ids.insert(id).second)
+            fail("OOF1114", event_path, "unique Form event ID", std::to_string(id), "Form event ID is duplicated");
+        const auto found = std::ranges::find_if(descriptors, [id](const auto& d) {
+            return d.storage_event_id && *d.storage_event_id == id &&
+                d.persistence == model::metamodel::PersistenceClass::persisted_editable &&
+                d.storage_codec == model::metamodel::StorageCodec::event_record && !d.storage_tag.empty();
+        });
+        if (found == descriptors.end() || !names.insert(found->api_name).second)
+            fail("OOF1114", event_path, "known unique Form event ID", std::to_string(id), "Form event ID is unsupported");
+        require_raw_constant(record.items[1], found->storage_tag, child_path(event_path, 1));
+        const auto action = decode_action(record.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2));
+        decoded.emplace_back(&*found, action.handler);
+    }
+    std::ranges::sort(decoded, {}, [](const auto& event) { return event.first->order; });
+    std::vector<DecodedControlEvent> result;
+    for (auto& [descriptor, handler] : decoded) result.push_back({std::string(descriptor->api_name), std::move(handler)});
+    return result;
 }
 
 struct DecodedPictureDescriptor {
@@ -10189,7 +10223,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 "DataProcessorFormExtension contains unsupported nondefault settings");
             form_extension = descriptor.kind;
         }
-        const auto form_close_handler = decode_form_close_events(payload.items[4], "$/4");
+        const auto form_named_events = decode_form_events(payload.items[4], "$/4");
         const bool auto_title = bool_atom(payload.items[5], "$/5");
         require_raw_constant(payload.items[6], "4", "$/6");
         require_raw_constant(payload.items[7], "1", "$/7");
@@ -10213,7 +10247,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const std::uint64_t stored_max_id = integer_atom<std::uint64_t>(header.items[1], "$/1/1/1");
         const auto default_owner_id = integer_atom<std::uint32_t>(header.items[2], "$/1/1/2");
         if (default_owner_id == 0) fail("OOF1114", "$/1/1/2", "default owner ID or uint32 sentinel", "0", "Default action owner is invalid");
-        if (form_close_handler && stored_max_id == std::numeric_limits<std::uint64_t>::max())
+        if (!form_named_events.empty() && stored_max_id == std::numeric_limits<std::uint64_t>::max())
             fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
         if (stored_max_id >= std::numeric_limits<std::uint32_t>::max())
             fail("OOF1120", "$/1/1/1", "object-ID bound below uint32 max", std::to_string(stored_max_id),
@@ -10737,11 +10771,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         std::uint64_t synthetic_event_offset = 0;
         const std::uint64_t event_id_base = std::max(actual_max_id, next_page_id - 1);
         std::vector<model::PictureAsset> decoded_picture_assets;
-        if (form_close_handler) {
-            if (event_id_base == std::numeric_limits<std::uint64_t>::max()) fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
+        for (const auto& named_event : form_named_events) {
+            if (synthetic_event_offset >= std::numeric_limits<std::uint64_t>::max() - event_id_base)
+                fail("OOF1120", "$/4", "allocatable Form event ID", "uint64 max", "Synthetic event ID overflows");
             const model::ObjectId event_id{event_id_base + ++synthetic_event_offset};
             form.events.push_back(model::EventRef{event_id});
-            document.add_event(model::Event{event_id, "OnClose", *form_close_handler, model::FormRef{form.id}});
+            document.add_event(model::Event{event_id, named_event.name, named_event.handler, model::FormRef{form.id}});
         }
 
         for (auto& decoded_control : pending_controls) {
@@ -11308,7 +11343,7 @@ Result<list_stream::ListValue> encode_document(
             form_section,
             encoded_attributes_result.value(),
             std::move(encoded_extension),
-            encode_form_close_events(document),
+            encode_form_events(document),
             raw(auto_title ? "1" : "0"),
             raw("4"),
             raw("1"),

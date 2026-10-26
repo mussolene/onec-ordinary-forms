@@ -880,6 +880,20 @@ void test_help_metamodel() {
     const auto* current_parent = find_event(ControlKind::table, "OnCurrentParentChange");
     expect(current_parent && current_parent->persistence != PersistenceClass::persisted_editable,
         "Table OnCurrentParentChange must remain unsupported");
+    constexpr std::array form_event_ids{
+        std::pair{"BeforeOpen", 70000U}, std::pair{"OnOpen", 70001U},
+        std::pair{"BeforeClose", 70002U}, std::pair{"OnClose", 70003U},
+        std::pair{"ChoiceProcessing", 70004U}, std::pair{"ObjectActivationProcessing", 70005U},
+        std::pair{"NewObjectWriteProcessing", 70006U}, std::pair{"NotificationProcessing", 70007U},
+        std::pair{"OnReopen", 70008U}, std::pair{"RefreshDisplay", 70009U},
+        std::pair{"ExternalEvent", 70010U}, std::pair{"AddInDetachmentOnError", 70011U},
+        std::pair{"FillCheckProcessing", 70012U}};
+    for (const auto& [name, id] : form_event_ids) {
+        const auto* event = find_form_event(name);
+        expect(event && event->persistence == PersistenceClass::persisted_editable &&
+            event->storage_codec == StorageCodec::event_record && event->storage_event_id == id &&
+            event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c", "Form event descriptor must match observed storage");
+    }
     const auto* form_close = find_form_event("OnClose");
     expect(form_close != nullptr && form_close->persistence == PersistenceClass::persisted_editable &&
         form_close->storage_codec == StorageCodec::event_record &&
