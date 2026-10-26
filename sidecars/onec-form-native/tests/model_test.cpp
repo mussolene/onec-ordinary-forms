@@ -773,7 +773,18 @@ void test_shared_control_default_classifications() {
                classified(ControlKind::choice_field, "Font", StorageCodec::control_base,
                    DefaultKind::font, "automatic", ValueCodec::font) &&
                classified(ControlKind::command_bar, "Font", StorageCodec::control_base,
-                   DefaultKind::font, "automatic", ValueCodec::font),
+                   DefaultKind::font, "automatic", ValueCodec::font) &&
+               classified(ControlKind::radio_button, "BorderColor", StorageCodec::control_base,
+                   DefaultKind::color, "automatic", ValueCodec::color) &&
+               classified(ControlKind::input_field, "BorderColor", StorageCodec::control_base,
+                   DefaultKind::color, "automatic", ValueCodec::color) &&
+               classified(ControlKind::list_box, "BorderColor", StorageCodec::control_base,
+                   DefaultKind::color, "automatic", ValueCodec::color) &&
+               classified(ControlKind::radio_button, "Font", StorageCodec::control_base,
+                   DefaultKind::font, "automatic", ValueCodec::font) &&
+               classified(ControlKind::input_field, "Font", StorageCodec::control_base,
+                   DefaultKind::font, "automatic", ValueCodec::font) &&
+               find_property(ControlKind::list_box, "Font") == nullptr,
         "shared BorderColor and Font rules must retain named codecs and defaults");
 
     const auto* unproven_enabled = find_property(ControlKind::panel, "Enabled");
@@ -891,6 +902,8 @@ void test_document_property_api() {
     document.add_control(ControlNode{ObjectId{15}, "Label", LabelDecorationPayload{}});
     document.add_control(ControlNode{ObjectId{16}, "Choice", ChoiceFieldPayload{}});
     document.add_control(ControlNode{ObjectId{17}, "Dendrogram", DendrogramPayload{}});
+    document.add_control(ControlNode{ObjectId{19}, "Radio", RadioButtonPayload{}});
+    document.add_control(ControlNode{ObjectId{21}, "List", ListBoxPayload{}});
     ControlNode active_x_node{ObjectId{18}, "ActiveX", ActiveXControlPayload{}};
     active_x_node.properties().set_explicit(PropertyId::from_name("CLSID"), std::string("existing"));
     document.add_control(std::move(active_x_node));
@@ -906,6 +919,8 @@ void test_document_property_api() {
     const auto label = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{15}};
     const auto choice = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{16}};
     const auto dendrogram = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{17}};
+    const auto radio = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{19}};
+    const auto list_box = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{21}};
     const auto active_x = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{18}};
 
     const auto input_enabled = document.get_prop_val(input, PropertyId::from_name("Enabled"));
@@ -976,6 +991,8 @@ void test_document_property_api() {
     const auto button_font = document.get_prop_val(button, PropertyId::from_name("Font"));
     const auto check_font = document.get_prop_val(check, PropertyId::from_name("Font"));
     const auto label_font = document.get_prop_val(label, PropertyId::from_name("Font"));
+    const auto radio_font = document.get_prop_val(radio, PropertyId::from_name("Font"));
+    const auto input_font = document.get_prop_val(input, PropertyId::from_name("Font"));
     expect(button_font.status == PropertyReadStatus::proven_default && button_font.value &&
                *button_font.value == PropertyValue{FontValue{}} &&
                check_font.status == PropertyReadStatus::proven_default && check_font.value &&
@@ -984,6 +1001,11 @@ void test_document_property_api() {
     expect(label_font.status == PropertyReadStatus::proven_default && label_font.value &&
                *label_font.value == PropertyValue{FontValue{}},
         "LabelDecoration Font must expose the proven automatic default");
+    expect(radio_font.status == PropertyReadStatus::proven_default && radio_font.value &&
+               *radio_font.value == PropertyValue{FontValue{}} &&
+               input_font.status == PropertyReadStatus::proven_default && input_font.value &&
+               *input_font.value == PropertyValue{FontValue{}},
+        "RadioButton and InputField Font must expose the automatic default");
 
     FontValue label_absolute_font;
     label_absolute_font.kind = FontKind::absolute;
@@ -1024,10 +1046,19 @@ void test_document_property_api() {
 
     const auto button_border = document.get_prop_val(button, PropertyId::from_name("BorderColor"));
     const auto choice_border = document.get_prop_val(choice, PropertyId::from_name("BorderColor"));
+    const auto radio_border = document.get_prop_val(radio, PropertyId::from_name("BorderColor"));
+    const auto input_border = document.get_prop_val(input, PropertyId::from_name("BorderColor"));
+    const auto list_box_border = document.get_prop_val(list_box, PropertyId::from_name("BorderColor"));
     expect(button_border.status == PropertyReadStatus::proven_default && button_border.value &&
                *button_border.value == PropertyValue{ColorValue{}} &&
                choice_border.status == PropertyReadStatus::proven_default && choice_border.value &&
-               *choice_border.value == *button_border.value,
+               *choice_border.value == *button_border.value &&
+               radio_border.status == PropertyReadStatus::proven_default && radio_border.value &&
+               *radio_border.value == *button_border.value &&
+               input_border.status == PropertyReadStatus::proven_default && input_border.value &&
+               *input_border.value == *button_border.value &&
+               list_box_border.status == PropertyReadStatus::proven_default && list_box_border.value &&
+               *list_box_border.value == *button_border.value,
         "automatic BorderColor default must be shared across button and choice controls");
 
     ColorValue red;
@@ -1040,6 +1071,22 @@ void test_document_property_api() {
     expect(button_color.status == PropertyReadStatus::explicit_value && button_color.value &&
                *button_color.value == PropertyValue{red},
         "explicit ColorValue must round-trip through the common property API");
+    expect(document.set_prop_val(radio, PropertyId::from_name("Font"), FontValue{}) ==
+               PropertyMutationStatus::applied &&
+               document.get_prop_val(radio, PropertyId::from_name("Font")).status ==
+                   PropertyReadStatus::explicit_value &&
+               document.set_prop_val(input, PropertyId::from_name("Font"), std::string("Arial")) ==
+                   PropertyMutationStatus::invalid_value,
+        "RadioButton Font must be writable and wrong-typed InputField Font must fail closed");
+    expect(document.set_prop_val(input, PropertyId::from_name("BorderColor"), red) ==
+               PropertyMutationStatus::applied &&
+               document.get_prop_val(input, PropertyId::from_name("BorderColor")).status ==
+                   PropertyReadStatus::explicit_value &&
+               document.set_prop_val(list_box, PropertyId::from_name("BorderColor"), true) ==
+                   PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(radio, PropertyId::from_name("BorderColor"), std::string("red")) ==
+                   PropertyMutationStatus::invalid_value,
+        "new control BorderColor descriptors must accept ColorValue and reject other types");
 
     const auto unknown_default = document.get_prop_val(input, PropertyId::from_name("Border"));
     expect(unknown_default.status == PropertyReadStatus::unknown_default && !unknown_default.value,

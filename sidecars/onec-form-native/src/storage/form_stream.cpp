@@ -1280,9 +1280,11 @@ LV canonical_radio_button_info(
     std::optional<model::DecimalValue> selection_value,
     bool enabled,
     std::string_view caption,
-    std::string_view tool_tip) {
+    std::string_view tool_tip,
+    const model::FontValue* font = nullptr,
+    const model::ColorValue* border_color = nullptr) {
     const auto properties = list({
-        canonical_button_base(enabled, tool_tip),
+        canonical_button_base(enabled, tool_tip, border_color, nullptr, nullptr, font, "$/RadioButton"),
         raw("7"),
         encoded_localized(caption),
         raw("1"),
@@ -1522,7 +1524,9 @@ LV canonical_input_field_info(
     bool read_only,
     const InputFieldFlagValues& flags,
     const InputFieldTextValues& text_values,
-    const InputFieldLayoutValues& layout_values) {
+    const InputFieldLayoutValues& layout_values,
+    const model::FontValue* font = nullptr,
+    const model::ColorValue* border_color = nullptr) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
 )OOF");
@@ -1532,8 +1536,11 @@ LV canonical_input_field_info(
         throw std::logic_error("canonical InputField profile is malformed");
     }
     value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
-    value.items[2].items[0].items[0].items[1] = raw(enabled ? "1" : "0");
-    value.items[2].items[0].items[0].items[12] = encoded_localized(text_values.tool_tip);
+    encode_common_control_base(value.items[2].items[0].items[0],
+        CommonControlBaseFields{enabled, text_values.tool_tip,
+            font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
+            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
+        "$/InputField");
     value.items[2].items[0].items[13] = raw(read_only ? "1" : "0");
     value.items[2].items[0].items[34] = encoded_localized(text_values.format);
     value.items[2].items[0].items[17] = raw(std::to_string(layout_values.horizontal_align));
@@ -4708,9 +4715,10 @@ DecodedControl decode_radio_button(
     const auto base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
     require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_path, 12));
+    const auto common = decode_common_control_base(
+        base_properties, base_path, CommonControlBaseCapabilities{true, true});
+    const bool enabled = common.enabled;
+    const std::string& tool_tip = common.tool_tip;
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     const auto selection_value = decoded_radio_selection_value(info.items[4], child_path(info_path, 4));
@@ -4728,7 +4736,8 @@ DecodedControl decode_radio_button(
     normalized_properties.items[2] = encoded_localized(caption);
     normalized_info.items[2].items[0] = std::move(normalized_properties);
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
-        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip)))
+        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
+            &*common.font, &*common.border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "RadioButton");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -4749,9 +4758,8 @@ DecodedControl decode_radio_button(
         "RadioButton cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::RadioButtonPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    apply_common_control_base(control.properties(), common);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (selection_value) control.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), *selection_value);
     if (first_in_group) control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
     if (!value_type.entries.empty()) control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), value_type);
@@ -5679,13 +5687,15 @@ LV canonical_track_bar_info(
         list({raw("0")})});
 }
 
-LV canonical_list_box_properties(bool enabled, std::string_view tool_tip) {
+LV canonical_list_box_properties(bool enabled, std::string_view tool_tip,
+    const model::ColorValue& border_color) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
         "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
         "{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    properties.items[1] = raw(enabled ? "1" : "0");
-    properties.items[12] = encoded_localized(tool_tip);
+    encode_common_control_base(properties,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt, border_color},
+        "$/ListBox");
     return properties;
 }
 
@@ -5695,7 +5705,8 @@ LV canonical_list_box_info(
     bool show_picture,
     bool show_check_box,
     bool read_only,
-    std::string_view tool_tip) {
+    std::string_view tool_tip,
+    const model::ColorValue& border_color) {
     auto property_flags = parse_constant(
         "{23,100743712,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},"
         "{4,0,{12741203},0},{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,1,0,1,1,"
@@ -5705,7 +5716,7 @@ LV canonical_list_box_info(
     return list({
         raw("1"),
         list({
-            canonical_list_box_properties(enabled, tool_tip),
+            canonical_list_box_properties(enabled, tool_tip, border_color),
             std::move(property_flags),
             raw("6"),
             raw("0"),
@@ -5921,11 +5932,8 @@ DecodedControl decode_list_box(
     const auto properties_path = child_path(info_path, 1);
     require_arity(properties, 7, properties_path);
     const auto base_path = child_path(properties_path, 0);
-    require_arity(properties.items[0], 21, base_path);
-    require_raw_constant(properties.items[0].items[0], "19", child_path(base_path, 0));
-    const bool enabled = bool_atom(properties.items[0].items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        properties.items[0].items[12], child_path(base_path, 12));
+    const auto common = decode_common_control_base(
+        properties.items[0], base_path, CommonControlBaseCapabilities{false, true});
     const auto flags_path = child_path(properties_path, 1);
     require_list(properties.items[1], flags_path);
     require_arity(properties.items[1], 38, flags_path);
@@ -5945,7 +5953,7 @@ DecodedControl decode_list_box(
     normalized_info.items[1].items[4] = raw("0");
     normalized_info.items[1].items[5] = raw("0");
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
-        canonical_list_box_info(true, false, false, true, "")))
+        canonical_list_box_info(true, false, false, true, "", *common.border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "ListBox");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -5963,10 +5971,9 @@ DecodedControl decode_list_box(
         "ListBox cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ListBoxPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    apply_common_control_base(control.properties(), common);
     if (show_picture) control.properties().set_explicit(model::PropertyId::from_name("ShowPicture"), true);
     if (show_check_box) control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (read_only == false) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
@@ -7017,9 +7024,10 @@ DecodedControl decode_input_field(
         fail("OOF1114", child_path(payload_path, 14), "zero Date-only InputField payload value",
             std::to_string(stored_length), "Date-only InputField payload slot must be zero");
     }
-    const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base_info.items[12], child_path(base_info_path, 12));
+    const auto common = decode_common_control_base(
+        base_info, base_info_path, CommonControlBaseCapabilities{true, true});
+    const bool enabled = common.enabled;
+    const std::string& tool_tip = common.tool_tip;
     const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
     const std::string format = decoded_single_language_text(
         payload.items[34], child_path(payload_path, 34));
@@ -7042,7 +7050,8 @@ DecodedControl decode_input_field(
     const InputFieldTextValues text_values{tool_tip, format};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
     if (list_stream::dump_compact(info) != list_stream::dump_compact(
-        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values)))
+        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values,
+            &*common.font, &*common.border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
 
     const auto geometry_path = child_path(path, 3);
@@ -7063,8 +7072,7 @@ DecodedControl decode_input_field(
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "InputField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    apply_common_control_base(control.properties(), common);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     if (!format.empty()) control.properties().set_explicit(model::PropertyId::from_name("Format"), format);
     if (horizontal_align != 4) {
@@ -7913,7 +7921,7 @@ LV encode_list_box(
             control.name, "ListBox uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly"}, "$/ListBox");
+        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly", "BorderColor"}, "$/ListBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
@@ -7930,11 +7938,12 @@ LV encode_list_box(
     const bool show_check_box = explicit_bool(control.properties(), "ShowCheckBox", false);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor", "ListBox");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip),
+        canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip, border_color),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -8044,7 +8053,8 @@ LV encode_radio_button(
         fail("OOF1122", "$/RadioButton", "named RadioButton with plain Position", control.name,
             "RadioButton uses a storage concept outside the supported basic profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "SelectionValue"}, "$/RadioButton");
+    require_allowed_properties(control.properties(),
+        {"Enabled", "Caption", "ToolTip", "SelectionValue", "Font", "BorderColor"}, "$/RadioButton");
     bool first_in_group = false;
     if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("FirstInGroup"))) {
         const auto* value = std::get_if<bool>(&entry->value);
@@ -8103,11 +8113,14 @@ LV encode_radio_button(
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto font = explicit_control_font(control.properties(), "$/RadioButton/Font");
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor", "RadioButton");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip),
+        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
+            &font, &border_color),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
         list({raw("0")}),
@@ -8302,7 +8315,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "Font", "BorderColor"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -8325,6 +8338,8 @@ LV encode_input_field(
             {{"Top", 0}, {"Center", 1}, {"Bottom", 2}}),
         explicit_integer(control.properties(), "ChoiceListHeight", 0, "$/InputField/ChoiceListHeight"),
     };
+    const auto font = explicit_control_font(control.properties(), "$/InputField/Font");
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor", "InputField");
     InputFieldFlagValues input_field_flags{};
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -8334,7 +8349,8 @@ LV encode_input_field(
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags, text_values, layout_values),
+        canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags, text_values, layout_values,
+            &font, &border_color),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

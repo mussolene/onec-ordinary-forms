@@ -685,10 +685,12 @@ void apply_proven_storage_overrides(
     classify_shared_control_property("BorderColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::panel, ControlKind::command_bar, ControlKind::button, ControlKind::check_box,
             ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,
-            ControlKind::text_document_field});
+            ControlKind::text_document_field, ControlKind::radio_button, ControlKind::list_box,
+            ControlKind::input_field});
     classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
         ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
-        ControlKind::choice_field, ControlKind::command_bar,
+        ControlKind::choice_field, ControlKind::command_bar, ControlKind::radio_button,
+        ControlKind::input_field,
     });
 
     auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];

@@ -4,6 +4,7 @@
 
 - Для цели 8.5.1.1343 явно исключен ActiveXControl; добавлен отчет `oof --coverage --json`, отделяющий классификацию дескрипторов от проверки семантики.
 - Добавлены CalendarField.ToolTip, CheckBox.BorderColor, ChoiceField.Font и CommandBar.Font через общие кодеки; значения проверены getters и строгим Designer.
+- Добавлены RadioButton.Font/BorderColor, InputField.Font/BorderColor и ListBox.BorderColor; сохранены профили типов, привязок и редактора таблицы.
 - Запись XML, модуля, ресурсов и BIN использует приватную подготовку файлов и откат при ошибке установки; существующие режимы доступа сохраняются.
 
 

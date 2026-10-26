@@ -2760,6 +2760,154 @@ void test_choice_and_command_bar_font_round_trip_and_validation() {
     }
 }
 
+void test_radio_input_list_common_font_border_color_round_trip() {
+    const auto make_document = [](model::ControlKind kind,
+                                  std::optional<model::FontValue> font = std::nullopt,
+                                  std::optional<model::ColorValue> border_color = std::nullopt) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CommonBaseWaveTwo";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode control = kind == model::ControlKind::radio_button
+            ? model::ControlNode{model::ObjectId{2}, "Radio", model::RadioButtonPayload{}}
+            : kind == model::ControlKind::input_field
+                ? model::ControlNode{model::ObjectId{2}, "Input", model::InputFieldPayload{}}
+                : model::ControlNode{model::ObjectId{2}, "List", model::ListBoxPayload{}};
+        if (kind == model::ControlKind::input_field || kind == model::ControlKind::list_box) {
+            model::TypeDomainEntry entry;
+            entry.term = kind == model::ControlKind::input_field ?
+                model::TypeDomainTerm::string : model::TypeDomainTerm::value_list;
+            if (kind == model::ControlKind::input_field) entry.string = model::LengthQualifiers{20, false};
+            document.add_attribute(model::Attribute{model::ObjectId{3}, "Value", model::TypeDomainPatternValue{{entry}}});
+            control.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        }
+        if (font) control.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
+        if (border_color)
+            control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), *border_color);
+        document.add_control(std::move(control));
+        return document;
+    };
+    const auto common_base = [](list_stream::ListValue& encoded, model::ControlKind kind)
+        -> const list_stream::ListValue* {
+        const auto* record = find_record_with_guid(encoded, model::metamodel::descriptor_for(kind).guid);
+        if (record == nullptr) return nullptr;
+        if (kind == model::ControlKind::radio_button)
+            return &record->items[2].items[2].items[0].items[0];
+        if (kind == model::ControlKind::list_box)
+            return &record->items[2].items[1].items[0];
+        return &record->items[2].items[2].items[0].items[0];
+    };
+    const auto property = [](const model::OrdinaryFormDocument& document, std::string_view name) {
+        const auto* control = document.find_control(model::ObjectId{2});
+        return control == nullptr ? static_cast<const model::PropertyEntry*>(nullptr) :
+            control->properties().find(model::PropertyId::from_name(name));
+    };
+    const model::FontValue automatic_font{};
+    model::FontValue absolute_font;
+    absolute_font.kind = model::FontKind::absolute;
+    absolute_font.face_name = "Arial";
+    absolute_font.height = 12;
+    absolute_font.bold = true;
+    model::FontValue style_font;
+    style_font.kind = model::FontKind::style_reference;
+    style_font.style = model::QualifiedName{"StyleFonts.TextFont"};
+    model::ColorValue automatic_color{};
+    model::ColorValue rgb_color;
+    rgb_color.kind = model::ColorKind::absolute;
+    rgb_color.red = 17;
+    rgb_color.green = 83;
+    rgb_color.blue = 201;
+
+    for (const auto kind : {model::ControlKind::radio_button, model::ControlKind::input_field,
+                             model::ControlKind::list_box}) {
+        const bool supports_font = kind != model::ControlKind::list_box;
+        const auto absent = form_stream::encode_document(make_document(kind));
+        const auto explicit_defaults = form_stream::encode_document(
+            make_document(kind, supports_font ? std::optional{automatic_font} : std::nullopt, automatic_color));
+        expect(absent.ok() && explicit_defaults.ok() &&
+                   list_stream::dump_compact(absent.value()) == list_stream::dump_compact(explicit_defaults.value()),
+            "automatic common-base defaults must normalize to the canonical control record");
+        if (!explicit_defaults.ok()) continue;
+        const auto automatic_decoded = form_stream::decode_document(explicit_defaults.value(), "CommonBaseDefaults");
+        expect(automatic_decoded.ok() && automatic_decoded.value().reconstruction_complete() &&
+                   property(automatic_decoded.value(), "BorderColor") == nullptr &&
+                   (!supports_font || property(automatic_decoded.value(), "Font") == nullptr),
+            "automatic Font and BorderColor defaults must decode as implicit properties");
+
+        const auto check_color = [&](const model::ColorValue& color) {
+            auto encoded = form_stream::encode_document(make_document(kind, std::nullopt, color));
+            expect(encoded.ok(), "common-base BorderColor must encode");
+            if (!encoded.ok()) return;
+            const auto* base = common_base(encoded.value(), kind);
+            const auto packed = (static_cast<unsigned>(color.blue) << 16) |
+                (static_cast<unsigned>(color.green) << 8) | static_cast<unsigned>(color.red);
+            expect(base != nullptr && list_stream::dump_compact(base->items[6]) ==
+                       (color.kind == model::ColorKind::automatic ? "{4,4,{0},4}" :
+                        "{4,0,{" + std::to_string(packed) + "},0}"),
+                "common-base BorderColor must use the observed slot-6 packed RGB layout");
+            const auto decoded = form_stream::decode_document(encoded.value(), "CommonBaseBorderColor");
+            expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                       (color.kind == model::ColorKind::automatic ? property(decoded.value(), "BorderColor") == nullptr :
+                        property(decoded.value(), "BorderColor") != nullptr &&
+                            std::get<model::ColorValue>(property(decoded.value(), "BorderColor")->value) == color),
+                "common-base BorderColor must decode to its named value or implicit automatic default");
+            if (!decoded.ok()) return;
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "named BorderColor XML must serialize");
+            if (!xml.ok()) return;
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "named BorderColor XML must parse");
+            if (!parsed.ok()) return;
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                       list_stream::dump_compact(encoded.value()),
+                "named BorderColor XML must rebuild the same ordinary Form.bin stream");
+        };
+        check_color(automatic_color);
+        check_color(rgb_color);
+
+        if (supports_font) {
+            for (const auto& font : {absolute_font, style_font}) {
+                auto encoded = form_stream::encode_document(make_document(kind, font));
+                expect(encoded.ok(), "absolute and StyleFonts.TextFont common-base fonts must encode");
+                if (!encoded.ok()) continue;
+                const auto* base = common_base(encoded.value(), kind);
+                expect(base != nullptr && list_stream::dump_compact(base->items[4]) ==
+                           list_stream::dump_compact(list_stream::parse(value_codec::encode_font(font))),
+                    "Font must use the shared typed Font codec in base slot 4");
+                const auto decoded = form_stream::decode_document(encoded.value(), "CommonBaseFont");
+                const auto* decoded_font = decoded ? property(decoded.value(), "Font") : nullptr;
+                expect(decoded.ok() && decoded.value().reconstruction_complete() && decoded_font &&
+                           std::get<model::FontValue>(decoded_font->value) == font,
+                    "named common-base Font must survive native decode without incompleteness");
+                if (!decoded.ok()) continue;
+                const auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "named Font XML must serialize");
+                if (!xml.ok()) continue;
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "named Font XML must parse");
+                if (!parsed.ok()) continue;
+                const auto rebuilt = form_stream::encode_document(parsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                           list_stream::dump_compact(encoded.value()),
+                    "named Font XML must rebuild the same ordinary Form.bin stream");
+            }
+        }
+
+        auto wrong_font = make_document(kind);
+        auto wrong_color = make_document(kind);
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
+        if (supports_font)
+            expect(wrong_font.set_prop_val(key, model::PropertyId::from_name("Font"), std::string("Arial")) ==
+                       model::PropertyMutationStatus::invalid_value,
+                "wrong-typed common-base Font must be rejected by the typed public property API");
+        expect(wrong_color.set_prop_val(key, model::PropertyId::from_name("BorderColor"), true) ==
+                   model::PropertyMutationStatus::invalid_value,
+            "wrong-typed common-base BorderColor must be rejected by the typed public property API");
+    }
+}
+
 void test_button_colors_round_trip_and_validation() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -12327,6 +12475,7 @@ int main() {
         test_check_box_font_round_trip_and_validation();
         test_check_box_border_color_round_trip_and_validation();
         test_choice_and_command_bar_font_round_trip_and_validation();
+        test_radio_input_list_common_font_border_color_round_trip();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
