@@ -5541,7 +5541,8 @@ DecodedControl decode_label(
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
             properties_path, "LabelDecoration");
     }
-    require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
+    auto named_events = decode_control_event_collection(
+        info.items[2], child_path(info_path, 2), model::ControlKind::label_decoration);
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -5576,7 +5577,8 @@ DecodedControl decode_label(
             horizontal_align == 4 ? "Auto" : horizontal_align == 2 ? "Right" :
                 horizontal_align == 1 ? "Center" : "Left"});
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 static std::vector<ls::ListValue> canonical_chart_series_defaults(){return {
@@ -8550,13 +8552,13 @@ LV encode_splitter(const model::ControlNode& control, const GeometryContext& con
         list({raw("0")})});
 }
 
-LV encode_label(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_label(const model::OrdinaryFormDocument& document, const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::label_decoration ||
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$/Form/ChildItems", "LabelDecoration with positive int64 ID", control.name, "LabelDecoration is outside the supported profile");
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8597,10 +8599,11 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         control.properties(), "$/LabelDecoration");
     encode_named_control_border(label_properties.items[0], model::ControlKind::label_decoration,
         control.properties(), "$/LabelDecoration");
+    auto label_events = encode_control_event_collection(document, control, "$/LabelDecoration/Events");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("3"), std::move(label_properties), list({raw("0")})}),
+        list({raw("3"), std::move(label_properties), std::move(label_events)}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -10782,7 +10785,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::splitter) {
                     record = encode_splitter(*control, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
-                    record = encode_label(*control, context);
+                    record = encode_label(document, *control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
                     record = encode_calendar_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::dendrogram) {

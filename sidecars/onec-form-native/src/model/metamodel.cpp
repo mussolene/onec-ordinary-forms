@@ -1142,6 +1142,19 @@ void apply_proven_storage_overrides(
     click->storage_codec = StorageCodec::event_record;
     click->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
 
+    auto& label_events = events[static_cast<std::size_t>(ControlKind::label_decoration)];
+    const auto label_click = std::ranges::find(
+        label_events,
+        std::string_view{"Click"},
+        &EventDescriptor::api_name);
+    if (label_click == label_events.end()) {
+        throw std::logic_error("missing LabelDecoration.Click event for proven storage override");
+    }
+    label_click->persistence = PersistenceClass::persisted_editable;
+    label_click->storage_codec = StorageCodec::event_record;
+    label_click->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+    label_click->storage_event_id = 0U;
+
     constexpr std::array calendar_event_storage{
         std::pair{"Selection", 1U},
         std::pair{"DragStart", 3U},

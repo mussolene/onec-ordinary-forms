@@ -4781,6 +4781,131 @@ void test_button_then_label_decoration_round_trip() {
         "unsupported LabelDecoration storage leaves must fail closed");
 }
 
+void test_label_decoration_click_event_round_trip_and_guards() {
+    const auto make_document = [](bool include_event, bool event_owner_is_control = true,
+                                  std::uint64_t reference_id = 3, std::string handler = "LabelHandler") {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "LabelClick";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode label{model::ObjectId{2}, "Label", model::LabelDecorationPayload{}};
+        if (include_event) {
+            label.events = {model::EventRef{model::ObjectId{reference_id}}};
+            const model::EventOwner owner = event_owner_is_control
+                ? model::EventOwner{model::ControlRef{model::ObjectId{2}}}
+                : model::EventOwner{model::FormRef{model::ObjectId{1}}};
+            document.add_event(model::Event{model::ObjectId{3}, "Click", std::move(handler), owner});
+        }
+        document.add_control(std::move(label));
+        return document;
+    };
+    constexpr std::string_view click_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+    const auto* descriptor = model::metamodel::find_event(model::ControlKind::label_decoration, "Click");
+    expect(descriptor && descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::event_record &&
+               descriptor->storage_tag == click_tag && descriptor->storage_event_id == 0,
+        "LabelDecoration.Click must expose the proven shared event descriptor and numeric ID zero");
+
+    auto without_event = make_document(false);
+    const auto absent_encoded = form_stream::encode_document(without_event);
+    expect(absent_encoded.ok(), "LabelDecoration without Click must encode");
+    auto absent_inspection = absent_encoded.value();
+    auto* absent_record = find_record_with_guid(
+        absent_inspection, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    const auto* absent_events = absent_record ? bounded_list_item(*absent_record, {2, 2}) : nullptr;
+    expect(absent_events && list_stream::dump_compact(*absent_events) == "{0}",
+        "LabelDecoration with no event must retain the empty shared event collection");
+    const auto absent_decoded = form_stream::decode_document(absent_encoded.value(), "LabelClick");
+    const auto* absent_label = absent_decoded ? absent_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(absent_decoded.ok() && absent_label && absent_label->events.empty(),
+        "LabelDecoration with no Click must decode without synthetic events");
+
+    auto document = make_document(true);
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "owned LabelDecoration.Click event must encode");
+    auto inspection = encoded.value();
+    auto* record = find_record_with_guid(
+        inspection, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    const auto* event_collection = record ? bounded_list_item(*record, {2, 2}) : nullptr;
+    expect(event_collection && event_collection->items.size() == 2 &&
+               event_collection->items[0].atom == "1" && event_collection->items[1].is_list &&
+               event_collection->items[1].items.size() == 3 &&
+               event_collection->items[1].items[0].atom == "0" &&
+               event_collection->items[1].items[1].atom == click_tag &&
+               event_collection->items[1].items[2].items.size() == 3 &&
+               event_collection->items[1].items[2].items[1].atom == "LabelHandler",
+        "LabelDecoration.Click must serialize as one event with ID zero, tag, and handler");
+    const auto decoded = form_stream::decode_document(encoded.value(), "LabelClick");
+    const auto* label = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* event = label && !label->events.empty()
+        ? decoded.value().find_event(label->events.front().id()) : nullptr;
+    const auto* owner = event ? std::get_if<model::ControlRef>(&event->owner) : nullptr;
+    expect(decoded.ok() && label && label->events.size() == 1 && event && event->name == "Click" &&
+               event->handler == "LabelHandler" && owner && owner->id() == label->id,
+        "decoded Click must be owned by the LabelDecoration and retain its handler");
+    const auto storage_rebuilt = form_stream::encode_document(decoded.value());
+    expect(storage_rebuilt.ok() && list_stream::dump_compact(storage_rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "LabelDecoration.Click must survive exact stream decode and re-encode");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("Click") != std::string::npos &&
+               xml.value().find("LabelHandler") != std::string::npos,
+        "LabelDecoration.Click must serialize as a named event and handler in XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named LabelDecoration.Click XML must parse");
+    const auto xml_rebuilt = form_stream::encode_document(parsed.value());
+    expect(xml_rebuilt.ok() && list_stream::dump_compact(xml_rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "LabelDecoration.Click must survive named XML and rebuild the exact stream");
+
+    expect(!form_stream::encode_document(make_document(true, false)),
+        "a Click event owned by another object must be rejected");
+    expect(!form_stream::encode_document(make_document(true, true, 99)),
+        "a missing referenced event ID must be rejected");
+    expect(!form_stream::encode_document(make_document(true, true, 3, "")),
+        "an empty LabelDecoration.Click handler must be rejected");
+
+    {
+        auto bad = encoded.value();
+        auto* bad_record = find_record_with_guid(
+            bad, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+        auto* events = bad_record ? bounded_list_item(*bad_record, {2, 2}) : nullptr;
+        auto* id = events ? bounded_list_item(*events, {1, 0}) : nullptr;
+        expect(id != nullptr, "LabelDecoration event ID field must be bounds-checkable");
+        if (id) {
+            *id = list_stream::ListValue::raw_atom("1");
+            expect(!form_stream::decode_document(bad, "LabelClickBadId"),
+                "unknown LabelDecoration event ID must be rejected");
+        }
+    }
+    {
+        auto bad = encoded.value();
+        auto* bad_record = find_record_with_guid(
+            bad, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+        auto* events = bad_record ? bounded_list_item(*bad_record, {2, 2}) : nullptr;
+        auto* tag = events ? bounded_list_item(*events, {1, 1}) : nullptr;
+        expect(tag != nullptr, "LabelDecoration event tag field must be bounds-checkable");
+        if (tag) {
+            *tag = list_stream::ListValue::raw_atom("unsupported-tag");
+            expect(!form_stream::decode_document(bad, "LabelClickBadTag"),
+                "LabelDecoration event with an unknown tag must be rejected");
+        }
+    }
+    {
+        auto bad = encoded.value();
+        auto* bad_record = find_record_with_guid(
+            bad, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+        auto* handler = bad_record ? bounded_list_item(*bad_record, {2, 2, 1, 2, 1}) : nullptr;
+        expect(handler != nullptr, "LabelDecoration event handler field must be bounds-checkable");
+        if (handler) {
+            *handler = list_stream::ListValue::string_atom("");
+            expect(!form_stream::decode_document(bad, "LabelClickEmptyHandler"),
+                "LabelDecoration event with an empty handler must be rejected");
+        }
+    }
+}
+
 void test_label_border_color_round_trip() {
     const auto make_document = [](std::optional<model::ColorValue> color) {
         model::Form form;
@@ -14728,6 +14853,7 @@ int main() {
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
+        test_label_decoration_click_event_round_trip_and_guards();
         test_label_border_color_round_trip();
         test_label_font_round_trip_and_validation();
         test_label_partial_reconstruction_warning_and_build();
