@@ -7709,7 +7709,31 @@ DecodedControl decode_dendrogram(
     validate_dendrogram_graph(graph, child_path(data_path, 2));
     normalized_data.items[2] = expected_data.items[2];
     normalized_data.items[3] = expected_data.items[3];
-    validate_embedded_chart_info(record.items[2].items[1], expected_data.items[1],
+    auto embedded_chart = record.items[2].items[1];
+    const auto embedded_path = child_path(data_path, 1);
+    require_arity(embedded_chart, 3, embedded_path);
+    auto& info = embedded_chart.items[2];
+    const auto info_path = child_path(embedded_path, 2);
+    require_list(info, info_path);
+    const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
+    const auto series_size = static_cast<std::size_t>(series_count);
+    if (series_size >= std::numeric_limits<std::size_t>::max() / 11)
+        fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Embedded Chart Series count overflows its offset");
+    const auto points_offset = std::size_t{5} + 11 * (series_size + 1) + 1;
+    const auto point_count = integer_atom<std::uint32_t>(at(info, points_offset, info_path), child_path(info_path, points_offset));
+    const auto expected_count = chart_info_item_count(series_size, static_cast<std::size_t>(point_count), info_path);
+    const auto flag = points_offset + 1 + 11 * static_cast<std::size_t>(point_count) + 94;
+    const bool has_events = bool_atom(at(info, flag, info_path), child_path(info_path, flag));
+    if (info.items.size() != expected_count + (has_events ? 1U : 0U))
+        fail("OOF1102", info_path, "supported embedded Chart cardinality", std::to_string(info.items.size()), "Embedded Chart Info dimensions are unsupported");
+    std::vector<DecodedControlEvent> named_events;
+    if (has_events) {
+        named_events = decode_control_event_collection(at(info, flag + 1, info_path), child_path(info_path, flag + 1), model::ControlKind::dendrogram);
+        if (named_events.empty()) fail("OOF1114", child_path(info_path, flag + 1), "nonempty Dendrogram event collection", "empty", "Dendrogram event flag requires events");
+        info.items.erase(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1));
+        info.items[flag] = raw("0");
+    }
+    validate_embedded_chart_info(embedded_chart, expected_data.items[1],
         child_path(data_path, 1), raw_id, "Dendrogram", warnings, reconstruction_complete);
     normalized_data.items[1] = expected_data.items[1];
     require_exact(normalized_data, expected_data, data_path,
@@ -7733,7 +7757,7 @@ DecodedControl decode_dendrogram(
             "DendrogramOrientation", "Down"});
     }
     control.position = std::move(geometry.position);
-    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
 
 
@@ -9584,14 +9608,14 @@ LV encode_calendar_field(
     });
 }
 
-LV encode_dendrogram(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_dendrogram(const model::OrdinaryFormDocument& document, const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::dendrogram || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "Dendrogram with positive int64 ID", control.name,
             "Dendrogram is outside the supported profile");
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -9604,6 +9628,14 @@ LV encode_dendrogram(const model::ControlNode& control, const GeometryContext& c
     const auto& graph = std::get<model::DendrogramPayload>(control.payload);
     validate_dendrogram_graph(graph, "$/Dendrogram");
     LV data = canonical_dendrogram_data(orientation);
+    if (!control.events.empty()) {
+        auto& info = data.items.at(1).items.at(2);
+        constexpr std::size_t flag = 112;
+        require_raw_constant(info.items.at(flag), "0", "$/Dendrogram/Events");
+        info.items.at(flag) = raw("1");
+        info.items.insert(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1),
+            encode_control_event_collection(document, control, "$/Dendrogram/Events"));
+    }
     std::vector<LV> item_rows;
     std::map<std::string, std::uint64_t> item_keys;
     for (std::size_t index = 0; index < graph.items.size(); ++index) {
@@ -11249,7 +11281,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::calendar_field) {
                     record = encode_calendar_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::dendrogram) {
-                    record = encode_dendrogram(*control, context);
+                    record = encode_dendrogram(document, *control, context);
                 } else if (control->kind() == model::ControlKind::spreadsheet_document_field) {
                     record = encode_spreadsheet_document_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::text_document_field) {

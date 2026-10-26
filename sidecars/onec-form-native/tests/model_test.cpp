@@ -734,6 +734,13 @@ void test_help_metamodel() {
     expect(
         event_descriptors(ControlKind::input_field).size() == 9,
         "InputField must retain the exact 9-event TextBox surface");
+    for (const auto& [name, id] : {std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}}) {
+        const auto* event = find_event(ControlKind::dendrogram, name);
+        expect(event && event->persistence == PersistenceClass::persisted_editable &&
+                event->storage_codec == StorageCodec::event_record && event->storage_event_id == id &&
+                event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c",
+            "Dendrogram event descriptors must match observed IDs and tag");
+    }
     for (const auto kind : {ControlKind::check_box, ControlKind::radio_button, ControlKind::track_bar}) {
         const auto* on_change = find_event(kind, "OnChange");
         expect(on_change && on_change->persistence == PersistenceClass::persisted_editable &&

@@ -15041,6 +15041,74 @@ void test_chart_named_integer_and_delimiter_properties() {
     }
 }
 
+void test_dendrogram_named_events() {
+    const auto find_record = [](auto&& self, list_stream::ListValue& node) -> list_stream::ListValue* {
+        if (node.is_list && node.items.size() == 6 && !node.items[0].is_list &&
+            node.items[0].atom == model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid) return &node;
+        for (auto& child : node.items) if (auto* found = self(self, child)) return found;
+        return nullptr;
+    };
+    for (const bool graph : {false, true}) {
+        for (const unsigned mask : {0U, 1U, 2U, 3U}) {
+            std::string xml = R"XML(<Form id="1" name="TreeForm" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="2" name="Tree"><Position/>)XML";
+            if (graph) xml += R"XML(<Items><Item><Value>A</Value><Text><Item language="ru">А</Item></Text></Item><Item><Value>B</Value><Text><Item language="ru">Б</Item></Text></Item></Items><Links><Link><FirstItem>A</FirstItem><SecondItem>B</SecondItem><Title><Item language="ru">A-B</Item></Title><Distance>1.25</Distance></Link></Links>)XML";
+            if (mask) {
+                xml += "<Events>";
+                if (mask & 1U) xml += "<Selection id=\"100\">OnSelection</Selection>";
+                if (mask & 2U) xml += "<DetailProcessing id=\"101\">OnDetail</DetailProcessing>";
+                xml += "</Events>";
+            }
+            xml += "</Dendrogram></ChildItems></Form>";
+            const auto document = source::parse_form_xml(xml);
+            expect(document.ok(), "Dendrogram event fixture must parse");
+            const auto encoded = form_stream::encode_document(document.value());
+            expect(encoded.ok(), "Dendrogram event fixture must encode");
+            auto stream = encoded.value();
+            auto* record = find_record(find_record, stream);
+            expect(record != nullptr, "Dendrogram record must be present");
+            auto& info = record->items[2].items[1].items[2];
+            expect(info.items[112].atom == (mask ? "1" : "0"), "Dendrogram event flag must match event presence");
+            if (mask) {
+                const auto& events = info.items[113];
+                expect(events.items.size() == 1 + ((mask & 1U) ? 1U : 0U) + ((mask & 2U) ? 1U : 0U), "Dendrogram event count must match");
+                expect(events.items[1].items[0].atom == ((mask & 1U) ? "0" : "1") &&
+                    events.items[1].items[1].atom == "e1692cc2-605b-4535-84dd-28440238746c", "Dendrogram event record must match platform");
+            }
+            const auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "Dendrogram events and graph must decode completely");
+            const auto* control = decoded.value().find_control(model::ObjectId{2});
+            expect(control && control->events.size() == ((mask & 1U) ? 1U : 0U) + ((mask & 2U) ? 1U : 0U), "Dendrogram events must survive");
+            for (const auto& reference : control->events) {
+                const auto* event = decoded.value().find_event(reference.id());
+                expect(event && std::holds_alternative<model::ControlRef>(event->owner) &&
+                    std::get<model::ControlRef>(event->owner).id() == control->id &&
+                    ((event->name == "Selection" && event->handler == "OnSelection") ||
+                     (event->name == "DetailProcessing" && event->handler == "OnDetail")),
+                    "Dendrogram event name, handler and owner must survive");
+            }
+            const auto& payload = std::get<model::DendrogramPayload>(control->payload);
+            expect(payload.items.size() == (graph ? 2U : 0U) && payload.links.size() == (graph ? 1U : 0U), "Dendrogram graph must survive events");
+            const auto rendered = source::serialize_form_xml(decoded.value());
+            expect(rendered.ok(), "Dendrogram event XML must serialize");
+            const auto parsed = source::parse_form_xml(rendered.value());
+            expect(parsed.ok(), "Dendrogram event XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "Dendrogram XML/native cycle must preserve events and graph");
+            if (mask == 3U) {
+                const auto reject = [&](auto mutate, const char* message) {
+                    auto bad = encoded.value(); auto& c = find_record(find_record, bad)->items[2].items[1].items[2]; mutate(c);
+                    expect(!form_stream::decode_document(bad), message);
+                };
+                reject([](auto& c) { c.items[112] = list_stream::ListValue::raw_atom("2"); }, "invalid Dendrogram event flag must fail");
+                reject([](auto& c) { c.items[113].items[1].items[0] = list_stream::ListValue::raw_atom("99"); }, "invalid Dendrogram event ID must fail");
+                reject([](auto& c) { c.items[113].items[2].items[0] = list_stream::ListValue::raw_atom("0"); }, "duplicate Dendrogram event ID must fail");
+                reject([](auto& c) { c.items[113].items[1].items[1] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); }, "invalid Dendrogram event tag must fail");
+                reject([](auto& c) { c.items[113] = list_stream::parse("{0}"); }, "empty Dendrogram table with event flag must fail");
+            }
+        }
+    }
+}
+
 void test_chart_named_events() {
     constexpr std::array events{std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}};
     const auto make_document = [&](std::size_t series_count, std::size_t point_count,
@@ -16475,6 +16543,7 @@ int main() {
         test_chart_named_boolean_properties();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
+        test_dendrogram_named_events();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();

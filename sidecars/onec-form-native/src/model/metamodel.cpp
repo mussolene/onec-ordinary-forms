@@ -1251,6 +1251,7 @@ void apply_proven_storage_overrides(
     };
     constexpr std::array chart_events{std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}};
     classify_control_events(ControlKind::chart, chart_events);
+    classify_control_events(ControlKind::dendrogram, chart_events);
     classify_control_events(ControlKind::spreadsheet_document_field, spreadsheet_events);
     classify_control_events(ControlKind::picture_decoration, picture_drag_events);
     classify_control_events(ControlKind::list_box, list_box_events);

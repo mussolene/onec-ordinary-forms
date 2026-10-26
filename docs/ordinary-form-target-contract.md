@@ -59,6 +59,9 @@ Chart сохраняет локализованные ValueLabelFormat и Percen
 Chart сохраняет LabelDelimiter, MaxSeriesCount, MaxSeriesPercent,
 BeginGaugeAngle, EndGaugeAngle, GaugeThickness и GaugeBushThickness.
 Числовые границы проверяются при чтении и записи.
+Dendrogram сохраняет события Selection и DetailProcessing вместе с узлами
+и связями. Назначения проверены платформой; вызов событий интерфейсом
+отдельно не проверен.
 Chart сохраняет именованные события Selection и DetailProcessing совместно
 с сериями, точками и значениями. Вызов событий интерфейсом отдельно не проверен.
 Chart сохраняет 13 булевых свойств, включая автоматические пределы и
