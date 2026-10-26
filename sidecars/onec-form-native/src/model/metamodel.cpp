@@ -915,6 +915,7 @@ void apply_proven_storage_overrides(
     }
 
     auto& check_box = properties[static_cast<std::size_t>(ControlKind::check_box)];
+    classify_property(check_box, "ThreeState", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(
         check_box,
         "Caption",

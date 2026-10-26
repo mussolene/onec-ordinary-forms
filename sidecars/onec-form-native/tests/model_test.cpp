@@ -165,6 +165,13 @@ void test_descriptors() {
                check_box_tool_tip->default_value.kind == DefaultKind::string &&
                check_box_tool_tip->default_value.canonical.empty(),
         "CheckBox ToolTip descriptor must declare its empty localized base-string default");
+    const auto* check_box_three_state = find_property(ControlKind::check_box, "ThreeState");
+    expect(check_box_three_state && check_box_three_state->persistence == PersistenceClass::persisted_editable &&
+               check_box_three_state->storage_codec == StorageCodec::control_info &&
+               check_box_three_state->value_codec == ValueCodec::boolean &&
+               check_box_three_state->default_value.kind == DefaultKind::boolean &&
+               check_box_three_state->default_value.canonical == "false",
+        "CheckBox ThreeState descriptor must use its Boolean control-info slot and false default");
     const auto* check_box_font = find_property(ControlKind::check_box, "Font");
     expect(check_box_font && check_box_font->persistence == PersistenceClass::persisted_editable &&
                check_box_font->storage_codec == StorageCodec::control_base &&

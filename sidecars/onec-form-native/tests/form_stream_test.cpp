@@ -690,6 +690,16 @@ void test_table_column_choice_and_check_box_profiles() {
         model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}});
     expect(!form_stream::encode_document(localized_editor_tooltip).ok(),
         "multilingual standalone ChoiceField ToolTip must not expand TableColumnEditor profiles");
+    auto three_state_editor = make_document();
+    auto* three_state_table = const_cast<model::ControlNode*>(
+        three_state_editor.find_control(model::ObjectId{3}));
+    expect(three_state_table != nullptr, "ThreeState TableColumnEditor fixture must contain its Table");
+    if (three_state_table != nullptr) {
+        std::get<model::TablePayload>(three_state_table->payload).columns[2].control.properties.set_explicit(
+            model::PropertyId::from_name("ThreeState"), true);
+        expect(!form_stream::encode_document(three_state_editor).ok(),
+            "standalone CheckBox ThreeState support must not expand TableColumnEditor profiles");
+    }
     const auto document = make_document();
     auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "three named default Table editors must encode" :
@@ -2374,6 +2384,91 @@ void test_check_box_tooltip_round_trip_and_validation() {
     expect(multilingual_reencoded.ok() && list_stream::dump_compact(multilingual_reencoded.value()) ==
                list_stream::dump_compact(multilingual),
         "multilingual CheckBox ToolTip must re-encode without loss");
+}
+
+void test_check_box_three_state_round_trip_and_validation() {
+    const auto make_document = [] {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CheckBoxThreeState";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainEntry boolean_entry;
+        boolean_entry.term = model::TypeDomainTerm::boolean;
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Flag",
+            model::TypeDomainPatternValue{{boolean_entry}}});
+        model::ControlNode check_box{model::ObjectId{2}, "FlagControl", model::CheckBoxPayload{}};
+        check_box.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        document.add_control(std::move(check_box));
+        return document;
+    };
+    const model::OrdinaryFormDocument::ObjectKey key{
+        model::ObjectCategory::control, model::ObjectId{2}};
+    const auto property = model::PropertyId::from_name("ThreeState");
+    const auto* descriptor = model::metamodel::find_property(model::ControlKind::check_box, "ThreeState");
+    expect(descriptor && descriptor->value_codec == model::metamodel::ValueCodec::boolean &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::control_info &&
+               descriptor->default_value.kind == model::metamodel::DefaultKind::boolean &&
+               descriptor->default_value.canonical == "false",
+        "CheckBox ThreeState must expose the existing Boolean control-info descriptor and false default");
+
+    auto defaults = make_document();
+    const auto default_value = defaults.get_prop_val(key, property);
+    expect(default_value.status == model::PropertyReadStatus::proven_default &&
+               default_value.value == std::optional<model::PropertyValue>{false},
+        "CheckBox ThreeState must return its proven false default");
+    const auto default_encoded = form_stream::encode_document(defaults);
+    expect(default_encoded.ok(), "default CheckBox ThreeState must encode");
+    auto default_slot_source = default_encoded.value();
+    auto* default_record = find_record_with_guid(
+        default_slot_source, model::metamodel::descriptor_for(model::ControlKind::check_box).guid);
+    const auto* default_slot = default_record ? bounded_list_item(*default_record, {2, 1, 2}) : nullptr;
+    expect(default_slot && !default_slot->is_list && default_slot->atom == "0",
+        "CheckBox ThreeState default must serialize as zero in the observed slot");
+    const auto default_decoded = form_stream::decode_document(default_encoded.value(), "CheckBoxThreeState");
+    const auto* default_control = default_decoded ? default_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(default_decoded.ok() && default_control &&
+               !default_control->properties().find(property),
+        "decoded CheckBox false default must remain implicit");
+
+    expect(defaults.set_prop_val(key, property, true) == model::PropertyMutationStatus::applied,
+        "CheckBox ThreeState must accept Boolean true through SetPropVal");
+    expect(defaults.set_prop_val(key, property, std::string("true")) ==
+               model::PropertyMutationStatus::invalid_value,
+        "CheckBox ThreeState must reject non-Boolean values");
+    const auto encoded = form_stream::encode_document(defaults);
+    expect(encoded.ok(), "CheckBox ThreeState=true must encode");
+    auto inspect_stream = encoded.value();
+    auto* record = find_record_with_guid(
+        inspect_stream, model::metamodel::descriptor_for(model::ControlKind::check_box).guid);
+    auto* slot = record ? bounded_list_item(*record, {2, 1, 2}) : nullptr;
+    expect(slot && !slot->is_list && slot->atom == "1",
+        "CheckBox ThreeState true must occupy the observed single-bit stream slot");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CheckBoxThreeState");
+    const auto* control = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* decoded_value = control ? control->properties().find(property) : nullptr;
+    expect(decoded.ok() && decoded_value && std::get<bool>(decoded_value->value),
+        "CheckBox ThreeState true must decode as an explicit Boolean");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<ThreeState>true</ThreeState>") != std::string::npos,
+        "CheckBox ThreeState must serialize through its named XML property");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named CheckBox ThreeState XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "named CheckBox ThreeState XML must rebuild the exact stream value");
+
+    auto malformed = encoded.value();
+    auto* malformed_record = find_record_with_guid(
+        malformed, model::metamodel::descriptor_for(model::ControlKind::check_box).guid);
+    auto* malformed_slot = malformed_record ? bounded_list_item(*malformed_record, {2, 1, 2}) : nullptr;
+    expect(malformed_slot != nullptr, "CheckBox ThreeState malformed slot must be bounds-checkable");
+    if (malformed_slot) {
+        *malformed_slot = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(malformed, "MalformedCheckBoxThreeState"),
+            "CheckBox ThreeState storage values other than zero or one must fail closed");
+    }
 }
 
 void test_choice_field_static_profile_round_trip_and_validation() {
@@ -12075,7 +12170,7 @@ void test_two_input_fields_round_trip() {
         invalid_checkbox.data_path = model::DataPath{model::AttributeRef{model::ObjectId{8}}, std::move(members)};
         if (add_unsupported_property) {
             invalid_checkbox.properties().set_explicit(
-                model::PropertyId::from_name("ThreeState"), true);
+                model::PropertyId::from_name("UnprovenCheckBoxFlag"), true);
         }
         invalid_document.add_control(std::move(invalid_checkbox));
         return !form_stream::encode_document(invalid_document);
@@ -14542,6 +14637,7 @@ int main() {
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
         test_check_box_tooltip_round_trip_and_validation();
+        test_check_box_three_state_round_trip_and_validation();
         test_choice_field_static_profile_round_trip_and_validation();
         test_check_box_font_round_trip_and_validation();
         test_check_box_border_color_round_trip_and_validation();

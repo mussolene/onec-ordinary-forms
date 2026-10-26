@@ -1653,7 +1653,8 @@ LV canonical_html_document_field_data(std::int32_t output) {
 LV canonical_check_box_info(bool enabled, model::PropertyValue caption, model::PropertyValue tool_tip,
     const model::FontValue* font = nullptr, const model::ColorValue* border_color = nullptr,
     bool transparent = false, std::int32_t title_location = 1,
-    std::int32_t horizontal_align = 0, std::int32_t vertical_align = 1) {
+    std::int32_t horizontal_align = 0, std::int32_t vertical_align = 1,
+    bool three_state = false) {
     return list({
         raw("1"),
         list({
@@ -1670,7 +1671,7 @@ LV canonical_check_box_info(bool enabled, model::PropertyValue caption, model::P
                 raw("1"),
             }),
             raw("4"),
-            raw("0"),
+            raw(three_state ? "1" : "0"),
             raw("0"),
             raw("0"),
             raw("0"),
@@ -6662,6 +6663,7 @@ DecodedControl decode_check_box(
     const auto title_location = integer_atom<std::int32_t>(properties.items[3], child_path(properties_path, 3));
     const auto horizontal_align = integer_atom<std::int32_t>(properties.items[4], child_path(properties_path, 4));
     const auto vertical_align = integer_atom<std::int32_t>(properties.items[5], child_path(properties_path, 5));
+    const bool three_state = bool_atom(info_payload.items[2], child_path(payload_path, 2));
     if (title_location < 0 || title_location > 1)
         fail("OOF1114", child_path(properties_path, 3), "TitleLocation storage value 0 or 1",
             std::to_string(title_location), "CheckBox.TitleLocation storage value is unsupported");
@@ -6684,7 +6686,7 @@ DecodedControl decode_check_box(
     normalized_info.items[2] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color, false,
-            title_location, horizontal_align, vertical_align)))
+            title_location, horizontal_align, vertical_align, three_state)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CheckBox");
 
     const auto geometry_path = child_path(path, 3);
@@ -6717,6 +6719,9 @@ DecodedControl decode_check_box(
         static constexpr std::string_view members[] = {"Top", "Center", "Bottom"};
         control.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
             model::EnumerationValue{"VerticalAlign", std::string(members[vertical_align])});
+    }
+    if (three_state) {
+        control.properties().set_explicit(model::PropertyId::from_name("ThreeState"), true);
     }
     if (caption != model::PropertyValue{std::string{}})
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
@@ -8797,7 +8802,7 @@ LV encode_check_box(
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent", "TitleLocation", "HorizontalAlign", "VerticalAlign"}, "$/CheckBox");
+    require_allowed_properties(control.properties(), {"Enabled", "ThreeState", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent", "TitleLocation", "HorizontalAlign", "VerticalAlign"}, "$/CheckBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
@@ -8808,6 +8813,7 @@ LV encode_check_box(
             "CheckBox DataPath must target a Boolean attribute");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const bool three_state = explicit_bool(control.properties(), "ThreeState", false);
     const auto caption = explicit_localized_text(control.properties(), "Caption", "$/CheckBox");
     const auto tool_tip = explicit_localized_text(control.properties(), "ToolTip", "$/CheckBox");
     const auto font = explicit_control_font(control.properties(), "$/CheckBox/Font");
@@ -8821,7 +8827,7 @@ LV encode_check_box(
         "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}});
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     auto check_info = canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color, transparent,
-        title_location, horizontal_align, vertical_align);
+        title_location, horizontal_align, vertical_align, three_state);
     encode_named_control_colors(check_info.items[1].items[0].items[0], model::ControlKind::check_box,
         control.properties(), "$/CheckBox");
     encode_named_control_border(check_info.items[1].items[0].items[0], model::ControlKind::check_box,

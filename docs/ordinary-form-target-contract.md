@@ -51,6 +51,8 @@ Multiple и Interval. SelectedDates является временной колл
 CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration также
 сохраняют Transparent. PictureDecoration поддерживает Font и BorderColor через
 те же именованные типы значений, что и остальные подтвержденные владельцы.
+CheckBox сохраняет булевое ThreeState с исходным значением false. Редактор
+колонки таблицы сохраняет прежние ограничения.
 
 Caption для Button, CheckBox, RadioButton, UsualGroup и LabelDecoration
 поддерживает обычную строку и именованные переводы. Для непустых ru/en эти пять
