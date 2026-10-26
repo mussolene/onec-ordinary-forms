@@ -7943,6 +7943,126 @@ void test_calendar_field_named_events_round_trip_and_rejections() {
     expect(!form_stream::encode_document(empty_handler), "empty CalendarField event handler must fail closed");
 }
 
+void test_table_named_events() {
+    constexpr std::array events{
+        std::pair{"Selection", 34U}, std::pair{"ValueChoice", 48U}, std::pair{"DragStart", 900U},
+        std::pair{"ChoiceProcessing", 52U}, std::pair{"NewObjectWriteProcessing", 50U},
+        std::pair{"DragEnd", 902U}, std::pair{"BeforeAddRow", 40U}, std::pair{"BeforeRowChange", 41U},
+        std::pair{"BeforeEditEnd", 44U}, std::pair{"BeforeDeleteRow", 42U}, std::pair{"Drag", 903U},
+        std::pair{"AfterDeleteLine", 51U}, std::pair{"OnActivateColumn", 36U}, std::pair{"OnActivateRow", 35U},
+        std::pair{"OnActivateCell", 37U}, std::pair{"OnRowOutput", 47U}, std::pair{"OnCheckChange", 45U},
+        std::pair{"OnStartEdit", 43U}, std::pair{"OnEditEnd", 49U}, std::pair{"OnDataGet", 53U},
+        std::pair{"DragCheck", 901U},
+    };
+    const auto make_document = [](std::span<const std::pair<const char*, unsigned int>> selected,
+                                  bool wrong_owner = false, bool unsupported = false) {
+        model::Form form;
+        form.id = model::ObjectId{1}; form.name = "TableEvents";
+        form.children = {model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainEntry entry; entry.term = model::TypeDomainTerm::value_table;
+        document.add_attribute(model::Attribute{model::ObjectId{2}, "Rows", model::TypeDomainPatternValue{{entry}}});
+        model::ControlNode table{model::ObjectId{3}, "Rows", model::TablePayload{}};
+        table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+        table.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        table.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        table.properties().set_explicit(model::PropertyId::from_name("ToolTip"),
+            model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}});
+        table.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+        for (const auto kind : {model::ControlKind::input_field, model::ControlKind::choice_field, model::ControlKind::check_box}) {
+            model::TableColumn column;
+            column.name = std::string(model::metamodel::descriptor_for(kind).public_name);
+            column.data_path = column.name; column.control.kind = kind;
+            column.header.items.push_back({"en", column.name});
+            std::get<model::TablePayload>(table.payload).columns.push_back(std::move(column));
+        }
+        for (std::size_t i = 0; i < selected.size(); ++i) {
+            const model::ObjectId id{100 + i};
+            table.events.push_back(model::EventRef{id});
+            document.add_event(model::Event{id, unsupported ? "OnCurrentParentChange" : selected[i].first,
+                std::string("Handle") + selected[i].first,
+                wrong_owner ? model::EventOwner{model::FormRef{model::ObjectId{1}}} :
+                    model::EventOwner{model::ControlRef{model::ObjectId{3}}}});
+        }
+        document.add_control(std::move(table));
+        return document;
+    };
+    const auto collection = [](auto& stream) -> auto& {
+        auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr, "Table record must exist");
+        return record->items.at(2).items.at(4);
+    };
+    const auto check = [&](std::span<const std::pair<const char*, unsigned int>> selected) {
+        const auto document = make_document(selected);
+        const auto validation = document.validate();
+        expect(validation.ok(), validation.ok() ? "Table event fixture must satisfy model invariants" :
+            validation.violations.front().message);
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "Table events must encode" :
+            encoded.diagnostics().front().code + ": " + encoded.diagnostics().front().path + ": " +
+            encoded.diagnostics().front().message);
+        const auto& records = collection(encoded.value());
+        expect(records.items.size() == selected.size() + 1, "Table event count must match");
+        for (const auto& [name, id] : selected) {
+            expect(std::ranges::any_of(records.items.begin() + 1, records.items.end(), [&](const auto& record) {
+                return record.items.at(0).atom == std::to_string(id) &&
+                    record.items.at(1).atom == "e1692cc2-605b-4535-84dd-28440238746c";
+            }), std::string(name) + " must have observed event ID and tag");
+        }
+        const auto decoded = form_stream::decode_document(encoded.value(), "TableEvents");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "Table events must decode completely");
+        const auto* table = decoded.value().find_control(model::ObjectId{3});
+        expect(table && table->events.size() == selected.size() &&
+            std::get<model::TablePayload>(table->payload).columns.size() == 3,
+            "Table events and all editor profiles must coexist");
+        expect(!std::get<bool>(table->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+            !std::get<bool>(table->properties().find(model::PropertyId::from_name("ReadOnly"))->value) &&
+            std::get<bool>(table->extension_properties.find(model::PropertyId::from_name("FirstInGroup"))->value),
+            "Table properties must coexist with events");
+        const auto* tooltip = table->properties().find(model::PropertyId::from_name("ToolTip"));
+        expect(tooltip && std::get<model::LocalizedStringValue>(tooltip->value) ==
+            model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}},
+            "localized Table ToolTip must coexist with events");
+        for (const auto& [name, id] : selected) {
+            static_cast<void>(id);
+            expect(std::ranges::any_of(table->events, [&](const auto& reference) {
+                const auto* event = decoded.value().find_event(reference.id());
+                return event && event->name == name && event->handler == std::string("Handle") + name &&
+                    std::holds_alternative<model::ControlRef>(event->owner) &&
+                    std::get<model::ControlRef>(event->owner).id() == table->id;
+            }), std::string(name) + " must retain handler and owner");
+        }
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "Table events must serialize as named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "Table event XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "Table events must round-trip through XML and native storage");
+    };
+    check({});
+    for (std::size_t i = 0; i < events.size(); ++i) check(std::span(events).subspan(i, 1));
+    check(events);
+    const auto single = form_stream::encode_document(make_document(std::span(events).first(1)));
+    expect(single.ok(), "Table event rejection fixture must encode");
+    auto unknown = single.value();
+    collection(unknown).items.at(1).items.at(0) = list_stream::ListValue::raw_atom("999");
+    expect(!form_stream::decode_document(unknown, "UnknownTableEvent"), "unknown Table event ID must fail");
+    auto duplicate = single.value();
+    auto& duplicate_events = collection(duplicate);
+    duplicate_events.items.at(0) = list_stream::ListValue::raw_atom("2");
+    duplicate_events.items.push_back(duplicate_events.items.at(1));
+    expect(!form_stream::decode_document(duplicate, "DuplicateTableEvent"), "duplicate Table event ID must fail");
+    expect(!form_stream::encode_document(make_document(std::span(events).first(1), true)), "foreign event owner must fail");
+    expect(!form_stream::encode_document(make_document(std::span(events).first(1), false, true)),
+        "OnCurrentParentChange must remain unsupported");
+    auto neighbor = single.value();
+    auto* record = find_record_with_guid(neighbor, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    record->items.at(2).items.at(2).items.at(0).items.at(15) = list_stream::ListValue::raw_atom("99");
+    const auto partial = form_stream::decode_document(neighbor, "UnknownTableEventNeighbor");
+    expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown Table neighbor must remain incomplete");
+}
+
 void test_choice_and_input_named_events() {
     constexpr std::array events{
         std::pair{"StartListChoice", 1U}, std::pair{"StartChoice", 2U}, std::pair{"Clearing", 3U},
@@ -15432,6 +15552,7 @@ int main() {
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_named_events_round_trip_and_rejections();
         test_choice_and_input_named_events();
+        test_table_named_events();
         test_check_box_radio_button_track_bar_named_on_change_events();
         test_common_control_font_and_border_color();
         test_all_named_base_color_pairs_public_xml_round_trip();

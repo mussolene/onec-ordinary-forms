@@ -8132,8 +8132,8 @@ DecodedControl decode_table(
     require_exact(info.items[3],
         list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
         child_path(info_path, 3), "Table editor envelope header is unsupported");
-    require_exact(info.items[4], list({raw("0")}), child_path(info_path, 4),
-        "Table cannot contain storage children");
+    auto named_events = decode_control_event_collection(info.items[4], child_path(info_path, 4),
+        model::ControlKind::table);
     const auto stored_type = type_domain(info.items[1], child_path(info_path, 1));
     if (stored_type != linked_attribute.type) {
         fail("OOF1122", child_path(info_path, 1), "Table ValueType matching linked ValueTable Attribute",
@@ -8176,6 +8176,7 @@ DecodedControl decode_table(
         CommonControlBaseCapabilities{true, true, model::ControlKind::table});
     apply_common_control_base(control.properties(), common);
     LV normalized_info = info;
+    normalized_info.items[4] = list({raw("0")});
     const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
         child_path(child_path(child_path(info_path, 2), 1), 1));
     const bool read_only = (flags & 0x400U) == 0;
@@ -8202,7 +8203,8 @@ DecodedControl decode_table(
     }
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Table cannot contain storage children");
-    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value) {
@@ -9352,7 +9354,7 @@ LV encode_table(
             "Table is outside the supported storage profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -9375,6 +9377,7 @@ LV encode_table(
     const auto& table = std::get<model::TablePayload>(control.payload);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
     auto info = canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table");
+    info.items.at(4) = encode_control_event_collection(document, control, "$/Table/Events");
     auto& base = info.items.at(2).items.at(0);
     CommonControlBaseFields common{
         explicit_bool(control.properties(), "Enabled", true),

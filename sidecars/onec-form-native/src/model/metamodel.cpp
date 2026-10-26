@@ -1201,6 +1201,26 @@ void apply_proven_storage_overrides(
         event->storage_event_id = storage_id;
     }
 
+    constexpr std::array table_event_storage{
+        std::pair{"Selection", 34U}, std::pair{"ValueChoice", 48U}, std::pair{"DragStart", 900U},
+        std::pair{"ChoiceProcessing", 52U}, std::pair{"NewObjectWriteProcessing", 50U},
+        std::pair{"DragEnd", 902U}, std::pair{"BeforeAddRow", 40U}, std::pair{"BeforeRowChange", 41U},
+        std::pair{"BeforeEditEnd", 44U}, std::pair{"BeforeDeleteRow", 42U}, std::pair{"Drag", 903U},
+        std::pair{"AfterDeleteLine", 51U}, std::pair{"OnActivateColumn", 36U}, std::pair{"OnActivateRow", 35U},
+        std::pair{"OnActivateCell", 37U}, std::pair{"OnRowOutput", 47U}, std::pair{"OnCheckChange", 45U},
+        std::pair{"OnStartEdit", 43U}, std::pair{"OnEditEnd", 49U}, std::pair{"OnDataGet", 53U},
+        std::pair{"DragCheck", 901U},
+    };
+    auto& table_events = events[static_cast<std::size_t>(ControlKind::table)];
+    for (const auto& [name, id] : table_event_storage) {
+        const auto event = std::ranges::find(table_events, std::string_view{name}, &EventDescriptor::api_name);
+        if (event == table_events.end()) throw std::logic_error("missing Table event");
+        event->persistence = PersistenceClass::persisted_editable;
+        event->storage_codec = StorageCodec::event_record;
+        event->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+        event->storage_event_id = id;
+    }
+
     constexpr std::array choice_input_events{
         std::pair{"StartListChoice", 1U}, std::pair{"StartChoice", 2U}, std::pair{"Clearing", 3U},
         std::pair{"Tuning", 4U}, std::pair{"Opening", 5U}, std::pair{"ChoiceProcessing", 7U},

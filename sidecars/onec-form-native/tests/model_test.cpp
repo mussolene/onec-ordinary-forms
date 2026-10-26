@@ -831,6 +831,26 @@ void test_help_metamodel() {
                 std::string(name) + " must have its observed field event descriptor");
         }
     }
+    constexpr std::array table_events{
+        std::pair{"Selection", 34U}, std::pair{"ValueChoice", 48U}, std::pair{"DragStart", 900U},
+        std::pair{"ChoiceProcessing", 52U}, std::pair{"NewObjectWriteProcessing", 50U},
+        std::pair{"DragEnd", 902U}, std::pair{"BeforeAddRow", 40U}, std::pair{"BeforeRowChange", 41U},
+        std::pair{"BeforeEditEnd", 44U}, std::pair{"BeforeDeleteRow", 42U}, std::pair{"Drag", 903U},
+        std::pair{"AfterDeleteLine", 51U}, std::pair{"OnActivateColumn", 36U}, std::pair{"OnActivateRow", 35U},
+        std::pair{"OnActivateCell", 37U}, std::pair{"OnRowOutput", 47U}, std::pair{"OnCheckChange", 45U},
+        std::pair{"OnStartEdit", 43U}, std::pair{"OnEditEnd", 49U}, std::pair{"OnDataGet", 53U},
+        std::pair{"DragCheck", 901U},
+    };
+    for (const auto& [name, id] : table_events) {
+        const auto* event = find_event(ControlKind::table, name);
+        expect(event && event->persistence == PersistenceClass::persisted_editable &&
+            event->storage_codec == StorageCodec::event_record && event->storage_event_id == id &&
+            event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c",
+            std::string(name) + " must have its observed Table event descriptor");
+    }
+    const auto* current_parent = find_event(ControlKind::table, "OnCurrentParentChange");
+    expect(current_parent && current_parent->persistence != PersistenceClass::persisted_editable,
+        "Table OnCurrentParentChange must remain unsupported");
     const auto* form_close = find_form_event("OnClose");
     expect(form_close != nullptr && form_close->persistence == PersistenceClass::persisted_editable &&
         form_close->storage_codec == StorageCodec::event_record &&
