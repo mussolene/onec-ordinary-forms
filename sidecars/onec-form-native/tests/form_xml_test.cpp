@@ -1010,6 +1010,54 @@ void test_check_box_font_xml_round_trip() {
     expect(empty_control && !empty_control->properties().find(model::PropertyId::from_name("Font")),
         "omitted CheckBox Font must parse as its implicit default");
 
+    model::FontValue automatic_bold_false;
+    automatic_bold_false.bold = false;
+    const auto false_serialized = source::serialize_form_xml(make_document(automatic_bold_false));
+    expect(false_serialized.ok() &&
+               false_serialized.value().find("<Font kind=\"automatic\" bold=\"false\"/>") != std::string::npos,
+        "automatic Font must serialize an explicit false bold override");
+    std::string automatic_bold_absent_xml = false_serialized.value();
+    const auto false_font_node = automatic_bold_absent_xml.find("<Font kind=\"automatic\" bold=\"false\"/>");
+    automatic_bold_absent_xml.replace(false_font_node, std::string("<Font kind=\"automatic\" bold=\"false\"/>").size(),
+        "<Font kind=\"automatic\"/>");
+    const auto absent_bold_parsed = source::parse_form_xml(automatic_bold_absent_xml);
+    const auto* absent_bold_control = absent_bold_parsed.ok() ?
+        absent_bold_parsed.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(absent_bold_control &&
+               !absent_bold_control->properties().find(model::PropertyId::from_name("Font")),
+        "automatic Font with absent bold must parse as its implicit default");
+    const auto false_parsed = source::parse_form_xml(false_serialized.value());
+    const auto* false_control = false_parsed.ok() ? false_parsed.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* false_font = false_control == nullptr ? nullptr :
+        false_control->properties().find(model::PropertyId::from_name("Font"));
+    expect(false_font && std::get<model::FontValue>(false_font->value) == automatic_bold_false,
+        "automatic Font false bold override must round-trip through XML");
+
+    model::FontValue automatic_bold_true;
+    automatic_bold_true.bold = true;
+    const auto true_serialized = source::serialize_form_xml(make_document(automatic_bold_true));
+    expect(true_serialized.ok() &&
+               true_serialized.value().find("<Font kind=\"automatic\" bold=\"true\"/>") != std::string::npos,
+        "automatic Font must serialize an explicit true bold override");
+    const auto true_parsed = source::parse_form_xml(true_serialized.value());
+    const auto* true_control = true_parsed.ok() ? true_parsed.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* true_font = true_control == nullptr ? nullptr :
+        true_control->properties().find(model::PropertyId::from_name("Font"));
+    expect(true_font && std::get<model::FontValue>(true_font->value) == automatic_bold_true,
+        "automatic Font true bold override must round-trip through XML");
+
+    model::FontValue automatic_italic;
+    automatic_italic.italic = false;
+    expect(!source::serialize_form_xml(make_document(automatic_italic)).ok(),
+        "automatic Font must reject unobserved XML italic overrides during serialization");
+    std::string unsupported_automatic_xml = false_serialized.value();
+    const auto bold_attribute = unsupported_automatic_xml.find("bold=\"false\"");
+    expect(bold_attribute != std::string::npos, "automatic false bold test XML must contain its named attribute");
+    unsupported_automatic_xml.replace(bold_attribute, std::string("bold=\"false\"").size(),
+        "bold=\"false\" italic=\"false\"");
+    expect_code(source::parse_form_xml(unsupported_automatic_xml), "OOF2003",
+        "automatic Font must reject unobserved XML italic attributes");
+
     model::FontValue font;
     font.kind = model::FontKind::absolute;
     font.face_name = "Arial";

@@ -587,8 +587,18 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
     const bool has_style = !std::holds_alternative<std::monostate>(value.style);
     const std::uint32_t kind = font_kind_code(value.kind);
     if (value.kind == model::FontKind::automatic) {
-        if (has_style || has_fields()) throw std::runtime_error("automatic Font cannot carry overrides");
-        out.begin_list(); out.write_uint32(8); out.write_uint32(kind); out.write_uint32(0);
+        const bool has_unsupported_fields = value.face_name.has_value() || value.height.has_value() ||
+            value.italic.has_value() || value.underline.has_value() || value.strikeout.has_value() ||
+            value.scale != 100.0 || value.scale_override;
+        if (has_style || has_unsupported_fields) {
+            throw std::runtime_error("automatic Font only supports the observed bold override");
+        }
+        out.begin_list(); out.write_uint32(8); out.write_uint32(kind);
+        if (value.bold) {
+            out.write_uint32(4); out.write_uint32(*value.bold ? 700 : 400);
+        } else {
+            out.write_uint32(0);
+        }
         out.write_uint32(1); out.write_uint32(100); out.end_list();
         return;
     }
@@ -650,8 +660,21 @@ model::FontValue read_font(list_stream::ListInStream& in) {
     model::FontValue value;
     value.kind = parse_font_kind(in.read_uint32());
     if (value.kind == model::FontKind::automatic) {
-        if (in.read_uint32() != 0 || in.read_uint32() != 1 || in.read_uint32() != 100 || in.has_next())
-            throw std::runtime_error("automatic Font record is not canonical");
+        const auto flags = in.read_uint32();
+        if (flags == 0) {
+            if (in.read_uint32() != 1 || in.read_uint32() != 100 || in.has_next()) {
+                throw std::runtime_error("automatic Font record is not canonical");
+            }
+        } else if (flags == 4) {
+            const auto weight = in.read_uint32();
+            if ((weight != 400 && weight != 700) || in.read_uint32() != 1 ||
+                in.read_uint32() != 100 || in.has_next()) {
+                throw std::runtime_error("automatic Font bold record is not canonical");
+            }
+            value.bold = weight == 700;
+        } else {
+            throw std::runtime_error("automatic Font contains unsupported presence flags");
+        }
         in.end_list();
         return value;
     }
@@ -813,7 +836,9 @@ std::string encode_font(const model::FontValue& value) {
 
 model::FontValue decode_font(std::string_view text) {
     list_stream::ListInStream in(text);
-    return read_font(in);
+    const auto value = read_font(in);
+    if (in.has_next()) throw std::runtime_error("Font stream contains trailing values");
+    return value;
 }
 
 std::string encode_shortcut(const model::ShortcutValue& value) {

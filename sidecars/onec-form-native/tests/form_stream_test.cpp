@@ -6673,6 +6673,192 @@ void test_calendar_field_named_events_round_trip_and_rejections() {
     expect(!form_stream::encode_document(empty_handler), "empty CalendarField event handler must fail closed");
 }
 
+void test_calendar_group_progress_track_common_base_font_border_color() {
+    const auto make_document = [](model::ControlKind kind,
+                                  std::optional<model::FontValue> font = std::nullopt,
+                                  std::optional<model::ColorValue> border_color = std::nullopt) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CommonBaseWaveThree";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode control = kind == model::ControlKind::calendar_field
+            ? model::ControlNode{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}}
+            : kind == model::ControlKind::usual_group
+                ? model::ControlNode{model::ObjectId{2}, "Group", model::UsualGroupPayload{}}
+                : kind == model::ControlKind::progress_bar
+                    ? model::ControlNode{model::ObjectId{2}, "Progress", model::ProgressBarPayload{}}
+                    : model::ControlNode{model::ObjectId{2}, "Track", model::TrackBarPayload{}};
+        if (font) control.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
+        if (border_color)
+            control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), *border_color);
+        document.add_control(std::move(control));
+        return document;
+    };
+    const auto common_base = [](list_stream::ListValue& encoded, model::ControlKind kind)
+        -> list_stream::ListValue* {
+        auto* record = find_record_with_guid(encoded, model::metamodel::descriptor_for(kind).guid);
+        if (record == nullptr) return nullptr;
+        return &record->items[2].items[1].items[0];
+    };
+    const auto property = [](const model::OrdinaryFormDocument& document, std::string_view name) {
+        const auto* control = document.find_control(model::ObjectId{2});
+        return control == nullptr ? static_cast<const model::PropertyEntry*>(nullptr) :
+            control->properties().find(model::PropertyId::from_name(name));
+    };
+    model::FontValue automatic_font;
+    model::FontValue absolute_font;
+    absolute_font.kind = model::FontKind::absolute;
+    absolute_font.face_name = "Arial";
+    absolute_font.height = 13;
+    absolute_font.bold = true;
+    model::ColorValue automatic_color;
+    model::ColorValue rgb_color;
+    rgb_color.kind = model::ColorKind::absolute;
+    rgb_color.red = 17;
+    rgb_color.green = 83;
+    rgb_color.blue = 201;
+
+    for (const auto kind : {model::ControlKind::calendar_field, model::ControlKind::usual_group,
+                             model::ControlKind::progress_bar, model::ControlKind::track_bar}) {
+        const bool supports_font = kind != model::ControlKind::track_bar;
+        auto default_font = automatic_font;
+        if (kind == model::ControlKind::usual_group) default_font.bold = true;
+        const auto absent = form_stream::encode_document(make_document(kind));
+        const auto explicit_defaults = form_stream::encode_document(make_document(kind,
+            supports_font ? std::optional{default_font} : std::nullopt, automatic_color));
+        expect(absent.ok() && explicit_defaults.ok() &&
+                list_stream::dump_compact(absent.value()) == list_stream::dump_compact(explicit_defaults.value()),
+            "explicit automatic Font and BorderColor must normalize to each control's observed canonical record");
+        if (!absent.ok() || !explicit_defaults.ok()) continue;
+        const auto decoded_defaults = form_stream::decode_document(absent.value(), "CommonBaseWaveThreeDefaults");
+        expect(decoded_defaults.ok() && decoded_defaults.value().reconstruction_complete() &&
+                property(decoded_defaults.value(), "BorderColor") == nullptr &&
+                (!supports_font || property(decoded_defaults.value(), "Font") == nullptr),
+            "common-base automatic values must remain implicit defaults");
+
+        if (kind == model::ControlKind::usual_group) {
+            for (const auto bold : {std::optional<bool>{}, std::optional<bool>{false}, std::optional<bool>{true}}) {
+                auto font = automatic_font;
+                font.bold = bold;
+                const auto encoded = form_stream::encode_document(make_document(kind, font));
+                expect(encoded.ok(), "UsualGroup automatic Font overrides must encode");
+                if (!encoded) continue;
+                const auto decoded = form_stream::decode_document(encoded.value(), "GroupAutomaticFont");
+                expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                    "UsualGroup automatic Font overrides must decode completely");
+                if (!decoded) continue;
+                const auto actual = decoded.value().get_prop_val(
+                    model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}}, model::PropertyId::from_name("Font"));
+                expect(actual.value && std::get<model::FontValue>(*actual.value) == font,
+                    "UsualGroup Font default must retain bold and explicit false must remain distinct");
+                const auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "UsualGroup automatic Font must serialize as named XML");
+                if (!xml) continue;
+                expect((xml.value().find("<Font") == std::string::npos) == (bold == std::optional<bool>{true}),
+                    "UsualGroup must omit only its proven automatic bold default");
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "UsualGroup automatic Font XML must parse");
+                if (!parsed) continue;
+                const auto rebuilt = form_stream::encode_document(parsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                    "UsualGroup automatic Font must survive named XML without a baseline");
+            }
+        }
+
+        const auto check_color = [&](const model::ColorValue& color) {
+            auto encoded = form_stream::encode_document(make_document(kind, std::nullopt, color));
+            expect(encoded.ok(), "common-base BorderColor must encode through the existing Color codec");
+            if (!encoded.ok()) return;
+            const auto* base = common_base(encoded.value(), kind);
+            const std::uint32_t packed = (static_cast<std::uint32_t>(color.blue) << 16) |
+                (static_cast<std::uint32_t>(color.green) << 8) | color.red;
+            expect(base && list_stream::dump_compact(base->items[6]) ==
+                    (color.kind == model::ColorKind::automatic ? "{4,4,{0},4}" :
+                     "{4,0,{" + std::to_string(packed) + "},0}"),
+                "common-base BorderColor must use base19 slot 6 and packed BGR RGB storage");
+            const auto decoded = form_stream::decode_document(encoded.value(), "CommonBaseWaveThreeColor");
+            const auto* actual = decoded ? property(decoded.value(), "BorderColor") : nullptr;
+            expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                    (color.kind == model::ColorKind::automatic ? actual == nullptr :
+                     actual && std::get<model::ColorValue>(actual->value) == color),
+                "BorderColor must decode as a named value or implicit automatic default");
+            if (!decoded.ok()) return;
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "common-base BorderColor XML must serialize");
+            if (!xml.ok()) return;
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "common-base BorderColor XML must parse");
+            if (!parsed.ok()) return;
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                    list_stream::dump_compact(encoded.value()),
+                "BorderColor XML must rebuild the same ordinary Form.bin stream");
+        };
+        check_color(automatic_color);
+        check_color(rgb_color);
+
+        if (supports_font) {
+            auto encoded = form_stream::encode_document(make_document(kind, absolute_font));
+            expect(encoded.ok(), "common-base absolute Font must encode through the existing Font codec");
+            if (encoded.ok()) {
+                const auto* base = common_base(encoded.value(), kind);
+                expect(base && list_stream::dump_compact(base->items[4]) ==
+                        list_stream::dump_compact(list_stream::parse(value_codec::encode_font(absolute_font))),
+                    "common-base Font must use base19 slot 4 and the existing typed Font codec");
+                const auto decoded = form_stream::decode_document(encoded.value(), "CommonBaseWaveThreeFont");
+                const auto* actual = decoded ? property(decoded.value(), "Font") : nullptr;
+                expect(decoded.ok() && decoded.value().reconstruction_complete() && actual &&
+                        std::get<model::FontValue>(actual->value) == absolute_font,
+                    "absolute Font must survive native stream decode");
+                if (decoded.ok()) {
+                    const auto xml = source::serialize_form_xml(decoded.value());
+                    expect(xml.ok(), "common-base Font XML must serialize");
+                    if (xml.ok()) {
+                        const auto parsed = source::parse_form_xml(xml.value());
+                        expect(parsed.ok(), "common-base Font XML must parse");
+                        if (parsed.ok()) {
+                            const auto rebuilt = form_stream::encode_document(parsed.value());
+                            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                                    list_stream::dump_compact(encoded.value()),
+                                "Font XML must rebuild the same ordinary Form.bin stream");
+                        }
+                    }
+                }
+            }
+        }
+
+        auto unknown_neighbor = form_stream::encode_document(make_document(kind,
+            supports_font ? std::optional{absolute_font} : std::nullopt, rgb_color));
+        expect(unknown_neighbor.ok(), "known common-base properties must encode before a neighboring-profile probe");
+        if (unknown_neighbor.ok()) {
+            auto* base = common_base(unknown_neighbor.value(), kind);
+            expect(base != nullptr, "candidate common-base record must be locatable for profile validation");
+            if (base != nullptr) base->items[3] = list_stream::ListValue::raw_atom("7");
+            const auto partial = form_stream::decode_document(unknown_neighbor.value(), "CommonBaseWaveThreeNeighbor");
+            const auto* decoded_color = partial ? property(partial.value(), "BorderColor") : nullptr;
+            const auto* decoded_font = partial && supports_font ? property(partial.value(), "Font") : nullptr;
+            expect(partial.ok() && !partial.value().reconstruction_complete() && decoded_color &&
+                    std::get<model::ColorValue>(decoded_color->value) == rgb_color &&
+                    (!supports_font || (decoded_font && std::get<model::FontValue>(decoded_font->value) == absolute_font)),
+                "unknown neighboring base slots must warn without hiding or dropping the named common properties");
+        }
+
+        model::OrdinaryFormDocument wrong_color = make_document(kind);
+        expect(wrong_color.set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+                    model::PropertyId::from_name("BorderColor"), true) ==
+                model::PropertyMutationStatus::invalid_value,
+            "wrong-typed common-base BorderColor must fail at the public property boundary");
+        if (supports_font) {
+            model::OrdinaryFormDocument wrong_font = make_document(kind);
+            expect(wrong_font.set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+                        model::PropertyId::from_name("Font"), std::string("Arial")) ==
+                    model::PropertyMutationStatus::invalid_value,
+                "wrong-typed common-base Font must fail at the public property boundary");
+        }
+    }
+}
+
 void test_calendar_field_begin_display_period() {
     const auto* descriptor = model::metamodel::find_property(
         model::ControlKind::calendar_field, "BeginOfDisplayPeriod");
@@ -12640,6 +12826,7 @@ int main() {
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_named_events_round_trip_and_rejections();
+        test_calendar_group_progress_track_common_base_font_border_color();
         test_text_document_field_persisted_profile_and_rejections();
         test_calendar_field_begin_display_period();
         test_calendar_field_captured_begin_period_record_decode();

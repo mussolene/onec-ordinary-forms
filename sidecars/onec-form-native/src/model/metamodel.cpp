@@ -668,32 +668,29 @@ void apply_proven_storage_overrides(
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::calendar_field, ControlKind::text_document_field, ControlKind::input_field,
-        ControlKind::label_decoration,
-    });
-    classify_shared_control_property("Enabled", StorageCodec::control_info, DefaultKind::boolean, "true", {
-        ControlKind::progress_bar, ControlKind::track_bar,
+        ControlKind::label_decoration, ControlKind::progress_bar, ControlKind::track_bar,
     });
     classify_shared_control_property("ToolTip", StorageCodec::control_base, DefaultKind::string, "", {
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::input_field, ControlKind::calendar_field, ControlKind::label_decoration,
-    });
-    classify_shared_control_property("ToolTip", StorageCodec::control_info, DefaultKind::string, "", {
         ControlKind::progress_bar, ControlKind::track_bar,
     });
     classify_shared_control_property("BorderColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::panel, ControlKind::command_bar, ControlKind::button, ControlKind::check_box,
             ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,
             ControlKind::text_document_field, ControlKind::radio_button, ControlKind::list_box,
-            ControlKind::input_field});
+            ControlKind::input_field, ControlKind::calendar_field, ControlKind::usual_group,
+            ControlKind::progress_bar, ControlKind::track_bar});
     classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
         ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
         ControlKind::choice_field, ControlKind::command_bar, ControlKind::radio_button,
-        ControlKind::input_field,
+        ControlKind::input_field, ControlKind::calendar_field, ControlKind::progress_bar,
     });
 
     auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];
+    classify_property(usual_group, "Font", StorageCodec::control_base, DefaultKind::font, "automatic,bold=true");
     classify_property(usual_group, "Caption", StorageCodec::control_info, DefaultKind::string, "");
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
     classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");

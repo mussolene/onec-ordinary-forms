@@ -4,6 +4,7 @@
 #include <set>
 #include <stdexcept>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 
 #include "oof/model/metamodel.hpp"
@@ -471,15 +472,15 @@ void test_progress_bar_storage_descriptors() {
     const auto* min_value = find_property(ControlKind::progress_bar, "MinValue");
     const auto* step = find_property(ControlKind::progress_bar, "Step");
     expect(enabled && enabled->persistence == PersistenceClass::persisted_editable &&
-               enabled->storage_codec == StorageCodec::control_info &&
+               enabled->storage_codec == StorageCodec::control_base &&
                enabled->default_value.kind == DefaultKind::boolean &&
                enabled->default_value.canonical == "true",
-        "ProgressBar Enabled must have its observed control-info codec and true default");
+        "ProgressBar Enabled must have its observed control-base codec and true default");
     expect(tool_tip && tool_tip->persistence == PersistenceClass::persisted_editable &&
-               tool_tip->storage_codec == StorageCodec::control_info &&
+               tool_tip->storage_codec == StorageCodec::control_base &&
                tool_tip->default_value.kind == DefaultKind::string &&
                tool_tip->default_value.canonical.empty(),
-        "ProgressBar ToolTip must have its observed control-info codec and empty default");
+        "ProgressBar ToolTip must have its observed control-base codec and empty default");
     expect(max_value && max_value->persistence == PersistenceClass::persisted_editable &&
                max_value->storage_codec == StorageCodec::control_info &&
                max_value->default_value.kind == DefaultKind::integer &&
@@ -505,15 +506,15 @@ void test_track_bar_storage_descriptors() {
     const auto* min_value = find_property(ControlKind::track_bar, "MinValue");
     const auto* step = find_property(ControlKind::track_bar, "Step");
     expect(enabled && enabled->persistence == PersistenceClass::persisted_editable &&
-               enabled->storage_codec == StorageCodec::control_info &&
+               enabled->storage_codec == StorageCodec::control_base &&
                enabled->default_value.kind == DefaultKind::boolean &&
                enabled->default_value.canonical == "true",
-        "TrackBar Enabled must use its observed control-info codec and true default");
+        "TrackBar Enabled must use its observed control-base codec and true default");
     expect(tool_tip && tool_tip->persistence == PersistenceClass::persisted_editable &&
-               tool_tip->storage_codec == StorageCodec::control_info &&
+               tool_tip->storage_codec == StorageCodec::control_base &&
                tool_tip->default_value.kind == DefaultKind::string &&
                tool_tip->default_value.canonical.empty(),
-        "TrackBar ToolTip must use its observed control-info codec and empty default");
+        "TrackBar ToolTip must use its observed control-base codec and empty default");
     expect(max_value && max_value->persistence == PersistenceClass::persisted_editable &&
                max_value->storage_codec == StorageCodec::control_info &&
                max_value->default_value.kind == DefaultKind::integer &&
@@ -752,6 +753,30 @@ void test_help_metamodel() {
                 descriptor->storage_event_id == storage_id && calendar_storage_ids.insert(storage_id).second,
             std::string("CalendarField.") + name + " must declare its proven event storage identity");
     }
+    const auto expect_common_base_property = [](ControlKind kind, std::string_view name, DefaultKind default_kind) {
+        const auto* descriptor = find_property(kind, name);
+        return descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == StorageCodec::control_base &&
+            descriptor->default_value.kind == default_kind && descriptor->default_value.canonical == "automatic";
+    };
+    for (const auto& [kind, name, default_kind] : std::array{
+             std::tuple{ControlKind::calendar_field, std::string_view{"Font"}, DefaultKind::font},
+             std::tuple{ControlKind::calendar_field, std::string_view{"BorderColor"}, DefaultKind::color},
+             std::tuple{ControlKind::usual_group, std::string_view{"BorderColor"}, DefaultKind::color},
+             std::tuple{ControlKind::progress_bar, std::string_view{"Font"}, DefaultKind::font},
+             std::tuple{ControlKind::progress_bar, std::string_view{"BorderColor"}, DefaultKind::color},
+             std::tuple{ControlKind::track_bar, std::string_view{"BorderColor"}, DefaultKind::color}}) {
+        expect(expect_common_base_property(kind, name, default_kind),
+            "new Font and BorderColor descriptors must use the automatic common-base default");
+    }
+    for (const auto kind : {ControlKind::progress_bar, ControlKind::track_bar}) {
+        for (const auto name : {std::string_view{"Enabled"}, std::string_view{"ToolTip"}}) {
+            const auto* descriptor = find_property(kind, name);
+            expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                    descriptor->storage_codec == StorageCodec::control_base,
+                "ProgressBar and TrackBar Enabled/ToolTip must match their observed base19 slots");
+        }
+    }
 }
 
 void test_shared_control_default_classifications() {
@@ -771,13 +796,16 @@ void test_shared_control_default_classifications() {
                classified(ControlKind::splitter, "Enabled", StorageCodec::control_base,
                    DefaultKind::boolean, "true", ValueCodec::boolean),
         "shared Enabled rule must retain the common control-base classification");
-    expect(classified(ControlKind::progress_bar, "Enabled", StorageCodec::control_info,
+    expect(classified(ControlKind::progress_bar, "Enabled", StorageCodec::control_base,
                DefaultKind::boolean, "true", ValueCodec::boolean) &&
                classified(ControlKind::label_decoration, "Enabled", StorageCodec::control_base,
                    DefaultKind::boolean, "true", ValueCodec::boolean) &&
                classified(ControlKind::label_decoration, "ToolTip", StorageCodec::control_base,
                    DefaultKind::string, "", ValueCodec::string),
         "LabelDecoration Enabled and ToolTip must use the common control-base slots");
+    expect(classified(ControlKind::usual_group, "Font", StorageCodec::control_base,
+               DefaultKind::font, "automatic,bold=true", ValueCodec::font),
+        "UsualGroup must expose its observed automatic bold Font default");
     expect(classified(ControlKind::choice_field, "BorderColor", StorageCodec::control_base,
                DefaultKind::color, "automatic", ValueCodec::color) &&
                classified(ControlKind::check_box, "BorderColor", StorageCodec::control_base,

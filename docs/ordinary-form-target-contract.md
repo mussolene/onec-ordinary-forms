@@ -19,6 +19,12 @@ Font у ListBox не объявлен в текущем API и не вводит
 публичное свойство. Профиль редактора таблицы остается отдельной границей.
 
 
+CalendarField и ProgressBar также поддерживают Font и BorderColor,
+UsualGroup поддерживает Font и BorderColor, TrackBar поддерживает BorderColor.
+У UsualGroup default шрифта отличается: `Font kind="automatic" bold="true"`.
+Именованный FontValue различает отсутствие bold, явно false и true;
+остальные неподтвержденные переопределения автоматического шрифта отклоняются.
+
 CalendarField поддерживает восемь именованных событий: Selection, DragStart,
 DragEnd, Drag, OnActivateDate, OnPeriodOutput, OnChange и DragCheck. События
 хранятся в Events самого контрола как имена обработчиков. Кодек проверяет

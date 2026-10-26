@@ -871,9 +871,9 @@ model::FontValue parse_font(xmlNodePtr node) {
         fail("OOF2003", node, {}, "kind", "font without style reference", "style", "Only a style font may carry a style reference");
     }
     if (value.kind == model::FontKind::automatic &&
-        (value.face_name || value.height || value.bold || value.italic ||
+        (value.face_name || value.height || value.italic ||
          value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)) {
-        fail("OOF2003", node, {}, "kind", "automatic font defaults", "explicit font fields", "Automatic font must not carry absolute font fields");
+        fail("OOF2003", node, {}, "kind", "automatic font defaults or bold override", "unsupported explicit font fields", "Automatic font only supports the observed bold override");
     }
     return value;
 }
@@ -2781,9 +2781,9 @@ private:
         }
         if (has_style) append_style_attributes(attributes, value.style, object_id, name);
         if (value.kind == model::FontKind::automatic &&
-            (value.face_name || value.height || value.bold || value.italic ||
+            (value.face_name || value.height || value.italic ||
              value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)) {
-            serialization_fail(std::string(object_id), std::string(name), "automatic font defaults", "explicit font data", "Automatic font carries absolute fields");
+            serialization_fail(std::string(object_id), std::string(name), "automatic font defaults or bold override", "unsupported explicit font data", "Automatic font only supports the observed bold override");
         }
         if (value.face_name) attributes.emplace_back("faceName", *value.face_name);
         if (value.height) {

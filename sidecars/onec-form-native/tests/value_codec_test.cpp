@@ -340,6 +340,29 @@ void test_font() {
     model::FontValue automatic;
     expect(codec::encode_font(automatic) == "{8,3,0,1,100}", "automatic Font must match its exact default tuple");
     expect(codec::decode_font(codec::encode_font(automatic)) == automatic, "automatic Font must round-trip");
+    model::FontValue automatic_bold_false = automatic;
+    automatic_bold_false.bold = false;
+    expect(codec::encode_font(automatic_bold_false) == "{8,3,4,400,1,100}" &&
+               codec::decode_font(codec::encode_font(automatic_bold_false)) == automatic_bold_false,
+        "automatic Font must preserve an explicitly false bold setting");
+    model::FontValue automatic_bold_true = automatic;
+    automatic_bold_true.bold = true;
+    expect(codec::encode_font(automatic_bold_true) == "{8,3,4,700,1,100}" &&
+               codec::decode_font(codec::encode_font(automatic_bold_true)) == automatic_bold_true,
+        "automatic Font must preserve an explicitly enabled bold setting");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{8,3,8,0,1,100}")); },
+        "automatic Font non-bold presence flags must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{8,3,4,500,1,100}")); },
+        "automatic Font unobserved bold weights must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{8,3,4,700,1,100},0")); },
+        "Font must reject trailing values outside its own record");
+    model::FontValue automatic_italic = automatic;
+    automatic_italic.italic = false;
+    expect_rejected([&] { static_cast<void>(codec::encode_font(automatic_italic)); },
+        "automatic Font must reject unobserved italic overrides");
 
     model::FontValue family_only;
     family_only.kind = model::FontKind::absolute;

@@ -230,6 +230,11 @@ std::optional<PropertyValue> materialize_default(
             return std::nullopt;
         case DefaultKind::font:
             if (value.canonical == "automatic") return PropertyValue{FontValue{}};
+            if (value.canonical == "automatic,bold=true") {
+                FontValue font;
+                font.bold = true;
+                return PropertyValue{font};
+            }
             return std::nullopt;
         case DefaultKind::enumeration: {
             const auto separator = value.canonical.find('.');
