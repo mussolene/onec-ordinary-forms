@@ -2353,6 +2353,11 @@ void require_list_stream_shape(const LV& actual, const LV& expected, std::string
     }
 }
 
+constexpr std::array<std::string_view, 13> panel_show_tabs_members{
+    "DontUse", "Top", "Bottom", "LeftVertical", "RightVertical", "LeftHorizontal", "RightHorizontal",
+    "TopScrolling", "TopMultiLine", "TopMultilineTransposition", "BottomScrolling", "BottomMultiLine",
+    "BottomMultilineTransposition"};
+
 struct DecodedOwnerPages {
     std::vector<model::Page> pages;
     IncomingAnchorLists incoming;
@@ -2370,7 +2375,7 @@ DecodedOwnerPages decode_owner_pages(
     std::string_view path) {
     require_arity(envelope, 3, path);
     require_exact(envelope.items[0], raw("1"), child_path(path, 0), "Owner page envelope marker is unsupported");
-    require_exact(envelope.items[2], list({raw("0")}), child_path(path, 2),
+    if (!panel) require_exact(envelope.items[2], list({raw("0")}), child_path(path, 2),
         "Owner page envelope trailer is unsupported");
     const auto& payload = envelope.items[1];
     std::size_t incoming_end = 2;
@@ -2413,6 +2418,22 @@ DecodedOwnerPages decode_owner_pages(
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     model::PanelPayload decoded_panel;
     if (!auto_tab_order) decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+    if (panel) {
+        const auto base_path = child_path(child_path(path, 1), 0);
+        const auto common = decode_common_control_base(normalized.items[0], base_path,
+            CommonControlBaseCapabilities{true, false, {}, {}, model::ControlKind::panel});
+        apply_common_control_base(decoded_panel.properties, common);
+        for (const auto slot : {1U, 4U, 5U, 12U})
+            expected.items[1].items[0].items[slot] = normalized.items[0].items[slot];
+        const auto tabs_path = child_path(child_path(path, 1), 3 + incoming_end - 2);
+        const auto tabs = integer_atom<std::size_t>(normalized.items[3], tabs_path);
+        if (tabs >= panel_show_tabs_members.size())
+            fail("OOF1114", tabs_path, "ShowTabs value from 0 to 12", std::to_string(tabs),
+                "Panel ShowTabs value is unsupported");
+        if (tabs != 1) decoded_panel.properties.set_explicit(model::PropertyId::from_name("ShowTabs"),
+            model::EnumerationValue{"ShowTabs", std::string(panel_show_tabs_members[tabs])});
+        expected.items[1].items[3] = normalized.items[3];
+    }
     for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
         {"BorderColor", 6}, {"TextColor", 3}, {"BackColor", 2}}}) {
         const auto color_path = child_path(child_path(child_path(path, 1), 0), slot);
@@ -2449,8 +2470,30 @@ LV encode_owner_pages(
     const model::PropertySet& properties = {}) {
     auto envelope = panel ? canonical_panel_payload(pages, *owner) :
         canonical_root_panel_payload(width, height, pages, owner);
-    require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
+    if (panel) require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
+        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs"}, "$/Panel");
+    else require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
     envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
+    if (panel) {
+        CommonControlBaseFields common;
+        common.enabled = explicit_bool(properties, "Enabled", true);
+        common.tool_tip = explicit_localized_text(properties, "ToolTip", "$/Panel");
+        common.font = explicit_control_font(properties, "$/Panel/Font");
+        common.named_transparent_control = model::ControlKind::panel;
+        common.transparent = explicit_bool(properties, "Transparent", false);
+        encode_common_control_base(envelope.items[1].items[0], common, "$/Panel");
+        if (const auto* entry = properties.find(model::PropertyId::from_name("ShowTabs"))) {
+            const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
+            if (!value || value->type_name != "ShowTabs")
+                fail("OOF1122", "$/Panel/ShowTabs", "ShowTabs enumeration", "different type",
+                    "Panel ShowTabs has the wrong value type");
+            const auto member = std::ranges::find(panel_show_tabs_members, value->member);
+            if (member == panel_show_tabs_members.end())
+                fail("OOF1122", "$/Panel/ShowTabs", "known ShowTabs member", value->member,
+                    "Panel ShowTabs member is unsupported");
+            envelope.items[1].items[9] = raw(std::to_string(member - panel_show_tabs_members.begin()));
+        }
+    }
     for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
         {"BorderColor", 6}, {"TextColor", 3}, {"BackColor", 2}}}) {
         const auto color = properties.contains(model::PropertyId::from_name(name)) ? explicit_control_color(properties, name) : model::ColorValue{};
@@ -10466,6 +10509,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                         const model::ControlRef panel_ref{model::ObjectId{raw_id}};
                         auto panel_owner = decode_owner_pages(at(record, 2, record_path), next_page_id, panel_ref, true,
                             raw_id, warnings, reconstruction_complete, child_path(record_path, 2));
+                        auto named_events = decode_control_event_collection(record.items[2].items[2],
+                            child_path(child_path(record_path, 2), 2), model::ControlKind::panel);
                         model::ControlNode panel{panel_ref.id(), name, model::PanelPayload{}};
                         panel.position = std::move(geometry.position);
                         panel.payload = std::move(panel_owner.panel);
@@ -10473,7 +10518,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
                             panel_owner.incoming, child_path(record_path, 5));
                         for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
-                        child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+                        child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
                     } else {
                         fail("OOF1122", record_path, "supported leaf controls or Panel", guid, "Control payload is unsupported");
                     }
@@ -11001,16 +11046,18 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::table) {
                     record = encode_table(document, *control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
-                    if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
-                        fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
+                    if (control->data_path || !control->extension_properties.empty()) {
+                        fail("OOF1122", child_path(path, ordinal), "Panel without DataPath or extension properties",
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
-                    require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, child_path(path, ordinal) + "/Panel");
+                    require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
+                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs"}, child_path(path, ordinal) + "/Panel");
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");
                     auto panel_properties = encode_owner_pages(panel_owner.pages, panel_owner.incoming, true, panel_ref, 8, 8,
                         control->properties());
+                    panel_properties.items[2] = encode_control_event_collection(document, *control, child_path(path, ordinal) + "/Panel/Events");
                     const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
                     const auto info = list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
                     record = list({raw(std::string(panel_descriptor.guid)), raw(std::to_string(control->id.value())),

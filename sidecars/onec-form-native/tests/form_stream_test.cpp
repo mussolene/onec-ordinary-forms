@@ -13770,6 +13770,114 @@ void test_owned_panel_auto_tab_order_round_trip() {
     }
 }
 
+void test_owned_panel_common_properties_and_page_event() {
+    for (const bool nondefault : {false, true}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "PanelCommon";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode panel{model::ObjectId{2}, "Tabs", model::PanelPayload{}};
+        panel.children = {model::PageRef{model::ObjectId{3}}, model::PageRef{model::ObjectId{4}}};
+        if (nondefault) {
+            panel.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+            panel.properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
+            panel.properties().set_explicit(model::PropertyId::from_name("ToolTip"),
+                model::LocalizedStringValue{{{"ru", "Панель"}, {"en", "Panel"}}});
+            model::FontValue font; font.kind = model::FontKind::absolute; font.face_name = "Arial"; font.height = 12;
+            panel.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+            panel.events.push_back(model::EventRef{model::ObjectId{8}});
+            document.add_event(model::Event{model::ObjectId{8}, "OnCurrentPageChange", "PageChanged",
+                model::ControlRef{model::ObjectId{2}}});
+        }
+        document.add_control(std::move(panel));
+        for (std::uint64_t id : {3U, 4U}) {
+            model::Page page; page.id = model::ObjectId{id}; page.name = "Page" + std::to_string(id);
+            model::Position position; position.width.set(100); position.height.set(80);
+            for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+                model::AnchorBinding binding; binding.coordinate = edge; binding.target_coordinate = edge;
+                binding.target = model::ControlRef{model::ObjectId{2}};
+                position.bindings.anchors.push_back(std::move(binding));
+            }
+            page.position.set(std::move(position));
+            if (id == 3) page.children = {model::ControlRef{model::ObjectId{5}}};
+            document.add_page(std::move(page));
+        }
+        document.add_control(model::ControlNode{model::ObjectId{5}, "Inner", model::ButtonPayload{}});
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        const auto decoded = form_stream::decode_document(encoded.value(), "PanelCommon");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "Panel common fields must decode completely");
+        const auto* found = decoded.value().find_control(model::ObjectId{2});
+        expect(found && found->children.size() == 2 && decoded.value().find_control(model::ObjectId{5}),
+            "Panel pages and nested controls must survive");
+        for (const auto name : {"Enabled", "ToolTip", "Font", "Transparent"}) {
+            const auto* original = document.find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name(name));
+            const auto* restored = found->properties().find(model::PropertyId::from_name(name));
+            expect(nondefault ? original && restored && original->value == restored->value : restored == nullptr,
+                std::string("Panel property must round-trip: ") + name);
+        }
+        expect(found->events.size() == (nondefault ? 1U : 0U), "Panel event count must round-trip");
+        if (nondefault) {
+            const auto* event = decoded.value().find_event(found->events.front().id());
+            expect(event && event->name == "OnCurrentPageChange" && event->handler == "PageChanged" &&
+                std::holds_alternative<model::ControlRef>(event->owner) &&
+                std::get<model::ControlRef>(event->owner).id() == found->id, "Panel event owner and handler must survive");
+        }
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "Panel named XML must serialize");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "Panel named XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "Panel common fields must rebuild through XML");
+        if (nondefault) {
+            auto invalid = encoded.value();
+            auto* record = find_record_with_guid(invalid, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            expect(record && record->items.at(2).items.at(2).items.size() == 2, "Panel event record must exist");
+            record->items.at(2).items.at(2).items.at(1).items.at(0) = list_stream::ListValue::raw_atom("99");
+            expect(!form_stream::decode_document(invalid, "UnknownPanelEvent"), "Unknown Panel event ID must fail");
+            auto duplicate = encoded.value();
+            record = find_record_with_guid(duplicate, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            auto& events = record->items.at(2).items.at(2);
+            events.items.at(0) = list_stream::ListValue::raw_atom("2");
+            events.items.push_back(events.items.at(1));
+            expect(!form_stream::decode_document(duplicate, "DuplicatePanelEvent"), "Duplicate Panel event ID must fail");
+            auto neighbor = encoded.value();
+            record = find_record_with_guid(neighbor, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            record->items.at(2).items.at(1).items.at(0).items.at(15) = list_stream::ListValue::raw_atom("99");
+            const auto partial = form_stream::decode_document(neighbor, "UnknownPanelField");
+            expect(partial.ok() && !partial.value().reconstruction_complete(), "Unknown Panel field must remain incomplete");
+            auto wrong_owner = document;
+            auto* wrong_event = const_cast<model::Event*>(wrong_owner.find_event(model::ObjectId{8}));
+            wrong_event->owner = model::FormRef{model::ObjectId{1}};
+            expect(!form_stream::encode_document(wrong_owner), "Panel event owned by another object must fail");
+            constexpr std::array<std::string_view, 13> members{
+                "DontUse", "Top", "Bottom", "LeftVertical", "RightVertical", "LeftHorizontal", "RightHorizontal",
+                "TopScrolling", "TopMultiLine", "TopMultilineTransposition", "BottomScrolling", "BottomMultiLine",
+                "BottomMultilineTransposition"};
+            for (std::size_t i = 0; i < members.size(); ++i) {
+                auto variant = document;
+                auto* tabs = const_cast<model::ControlNode*>(variant.find_control(model::ObjectId{2}));
+                tabs->properties().set_explicit(model::PropertyId::from_name("ShowTabs"),
+                    model::EnumerationValue{"ShowTabs", std::string(members[i])});
+                const auto stream = form_stream::encode_document(variant);
+                expect(stream.ok(), "Panel ShowTabs member must encode");
+                const auto* panel_record = find_record_with_guid(stream.value(), model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+                expect(panel_record && panel_record->items.at(2).items.at(1).items.at(9).atom == std::to_string(i),
+                    "Panel ShowTabs must use its observed storage value");
+                const auto round_trip = form_stream::decode_document(stream.value(), "PanelTabs");
+                expect(round_trip.ok() && round_trip.value().reconstruction_complete(), "Panel ShowTabs must decode");
+                const auto* value = round_trip.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("ShowTabs"));
+                expect(i == 1 ? value == nullptr : value && std::get<model::EnumerationValue>(value->value).member == members[i],
+                    "Panel ShowTabs value or default must survive");
+            }
+            auto invalid_tabs = encoded.value();
+            record = find_record_with_guid(invalid_tabs, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            record->items.at(2).items.at(1).items.at(9) = list_stream::ListValue::raw_atom("13");
+            expect(!form_stream::decode_document(invalid_tabs, "UnknownPanelTabs"), "Unknown ShowTabs code must fail");
+        }
+    }
+}
+
 void test_recursive_panel_pages_keep_owner_geometry_separate() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -14039,8 +14147,13 @@ void test_recursive_panel_pages_keep_owner_geometry_separate() {
         }
         changed_panel_property.add_control(std::move(control));
     }
-    expect(!form_stream::encode_document(changed_panel_property),
-        "unsupported explicit Panel Enabled variation must fail closed");
+    const auto enabled_stream = form_stream::encode_document(changed_panel_property);
+    expect(enabled_stream.ok(), "explicit Panel Enabled must encode");
+    const auto enabled_round_trip = form_stream::decode_document(enabled_stream.value(), "NestedPanels");
+    const auto* enabled_panel = enabled_round_trip ? enabled_round_trip.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* enabled = enabled_panel ? enabled_panel->properties().find(model::PropertyId::from_name("Enabled")) : nullptr;
+    expect(enabled_round_trip.ok() && enabled_round_trip.value().reconstruction_complete() && enabled &&
+        !std::get<bool>(enabled->value), "nested Panel Enabled must survive with its geometry");
 }
 
 void test_manual_bindings_are_not_silently_discarded() {
@@ -15825,6 +15938,7 @@ int main() {
         test_root_pages_round_trip_with_page_local_control_order();
         test_owned_panel_colors_and_repeated_background();
         test_owned_panel_auto_tab_order_round_trip();
+        test_owned_panel_common_properties_and_page_event();
         test_recursive_panel_pages_keep_owner_geometry_separate();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();

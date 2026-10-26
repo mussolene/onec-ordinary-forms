@@ -133,6 +133,13 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::type_domain;
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 if (expected != metamodel::ValueCodec::enumeration) return false;
+                if (descriptor.control_kind == ControlKind::panel && descriptor.api_name == "ShowTabs") {
+                    constexpr std::array<std::string_view, 13> members{"DontUse", "Top", "Bottom", "LeftVertical",
+                        "RightVertical", "LeftHorizontal", "RightHorizontal", "TopScrolling", "TopMultiLine",
+                        "TopMultilineTransposition", "BottomScrolling", "BottomMultiLine", "BottomMultilineTransposition"};
+                    return typed_value.type_name == "ShowTabs" &&
+                        std::ranges::find(members, typed_value.member) != members.end();
+                }
                 if (descriptor.control_kind == ControlKind::command_bar &&
                     descriptor.api_name == "ButtonsAlignment") {
                     return typed_value.type_name == "CommandBarButtonAlignment" &&
@@ -216,7 +223,8 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
-    if ((descriptor.control_kind == ControlKind::command_bar &&
+    if ((descriptor.control_kind == ControlKind::panel && descriptor.api_name == "ShowTabs") ||
+        (descriptor.control_kind == ControlKind::command_bar &&
          (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||
         ((descriptor.control_kind == ControlKind::check_box || descriptor.control_kind == ControlKind::radio_button) &&
          (descriptor.api_name == "HorizontalAlign" || descriptor.api_name == "VerticalAlign" || descriptor.api_name == "TitleLocation")) ||
@@ -1239,7 +1247,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
     validate_property_set(form_.id, form_.panel.properties,
         [](PropertyId id) { return metamodel::find_property(ControlKind::panel, id); },
         [](const metamodel::PropertyDescriptor& descriptor) { return descriptor.surface == metamodel::PropertySurface::control_payload &&
-            descriptor.persistence == metamodel::PersistenceClass::persisted_editable; });
+            descriptor.persistence == metamodel::PersistenceClass::persisted_editable &&
+            (descriptor.api_name == "AutoTabOrder" || descriptor.api_name == "BorderColor" ||
+             descriptor.api_name == "TextColor" || descriptor.api_name == "BackColor"); });
 
     for (const auto& command : collections_.commands) {
         if (const auto& picture = command.picture.value(); picture.has_value()) {

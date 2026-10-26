@@ -1938,11 +1938,22 @@ void test_main_panel_typed_xml_contract() {
     expect(defaults.ok(), defaults ? "" : defaults.diagnostics().front().message);
     const auto implicit = source::serialize_form_xml(defaults.value());
     expect(implicit.ok() && implicit.value().find("<Panel>") == std::string::npos, "default traversal must not create an explicit panel value");
-    auto invalid_form = parsed.value().form();
-    invalid_form.panel.properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
-    model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
-    expect(!invalid_document.validate().ok() && !source::serialize_form_xml(invalid_document),
-        "unimplemented main Panel properties must not be silently lost");
+    model::FontValue font; font.kind = model::FontKind::absolute; font.face_name = "Arial"; font.height = 12;
+    const std::array<std::pair<std::string_view, model::PropertyValue>, 5> unsupported{{
+        {"Enabled", false}, {"ToolTip", std::string("Tip")}, {"Font", font}, {"Transparent", true},
+        {"ShowTabs", model::EnumerationValue{"ShowTabs", "Bottom"}},
+    }};
+    for (const auto& [name, value] : unsupported) {
+        auto invalid_form = parsed.value().form();
+        invalid_form.panel.properties.set_explicit(model::PropertyId::from_name(name), value);
+        model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        expect(!invalid_document.validate().ok() && !source::serialize_form_xml(invalid_document),
+            "unimplemented main Panel properties must not be silently lost");
+    }
+    for (const auto body : {"<Enabled>false</Enabled>", "<Transparent>true</Transparent>"}) {
+        const auto invalid = std::string(R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><Panel>)XML") + body + "</Panel></Form>";
+        expect(!source::parse_form_xml(invalid), "unsupported main Panel property must not parse");
+    }
 }
 
 void test_command_bar_default_button_xml_contract() {

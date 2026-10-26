@@ -93,7 +93,7 @@
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
               <Property name="ShowTabs" apiName="ShowTabs" russianName="ОтображениеЗакладок" russianType="ОтображениеЗакладок" valueCodec="enumeration"/>
-              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="localized-text"/>
               <Property name="PanelPictureLocation" apiName="PanelPictureLocation" russianName="ПоложениеКартинкиПанели" russianType="ПоложениеКартинкиПанели" valueCodec="enumeration"/>
               <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" valueCodec="decimal"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>

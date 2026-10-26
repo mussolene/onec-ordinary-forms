@@ -53,6 +53,9 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 те же именованные типы значений, что и остальные подтвержденные владельцы.
 CheckBox сохраняет булевое ThreeState с исходным значением false. Редактор
 колонки таблицы сохраняет прежние ограничения.
+Вложенная Panel сохраняет Enabled, ToolTip, Font, Transparent, ShowTabs и
+OnCurrentPageChange. Для ShowTabs проверены все 13 значений. Корневая панель
+формы сохраняет только ранее подтвержденный набор свойств.
 Table сохраняет Enabled, ToolTip, Font, BorderColor и FieldBackColor через
 общий механизм свойств; ограничения редакторов колонок остаются прежними.
 Table сохраняет HeaderBackColor, HeaderTextColor, FooterBackColor,

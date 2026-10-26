@@ -668,14 +668,14 @@ void apply_proven_storage_overrides(
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::calendar_field, ControlKind::text_document_field, ControlKind::input_field,
-        ControlKind::label_decoration, ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table,
+        ControlKind::label_decoration, ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table, ControlKind::panel,
     });
     const std::initializer_list<ControlKind> tool_tip_controls{
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::input_field, ControlKind::calendar_field, ControlKind::label_decoration,
-        ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table,
+        ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table, ControlKind::panel,
     };
     classify_shared_control_property("ToolTip", StorageCodec::control_base, DefaultKind::string, "",
         tool_tip_controls);
@@ -711,7 +711,7 @@ void apply_proven_storage_overrides(
     classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
         ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
         ControlKind::choice_field, ControlKind::command_bar, ControlKind::radio_button, ControlKind::picture_decoration,
-        ControlKind::input_field, ControlKind::calendar_field, ControlKind::progress_bar, ControlKind::table,
+        ControlKind::input_field, ControlKind::calendar_field, ControlKind::progress_bar, ControlKind::table, ControlKind::panel,
     });
 
     for (const auto kind : {ControlKind::calendar_field, ControlKind::check_box, ControlKind::choice_field,
@@ -737,7 +737,7 @@ void apply_proven_storage_overrides(
     std::ranges::find(usual_group, "Caption", &PropertyDescriptor::api_name)->value_codec = ValueCodec::localized_text;
     classify_property(usual_group, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
     for (const auto kind : {ControlKind::check_box, ControlKind::choice_field, ControlKind::label_decoration,
-             ControlKind::picture_decoration, ControlKind::radio_button}) {
+             ControlKind::picture_decoration, ControlKind::radio_button, ControlKind::panel}) {
         classify_property(properties[static_cast<std::size_t>(kind)], "Transparent",
             StorageCodec::control_base, DefaultKind::boolean, "false");
     }
@@ -746,6 +746,10 @@ void apply_proven_storage_overrides(
     std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
     classify_property(properties[static_cast<std::size_t>(ControlKind::panel)], "AutoTabOrder",
         StorageCodec::control_info, DefaultKind::boolean, "true");
+    classify_property(properties[static_cast<std::size_t>(ControlKind::panel)], "ShowTabs",
+        StorageCodec::control_info, DefaultKind::enumeration, "ShowTabs.Top");
+    std::ranges::find(properties[static_cast<std::size_t>(ControlKind::panel)], "ShowTabs",
+        &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     for (const auto name : {"TextColor", "BackColor"})
         classify_property(properties[static_cast<std::size_t>(ControlKind::panel)], name,
             StorageCodec::control_base, DefaultKind::color, "automatic");
@@ -1233,6 +1237,14 @@ void apply_proven_storage_overrides(
         event->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
         event->storage_event_id = storage_id;
     }
+
+    auto& panel_events = events[static_cast<std::size_t>(ControlKind::panel)];
+    const auto page_change = std::ranges::find(panel_events, std::string_view{"OnCurrentPageChange"}, &EventDescriptor::api_name);
+    if (page_change == panel_events.end()) throw std::logic_error("missing Panel page change event");
+    page_change->persistence = PersistenceClass::persisted_editable;
+    page_change->storage_codec = StorageCodec::event_record;
+    page_change->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+    page_change->storage_event_id = 0U;
 
     constexpr std::array table_event_storage{
         std::pair{"Selection", 34U}, std::pair{"ValueChoice", 48U}, std::pair{"DragStart", 900U},

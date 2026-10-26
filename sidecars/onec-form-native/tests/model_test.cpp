@@ -131,6 +131,16 @@ void test_descriptors() {
         find_by_russian_name(u8"РамкаГруппы")->kind == ControlKind::usual_group,
         "Russian-name lookup must resolve UsualGroup");
     const auto* group_enabled = find_property(ControlKind::usual_group, "Enabled");
+    for (const auto name : {"Enabled", "ToolTip", "Font", "Transparent"}) {
+        const auto* property = find_property(ControlKind::panel, name);
+        expect(property && property->storage_codec == StorageCodec::control_base,
+            std::string("Panel common property must have a base codec: ") + name);
+    }
+    const auto* panel_tabs = find_property(ControlKind::panel, "ShowTabs");
+    expect(panel_tabs && panel_tabs->storage_codec == StorageCodec::control_info &&
+        panel_tabs->value_codec == ValueCodec::enumeration &&
+        panel_tabs->default_value.kind == DefaultKind::enumeration && panel_tabs->default_value.canonical == "ShowTabs.Top",
+        "Panel ShowTabs must have its observed default and descriptor");
     const auto* group_caption = find_property(ControlKind::usual_group, "Caption");
     const auto* group_tool_tip = find_property(ControlKind::usual_group, "ToolTip");
     expect(group_enabled && group_enabled->storage_codec == StorageCodec::control_base &&
@@ -893,6 +903,11 @@ void test_help_metamodel() {
                picture_click->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
                picture_click->storage_event_id.has_value() && *picture_click->storage_event_id == 0,
         "PictureDecoration.Click must use the shared event record descriptor and observed storage ID zero");
+    const auto* panel_change = find_event(ControlKind::panel, "OnCurrentPageChange");
+    expect(panel_change && panel_change->persistence == PersistenceClass::persisted_editable &&
+        panel_change->storage_codec == StorageCodec::event_record &&
+        panel_change->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
+        panel_change->storage_event_id == 0U, "Panel page change must have the observed event descriptor");
     for (const auto& [kind, name, id] : std::array{
              std::tuple{ControlKind::picture_decoration, "DragStart", 3U},
              std::tuple{ControlKind::picture_decoration, "DragCheck", 4U},
@@ -1042,11 +1057,11 @@ void test_shared_control_default_classifications() {
                find_property(ControlKind::list_box, "Font") == nullptr,
         "shared BorderColor and Font rules must retain named codecs and defaults");
 
-    const auto* unproven_enabled = find_property(ControlKind::panel, "Enabled");
-    expect(unproven_enabled && unproven_enabled->persistence == PersistenceClass::unclassified &&
+    expect(classified(ControlKind::panel, "Enabled", StorageCodec::control_base,
+                   DefaultKind::boolean, "true", ValueCodec::boolean) &&
                classified(ControlKind::check_box, "BorderColor", StorageCodec::control_base,
                    DefaultKind::color, "automatic", ValueCodec::color),
-        "only proven shared properties are classified");
+        "proven shared properties must retain their descriptors");
 }
 
 void test_variant_coverage() {
