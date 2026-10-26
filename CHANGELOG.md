@@ -2,6 +2,9 @@
 
 ## 1.0.0 - Не выпущен
 
+- Добавлены именованные переводы Caption самой формы; AutoTitle остается
+  отдельным неподтвержденным свойством.
+
 - Добавлены именованные переводы Caption для Button, CheckBox, RadioButton,
   UsualGroup и LabelDecoration.
 

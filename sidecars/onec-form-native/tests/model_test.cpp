@@ -755,9 +755,14 @@ void test_help_metamodel() {
         find_property(ControlKind::input_field, "SelButtonPicture") != nullptr &&
             find_property(ControlKind::input_field, "ChoiceButtonPicture") != nullptr,
         "duplicate Russian choice-button labels must retain distinct API properties");
+    const auto* form_caption_descriptor = find_form_property("Caption");
     expect(
-        find_form_property("Caption")->russian_name == u8"Заголовок",
-        "Form Caption must resolve from exact bilingual help");
+        form_caption_descriptor && form_caption_descriptor->russian_name == u8"Заголовок" &&
+            form_caption_descriptor->value_codec == ValueCodec::localized_text &&
+            form_caption_descriptor->storage_codec == StorageCodec::root_record &&
+            form_caption_descriptor->default_value.kind == DefaultKind::string &&
+            form_caption_descriptor->default_value.canonical.empty(),
+        "Form Caption must use the existing localized_text codec, root record, and empty string default");
     expect(
         find_event(ControlKind::input_field, "OnChange") != nullptr,
         "InputField OnChange event must be executable metamodel data");

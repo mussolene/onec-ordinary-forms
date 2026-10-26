@@ -56,6 +56,9 @@ Caption для Button, CheckBox, RadioButton, UsualGroup и LabelDecoration
 поддерживает обычную строку и именованные переводы. Для непустых ru/en эти пять
 типов прошли полный цикл Designer и проверку значений при запуске. Пустые
 переводы и другие сочетания языков требуют отдельного подтверждения.
+Caption самой формы также поддерживает именованные переводы; непустые ru/en
+прошли проверку Designer и запуск на синтетической форме. AutoTitle пока не
+классифицирован и его влияние на отображаемый заголовок отдельно не подтверждено.
 
 PictureDecoration также сохраняет Hyperlink, UseContextMenu, Zoomable,
 EnableStartDrag, EnableDrag, NonselectedPictureText и PictureSize. Поддержаны

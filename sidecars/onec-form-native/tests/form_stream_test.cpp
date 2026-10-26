@@ -176,6 +176,17 @@ Value* find_record_with_guid(Value& value, std::string_view guid) {
     return nullptr;
 }
 
+const list_stream::ListValue* bounded_list_item(
+    const list_stream::ListValue& value,
+    std::initializer_list<std::size_t> path) noexcept {
+    const auto* current = &value;
+    for (const auto index : path) {
+        if (!current->is_list || index >= current->items.size()) return nullptr;
+        current = &current->items[index];
+    }
+    return current;
+}
+
 list_stream::ListValue* bounded_list_item(
     list_stream::ListValue& value,
     std::initializer_list<std::size_t> path) noexcept {
@@ -6548,6 +6559,119 @@ void test_multilingual_caption_round_trip_for_supported_controls() {
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
                list_stream::dump_compact(encoded.value()),
         "the five named multilingual Caption properties must survive XML rebuild without storage drift");
+}
+
+void test_form_caption_localized_text_round_trip_and_rejections() {
+    using model::ObjectCategory;
+    using model::ObjectId;
+    using model::PropertyId;
+    const auto make_document = [] {
+        model::Form form;
+        form.id = ObjectId{1};
+        form.name = "LocalizedFormCaption";
+        return model::OrdinaryFormDocument(std::move(form));
+    };
+    const model::OrdinaryFormDocument::ObjectKey form_key{ObjectCategory::form, ObjectId{1}};
+    const auto property = PropertyId::from_name("Caption");
+    const auto* descriptor = model::metamodel::find_form_property("Caption");
+    expect(descriptor && descriptor->value_codec == model::metamodel::ValueCodec::localized_text &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::root_record &&
+               descriptor->default_value.kind == model::metamodel::DefaultKind::string &&
+               descriptor->default_value.canonical.empty(),
+        "Form.Caption must use localized_text in its existing root record and preserve its empty default");
+
+    auto defaults = make_document();
+    const auto default_read = defaults.get_prop_val(form_key, property);
+    expect(default_read.status == model::PropertyReadStatus::proven_default &&
+               default_read.value == std::optional<model::PropertyValue>{std::string{}},
+        "an omitted Form.Caption must retain the proven empty string default");
+    const auto default_stream = form_stream::encode_document(defaults);
+    expect(default_stream.ok(), "default Form.Caption must encode");
+    const auto* default_slot = bounded_list_item(default_stream.value(), {1, 1, 0});
+    expect(default_slot && list_stream::dump_compact(*default_slot) ==
+               value_codec::encode_localized_string(model::LocalizedStringValue{}),
+        "default Form.Caption must use the existing localized root header slot");
+    const auto default_decoded = form_stream::decode_document(default_stream.value(), "DefaultFormCaption");
+    expect(default_decoded.ok() &&
+               default_decoded.value().get_prop_val(form_key, property).status ==
+                   model::PropertyReadStatus::proven_default,
+        "decoding an empty root Caption must preserve the implicit default");
+
+    const std::vector<model::PropertyValue> values{
+        std::string("Обычный заголовок"),
+        model::LocalizedStringValue{{{"ru", "Заголовок"}, {"en", "Caption"}}},
+        model::LocalizedStringValue{{{"en", "English title"}}},
+        model::LocalizedStringValue{{{"ru", ""}}},
+    };
+    for (const auto& expected : values) {
+        auto document = make_document();
+        expect(document.set_prop_val(form_key, property, expected) == model::PropertyMutationStatus::applied,
+            "Form.Caption must accept plain and localized text through SetPropVal");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "plain or localized Form.Caption must encode");
+        const auto* caption_slot = bounded_list_item(encoded.value(), {1, 1, 0});
+        const auto encoded_value = std::holds_alternative<std::string>(expected)
+            ? value_codec::encode_localized_string(model::LocalizedStringValue{{{"ru", std::get<std::string>(expected)}}})
+            : value_codec::encode_localized_string(std::get<model::LocalizedStringValue>(expected));
+        expect(caption_slot && list_stream::dump_compact(*caption_slot) == encoded_value,
+            "Form.Caption must serialize through its known localized root slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "LocalizedFormCaption");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "plain or localized Form.Caption must decode completely");
+        const auto read = decoded.value().get_prop_val(form_key, property);
+        const auto normalized_expected = std::holds_alternative<std::string>(expected)
+            ? model::PropertyValue{std::get<std::string>(expected)}
+            : model::PropertyValue{std::get<model::LocalizedStringValue>(expected)};
+        expect(read.value && *read.value == normalized_expected,
+            "Form.Caption must preserve all explicit language values, including empty ru");
+        const auto reencoded = form_stream::encode_document(decoded.value());
+        expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "Form.Caption must re-encode without root slot drift");
+    }
+
+    auto invalid_values = make_document();
+    expect(invalid_values.set_prop_val(form_key, property,
+               model::LocalizedStringValue{{{"", "Missing language"}}}) ==
+               model::PropertyMutationStatus::invalid_value &&
+               invalid_values.set_prop_val(form_key, property,
+               model::LocalizedStringValue{{{"bad_tag", "Invalid language"}}}) ==
+               model::PropertyMutationStatus::invalid_value &&
+               invalid_values.set_prop_val(form_key, property,
+               model::LocalizedStringValue{{{"ru", "First"}, {"ru", "Duplicate"}}}) ==
+               model::PropertyMutationStatus::invalid_value,
+        "Form.Caption must reject empty, invalid, and duplicate language tags");
+    model::LocalizedStringValue too_many;
+    too_many.items.reserve(model::max_localized_text_items + 1);
+    for (std::size_t index = 0; index < model::max_localized_text_items + 1; ++index) {
+        too_many.items.push_back({"x-" + std::to_string(index), "v"});
+    }
+    expect(invalid_values.set_prop_val(form_key, property, too_many) ==
+               model::PropertyMutationStatus::invalid_value,
+        "Form.Caption must enforce the existing localized text item limit");
+
+    auto malformed = form_stream::encode_document(make_document());
+    expect(malformed.ok(), "empty Form.Caption fixture must encode before malformed-slot checks");
+    auto invalid_language_stream = malformed.value();
+    auto* invalid_language_slot = bounded_list_item(invalid_language_stream, {1, 1, 0});
+    expect(invalid_language_slot != nullptr, "Form.Caption root slot must be bounds-checkable");
+    if (invalid_language_slot) {
+        *invalid_language_slot = list_stream::parse(
+            value_codec::encode_localized_string(model::LocalizedStringValue{{{"bad_tag", "Invalid"}}}));
+        expect(!form_stream::decode_document(invalid_language_stream, "InvalidFormCaptionLanguage"),
+            "native Form.Caption with an invalid language tag must be rejected");
+    }
+
+    auto over_limit_stream = malformed.value();
+    auto* over_limit_slot = bounded_list_item(over_limit_stream, {1, 1, 0});
+    expect(over_limit_slot && over_limit_slot->is_list && over_limit_slot->items.size() >= 2,
+        "Form.Caption localized slot must expose its count only through bounds-checked access");
+    if (over_limit_slot && over_limit_slot->is_list && over_limit_slot->items.size() >= 2) {
+        over_limit_slot->items[1] = list_stream::ListValue::raw_atom(
+            std::to_string(model::max_localized_text_items + 1));
+        expect(!form_stream::decode_document(over_limit_stream, "OverLimitFormCaption"),
+            "native Form.Caption exceeding the item limit must be rejected");
+    }
 }
 
 void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() {
@@ -14444,6 +14568,7 @@ int main() {
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
         test_multilingual_caption_round_trip_for_supported_controls();
+        test_form_caption_localized_text_round_trip_and_rejections();
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();

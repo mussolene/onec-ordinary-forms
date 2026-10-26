@@ -9,7 +9,7 @@
             <Property name="AutoTitle" apiName="AutoTitle" russianName="АвтоЗаголовок" russianType="Булево" valueCodec="boolean"/>
             <Property name="FormOwner" apiName="FormOwner" russianName="ВладелецФормы" russianType="Форма ; Элемент управления" valueCodec="unclassified"/>
             <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
-            <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+            <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="localized-text"/>
             <Property name="CloseOnChoice" apiName="CloseOnChoice" russianName="ЗакрыватьПриВыборе" russianType="Булево" valueCodec="boolean"/>
             <Property name="CloseOnOwnerClose" apiName="CloseOnOwnerClose" russianName="ЗакрыватьПриЗакрытииВладельца" russianType="Булево" valueCodec="boolean"/>
             <Property name="SizeChange" apiName="SizeChange" russianName="ИзменениеРазмера" russianType="ИзменениеРазмераОкна" valueCodec="enumeration"/>

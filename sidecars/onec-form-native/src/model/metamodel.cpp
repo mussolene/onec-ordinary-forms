@@ -1108,6 +1108,8 @@ void apply_proven_storage_overrides(
         StorageCodec::root_record,
         DefaultKind::string,
         "");
+    std::ranges::find(form_properties, "Caption", &PropertyDescriptor::api_name)->value_codec =
+        ValueCodec::localized_text;
     classify_property(
         form_properties,
         "Width",

@@ -1788,7 +1788,7 @@
       <xs:element name="AutoTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FormOwner" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CloseOnChoice" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CloseOnOwnerClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SizeChange" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>

@@ -9916,7 +9916,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& form_section = payload.items[1];
         const auto& header = form_section.items[1];
         require_arity(header, 3, "$/1/1");
-        const std::string caption = decoded_single_language_text(header.items[0], "$/1/1/0");
+        const model::PropertyValue caption = decoded_localized_text(header.items[0], "$/1/1/0");
         const std::uint64_t stored_max_id = integer_atom<std::uint64_t>(header.items[1], "$/1/1/1");
         const auto default_owner_id = integer_atom<std::uint32_t>(header.items[2], "$/1/1/2");
         if (default_owner_id == 0) fail("OOF1114", "$/1/1/2", "default owner ID or uint32 sentinel", "0", "Default action owner is invalid");
@@ -9997,7 +9997,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
-        if (!caption.empty()) {
+        if (caption != model::PropertyValue{std::string{}}) {
             form.properties.set_explicit(model::PropertyId::from_name("Caption"), caption);
         }
         if (width != default_form_width) {
@@ -10627,7 +10627,8 @@ Result<list_stream::ListValue> encode_document(
             {"Caption", "Width", "Height"},
             "$/Form");
 
-        const std::string caption = explicit_string(document.form().properties, "Caption");
+        const auto caption = explicit_localized_text(
+            document.form().properties, "Caption", "$/Form");
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -10978,7 +10979,7 @@ Result<list_stream::ListValue> encode_document(
         const auto form_section = list({
             raw("18"),
             list({
-                encoded_localized(caption),
+                encoded_localized_text(caption, "$/Form/Caption"),
                 raw(std::to_string(max_id)),
                 raw(std::to_string(default_command_bar_id(document))),
             }),
