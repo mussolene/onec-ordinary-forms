@@ -53,6 +53,9 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 те же именованные типы значений, что и остальные подтвержденные владельцы.
 CheckBox сохраняет булевое ThreeState с исходным значением false. Редактор
 колонки таблицы сохраняет прежние ограничения.
+Chart сохраняет LabelDelimiter, MaxSeriesCount, MaxSeriesPercent,
+BeginGaugeAngle, EndGaugeAngle, GaugeThickness и GaugeBushThickness.
+Числовые границы проверяются при чтении и записи.
 Chart сохраняет именованные события Selection и DetailProcessing совместно
 с сериями, точками и значениями. Вызов событий интерфейсом отдельно не проверен.
 Chart сохраняет 13 булевых свойств, включая автоматические пределы и

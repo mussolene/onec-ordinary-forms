@@ -682,6 +682,14 @@ void apply_proven_storage_overrides(
         classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::boolean, "true");
     }
 
+    classify_property(chart_properties, "LabelDelimiter", StorageCodec::control_info, DefaultKind::string, ", ");
+    for (const auto& [name, default_value] : {std::pair{"MaxSeriesCount", "4"}, std::pair{"MaxSeriesPercent", "30"},
+             std::pair{"BeginGaugeAngle", "0"}, std::pair{"EndGaugeAngle", "180"},
+             std::pair{"GaugeThickness", "5"}, std::pair{"GaugeBushThickness", "4"}}) {
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::integer, default_value);
+        std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    }
+
     classify_shared_control_property("Enabled", StorageCodec::control_base, DefaultKind::boolean, "true", {
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,

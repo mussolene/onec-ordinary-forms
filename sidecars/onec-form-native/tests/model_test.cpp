@@ -648,6 +648,22 @@ void test_track_bar_storage_descriptors() {
         "TrackBar Step must use named int32 input, observed control-info storage, and default 1");
 }
 
+void test_chart_integer_and_delimiter_descriptors() {
+    using namespace oof::model::metamodel;
+    const auto* delimiter = find_property(ControlKind::chart, "LabelDelimiter");
+    expect(delimiter && delimiter->storage_codec == StorageCodec::control_info &&
+        delimiter->value_codec == ValueCodec::string && delimiter->default_value.kind == DefaultKind::string &&
+        delimiter->default_value.canonical == ", ", "Chart delimiter must use its named string and platform default");
+    for (const auto& [name, default_value] : {std::pair{"MaxSeriesCount", "4"}, std::pair{"MaxSeriesPercent", "30"},
+             std::pair{"BeginGaugeAngle", "0"}, std::pair{"EndGaugeAngle", "180"},
+             std::pair{"GaugeThickness", "5"}, std::pair{"GaugeBushThickness", "4"}}) {
+        const auto* property = find_property(ControlKind::chart, name);
+        expect(property && property->storage_codec == StorageCodec::control_info &&
+            property->value_codec == ValueCodec::integer32 && property->default_value.kind == DefaultKind::integer &&
+            property->default_value.canonical == default_value, "Chart integer descriptor must match platform storage and default");
+    }
+}
+
 void test_help_metamodel() {
     using namespace oof::model::metamodel;
 
@@ -2159,6 +2175,7 @@ int main() {
         test_button_alignment_xml_defaults();
         test_progress_bar_storage_descriptors();
         test_track_bar_storage_descriptors();
+        test_chart_integer_and_delimiter_descriptors();
         test_help_metamodel();
         test_shared_control_default_classifications();
         test_variant_coverage();

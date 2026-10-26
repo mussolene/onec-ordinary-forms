@@ -364,13 +364,13 @@
               <Property name="DataSource" apiName="DataSource" russianName="ИсточникДанных" russianType="ТаблицаЗначений ; ОбластьЯчеекТабличногоДокумента" valueCodec="unclassified"/>
               <Property name="SeriesCount" apiName="SeriesCount" russianName="КоличествоСерий" russianType="Число" valueCodec="decimal"/>
               <Property name="PointCount" apiName="PointCount" russianName="КоличествоТочек" russianType="Число" valueCodec="decimal"/>
-              <Property name="EndGaugeAngle" apiName="EndGaugeAngle" russianName="КонечныйУголИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
+              <Property name="EndGaugeAngle" apiName="EndGaugeAngle" russianName="КонечныйУголИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
               <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="decimal"/>
               <Property name="MaxSeries" apiName="MaxSeries" russianName="МаксимумСерий" russianType="МаксимумСерий" valueCodec="enumeration"/>
-              <Property name="MaxSeriesCount" apiName="MaxSeriesCount" russianName="МаксимумСерийКоличество" russianType="Число" valueCodec="decimal"/>
-              <Property name="MaxSeriesPercent" apiName="MaxSeriesPercent" russianName="МаксимумСерийПроцент" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxSeriesCount" apiName="MaxSeriesCount" russianName="МаксимумСерийКоличество" russianType="Число" valueCodec="integer32"/>
+              <Property name="MaxSeriesPercent" apiName="MaxSeriesPercent" russianName="МаксимумСерийПроцент" russianType="Число" valueCodec="integer32"/>
               <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="decimal"/>
-              <Property name="BeginGaugeAngle" apiName="BeginGaugeAngle" russianName="НачальныйУголИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
+              <Property name="BeginGaugeAngle" apiName="BeginGaugeAngle" russianName="НачальныйУголИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
               <Property name="TitleArea" apiName="TitleArea" russianName="ОбластьЗаголовка" russianType="ОбластьЗаголовкаДиаграммы" valueCodec="unclassified"/>
               <Property name="LegendArea" apiName="LegendArea" russianName="ОбластьЛегенды" russianType="ОбластьЛегендыДиаграммы" valueCodec="unclassified"/>
               <Property name="PlotArea" apiName="PlotArea" russianName="ОбластьПостроения" russianType="ОбластьПостроенияДиаграммы" valueCodec="unclassified"/>
@@ -397,8 +397,8 @@
               <Property name="Series" apiName="Series" russianName="Серии" russianType="СерииДиаграммы" valueCodec="unclassified"/>
               <Property name="SeriesInRows" apiName="SeriesInRows" russianName="СерииВСтроках" russianType="Булево" valueCodec="boolean"/>
               <Property name="ChartType" apiName="ChartType" russianName="ТипДиаграммы" russianType="ТипДиаграммы" valueCodec="enumeration"/>
-              <Property name="GaugeBushThickness" apiName="GaugeBushThickness" russianName="ТолщинаВтулкиИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
-              <Property name="GaugeThickness" apiName="GaugeThickness" russianName="ТолщинаШкалыИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
+              <Property name="GaugeBushThickness" apiName="GaugeBushThickness" russianName="ТолщинаВтулкиИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
+              <Property name="GaugeThickness" apiName="GaugeThickness" russianName="ТолщинаШкалыИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
               <Property name="Points" apiName="Points" russianName="Точки" russianType="ТочкиДиаграммы" valueCodec="unclassified"/>
               <Property name="ValueLabelFormat" apiName="ValueLabelFormat" russianName="ФорматЗначенийВПодписях" russianType="Строка" valueCodec="string"/>
               <Property name="PercentLabelFormat" apiName="PercentLabelFormat" russianName="ФорматПроцентовВПодписях" russianType="Строка" valueCodec="string"/>

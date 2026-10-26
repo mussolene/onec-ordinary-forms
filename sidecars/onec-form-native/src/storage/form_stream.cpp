@@ -6052,6 +6052,26 @@ void apply_chart_render_cache(const LV& actual, LV& expected,
     for (const auto offset : render_cache_offsets) normalize(render_start + offset);
 }
 
+std::int32_t explicit_integer(const model::PropertySet& properties, std::string_view name,
+    std::int32_t default_value, std::string_view property_path);
+
+struct ChartIntegerProperty {
+    std::string_view name;
+    std::size_t offset;
+    std::int32_t default_value;
+    std::int32_t minimum;
+    std::int32_t maximum;
+};
+
+constexpr std::array chart_integer_properties{
+    ChartIntegerProperty{"MaxSeriesCount", 46, 4, std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()},
+    ChartIntegerProperty{"MaxSeriesPercent", 47, 30, std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()},
+    ChartIntegerProperty{"BeginGaugeAngle", 70, 0, 0, 360},
+    ChartIntegerProperty{"EndGaugeAngle", 71, 180, 0, 360},
+    ChartIntegerProperty{"GaugeThickness", 72, 5, 1, 10},
+    ChartIntegerProperty{"GaugeBushThickness", 75, 4, 0, 10},
+};
+
 struct ChartBooleanProperty {
     std::string_view name;
     std::size_t offset;
@@ -6172,6 +6192,16 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     append(canonical_chart_tail_defaults());
     if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
     const auto middle_start = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+    info.at(middle_start + 4) = string_value(explicit_string(properties, "LabelDelimiter", ", "));
+    for (const auto& spec : chart_integer_properties) {
+        const auto path = std::string("$/Chart/") + std::string(spec.name);
+        const auto value = explicit_integer(properties, spec.name, spec.default_value, path);
+        if (value < spec.minimum || value > spec.maximum) {
+            fail("OOF1120", path, "integer in supported Chart property range", std::to_string(value),
+                "Chart property is out of range");
+        }
+        info.at(middle_start + spec.offset) = raw(std::to_string(value));
+    }
     for (const auto& spec : chart_boolean_properties) {
         const bool value = explicit_bool(properties, spec.name, spec.default_value);
         info.at(middle_start + spec.offset) = raw(value != spec.inverted ? "1" : "0");
@@ -6201,7 +6231,9 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
     }
     require_allowed_properties(control.properties(), {"Title", "Transparent", "AutoSeriesText", "AutoPointText",
         "Outline", "Light", "Gradient", "SeriesInRows", "HideBaseValue", "AutoTransposition",
-        "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel"}, "$/Chart");
+        "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
+        "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
+        "GaugeThickness", "GaugeBushThickness"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6370,6 +6402,18 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const bool stored = bool_atom(at(info, index, info_path), child_path(info_path, index));
         const bool value = stored != spec.inverted;
         if (value != spec.default_value) properties.set_explicit(model::PropertyId::from_name(spec.name), value);
+    }
+    const auto delimiter = string_atom(at(info, middle_start + 4, info_path), child_path(info_path, middle_start + 4));
+    if (delimiter != ", ") properties.set_explicit(model::PropertyId::from_name("LabelDelimiter"), delimiter);
+    for (const auto& spec : chart_integer_properties) {
+        const auto index = middle_start + spec.offset;
+        const auto path = child_path(info_path, index);
+        const auto value = integer_atom<std::int32_t>(at(info, index, info_path), path);
+        if (value < spec.minimum || value > spec.maximum) {
+            fail("OOF1115", path, "integer in supported Chart property range", std::to_string(value),
+                "Chart property is out of range");
+        }
+        if (value != spec.default_value) properties.set_explicit(model::PropertyId::from_name(spec.name), static_cast<std::int64_t>(value));
     }
     const auto transparent_label_index = middle_start + 103 + 3 * series_size * static_cast<std::size_t>(point_count);
     const bool transparent_label = bool_atom(at(info, transparent_label_index, info_path), child_path(info_path, transparent_label_index));

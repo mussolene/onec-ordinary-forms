@@ -2266,13 +2266,13 @@
       <xs:element name="DataSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeriesCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PointCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="EndGaugeAngle" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EndGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MaxSeries" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxSeriesCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxSeriesPercent" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeriesCount" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeriesPercent" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="BeginGaugeAngle" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeginGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LegendArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PlotArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
@@ -2297,8 +2297,8 @@
       <xs:element name="Light" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeriesInRows" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeBushThickness" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeThickness" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeBushThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PercentLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeBushColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

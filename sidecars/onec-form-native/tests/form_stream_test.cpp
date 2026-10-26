@@ -14919,6 +14919,70 @@ void test_chart_named_boolean_properties() {
         "Chart Boolean property must reject wrong type");
 }
 
+void test_chart_named_integer_and_delimiter_properties() {
+    for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "ChartNumbers";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload payload;
+        for (unsigned i = 0; i < series_count; ++i) {
+            model::ChartSeries item; item.id = model::ObjectId{10 + i}; item.text = "Series";
+            item.color.kind = model::ColorKind::absolute; item.marker = {"ChartMarkerType", "Auto"};
+            payload.series.push_back(std::move(item));
+        }
+        for (unsigned i = 0; i < point_count; ++i) {
+            model::ChartPoint item; item.id = model::ObjectId{20 + i}; item.text = "Point";
+            item.color.kind = model::ColorKind::absolute; payload.points.push_back(std::move(item));
+        }
+        for (const auto& series : payload.series) for (const auto& point : payload.points)
+            payload.values.push_back({series.id, point.id, model::DecimalValue{"-1.25"}});
+        model::ControlNode chart{model::ObjectId{2}, "Chart", std::move(payload)};
+        const std::array values{std::pair{"MaxSeriesCount", std::int64_t{-2147483648LL}},
+            std::pair{"MaxSeriesPercent", std::int64_t{2147483647LL}}, std::pair{"BeginGaugeAngle", std::int64_t{360}},
+            std::pair{"EndGaugeAngle", std::int64_t{0}}, std::pair{"GaugeThickness", std::int64_t{1}},
+            std::pair{"GaugeBushThickness", std::int64_t{10}}};
+        for (const auto& [name, value] : values) chart.properties().set_explicit(model::PropertyId::from_name(name), value);
+        chart.properties().set_explicit(model::PropertyId::from_name("LabelDelimiter"), std::string("Разделитель Ω & < >"));
+        chart.events.push_back(model::EventRef{model::ObjectId{100}});
+        document.add_event(model::Event{model::ObjectId{100}, "Selection", "OnSelection", model::ControlRef{model::ObjectId{2}}});
+        document.add_control(std::move(chart));
+        auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "Chart integer and delimiter properties must encode with events and data");
+        const auto middle = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+        const auto& info = find_chart_record(encoded.value())->items[3];
+        const std::array offsets{46U, 47U, 70U, 71U, 72U, 75U};
+        for (std::size_t i = 0; i < values.size(); ++i)
+            expect(info.items[middle + offsets[i]].atom == std::to_string(values[i].second), "Chart integer offset must match platform");
+        expect(info.items[middle + 4].atom == "Разделитель Ω & < >", "Chart delimiter must preserve Unicode");
+        auto decoded = form_stream::decode_document(encoded.value());
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart properties must decode completely");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "Chart properties must serialize to named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "Chart properties must parse from named XML");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "Chart properties must survive XML and native round trip");
+        for (const auto [offset, invalid] : {std::pair{70U, "-1"}, std::pair{71U, "361"},
+                std::pair{72U, "0"}, std::pair{75U, "11"}, std::pair{46U, "2147483648"}}) {
+            auto damaged = encoded.value();
+            find_chart_record(damaged)->items[3].items[middle + offset] = list_stream::ListValue::raw_atom(invalid);
+            expect(!form_stream::decode_document(damaged), "Chart integer properties must reject invalid stored values");
+        }
+        for (const auto& [name, invalid] : {std::pair{"BeginGaugeAngle", std::int64_t{-1}},
+                std::pair{"EndGaugeAngle", std::int64_t{361}}, std::pair{"GaugeThickness", std::int64_t{0}},
+                std::pair{"GaugeBushThickness", std::int64_t{11}}, std::pair{"MaxSeriesCount", std::int64_t{2147483648LL}}}) {
+            auto invalid_document = document;
+            auto* invalid_chart = const_cast<model::ControlNode*>(invalid_document.find_control(model::ObjectId{2}));
+            invalid_chart->properties().set_explicit(model::PropertyId::from_name(name), invalid);
+            expect(!form_stream::encode_document(invalid_document), "Chart encoder must reject an out-of-range integer");
+        }
+        auto wrong = encoded.value();
+        find_chart_record(wrong)->items[3].items[middle + 4] = list_stream::ListValue::raw_atom("0");
+        expect(!form_stream::decode_document(wrong), "Chart delimiter must reject a non-string field");
+    }
+}
+
 void test_chart_named_events() {
     constexpr std::array events{std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}};
     const auto make_document = [&](std::size_t series_count, std::size_t point_count,
@@ -16351,6 +16415,7 @@ int main() {
         test_chart_value_tooltip_named_pair_and_xml_text();
         test_embedded_chart_typed_variants_and_guards();
         test_chart_named_boolean_properties();
+        test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();
