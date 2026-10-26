@@ -1267,30 +1267,31 @@ model::FontValue explicit_control_font(const model::PropertySet& properties, std
     return std::get<model::FontValue>(entry->value);
 }
 
-LV encode_button_shortcut(const model::ShortcutValue& shortcut) {
+LV encode_named_shortcut(const model::ShortcutValue& shortcut, std::string_view path) {
     try {
         return list_stream::parse(value_codec::encode_shortcut(shortcut));
     } catch (const std::exception& error) {
-        fail("OOF1122", "$/Button/Shortcut", "supported named Shortcut value", error.what(),
-            "Button Shortcut cannot be represented by the platform codec");
+        fail("OOF1122", std::string(path), "supported named Shortcut value", error.what(),
+            "Shortcut cannot be represented by the platform codec");
     }
 }
 
-model::ShortcutValue decode_button_shortcut(const LV& value, std::string_view path) {
+model::ShortcutValue decode_named_shortcut(const LV& value, std::string_view path) {
     try {
         return value_codec::decode_shortcut(list_stream::dump_compact(value));
     } catch (const std::exception& error) {
-        fail("OOF1114", std::string(path), "supported canonical Button Shortcut record", error.what(),
-            "Button Shortcut record is malformed or unsupported");
+        fail("OOF1114", std::string(path), "supported canonical Shortcut record", error.what(),
+            "Shortcut record is malformed or unsupported");
     }
 }
 
-model::ShortcutValue explicit_button_shortcut(const model::PropertySet& properties) {
+model::ShortcutValue explicit_named_shortcut(
+    const model::PropertySet& properties, std::string_view path) {
     const auto* entry = properties.find(model::PropertyId::from_name("Shortcut"));
     if (entry == nullptr) return {};
     if (!std::holds_alternative<model::ShortcutValue>(entry->value)) {
-        fail("OOF1122", "$/Button/Shortcut", "ShortcutValue", "different value type",
-            "Button Shortcut property has the wrong value type");
+        fail("OOF1122", std::string(path), "ShortcutValue", "different value type",
+            "Shortcut property has the wrong value type");
     }
     return std::get<model::ShortcutValue>(entry->value);
 }
@@ -1454,6 +1455,7 @@ struct PictureDecorationInfoValues {
     bool enable_drag = false;
     model::PropertyValue nonselected_picture_text{std::string{}};
     std::int32_t picture_size = 0;
+    model::ShortcutValue shortcut{};
 };
 
 LV canonical_picture_properties(bool enabled, model::PropertyValue tool_tip = std::string{},
@@ -1466,6 +1468,7 @@ LV canonical_picture_properties(bool enabled, model::PropertyValue tool_tip = st
     properties.items[2] = raw(std::to_string(picture_info.picture_size));
     properties.items[3] = raw(picture_info.hyperlink ? "1" : "0");
     properties.items[4].items[1] = raw(std::to_string(picture_info.picture_size));
+    properties.items[5] = encode_named_shortcut(picture_info.shortcut, "$/PictureDecoration/Shortcut");
     properties.items[6] = raw(picture_info.zoomable ? "1" : "0");
     properties.items[7] = raw(picture_info.use_context_menu ? "1" : "0");
     properties.items[8] = raw(picture_info.enable_start_drag ? "1" : "0");
@@ -1517,7 +1520,7 @@ LV canonical_button_properties(
         raw(std::to_string(picture_location)),
         raw(std::to_string(picture_size)),
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"),
-        encode_button_shortcut(shortcut),
+        encode_named_shortcut(shortcut, "$/Button/Shortcut"),
         raw(multi_line ? "1" : "0"),
         raw(std::to_string(menu_mode)),
         raw("0"),
@@ -1536,7 +1539,9 @@ LV canonical_button_properties(
 LV canonical_label_properties(
     model::PropertyValue caption,
     std::int32_t horizontal_align,
-    const CommonControlBaseFields& common) {
+    const CommonControlBaseFields& common,
+    bool hyperlink = false,
+    const model::ShortcutValue& shortcut = {}) {
     auto base_properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
@@ -1549,10 +1554,10 @@ LV canonical_label_properties(
         encoded_localized_text(caption, "$/LabelDecoration/Caption"),
         raw(std::to_string(horizontal_align)),
         raw("1"),
+        raw(hyperlink ? "1" : "0"),
         raw("0"),
         raw("0"),
-        raw("0"),
-        parse_constant("{0,0,0}"),
+        encode_named_shortcut(shortcut, "$/LabelDecoration/Shortcut"),
         raw("0"),
         parse_constant("{1,0}"),
         raw("1"),
@@ -3651,7 +3656,7 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         if (entry.tooltip) record.push_back(encoded_localized(*entry.tooltip));
         if (entry.explanation) record.push_back(encoded_localized(*entry.explanation));
         if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
-        if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_button_shortcut(entry.shortcut));
+        if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_named_shortcut(entry.shortcut, "$/Button/Shortcut"));
         record.push_back(raw(std::to_string(client_interface_variant)));
         record.push_back(raw("0"));
         result.push_back(list(std::move(record)));
@@ -3910,7 +3915,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             }
             if (mask & 8) {
                 const auto slot = cursor;
-                entry.shortcut = decode_button_shortcut(take(), child_path(action_path, slot));
+                entry.shortcut = decode_named_shortcut(take(), child_path(action_path, slot));
             }
             const auto variant_slot = cursor;
             const auto client_interface_variant = integer_atom<std::int32_t>(take(), child_path(action_path, variant_slot));
@@ -4870,7 +4875,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_arity(properties, menu_mode == 0 ? 16 : 17, properties_path);
     const bool multi_line = bool_atom(
         properties.items[10], child_path(properties_path, 10));
-    const auto shortcut = decode_button_shortcut(
+    const auto shortcut = decode_named_shortcut(
         properties.items[9], child_path(properties_path, 9));
     const auto picture = decode_button_picture(properties.items[8], child_path(properties_path, 8));
     auto normalized_properties = properties;
@@ -5039,6 +5044,8 @@ DecodedControl decode_picture_decoration(
             std::to_string(picture_info.picture_size), "PictureDecoration.PictureSize storage value is unsupported");
     }
     picture_info.hyperlink = bool_atom(picture_properties.items[3], child_path(properties_path, 3));
+    picture_info.shortcut = decode_named_shortcut(
+        picture_properties.items[5], child_path(properties_path, 5));
     picture_info.zoomable = bool_atom(picture_properties.items[6], child_path(properties_path, 6));
     picture_info.use_context_menu = bool_atom(picture_properties.items[7], child_path(properties_path, 7));
     picture_info.enable_start_drag = bool_atom(picture_properties.items[8], child_path(properties_path, 8));
@@ -5104,6 +5111,8 @@ DecodedControl decode_picture_decoration(
         model::PropertyId::from_name("EnableStartDrag"), true);
     if (picture_info.enable_drag) control.properties().set_explicit(
         model::PropertyId::from_name("EnableDrag"), true);
+    if (picture_info.shortcut != model::ShortcutValue{}) control.properties().set_explicit(
+        model::PropertyId::from_name("Shortcut"), picture_info.shortcut);
     if (const auto* plain = std::get_if<std::string>(&picture_info.nonselected_picture_text)) {
         if (!plain->empty()) control.properties().set_explicit(
             model::PropertyId::from_name("NonselectedPictureText"), *plain);
@@ -5515,6 +5524,9 @@ DecodedControl decode_label(
         properties.items[2], child_path(properties_path, 2));
     const std::int32_t horizontal_align = integer_atom<std::int32_t>(
         properties.items[3], child_path(properties_path, 3));
+    const bool hyperlink = bool_atom(properties.items[5], child_path(properties_path, 5));
+    const auto shortcut = decode_named_shortcut(
+        properties.items[8], child_path(properties_path, 8));
     if (horizontal_align != 0 && horizontal_align != 1 && horizontal_align != 2 && horizontal_align != 4) {
         fail("OOF1122", child_path(properties_path, 3),
             "LabelDecoration HorizontalAlign storage value 0 (Left), 1 (Center), 2 (Right), or 4 (Auto)",
@@ -5536,7 +5548,7 @@ DecodedControl decode_label(
     canonical_common.named_transparent_control.reset();
     canonical_common.transparent = false;
     const auto canonical_properties = canonical_label_properties(
-        caption, horizontal_align, canonical_common);
+        caption, horizontal_align, canonical_common, hyperlink, shortcut);
     if (list_stream::dump_compact(normalized_properties) !=
         list_stream::dump_compact(canonical_properties)) {
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
@@ -5577,6 +5589,9 @@ DecodedControl decode_label(
             "HorizontalAlign",
             horizontal_align == 4 ? "Auto" : horizontal_align == 2 ? "Right" :
                 horizontal_align == 1 ? "Center" : "Left"});
+    if (hyperlink) control.properties().set_explicit(model::PropertyId::from_name("Hyperlink"), true);
+    if (shortcut != model::ShortcutValue{}) control.properties().set_explicit(
+        model::PropertyId::from_name("Shortcut"), shortcut);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
         std::move(named_events)};
@@ -8336,7 +8351,7 @@ LV encode_button(
     const auto menu_mode = explicit_enum_storage_value(control.properties(), "Button", "MenuMode", "MenuMode", 0,
         {{"DontUse", 0}, {"Use", 1}, {"UseExtra", 2}});
     const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
-    const auto shortcut = explicit_button_shortcut(control.properties());
+    const auto shortcut = explicit_named_shortcut(control.properties(), "$/Button/Shortcut");
     const auto handler = button_click_handler(document, control);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     auto button_properties = canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
@@ -8449,7 +8464,7 @@ LV encode_picture_decoration(
         fail("OOF1122", "$/PictureDecoration", "plain PictureDecoration", control.name,
             "PictureDecoration uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture", "TextColor", "BackColor", "Border",
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture", "TextColor", "BackColor", "Border", "Shortcut",
         "Font", "BorderColor", "Transparent", "Hyperlink", "UseContextMenu", "Zoomable", "EnableStartDrag",
         "EnableDrag", "NonselectedPictureText", "PictureSize"}, "$/PictureDecoration");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -8467,6 +8482,7 @@ LV encode_picture_decoration(
         nonselected_text ? nonselected_text->value : model::PropertyValue{std::string{}},
         explicit_enum_storage_value(control.properties(), "PictureDecoration", "PictureSize", "PictureSize", 0,
             {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3}, {"AutoSize", 4}, {"ByFontSize", 7}}),
+        explicit_named_shortcut(control.properties(), "$/PictureDecoration/Shortcut"),
     };
     const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
     const model::PictureAsset* picture_asset = nullptr;
@@ -8567,8 +8583,10 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "Hyperlink", "Shortcut", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
     const auto caption = explicit_localized_text(control.properties(), "Caption", "$/LabelDecoration");
+    const bool hyperlink = explicit_bool(control.properties(), "Hyperlink", false);
+    const auto shortcut = explicit_named_shortcut(control.properties(), "$/LabelDecoration/Shortcut");
     CommonControlBaseFields common{
         explicit_bool(control.properties(), "Enabled", true),
         explicit_localized_text(control.properties(), "ToolTip", "$/LabelDecoration"),
@@ -8596,7 +8614,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         else horizontal_align = 2;
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
-    auto label_properties = canonical_label_properties(caption, horizontal_align, common);
+    auto label_properties = canonical_label_properties(caption, horizontal_align, common, hyperlink, shortcut);
     encode_named_control_colors(label_properties.items[0], model::ControlKind::label_decoration,
         control.properties(), "$/LabelDecoration");
     encode_named_control_border(label_properties.items[0], model::ControlKind::label_decoration,

@@ -53,6 +53,9 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 те же именованные типы значений, что и остальные подтвержденные владельцы.
 CheckBox сохраняет булевое ThreeState с исходным значением false. Редактор
 колонки таблицы сохраняет прежние ограничения.
+LabelDecoration сохраняет Hyperlink и Shortcut, PictureDecoration сохраняет
+Shortcut. Сочетание F2 с Alt и Ctrl проверено при открытии формы в режиме
+гиперссылки; физическое нажатие клавиш еще не проверено.
 Обработчики LabelDecoration.Click и PictureDecoration.Click сохраняются как
 именованные события; их назначения проверены после выгрузки и повторного
 открытия. Фактический щелчок и вызов обработчиков в интерфейсе еще не проверены.
@@ -75,7 +78,7 @@ NonselectedPictureText поддерживаются обычная строка 
 превышение отклоняется. Пустой перевод сохраняется в модели и Form.bin, но
 Designer 8.5.1.1343 удаляет его при выгрузке даже при наличии непустого `en`.
 Поэтому полная идентичность XML через Designer для этого случая не подтверждена.
-Остальные события и Shortcut PictureDecoration остаются отдельными задачами.
+Остальные события PictureDecoration остаются отдельными задачами.
 
 UsualGroup и TrackBar сохраняют Transparent. ProgressBar сохраняет ShowPercent,
 ShowStyle (ProgressBarSmoothingMode.Smooth, Broken, BrokenTilt) и Orientation.

@@ -6241,6 +6241,182 @@ void test_picture_decoration_click_event_round_trip_and_guards() {
     }
 }
 
+void test_decoration_hyperlink_shortcut_round_trip_and_validation() {
+    const auto make_document = [](bool include_events = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "DecorationShortcut";
+        form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode label{model::ObjectId{2}, "Label", model::LabelDecorationPayload{}};
+        model::ControlNode picture{model::ObjectId{3}, "Picture", model::PictureDecorationPayload{}};
+        if (include_events) {
+            label.events = {model::EventRef{model::ObjectId{4}}};
+            picture.events = {model::EventRef{model::ObjectId{5}}};
+            document.add_event(model::Event{
+                model::ObjectId{4}, "Click", "LabelHandler", model::ControlRef{model::ObjectId{2}}});
+            document.add_event(model::Event{
+                model::ObjectId{5}, "Click", "PictureHandler", model::ControlRef{model::ObjectId{3}}});
+        }
+        document.add_control(std::move(label));
+        document.add_control(std::move(picture));
+        return document;
+    };
+    const auto shortcut = model::ShortcutValue{"F2", true, true, false};
+    const auto label_key = model::OrdinaryFormDocument::ObjectKey{
+        model::ObjectCategory::control, model::ObjectId{2}};
+    const auto picture_key = model::OrdinaryFormDocument::ObjectKey{
+        model::ObjectCategory::control, model::ObjectId{3}};
+    const auto hyperlink_property = model::PropertyId::from_name("Hyperlink");
+    const auto shortcut_property = model::PropertyId::from_name("Shortcut");
+
+    auto defaults = make_document();
+    for (const auto& [key, kind] : {
+             std::pair{label_key, model::ControlKind::label_decoration},
+             std::pair{picture_key, model::ControlKind::picture_decoration}}) {
+        const auto* hyperlink = model::metamodel::find_property(kind, "Hyperlink");
+        const auto* shortcut_descriptor = model::metamodel::find_property(kind, "Shortcut");
+        expect(hyperlink && hyperlink->value_codec == model::metamodel::ValueCodec::boolean &&
+                   hyperlink->storage_codec == model::metamodel::StorageCodec::control_info &&
+                   hyperlink->default_value.kind == model::metamodel::DefaultKind::boolean &&
+                   hyperlink->default_value.canonical == "false" &&
+                   shortcut_descriptor && shortcut_descriptor->value_codec == model::metamodel::ValueCodec::shortcut &&
+                   shortcut_descriptor->storage_codec == model::metamodel::StorageCodec::control_info &&
+                   shortcut_descriptor->default_value.kind == model::metamodel::DefaultKind::shortcut &&
+                   shortcut_descriptor->default_value.canonical == "None",
+            "decoration Hyperlink and Shortcut must use the existing typed info descriptors and defaults");
+        expect(defaults.get_prop_val(key, hyperlink_property).status == model::PropertyReadStatus::proven_default &&
+                   defaults.get_prop_val(key, hyperlink_property).value ==
+                       std::optional<model::PropertyValue>{false} &&
+                   defaults.get_prop_val(key, shortcut_property).status == model::PropertyReadStatus::proven_default &&
+                   defaults.get_prop_val(key, shortcut_property).value ==
+                       std::optional<model::PropertyValue>{model::ShortcutValue{}},
+            "decoration Hyperlink=false and Shortcut=None must remain proven defaults");
+    }
+    const auto default_stream = form_stream::encode_document(defaults);
+    expect(default_stream.ok(), "default LabelDecoration and PictureDecoration values must encode");
+    auto default_inspection = default_stream.value();
+    auto* default_label_record = find_record_with_guid(
+        default_inspection, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    auto* default_picture_record = find_record_with_guid(
+        default_inspection, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+    const auto* default_label_hyperlink = default_label_record
+        ? bounded_list_item(*default_label_record, {2, 1, 5}) : nullptr;
+    const auto* default_label_shortcut = default_label_record
+        ? bounded_list_item(*default_label_record, {2, 1, 8}) : nullptr;
+    const auto* default_picture_hyperlink = default_picture_record
+        ? bounded_list_item(*default_picture_record, {2, 1, 3}) : nullptr;
+    const auto* default_picture_shortcut = default_picture_record
+        ? bounded_list_item(*default_picture_record, {2, 1, 5}) : nullptr;
+    expect(default_label_hyperlink && default_label_hyperlink->atom == "0" &&
+               default_picture_hyperlink && default_picture_hyperlink->atom == "0" &&
+               default_label_shortcut && list_stream::dump_compact(*default_label_shortcut) == "{0,0,0}" &&
+               default_picture_shortcut && list_stream::dump_compact(*default_picture_shortcut) == "{0,0,0}",
+        "false Hyperlink and None Shortcut must serialize into the observed decoration slots");
+
+    auto document = make_document(true);
+    expect(document.set_prop_val(label_key, hyperlink_property, true) == model::PropertyMutationStatus::applied &&
+               document.set_prop_val(picture_key, hyperlink_property, true) == model::PropertyMutationStatus::applied &&
+               document.set_prop_val(label_key, shortcut_property, shortcut) == model::PropertyMutationStatus::applied &&
+               document.set_prop_val(picture_key, shortcut_property, shortcut) == model::PropertyMutationStatus::applied,
+        "LabelDecoration and PictureDecoration must accept typed Hyperlink and F2 Alt Ctrl Shortcut values");
+    expect(document.set_prop_val(label_key, hyperlink_property, std::string("true")) ==
+               model::PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(label_key, shortcut_property, std::string("F2")) ==
+               model::PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(picture_key, shortcut_property,
+                   model::ShortcutValue{"F13", true, true, false}) ==
+                   model::PropertyMutationStatus::invalid_value,
+        "decoration properties must reject wrong types and unsupported Shortcut keys");
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "named decoration Hyperlink and Shortcut values must encode");
+    auto inspection = encoded.value();
+    auto* label_record = find_record_with_guid(
+        inspection, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    auto* picture_record = find_record_with_guid(
+        inspection, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+    const auto* label_hyperlink = label_record ? bounded_list_item(*label_record, {2, 1, 5}) : nullptr;
+    const auto* label_shortcut = label_record ? bounded_list_item(*label_record, {2, 1, 8}) : nullptr;
+    const auto* picture_hyperlink = picture_record ? bounded_list_item(*picture_record, {2, 1, 3}) : nullptr;
+    const auto* picture_shortcut = picture_record ? bounded_list_item(*picture_record, {2, 1, 5}) : nullptr;
+    const auto* label_events = label_record ? bounded_list_item(*label_record, {2, 2}) : nullptr;
+    const auto* picture_events = picture_record ? bounded_list_item(*picture_record, {2, 2}) : nullptr;
+    const auto* label_event_count = label_events ? bounded_list_item(*label_events, {0}) : nullptr;
+    const auto* picture_event_count = picture_events ? bounded_list_item(*picture_events, {0}) : nullptr;
+    expect(label_hyperlink && label_hyperlink->atom == "1" &&
+               picture_hyperlink && picture_hyperlink->atom == "1" &&
+               label_shortcut && list_stream::dump_compact(*label_shortcut) == "{0,113,24}" &&
+               picture_shortcut && list_stream::dump_compact(*picture_shortcut) == "{0,113,24}" &&
+               label_event_count && label_event_count->atom == "1" &&
+               picture_event_count && picture_event_count->atom == "1",
+        "Hyperlink and F2 Alt Ctrl Shortcut must occupy their owner-specific slots without disturbing Click events");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "DecorationShortcut");
+    const auto* label = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* picture = decoded ? decoded.value().find_control(model::ObjectId{3}) : nullptr;
+    const auto* label_shortcut_value = label ? label->properties().find(shortcut_property) : nullptr;
+    const auto* picture_shortcut_value = picture ? picture->properties().find(shortcut_property) : nullptr;
+    expect(decoded.ok() && label && picture &&
+               std::get<bool>(label->properties().find(hyperlink_property)->value) &&
+               std::get<bool>(picture->properties().find(hyperlink_property)->value) &&
+               label_shortcut_value && std::get<model::ShortcutValue>(label_shortcut_value->value) == shortcut &&
+               picture_shortcut_value && std::get<model::ShortcutValue>(picture_shortcut_value->value) == shortcut &&
+               label->events.size() == 1 && picture->events.size() == 1,
+        "decoration properties and their Click events must decode together");
+    const auto storage_rebuilt = form_stream::encode_document(decoded.value());
+    expect(storage_rebuilt.ok() && list_stream::dump_compact(storage_rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "decoration Hyperlink, Shortcut, and events must survive exact stream round-trip");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("Hyperlink") != std::string::npos &&
+               xml.value().find("Shortcut") != std::string::npos && xml.value().find("F2") != std::string::npos,
+        "decoration Hyperlink and Shortcut must use named XML properties");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named decoration Hyperlink and Shortcut XML must parse");
+    const auto xml_rebuilt = form_stream::encode_document(parsed.value());
+    expect(xml_rebuilt.ok() && list_stream::dump_compact(xml_rebuilt.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "named decoration properties and events must rebuild the exact stream");
+
+    auto invalid_hyperlink = encoded.value();
+    auto* invalid_label = find_record_with_guid(
+        invalid_hyperlink, model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    auto* invalid_hyperlink_slot = invalid_label ? bounded_list_item(*invalid_label, {2, 1, 5}) : nullptr;
+    expect(invalid_hyperlink_slot != nullptr, "LabelDecoration Hyperlink field must be bounds-checkable");
+    if (invalid_hyperlink_slot) {
+        *invalid_hyperlink_slot = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(invalid_hyperlink, "InvalidLabelHyperlink"),
+            "LabelDecoration Hyperlink storage values other than zero or one must be rejected");
+    }
+    auto invalid_shortcut = encoded.value();
+    auto* invalid_picture = find_record_with_guid(
+        invalid_shortcut, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+    auto* invalid_shortcut_slot = invalid_picture ? bounded_list_item(*invalid_picture, {2, 1, 5}) : nullptr;
+    auto* invalid_shortcut_key = invalid_shortcut_slot
+        ? bounded_list_item(*invalid_shortcut_slot, {1}) : nullptr;
+    expect(invalid_shortcut_key != nullptr, "PictureDecoration Shortcut key field must be bounds-checkable");
+    if (invalid_shortcut_key) {
+        *invalid_shortcut_key = list_stream::ListValue::raw_atom("999");
+        expect(!form_stream::decode_document(invalid_shortcut, "InvalidPictureShortcut"),
+            "PictureDecoration Shortcut with an unknown key code must be rejected");
+    }
+    auto invalid_shortcut_modifiers = encoded.value();
+    auto* invalid_modifier_picture = find_record_with_guid(
+        invalid_shortcut_modifiers, model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid);
+    auto* invalid_modifier_slot = invalid_modifier_picture
+        ? bounded_list_item(*invalid_modifier_picture, {2, 1, 5}) : nullptr;
+    auto* invalid_modifier_value = invalid_modifier_slot
+        ? bounded_list_item(*invalid_modifier_slot, {2}) : nullptr;
+    expect(invalid_modifier_value != nullptr,
+        "PictureDecoration Shortcut modifier field must be bounds-checkable");
+    if (invalid_modifier_value) {
+        *invalid_modifier_value = list_stream::ListValue::raw_atom("32");
+        expect(!form_stream::decode_document(invalid_shortcut_modifiers, "InvalidPictureShortcutModifiers"),
+            "PictureDecoration Shortcut with unsupported modifier flags must be rejected");
+    }
+}
+
 void test_splitter_observed_record_and_named_codec() {
     const auto make_document = [](std::string name) {
         model::Form form;
@@ -14992,6 +15168,7 @@ int main() {
         test_common_control_tooltip_localized_text_round_trip_and_rejections();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
         test_picture_decoration_click_event_round_trip_and_guards();
+        test_decoration_hyperlink_shortcut_round_trip_and_validation();
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();

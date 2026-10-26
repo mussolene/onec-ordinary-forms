@@ -210,6 +210,8 @@ void test_descriptors() {
         "Button MenuMode descriptor must declare DontUse as its encoded default");
     const auto* label_enabled = find_property(ControlKind::label_decoration, "Enabled");
     const auto* label_tool_tip = find_property(ControlKind::label_decoration, "ToolTip");
+    const auto* label_hyperlink = find_property(ControlKind::label_decoration, "Hyperlink");
+    const auto* label_shortcut = find_property(ControlKind::label_decoration, "Shortcut");
     expect(label_enabled && label_enabled->persistence == PersistenceClass::persisted_editable &&
                label_enabled->storage_codec == StorageCodec::control_base &&
                label_enabled->value_codec == ValueCodec::boolean &&
@@ -222,6 +224,17 @@ void test_descriptors() {
                label_tool_tip->default_value.kind == DefaultKind::string &&
                label_tool_tip->default_value.canonical.empty(),
         "LabelDecoration ToolTip must declare its editable empty string default");
+    expect(label_hyperlink && label_hyperlink->persistence == PersistenceClass::persisted_editable &&
+               label_hyperlink->storage_codec == StorageCodec::control_info &&
+               label_hyperlink->value_codec == ValueCodec::boolean &&
+               label_hyperlink->default_value.kind == DefaultKind::boolean &&
+               label_hyperlink->default_value.canonical == "false" &&
+               label_shortcut && label_shortcut->persistence == PersistenceClass::persisted_editable &&
+               label_shortcut->storage_codec == StorageCodec::control_info &&
+               label_shortcut->value_codec == ValueCodec::shortcut &&
+               label_shortcut->default_value.kind == DefaultKind::shortcut &&
+               label_shortcut->default_value.canonical == "None",
+        "LabelDecoration Hyperlink and Shortcut must declare their typed defaults in the existing info record");
     const auto* radio_enabled = find_property(ControlKind::radio_button, "Enabled");
     const auto* radio_caption = find_property(ControlKind::radio_button, "Caption");
     const auto* radio_tool_tip = find_property(ControlKind::radio_button, "ToolTip");
@@ -253,6 +266,7 @@ void test_descriptors() {
     const auto* picture_enabled = find_property(ControlKind::picture_decoration, "Enabled");
     const auto* picture_tool_tip = find_property(ControlKind::picture_decoration, "ToolTip");
     const auto* picture_value = find_property(ControlKind::picture_decoration, "Picture");
+    const auto* picture_shortcut = find_property(ControlKind::picture_decoration, "Shortcut");
     expect(picture_enabled && picture_enabled->persistence == PersistenceClass::persisted_editable &&
                picture_enabled->storage_codec == StorageCodec::control_base &&
                picture_enabled->value_codec == ValueCodec::boolean &&
@@ -270,6 +284,12 @@ void test_descriptors() {
                picture_value->value_codec == ValueCodec::picture &&
                picture_value->default_value.kind == DefaultKind::none,
         "PictureDecoration Picture must declare its typed editable picture record");
+    expect(picture_shortcut && picture_shortcut->persistence == PersistenceClass::persisted_editable &&
+               picture_shortcut->storage_codec == StorageCodec::control_info &&
+               picture_shortcut->value_codec == ValueCodec::shortcut &&
+               picture_shortcut->default_value.kind == DefaultKind::shortcut &&
+               picture_shortcut->default_value.canonical == "None",
+        "PictureDecoration Shortcut must use the shared typed Shortcut codec and None default");
 }
 
 void test_command_bar_property_descriptors() {

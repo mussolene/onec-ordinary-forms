@@ -874,6 +874,8 @@ void apply_proven_storage_overrides(
     classify_property(picture_decoration, "Zoomable", StorageCodec::control_info, DefaultKind::boolean, "true");
     classify_property(picture_decoration, "EnableStartDrag", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(picture_decoration, "EnableDrag", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(picture_decoration, "Shortcut", StorageCodec::control_info,
+        DefaultKind::shortcut, "None");
     classify_property(picture_decoration, "NonselectedPictureText", StorageCodec::control_info,
         DefaultKind::string, "");
     std::ranges::find(picture_decoration, "NonselectedPictureText", &PropertyDescriptor::api_name)->value_codec =
@@ -888,6 +890,9 @@ void apply_proven_storage_overrides(
     classify_property(splitter, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
+    classify_property(label_decoration, "Hyperlink", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(label_decoration, "Shortcut", StorageCodec::control_info,
+        DefaultKind::shortcut, "None");
     classify_property(label_decoration, "Caption", StorageCodec::control_info,
         DefaultKind::string, "");
     std::ranges::find(label_decoration, "Caption", &PropertyDescriptor::api_name)->value_codec =
