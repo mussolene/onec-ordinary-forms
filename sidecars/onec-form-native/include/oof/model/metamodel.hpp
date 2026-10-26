@@ -98,6 +98,7 @@ enum class ValueCodec : std::uint8_t {
     control_reference,
     attribute_reference,
     command_reference,
+    localized_text,
 };
 
 struct ShortcutKeyDescriptor {

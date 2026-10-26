@@ -367,6 +367,17 @@ LV encoded_localized(std::string_view text) {
     return list_stream::parse(value_codec::encode_localized_string(value));
 }
 
+LV encoded_localized_text(const model::PropertyValue& value, std::string_view path) {
+    if (const auto* plain = std::get_if<std::string>(&value)) return encoded_localized(*plain);
+    if (const auto* translations = std::get_if<model::LocalizedStringValue>(&value)) {
+        auto normalized = *translations;
+        for (auto& item : normalized.items) item.text = normalize_storage_line_endings(item.text);
+        return list_stream::parse(value_codec::encode_localized_string(normalized));
+    }
+    fail("OOF1122", std::string(path), "plain or localized text", "different value type",
+        "Localized text has the wrong model value type");
+}
+
 bool is_canonical_spreadsheet_decimal(std::string_view value) {
     try {
         return value_codec::canonical_decimal(value) == value;
@@ -560,6 +571,27 @@ std::string decoded_single_language_text(const LV& value, std::string_view path)
             "The product slice cannot normalize a multilingual storage title without loss");
     }
     return decoded.items.empty() ? std::string{} : normalize_model_line_endings(decoded.items.front().text);
+}
+
+model::PropertyValue decoded_localized_text(const LV& value, std::string_view path) {
+    static_assert(model::max_localized_text_items * 6 < list_stream::max_list_tokens);
+    if (value.items.size() >= 2 &&
+        integer_atom<std::uint32_t>(value.items[1], child_path(path, 1)) > model::max_localized_text_items) {
+        fail("OOF1108", std::string(path), "at most 65536 translations", "too many translations",
+             "Localized text exceeds the translation limit");
+    }
+    model::LocalizedStringValue decoded;
+    try {
+        list_stream::ListInStream in(value);
+        decoded = value_codec::read_localized_string(in);
+    } catch (const std::exception& error) {
+        fail("OOF1108", std::string(path), "localized text record", describe(value), error.what());
+    }
+    for (auto& item : decoded.items) item.text = normalize_model_line_endings(item.text);
+    if (decoded.items.empty()) return std::string{};
+    if (decoded.items.size() == 1 && decoded.items.front().language == "ru" &&
+        !decoded.items.front().text.empty()) return decoded.items.front().text;
+    return decoded;
 }
 
 LV canonical_style_record(std::uint32_t version) {
@@ -1405,7 +1437,7 @@ struct PictureDecorationInfoValues {
     bool zoomable = true;
     bool enable_start_drag = false;
     bool enable_drag = false;
-    std::string nonselected_picture_text;
+    model::PropertyValue nonselected_picture_text{std::string{}};
     std::int32_t picture_size = 0;
 };
 
@@ -1423,7 +1455,8 @@ LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {},
     properties.items[7] = raw(picture_info.use_context_menu ? "1" : "0");
     properties.items[8] = raw(picture_info.enable_start_drag ? "1" : "0");
     properties.items[9] = raw(picture_info.enable_drag ? "1" : "0");
-    properties.items[10] = encoded_localized(picture_info.nonselected_picture_text);
+    properties.items[10] = encoded_localized_text(picture_info.nonselected_picture_text,
+        "$/PictureDecoration/NonselectedPictureText");
     return properties;
 }
 
@@ -4993,7 +5026,7 @@ DecodedControl decode_picture_decoration(
     picture_info.use_context_menu = bool_atom(picture_properties.items[7], child_path(properties_path, 7));
     picture_info.enable_start_drag = bool_atom(picture_properties.items[8], child_path(properties_path, 8));
     picture_info.enable_drag = bool_atom(picture_properties.items[9], child_path(properties_path, 9));
-    picture_info.nonselected_picture_text = decoded_single_language_text(
+    picture_info.nonselected_picture_text = decoded_localized_text(
         picture_properties.items[10], child_path(properties_path, 10));
     const auto picture = decode_button_picture(
         picture_slot.items[2], child_path(picture_slot_path, 2));
@@ -5054,8 +5087,13 @@ DecodedControl decode_picture_decoration(
         model::PropertyId::from_name("EnableStartDrag"), true);
     if (picture_info.enable_drag) control.properties().set_explicit(
         model::PropertyId::from_name("EnableDrag"), true);
-    if (!picture_info.nonselected_picture_text.empty()) control.properties().set_explicit(
-        model::PropertyId::from_name("NonselectedPictureText"), picture_info.nonselected_picture_text);
+    if (const auto* plain = std::get_if<std::string>(&picture_info.nonselected_picture_text)) {
+        if (!plain->empty()) control.properties().set_explicit(
+            model::PropertyId::from_name("NonselectedPictureText"), *plain);
+    } else if (const auto* translations = std::get_if<model::LocalizedStringValue>(
+                   &picture_info.nonselected_picture_text); translations && !translations->items.empty()) {
+        control.properties().set_explicit(model::PropertyId::from_name("NonselectedPictureText"), *translations);
+    }
     if (picture_info.picture_size != 0) {
         static constexpr std::string_view members[] = {"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "", "", "ByFontSize"};
         control.properties().set_explicit(model::PropertyId::from_name("PictureSize"),
@@ -8389,13 +8427,14 @@ LV encode_picture_decoration(
     const auto font = explicit_control_font(control.properties(), "$/PictureDecoration/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "PictureDecoration");
     const bool transparent = explicit_bool(control.properties(), "Transparent", false);
+    const auto* nonselected_text = control.properties().find(model::PropertyId::from_name("NonselectedPictureText"));
     const PictureDecorationInfoValues picture_info{
         explicit_bool(control.properties(), "Hyperlink", false),
         explicit_bool(control.properties(), "UseContextMenu", true),
         explicit_bool(control.properties(), "Zoomable", true),
         explicit_bool(control.properties(), "EnableStartDrag", false),
         explicit_bool(control.properties(), "EnableDrag", false),
-        explicit_string(control.properties(), "NonselectedPictureText"),
+        nonselected_text ? nonselected_text->value : model::PropertyValue{std::string{}},
         explicit_enum_storage_value(control.properties(), "PictureDecoration", "PictureSize", "PictureSize", 0,
             {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3}, {"AutoSize", 4}, {"ByFontSize", 7}}),
     };

@@ -91,6 +91,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "xs:decimal";
         case ValueCodec::string:
             return "xs:string";
+        case ValueCodec::localized_text:
+            return "LocalizedTextValueType";
         case ValueCodec::localized_string:
             return "LocalizedStringValueType";
         case ValueCodec::formatted_string:
@@ -359,6 +361,12 @@ void append_value_types(std::string& output) {
   <xs:complexType name="LocalizedStringValueType">
     <xs:sequence>
       <xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="LocalizedTextValueType" mixed="true">
+    <xs:sequence>
+      <xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="65536"/>
     </xs:sequence>
   </xs:complexType>
 

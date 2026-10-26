@@ -867,6 +867,8 @@ void apply_proven_storage_overrides(
     classify_property(picture_decoration, "EnableDrag", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(picture_decoration, "NonselectedPictureText", StorageCodec::control_info,
         DefaultKind::string, "");
+    std::ranges::find(picture_decoration, "NonselectedPictureText", &PropertyDescriptor::api_name)->value_codec =
+        ValueCodec::localized_text;
     classify_property(picture_decoration, "PictureSize", StorageCodec::control_info,
         DefaultKind::enumeration, "RealSize");
     std::ranges::find(picture_decoration, "PictureSize", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
@@ -1793,6 +1795,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "decimal";
         case ValueCodec::string:
             return "string";
+        case ValueCodec::localized_text:
+            return "localized-text";
         case ValueCodec::localized_string:
             return "localized-string";
         case ValueCodec::formatted_string:

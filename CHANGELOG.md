@@ -2,6 +2,10 @@
 
 ## 1.0.0 - Не выпущен
 
+- Для NonselectedPictureText добавлены именованные переводы с ограничением их
+  числа. Пустые переводы сохраняются в модели, но Designer может удалить их
+  при выгрузке, что остается видимым в различиях XML.
+
 - Для цели 8.5.1.1343 явно исключен ActiveXControl; добавлен отчет `oof --coverage --json`, отделяющий классификацию дескрипторов от проверки семантики.
 - Добавлены CalendarField.ToolTip, CheckBox.BorderColor, ChoiceField.Font и CommandBar.Font через общие кодеки; значения проверены getters и строгим Designer.
 - Добавлены RadioButton.Font/BorderColor, InputField.Font/BorderColor и ListBox.BorderColor; сохранены профили типов, привязок и редактора таблицы.

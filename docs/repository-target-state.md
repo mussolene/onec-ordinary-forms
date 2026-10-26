@@ -252,6 +252,11 @@ ASan/UBSan: 11/11 PASS. TableColumnEditor не расширен; отдельн�
 
 В четырнадцатой волне PictureDecoration получил Hyperlink, UseContextMenu,
 Zoomable, EnableStartDrag, EnableDrag, PictureSize и NonselectedPictureText.
+Для NonselectedPictureText реализовано именованное многоязычное значение.
+Designer 8.5.1.1343 удаляет пустой `ru` при выгрузке, в том числе рядом с
+непустым `en`; это отличие платформы остается видимым в XML. Наблюдение:
+`ev_072db8e32a144a0faa58997e92e187cb`. Общая поддержка многоязычных свойств
+остается частичной.
 Размер картинки хранится в двух согласованных полях; при расхождении записей
 чтение прекращается с ошибкой. Подтверждены RealSize, Stretch, Proportionally,
 Tile, AutoSize и ByFontSize. Два варианта без учета масштаба платформа отклоняет

@@ -55,9 +55,12 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 PictureDecoration также сохраняет Hyperlink, UseContextMenu, Zoomable,
 EnableStartDrag, EnableDrag, NonselectedPictureText и PictureSize. Поддержаны
 шесть режимов PictureSize: RealSize, Stretch, Proportionally, Tile, AutoSize и
-ByFontSize. Внутренние парные значения размера должны совпадать. Текст пока
-сохраняется только с пустой или единственной локализацией `ru`; другие локализации
-и несколько языков отклоняются до реализации общего локализованного значения.
+ByFontSize. Внутренние парные значения размера должны совпадать. Для
+NonselectedPictureText поддерживаются обычная строка и именованные переводы
+`Item` с кодами языков. Предел составляет 65536 переводов на свойство;
+превышение отклоняется. Пустой перевод сохраняется в модели и Form.bin, но
+Designer 8.5.1.1343 удаляет его при выгрузке даже при наличии непустого `en`.
+Поэтому полная идентичность XML через Designer для этого случая не подтверждена.
 События и Shortcut PictureDecoration остаются отдельными задачами.
 
 UsualGroup и TrackBar сохраняют Transparent. ProgressBar сохраняет ShowPercent,

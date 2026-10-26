@@ -418,6 +418,31 @@ void test_schema_version_and_controls(
         "generic ControlType is forbidden");
 }
 
+void test_localized_text_schema(xmlNodePtr schema, xmlSchemaPtr compiled_schema) {
+    xmlNodePtr localized = schema_component(schema, "complexType", "LocalizedTextValueType");
+    expect(localized && attribute(localized, "mixed") == "true",
+        "localized text schema must support the existing plain-text form");
+    xmlNodePtr sequence = direct_child(localized, "sequence");
+    xmlNodePtr item = direct_child_with_attribute(sequence, "element", "name", "Item");
+    expect(item && attribute(item, "type") == "LocalizedStringItemType" &&
+               attribute(item, "maxOccurs") == "65536",
+        "localized text schema must reuse named language items");
+    bool property_found = false;
+    for (xmlNodePtr element : direct_children(sequence_for_type(schema, "PictureDecorationType"), "element"))
+        if (attribute(element, "name") == "NonselectedPictureText")
+            property_found = attribute(element, "type") == "LocalizedTextValueType";
+    expect(property_found, "picture text must use the localized text schema");
+    const auto document = [](std::string_view content) {
+        return std::string(R"XML(<Form id="1" name="Text" ordinaryFormVersion="2.1"><ChildItems><PictureDecoration id="2" name="Picture"><Position/><NonselectedPictureText>)XML") +
+            std::string(content) + R"XML(</NonselectedPictureText></PictureDecoration></ChildItems></Form>)XML";
+    };
+    expect(validate_document(compiled_schema, document("simple text")) == 0 &&
+               validate_document(compiled_schema, document(R"XML(<Item language="ru">Текст</Item><Item language="en">Text</Item>)XML")) == 0,
+        "plain and named multilingual values must both satisfy the public schema");
+    expect(validate_document(compiled_schema, document(R"XML(<Item language="bad_tag">Text</Item>)XML")) != 0,
+        "localized text schema must reject malformed language tags");
+}
+
 void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compiled_schema) {
     const auto element_type = [&](std::string_view owner, std::string_view element_name) {
         for (xmlNodePtr element : direct_children(sequence_for_type(schema, owner), "element")) {
@@ -1525,6 +1550,7 @@ int main() {
         expect(compiled_palette != nullptr, "palette XSD must compile");
 
         test_schema_version_and_controls(metamodel, form_schema);
+        test_localized_text_schema(form_schema, compiled_form.get());
         test_fixed_control_enumeration_schemas(form_schema, compiled_form.get());
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);

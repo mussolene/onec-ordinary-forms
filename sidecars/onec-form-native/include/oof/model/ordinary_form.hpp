@@ -186,6 +186,8 @@ struct LocalizedStringItem {
     friend bool operator==(const LocalizedStringItem&, const LocalizedStringItem&) = default;
 };
 
+inline constexpr std::size_t max_localized_text_items = 65536;
+
 struct LocalizedStringValue {
     std::vector<LocalizedStringItem> items;
 

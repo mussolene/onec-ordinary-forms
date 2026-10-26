@@ -48,6 +48,39 @@ bool valid_border_value(const BorderValue& value) noexcept {
 
 namespace {
 
+bool valid_xs_language(std::string_view language) noexcept {
+    if (language.empty()) return false;
+    std::size_t segment_length = 0;
+    bool first_segment = true;
+    for (const unsigned char character : language) {
+        if (character == '-') {
+            if (segment_length == 0 || segment_length > 8) return false;
+            segment_length = 0;
+            first_segment = false;
+        } else {
+            const bool alpha = (character >= 'A' && character <= 'Z') ||
+                (character >= 'a' && character <= 'z');
+            const bool digit = character >= '0' && character <= '9';
+            if ((!alpha && !digit) || (first_segment && !alpha) || segment_length == 8) return false;
+            ++segment_length;
+        }
+    }
+    return segment_length != 0;
+}
+
+bool valid_localized_string(const LocalizedStringValue& value) noexcept {
+    if (value.items.size() > max_localized_text_items) return false;
+    try {
+        std::set<std::string_view> languages;
+        for (const auto& item : value.items) {
+            if (!valid_xs_language(item.language) || !languages.insert(item.language).second) return false;
+        }
+    } catch (...) {
+        return false;
+    }
+    return true;
+}
+
 void add_violation(
     ValidationReport& report,
     InvariantCode code,
@@ -82,9 +115,12 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, DecimalValue>) {
                 return expected == metamodel::ValueCodec::decimal;
             } else if constexpr (std::is_same_v<Value, std::string>) {
-                return expected == metamodel::ValueCodec::string;
+                return expected == metamodel::ValueCodec::string ||
+                       expected == metamodel::ValueCodec::localized_text;
             } else if constexpr (std::is_same_v<Value, LocalizedStringValue>) {
-                return expected == metamodel::ValueCodec::localized_string;
+                return expected == metamodel::ValueCodec::localized_string ||
+                       (expected == metamodel::ValueCodec::localized_text &&
+                        valid_localized_string(typed_value));
             } else if constexpr (std::is_same_v<Value, FormattedStringValue>) {
                 return expected == metamodel::ValueCodec::formatted_string;
             } else if constexpr (std::is_same_v<Value, DateValue>) {
@@ -280,7 +316,8 @@ std::optional<PropertyValue> materialize_default(
             if (!value.canonical.empty()) return PropertyValue{DecimalValue{std::string(value.canonical)}};
             return std::nullopt;
         case DefaultKind::string:
-            if (descriptor.value_codec == metamodel::ValueCodec::string) {
+            if (descriptor.value_codec == metamodel::ValueCodec::string ||
+                descriptor.value_codec == metamodel::ValueCodec::localized_text) {
                 return PropertyValue{std::string(value.canonical)};
             }
             return std::nullopt;

@@ -5596,6 +5596,16 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
         const auto property = model::PropertyId::from_name("NonselectedPictureText");
         const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
         auto text_document = make_document(false, true, "");
+        model::LocalizedStringValue bounded;
+        bounded.items.reserve(model::max_localized_text_items + 1);
+        for (std::size_t i = 0; i < model::max_localized_text_items; ++i)
+            bounded.items.push_back({"x-" + std::to_string(i), "v"});
+        expect(text_document.set_prop_val(key, property, bounded) == model::PropertyMutationStatus::applied,
+            "localized text must accept the translation limit");
+        bounded.items.push_back({"x-65536", "v"});
+        expect(text_document.set_prop_val(key, property, bounded) == model::PropertyMutationStatus::invalid_value,
+            "localized text must reject translations above the limit");
+        text_document = make_document(false, true, "");
         const auto read_default = text_document.get_prop_val(key, property);
         expect(read_default.status == model::PropertyReadStatus::proven_default && read_default.value &&
                 *read_default.value == model::PropertyValue{std::string{}},
@@ -5635,11 +5645,71 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
         mutable_picture_record(malformed_text).items[2].items[1].items[10] = list_stream::ListValue::raw_atom("invalid");
         expect(!form_stream::decode_document(malformed_text, "MalformedPictureText"),
             "malformed picture text localization must fail closed");
-        auto multilingual_text = text_stream.value();
-        mutable_picture_record(multilingual_text).items[2].items[1].items[10] = list_stream::parse(
-            value_codec::encode_localized_string(model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
-        expect(!form_stream::decode_document(multilingual_text, "MultilingualPictureText"),
-            "unsupported multilingual picture text must fail rather than lose a language");
+        const std::string whitespace_text = "  \t";
+        expect(text_document.set_prop_val(key, property, whitespace_text) == model::PropertyMutationStatus::applied,
+            "whitespace-only plain text must be accepted");
+        const auto whitespace_xml = source::serialize_form_xml(text_document);
+        expect(whitespace_xml.ok(), "whitespace-only plain text must serialize");
+        const auto whitespace_parsed = source::parse_form_xml(whitespace_xml.value());
+        expect(whitespace_parsed.ok(), "whitespace-only plain text must parse");
+        const auto whitespace_result = whitespace_parsed.value().get_prop_val(key, property);
+        expect(whitespace_result.value && *whitespace_result.value == model::PropertyValue{whitespace_text},
+            "whitespace-only plain text must not be mistaken for an absent value");
+        const model::LocalizedStringValue only_russian{{{"ru", "Одна локализация"}}};
+        expect(text_document.set_prop_val(key, property, only_russian) == model::PropertyMutationStatus::applied,
+            "a single Russian translation must be accepted");
+        const auto only_russian_xml = source::serialize_form_xml(text_document);
+        expect(only_russian_xml.ok() && only_russian_xml.value().find("<Item language=") == std::string::npos,
+            "one nonempty Russian translation must use the canonical plain-text representation");
+        const auto only_russian_stream = form_stream::encode_document(text_document);
+        expect(only_russian_stream.ok(), "a single Russian translation must encode");
+        const auto only_russian_decoded = form_stream::decode_document(only_russian_stream.value(), "RussianPictureText");
+        expect(only_russian_decoded.ok() && only_russian_decoded.value().get_prop_val(key, property).value ==
+                std::optional<model::PropertyValue>{std::string("Одна локализация")},
+            "a single nonempty Russian translation must decode to its equivalent plain text");
+        const std::vector<model::LocalizedStringValue> variants{
+            {{{"ru", "Текст Ω <пусто> & \"кавычки\""}, {"en", "No image Ω <empty> & \"quotes\""}}},
+            {{{"en", "English only"}}},
+            {{{"ru", ""}}},
+        };
+        for (const auto& translations : variants) {
+            expect(text_document.set_prop_val(key, property, translations) == model::PropertyMutationStatus::applied,
+                "named localized picture text must be accepted by the model API");
+            const auto stored = form_stream::encode_document(text_document);
+            expect(stored.ok(), "localized picture text must encode without a baseline");
+            const auto decoded = form_stream::decode_document(stored.value(), "LocalizedPictureText");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                "localized picture text must decode completely");
+            const auto result = decoded.value().get_prop_val(key, property);
+            expect(result.value && *result.value == model::PropertyValue{translations},
+                "all language identifiers and texts must survive storage");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok() && xml.value().find("<Item language=") != std::string::npos,
+                "localized picture text must use named Item elements in public XML");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "named localized picture text XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(stored.value()),
+                "all language items must survive XML and native rebuild");
+        }
+        const model::LocalizedStringValue duplicate{{{"ru", "one"}, {"ru", "two"}}};
+        const model::LocalizedStringValue invalid_language{{{"bad_tag", "text"}}};
+        expect(text_document.set_prop_val(key, property, duplicate) == model::PropertyMutationStatus::invalid_value &&
+                text_document.set_prop_val(key, property, invalid_language) == model::PropertyMutationStatus::invalid_value,
+            "model API must reject duplicate and invalid language identifiers");
+        auto duplicate_native = text_stream.value();
+        mutable_picture_record(duplicate_native).items[2].items[1].items[10] = list_stream::parse(
+            value_codec::encode_localized_string(duplicate));
+        expect(!form_stream::decode_document(duplicate_native, "DuplicatePictureTextLanguage"),
+            "duplicate native language identifiers must fail closed");
+        const auto xml_with = [](std::string_view content) {
+            return std::string(R"XML(<Form id="1" name="BadLocale" ordinaryFormVersion="2.1"><ChildItems><PictureDecoration id="2" name="Picture"><Position/><NonselectedPictureText>)XML") +
+                std::string(content) + R"XML(</NonselectedPictureText></PictureDecoration></ChildItems></Form>)XML";
+        };
+        expect(!source::parse_form_xml(xml_with(R"XML(<Item language="ru">one</Item><Item language="ru">two</Item>)XML")) &&
+                !source::parse_form_xml(xml_with(R"XML(<Item language="bad_tag">text</Item>)XML")) &&
+                !source::parse_form_xml(xml_with(R"XML(direct<Item language="ru">text</Item>)XML")),
+            "public XML must reject duplicate languages, invalid tags and mixed direct text");
     }
 
     auto unknown_property_document = make_document(false, true, "");

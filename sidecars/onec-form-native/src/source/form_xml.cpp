@@ -968,6 +968,25 @@ model::PropertyValue parse_property_value(
             return model::DecimalValue{canonical_decimal(node_text(node), node, property, object_id)};
         case mm::ValueCodec::string:
             return node_text(node);
+        case mm::ValueCodec::localized_text: {
+            const auto children = element_children(node);
+            if (children.empty()) return node_text(node);
+            if (children.size() > model::max_localized_text_items) {
+                fail("OOF2003", node, std::string(object_id), property,
+                    "at most 65536 translations", "too many translations",
+                    "Localized text exceeds the translation limit");
+            }
+            for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
+                if ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) &&
+                    child->content != nullptr &&
+                    !trim_ascii(reinterpret_cast<const char*>(child->content)).empty()) {
+                    fail("OOF2003", child, std::string(object_id), property,
+                        "plain text or localized Item elements", "mixed text and items",
+                        "Localized text cannot combine direct content with translations");
+                }
+            }
+            return parse_localized_string(node);
+        }
         case mm::ValueCodec::localized_string:
             return parse_localized_string(node);
         case mm::ValueCodec::formatted_string:
@@ -1063,8 +1082,11 @@ bool equals_descriptor_default(
             return std::holds_alternative<model::DecimalValue>(value) &&
                    std::get<model::DecimalValue>(value).canonical == canonical;
         case mm::DefaultKind::string:
-            return std::holds_alternative<std::string>(value) &&
-                   std::get<std::string>(value) == canonical;
+            return (std::holds_alternative<std::string>(value) &&
+                    std::get<std::string>(value) == canonical) ||
+                   (descriptor.value_codec == mm::ValueCodec::localized_text && canonical.empty() &&
+                    std::holds_alternative<model::LocalizedStringValue>(value) &&
+                    std::get<model::LocalizedStringValue>(value).items.empty());
         case mm::DefaultKind::enumeration: {
             if (!std::holds_alternative<model::EnumerationValue>(value)) return false;
             const auto& enumeration = std::get<model::EnumerationValue>(value);
@@ -2882,6 +2904,20 @@ private:
                 return;
             case mm::ValueCodec::string:
                 writer_.text(name, require_value<std::string>(value, object_id, name, "string"));
+                return;
+            case mm::ValueCodec::localized_text:
+                if (const auto* plain = std::get_if<std::string>(&value)) {
+                    writer_.text(name, *plain);
+                } else {
+                    const auto& translations = require_value<model::LocalizedStringValue>(
+                        value, object_id, name, "localized text");
+                    if (translations.items.size() == 1 && translations.items.front().language == "ru" &&
+                        !translations.items.front().text.empty()) {
+                        writer_.text(name, translations.items.front().text);
+                    } else {
+                        write_localized(name, translations, object_id);
+                    }
+                }
                 return;
             case mm::ValueCodec::localized_string:
                 write_localized(name, require_value<model::LocalizedStringValue>(value, object_id, name, "localized string"), object_id);

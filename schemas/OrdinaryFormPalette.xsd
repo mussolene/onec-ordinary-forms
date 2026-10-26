@@ -169,7 +169,7 @@
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
-              <Property name="NonselectedPictureText" apiName="NonselectedPictureText" russianName="ТекстНевыбраннойКартинки" russianType="Строка" valueCodec="string"/>
+              <Property name="NonselectedPictureText" apiName="NonselectedPictureText" russianName="ТекстНевыбраннойКартинки" russianType="Строка" valueCodec="localized-text"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
