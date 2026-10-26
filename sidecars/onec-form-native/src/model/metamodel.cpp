@@ -670,13 +670,19 @@ void apply_proven_storage_overrides(
         ControlKind::calendar_field, ControlKind::text_document_field, ControlKind::input_field,
         ControlKind::label_decoration, ControlKind::progress_bar, ControlKind::track_bar,
     });
-    classify_shared_control_property("ToolTip", StorageCodec::control_base, DefaultKind::string, "", {
+    const std::initializer_list<ControlKind> tool_tip_controls{
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
         ControlKind::input_field, ControlKind::calendar_field, ControlKind::label_decoration,
         ControlKind::progress_bar, ControlKind::track_bar,
-    });
+    };
+    classify_shared_control_property("ToolTip", StorageCodec::control_base, DefaultKind::string, "",
+        tool_tip_controls);
+    for (const ControlKind kind : tool_tip_controls) {
+        std::ranges::find(properties[static_cast<std::size_t>(kind)], "ToolTip",
+            &PropertyDescriptor::api_name)->value_codec = ValueCodec::localized_text;
+    }
     classify_shared_control_property("BorderColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::panel, ControlKind::command_bar, ControlKind::button, ControlKind::check_box,
             ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,

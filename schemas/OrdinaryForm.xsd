@@ -1926,7 +1926,7 @@
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="CommandBarOrientationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -1960,7 +1960,7 @@
       <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MenuMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
@@ -1993,7 +1993,7 @@
       <xs:element name="UseContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Zoomable" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="PictureSizeValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2028,7 +2028,7 @@
       <xs:element name="HorizontalAlign" type="IndicatorHorizontalAlignValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleLocation" type="IndicatorTitleLocationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
@@ -2067,7 +2067,7 @@
       <xs:element name="OpenButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ClearButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SpinButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2102,7 +2102,7 @@
       <xs:element name="HorizontalAlign" type="IndicatorHorizontalAlignValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleLocation" type="IndicatorTitleLocationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
@@ -2154,7 +2154,7 @@
       <xs:element name="MinValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TypeRestriction" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ExtendedEdit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2195,7 +2195,7 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2224,7 +2224,7 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2437,7 +2437,7 @@
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowPicture" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowCheckBox" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentRow" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2468,7 +2468,7 @@
       <xs:element name="MinValue" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="CommandBarOrientationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowPercent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowStyle" type="ProgressBarSmoothingModeValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2500,7 +2500,7 @@
       <xs:element name="MinValue" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="CommandBarOrientationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MarkingAppearance" type="TrackBarMarkingAppearanceValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2533,7 +2533,7 @@
       <xs:element name="BeginOfDisplayPeriod" type="CalendarBeginDateValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowCurrentDate" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CalendarNavigation" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
@@ -2750,7 +2750,7 @@
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>

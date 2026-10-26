@@ -659,6 +659,14 @@ void test_table_column_choice_and_check_box_profiles() {
         expect(!form_stream::encode_document(with_width),
             "standalone ChoiceListWidth support must not silently expand TableColumnEditor contracts");
     }
+    auto localized_editor_tooltip = make_document();
+    auto* localized_editor_table = const_cast<model::ControlNode*>(
+        localized_editor_tooltip.find_control(model::ObjectId{3}));
+    std::get<model::TablePayload>(localized_editor_table->payload).columns[1].control.properties.set_explicit(
+        model::PropertyId::from_name("ToolTip"),
+        model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}});
+    expect(!form_stream::encode_document(localized_editor_tooltip).ok(),
+        "multilingual standalone ChoiceField ToolTip must not expand TableColumnEditor profiles");
     const auto document = make_document();
     auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "three named default Table editors must encode" :
@@ -2329,10 +2337,20 @@ void test_check_box_tooltip_round_trip_and_validation() {
     auto multilingual = encoded.value();
     auto& multilingual_tool_tip = multilingual.items[1].items[2].items[2].items[1]
         .items[2].items[1].items[0].items[0].items[12];
-    multilingual_tool_tip = list_stream::parse(value_codec::encode_localized_string(
-        model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
-    expect_failure(form_stream::decode_document(multilingual, "CheckBoxToolTip"), "OOF1115", tooltip_path,
-        "multilingual CheckBox ToolTip must be rejected without loss");
+    const model::LocalizedStringValue translations{{{"ru", "Текст"}, {"en", "Text"}}};
+    multilingual_tool_tip = list_stream::parse(value_codec::encode_localized_string(translations));
+    const auto multilingual_decoded = form_stream::decode_document(multilingual, "CheckBoxToolTip");
+    expect(multilingual_decoded.ok(), "multilingual CheckBox ToolTip must decode");
+    const auto* multilingual_check_box = multilingual_decoded.value().find_control(model::ObjectId{2});
+    const auto* multilingual_property = multilingual_check_box == nullptr ? nullptr :
+        multilingual_check_box->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(multilingual_property &&
+               std::get<model::LocalizedStringValue>(multilingual_property->value) == translations,
+        "multilingual CheckBox ToolTip must preserve both language values");
+    const auto multilingual_reencoded = form_stream::encode_document(multilingual_decoded.value());
+    expect(multilingual_reencoded.ok() && list_stream::dump_compact(multilingual_reencoded.value()) ==
+               list_stream::dump_compact(multilingual),
+        "multilingual CheckBox ToolTip must re-encode without loss");
 }
 
 void test_choice_field_static_profile_round_trip_and_validation() {
@@ -5288,16 +5306,129 @@ void test_label_enabled_and_tooltip_round_trip() {
                list_stream::dump_compact(variant.value()),
         "LabelDecoration Enabled and ToolTip storage must round-trip without drift");
 
-    auto unsupported_localization = variant.value();
-    auto& tooltip_slot = unsupported_localization.items[1].items[2].items[2].items[2]
+    auto localized_tooltip_storage = variant.value();
+    auto& tooltip_slot = localized_tooltip_storage.items[1].items[2].items[2].items[2]
         .items[2].items[1].items[0].items[12];
-    tooltip_slot = list_stream::parse(value_codec::encode_localized_string(
-        model::LocalizedStringValue{{{"en", "Hint"}, {"ru", "Подсказка"}}}));
-    expect_failure(
-        form_stream::decode_document(unsupported_localization, "LabelProperties"),
-        "OOF1115",
-        "$/1/2/2/2/2/1/0/12",
-        "LabelDecoration ToolTip must reject multiple localized values");
+    const model::LocalizedStringValue translations{{{"en", "Hint"}, {"ru", "Подсказка"}}};
+    tooltip_slot = list_stream::parse(value_codec::encode_localized_string(translations));
+    const auto localized = form_stream::decode_document(localized_tooltip_storage, "LabelProperties");
+    expect(localized.ok(), "multilingual LabelDecoration ToolTip must decode");
+    const auto* localized_label = localized.value().find_control(model::ObjectId{3});
+    const auto* localized_tool_tip = localized_label == nullptr ? nullptr :
+        localized_label->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(localized_tool_tip &&
+               std::get<model::LocalizedStringValue>(localized_tool_tip->value) == translations,
+        "multilingual LabelDecoration ToolTip must preserve both language values");
+    const auto localized_reencoded = form_stream::encode_document(localized.value());
+    expect(localized_reencoded.ok() && list_stream::dump_compact(localized_reencoded.value()) ==
+               list_stream::dump_compact(localized_tooltip_storage),
+        "multilingual LabelDecoration ToolTip must re-encode without loss");
+}
+
+void test_common_control_tooltip_localized_text_round_trip_and_rejections() {
+    const auto make_document = [](model::PropertyValue tool_tip, bool explicit_tool_tip = true) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "LocalizedToolTip";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode label{model::ObjectId{2}, "Notice", model::LabelDecorationPayload{}};
+        if (explicit_tool_tip) {
+            label.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tool_tip));
+        }
+        document.add_control(std::move(label));
+        return document;
+    };
+    const auto tooltip_slot = [](list_stream::ListValue& encoded) -> list_stream::ListValue& {
+        return encoded.items.at(1).items.at(2).items.at(2).items.at(1)
+            .items.at(2).items.at(1).items.at(0).items.at(12);
+    };
+    const auto* descriptor = model::metamodel::find_property(model::ControlKind::label_decoration, "ToolTip");
+    expect(descriptor && descriptor->value_codec == model::metamodel::ValueCodec::localized_text &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::control_base &&
+               descriptor->default_value.kind == model::metamodel::DefaultKind::string &&
+               descriptor->default_value.canonical.empty(),
+        "ordinary control ToolTip must use localized_text with the existing empty string default and base slot");
+
+    const std::vector<model::PropertyValue> values{
+        std::string("Plain hint"),
+        model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}},
+        model::LocalizedStringValue{{{"en", "English only"}}},
+        model::LocalizedStringValue{{{"ru", ""}}},
+    };
+    for (const auto& expected : values) {
+        auto document = make_document(expected);
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "plain and localized ordinary control ToolTip values must encode");
+        auto encoded_copy = encoded.value();
+        const std::string expected_text = std::holds_alternative<std::string>(expected)
+            ? std::get<std::string>(expected)
+            : std::get<model::LocalizedStringValue>(expected).items.front().text;
+        if (std::holds_alternative<std::string>(expected)) {
+            expect(list_stream::dump_compact(tooltip_slot(encoded_copy)) ==
+                    value_codec::encode_localized_string(model::LocalizedStringValue{{{"ru", expected_text}}}),
+                "plain ToolTip must retain the established ru storage representation");
+        } else {
+            expect(list_stream::dump_compact(tooltip_slot(encoded_copy)) ==
+                    value_codec::encode_localized_string(std::get<model::LocalizedStringValue>(expected)),
+                "localized ToolTip language items must occupy the common control base slot without loss");
+        }
+        const auto decoded = form_stream::decode_document(encoded.value(), "LocalizedToolTip");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "plain and localized ToolTip values must decode as a complete control profile");
+        const auto* label = decoded.value().find_control(model::ObjectId{2});
+        const auto* actual = label == nullptr ? nullptr : label->properties().find(
+            model::PropertyId::from_name("ToolTip"));
+        expect(actual != nullptr && actual->value == expected,
+            "plain, English, multilingual, and explicit empty-ru ToolTip values must survive decoding");
+        const auto reencoded = form_stream::encode_document(decoded.value());
+        expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+                list_stream::dump_compact(encoded.value()),
+            "localized ordinary control ToolTip values must re-encode without drift");
+    }
+
+    const auto default_document = make_document(std::string{}, false);
+    const auto default_read = default_document.get_prop_val(
+        {model::ObjectCategory::control, model::ObjectId{2}}, model::PropertyId::from_name("ToolTip"));
+    expect(default_read.status == model::PropertyReadStatus::proven_default && default_read.value &&
+               *default_read.value == model::PropertyValue{std::string{}},
+        "ordinary control ToolTip must preserve the proven empty std::string default");
+
+    for (const auto& invalid_tag : {std::string{}, std::string("en_US"), std::string("123")}) {
+        auto document = make_document(std::string{});
+        expect(document.set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+                   model::PropertyId::from_name("ToolTip"),
+                   model::LocalizedStringValue{{{invalid_tag, "bad"}}}) ==
+                   model::PropertyMutationStatus::invalid_value,
+            "localized ToolTip must reject language tags outside xs:language");
+    }
+    auto duplicate_languages = make_document(std::string{});
+    expect(duplicate_languages.set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+               model::PropertyId::from_name("ToolTip"),
+               model::LocalizedStringValue{{{"en", "First"}, {"en", "Second"}}}) ==
+               model::PropertyMutationStatus::invalid_value,
+        "localized ToolTip must reject duplicate language tags");
+
+    auto valid_encoded = form_stream::encode_document(make_document(std::string("Hint")));
+    expect(valid_encoded.ok(), "valid plain ToolTip fixture must encode before malformed storage checks");
+    constexpr std::string_view property_path = "$/1/2/2/1/2/1/0/12";
+    for (const auto& bad : {
+             model::LocalizedStringValue{{{"", "Empty tag"}}},
+             model::LocalizedStringValue{{{"ru", "Первый"}, {"ru", "Дубликат"}}},
+         }) {
+        auto malformed = valid_encoded.value();
+        tooltip_slot(malformed) = list_stream::parse(value_codec::encode_localized_string(bad));
+        expect(!form_stream::decode_document(malformed, "InvalidToolTip"),
+            "stored ToolTip must reject empty or duplicate language tags");
+    }
+    auto too_many = valid_encoded.value();
+    auto oversized_value = list_stream::parse(value_codec::encode_localized_string(
+        model::LocalizedStringValue{{{"ru", "Hint"}}}));
+    oversized_value.items[1] = list_stream::ListValue::raw_atom(
+        std::to_string(model::max_localized_text_items + 1));
+    tooltip_slot(too_many) = std::move(oversized_value);
+    expect_failure(form_stream::decode_document(too_many, "OversizedToolTip"), "OOF1108",
+        property_path, "stored ToolTip must enforce the shared 65536 translation limit");
 }
 
 void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections() {
@@ -5425,10 +5556,21 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
         tool_tip_path, "malformed PictureDecoration ToolTip localization must be rejected");
 
     auto multilingual = changed.value();
-    mutable_picture_base(multilingual).items[12] = list_stream::parse(value_codec::encode_localized_string(
-        model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
-    expect_failure(form_stream::decode_document(multilingual, "PictureDecorationCodec"), "OOF1115",
-        tool_tip_path, "multilingual PictureDecoration ToolTip must be rejected without loss");
+    const model::LocalizedStringValue translations{{{"ru", "Текст"}, {"en", "Text"}}};
+    mutable_picture_base(multilingual).items[12] = list_stream::parse(
+        value_codec::encode_localized_string(translations));
+    const auto multilingual_decoded = form_stream::decode_document(multilingual, "PictureDecorationCodec");
+    expect(multilingual_decoded.ok(), "multilingual PictureDecoration ToolTip must decode");
+    const auto* multilingual_picture = multilingual_decoded.value().find_control(model::ObjectId{2});
+    const auto* multilingual_tool_tip = multilingual_picture == nullptr ? nullptr :
+        multilingual_picture->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(multilingual_tool_tip &&
+               std::get<model::LocalizedStringValue>(multilingual_tool_tip->value) == translations,
+        "multilingual PictureDecoration ToolTip must preserve both language values");
+    const auto multilingual_reencoded = form_stream::encode_document(multilingual_decoded.value());
+    expect(multilingual_reencoded.ok() && list_stream::dump_compact(multilingual_reencoded.value()) ==
+               list_stream::dump_compact(multilingual),
+        "multilingual PictureDecoration ToolTip must re-encode without loss");
 
     auto unsupported_leaf = implicit_default.value();
     mutable_picture_base(unsupported_leaf).items[15] = list_stream::ListValue::raw_atom("99");
@@ -10550,8 +10692,25 @@ void test_input_field_tooltip_and_format_round_trip() {
         auto multilingual = combined;
         set_localized_record(multilingual, tool_tip, list_stream::parse(value_codec::encode_localized_string(
             model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}})));
-        expect_failure(form_stream::decode_document(multilingual, "InputStrings"), "OOF1115", property_path,
-            std::string("multilingual InputField ") + property_name + " must be rejected without loss");
+        const auto multilingual_decoded = form_stream::decode_document(multilingual, "InputStrings");
+        if (tool_tip) {
+            const model::LocalizedStringValue translations{{{"ru", "Текст"}, {"en", "Text"}}};
+            expect(multilingual_decoded.ok(), "multilingual InputField ToolTip must decode");
+            const auto* input = multilingual_decoded.value().find_control(model::ObjectId{2});
+            const auto* localized_tool_tip = input == nullptr ? nullptr :
+                input->properties().find(model::PropertyId::from_name("ToolTip"));
+            expect(localized_tool_tip &&
+                       std::get<model::LocalizedStringValue>(localized_tool_tip->value) == translations,
+                "multilingual InputField ToolTip must preserve both language values");
+            const auto multilingual_reencoded = form_stream::encode_document(multilingual_decoded.value());
+            expect(multilingual_reencoded.ok() &&
+                       list_stream::dump_compact(multilingual_reencoded.value()) ==
+                           list_stream::dump_compact(multilingual),
+                "multilingual InputField ToolTip must re-encode without loss");
+        } else {
+            expect_failure(multilingual_decoded, "OOF1115", property_path,
+                "multilingual InputField Format must remain unsupported");
+        }
     }
 }
 
@@ -14154,6 +14313,7 @@ int main() {
         test_control_unknown_common_state_warning_and_build();
         test_label_decoration_observed_center_right_records();
         test_label_enabled_and_tooltip_round_trip();
+        test_common_control_tooltip_localized_text_round_trip_and_rejections();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();

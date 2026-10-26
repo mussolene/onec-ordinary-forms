@@ -211,7 +211,7 @@ void test_descriptors() {
         "LabelDecoration Enabled must declare its editable Boolean true default");
     expect(label_tool_tip && label_tool_tip->persistence == PersistenceClass::persisted_editable &&
                label_tool_tip->storage_codec == StorageCodec::control_base &&
-               label_tool_tip->value_codec == ValueCodec::string &&
+               label_tool_tip->value_codec == ValueCodec::localized_text &&
                label_tool_tip->default_value.kind == DefaultKind::string &&
                label_tool_tip->default_value.canonical.empty(),
         "LabelDecoration ToolTip must declare its editable empty string default");
@@ -232,7 +232,7 @@ void test_descriptors() {
         "RadioButton Caption must declare its editable empty string default");
     expect(radio_tool_tip && radio_tool_tip->persistence == PersistenceClass::persisted_editable &&
                radio_tool_tip->storage_codec == StorageCodec::control_base &&
-               radio_tool_tip->value_codec == ValueCodec::string &&
+               radio_tool_tip->value_codec == ValueCodec::localized_text &&
                radio_tool_tip->default_value.kind == DefaultKind::string &&
                radio_tool_tip->default_value.canonical.empty(),
         "RadioButton ToolTip must declare its editable empty string default");
@@ -254,7 +254,7 @@ void test_descriptors() {
         "PictureDecoration Enabled must declare its editable Boolean true default");
     expect(picture_tool_tip && picture_tool_tip->persistence == PersistenceClass::persisted_editable &&
                picture_tool_tip->storage_codec == StorageCodec::control_base &&
-               picture_tool_tip->value_codec == ValueCodec::string &&
+               picture_tool_tip->value_codec == ValueCodec::localized_text &&
                picture_tool_tip->default_value.kind == DefaultKind::string &&
                picture_tool_tip->default_value.canonical.empty(),
         "PictureDecoration ToolTip must declare its editable empty string default");
@@ -834,7 +834,7 @@ void test_shared_control_default_classifications() {
                classified(ControlKind::label_decoration, "Enabled", StorageCodec::control_base,
                    DefaultKind::boolean, "true", ValueCodec::boolean) &&
                classified(ControlKind::label_decoration, "ToolTip", StorageCodec::control_base,
-                   DefaultKind::string, "", ValueCodec::string),
+                   DefaultKind::string, "", ValueCodec::localized_text),
         "LabelDecoration Enabled and ToolTip must use the common control-base slots");
     expect(classified(ControlKind::usual_group, "Font", StorageCodec::control_base,
                DefaultKind::font, "automatic,bold=true", ValueCodec::font),
