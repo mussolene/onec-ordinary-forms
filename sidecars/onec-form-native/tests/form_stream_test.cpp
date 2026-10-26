@@ -524,6 +524,80 @@ void test_table_boolean_properties() {
     expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown Table flag bits must remain incomplete");
 }
 
+void test_table_appearance_properties() {
+    struct Case { std::string_view name; std::size_t slot; bool font; };
+    constexpr std::array cases{
+        Case{"HeaderBackColor", 2, false}, Case{"HeaderTextColor", 3, false},
+        Case{"FooterBackColor", 4, false}, Case{"FooterTextColor", 5, false},
+        Case{"SelectionBackColor", 6, false}, Case{"SelectionTextColor", 7, false},
+        Case{"AlternationRowBackColor", 8, false}, Case{"HeaderFont", 18, true}, Case{"FooterFont", 19, true},
+    };
+    auto seed = form_stream::decode_document(captured_table_payload(), "TableAppearance");
+    expect(seed.ok(), "Table appearance fixture must decode");
+    const auto table = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table != seed.value().collections().controls.end(), "fixture must contain Table");
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, table->id};
+    const auto baseline = form_stream::encode_document(seed.value());
+    expect(baseline.ok(), "default Table fixture must encode");
+    model::ColorValue rgb; rgb.kind = model::ColorKind::absolute; rgb.red = 31; rgb.green = 61; rgb.blue = 101;
+    model::FontValue font; font.kind = model::FontKind::absolute; font.face_name = "Arial"; font.height = 12;
+    auto combined = seed.value();
+    for (const auto& spec : cases) {
+        const auto id = model::PropertyId::from_name(spec.name);
+        const auto def = seed.value().get_prop_val(key, id);
+        expect(def.status == model::PropertyReadStatus::proven_default && def.value,
+            std::string(spec.name) + " must expose its typed default");
+        auto doc = seed.value();
+        expect(doc.set_prop_val(key, id, *def.value) == model::PropertyMutationStatus::applied,
+            "explicit default must be accepted");
+        const auto default_encoded = form_stream::encode_document(doc);
+        expect(default_encoded.ok() && list_stream::dump_compact(default_encoded.value()) == list_stream::dump_compact(baseline.value()),
+            "explicit appearance default must match omitted default");
+        const model::PropertyValue value = spec.font ? model::PropertyValue{font} : model::PropertyValue{rgb};
+        expect(doc.set_prop_val(key, id, value) == model::PropertyMutationStatus::applied, "appearance value must be accepted");
+        expect(combined.set_prop_val(key, id, value) == model::PropertyMutationStatus::applied, "combined appearance value must be accepted");
+        const auto encoded = form_stream::encode_document(doc);
+        expect(encoded.ok(), encoded ? "appearance must encode" : encoded.diagnostics().front().message);
+        const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record && list_stream::dump_compact(record->items.at(2).items.at(2).items.at(1).items.at(spec.slot)) !=
+            list_stream::dump_compact(find_record_with_guid(baseline.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid)->items.at(2).items.at(2).items.at(1).items.at(spec.slot)),
+            "appearance must use its observed slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "TableAppearance");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "appearance must decode completely");
+        const auto actual = decoded.value().get_prop_val(key, id);
+        expect(actual.value && *actual.value == value, "appearance must round-trip");
+        model::ColorValue style; style.kind = model::ColorKind::style_reference;
+        style.style = model::QualifiedName{"StyleColors.FieldAlternativeBackColor"};
+        const model::PropertyValue alternate = spec.font ? model::PropertyValue{model::FontValue{}} : model::PropertyValue{style};
+        expect(doc.set_prop_val(key, id, alternate) == model::PropertyMutationStatus::applied, "alternate appearance must be accepted");
+        const auto alternate_encoded = form_stream::encode_document(doc);
+        expect(alternate_encoded.ok(), "alternate appearance must encode");
+        const auto alternate_decoded = form_stream::decode_document(alternate_encoded.value(), "TableAppearance");
+        expect(alternate_decoded.ok() && alternate_decoded.value().reconstruction_complete(), "alternate appearance must decode");
+        const auto alternate_value = alternate_decoded.value().get_prop_val(key, id);
+        expect(alternate_value.value && *alternate_value.value == alternate, "alternate appearance must round-trip");
+        expect(doc.set_prop_val(key, id, std::string("bad")) == model::PropertyMutationStatus::invalid_value,
+            "appearance must reject invalid type");
+    }
+    const auto encoded = form_stream::encode_document(combined);
+    expect(encoded.ok(), "combined appearance must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "TableAppearance");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "combined appearance must decode completely");
+    for (const auto& spec : cases) {
+        const auto value = decoded.value().get_prop_val(key, model::PropertyId::from_name(spec.name));
+        expect(value.value && *value.value == (spec.font ? model::PropertyValue{font} : model::PropertyValue{rgb}),
+            "combined appearance must retain every property");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "appearance XML must serialize");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "appearance XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "combined appearance must survive XML/native round-trip");
+}
+
 void test_table_named_common_properties() {
     auto seed = form_stream::decode_document(captured_table_payload(), "TableCommon");
     expect(seed.ok(), "captured Table fixture must decode");
@@ -15583,6 +15657,7 @@ int main() {
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();
         test_table_boolean_properties();
+        test_table_appearance_properties();
         test_table_first_in_group_observed_metadata();
         test_table_first_in_group_fresh_model_xml_bin();
         test_table_column_name_and_data_path_runtime_slots();

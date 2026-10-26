@@ -170,6 +170,13 @@ void test_descriptors() {
             property->default_value.kind == DefaultKind::boolean && property->default_value.canonical == default_value,
             std::string("Table.") + name + " must expose its Boolean default and storage descriptor");
     }
+    for (const auto name : {"HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor",
+             "SelectionBackColor", "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont"}) {
+        const auto* property = find_property(ControlKind::table, name);
+        expect(property && property->persistence == PersistenceClass::persisted_editable &&
+            property->storage_codec == StorageCodec::control_info && property->default_value.kind != DefaultKind::unknown,
+            std::string("Table.") + name + " must expose its appearance descriptor and default");
+    }
     const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
     const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
     const auto* tool_tip = find_property(ControlKind::button, "ToolTip");

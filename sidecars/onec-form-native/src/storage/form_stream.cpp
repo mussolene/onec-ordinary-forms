@@ -852,6 +852,7 @@ LV encode_control_color(const model::ColorValue& color, std::string_view path) {
     else if (name->value == "StyleColors.SpecialTextColor") style_id = -16;
     else if (name->value == "StyleColors.FieldSelectionBackColor") style_id = -14;
     else if (name->value == "StyleColors.FieldSelectedTextColor") style_id = -15;
+    else if (name->value == "StyleColors.FieldAlternativeBackColor") style_id = -13;
     else fail("OOF1122", std::string(path), "known control StyleColors property", name->value,
         "Control color style reference is unsupported");
     return list({raw("4"), raw("3"), list({raw(std::to_string(style_id))}), raw("3")});
@@ -893,6 +894,7 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
         else if (style_id == -16) style_name = "StyleColors.SpecialTextColor";
         else if (style_id == -14) style_name = "StyleColors.FieldSelectionBackColor";
         else if (style_id == -15) style_name = "StyleColors.FieldSelectedTextColor";
+        else if (style_id == -13) style_name = "StyleColors.FieldAlternativeBackColor";
         else fail("OOF1114", child_path(path, 2) + "/0", "known control StyleColors ID",
             std::to_string(style_id), "Control color style identifier is unsupported");
         model::ColorValue color;
@@ -3341,6 +3343,18 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         list({raw("8"), list({raw("8"), std::move(properties), list({raw("-1")}), list({raw("-1")}), list({raw("-1")})}),
             string_value(column.data_path), string_value(""), string_value(""), raw("0")})});
 }
+
+struct TableAppearanceProperty {
+    std::string_view name;
+    std::size_t slot;
+    bool font;
+};
+constexpr std::array<TableAppearanceProperty, 9> table_appearance_properties{{
+    TableAppearanceProperty{"HeaderBackColor", 2, false}, {"HeaderTextColor", 3, false},
+    {"FooterBackColor", 4, false}, {"FooterTextColor", 5, false},
+    {"SelectionBackColor", 6, false}, {"SelectionTextColor", 7, false},
+    {"AlternationRowBackColor", 8, false}, {"HeaderFont", 18, true}, {"FooterFont", 19, true},
+}};
 
 struct TableBooleanFlag {
     std::string_view name;
@@ -8231,6 +8245,21 @@ DecodedControl decode_table(
         normalized_table_properties.items.at(spec.slot) = raw(std::to_string(spec.default_value ? spec.true_code : spec.false_code));
     }
     const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path);
+    for (const auto& spec : table_appearance_properties) {
+        const auto slot_path = child_path(table_properties_path, spec.slot);
+        const auto& stored = info.items[2].items[1].items.at(spec.slot);
+        const auto& default_stored = canonical_info.items[2].items[1].items.at(spec.slot);
+        if (spec.font) {
+            const auto value = decode_control_font(stored, slot_path);
+            if (value != decode_control_font(default_stored, slot_path))
+                control.properties().set_explicit(model::PropertyId::from_name(spec.name), value);
+        } else {
+            const auto value = decode_control_color(stored, slot_path);
+            if (value != decode_control_color(default_stored, slot_path))
+                control.properties().set_explicit(model::PropertyId::from_name(spec.name), value);
+        }
+        normalized_table_properties.items.at(spec.slot) = default_stored;
+    }
     auto& normalized_base = normalized_info.items[2].items[0];
     const auto& canonical_base = canonical_info.items[2].items[0];
     for (const auto slot : {1U, 4U, 6U, 7U, 12U}) normalized_base.items.at(slot) = canonical_base.items.at(slot);
@@ -9412,7 +9441,9 @@ LV encode_table(
     }
     require_allowed_properties(control.properties(), {"ReadOnly", "Enabled", "ToolTip", "Font", "BorderColor", "FieldBackColor",
         "AutoInsertNewRow", "Footer", "Header", "EnableStartDrag", "EnableDrag", "ChangeSettingOfColumns",
-        "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines", "UseAlternationRowColor"}, "$/Table");
+        "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines", "UseAlternationRowColor",
+        "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
+        "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -9440,6 +9471,20 @@ LV encode_table(
     for (const auto& spec : table_boolean_slots) {
         const bool value = explicit_bool(control.properties(), spec.name, spec.default_value);
         table_properties.items.at(spec.slot) = raw(std::to_string(value ? spec.true_code : spec.false_code));
+    }
+    for (const auto& spec : table_appearance_properties) {
+        const auto* property = control.properties().find(model::PropertyId::from_name(spec.name));
+        if (property == nullptr) continue;
+        const auto property_path = std::string("$/Table/") + std::string(spec.name);
+        if (spec.font) {
+            const auto* value = std::get_if<model::FontValue>(&property->value);
+            if (!value) fail("OOF1122", property_path, "FontValue", "different value type", "Table font property has the wrong type");
+            table_properties.items.at(spec.slot) = encode_control_font(*value, property_path);
+        } else {
+            const auto* value = std::get_if<model::ColorValue>(&property->value);
+            if (!value) fail("OOF1122", property_path, "ColorValue", "different value type", "Table color property has the wrong type");
+            table_properties.items.at(spec.slot) = encode_control_color(*value, property_path);
+        }
     }
     auto& base = info.items.at(2).items.at(0);
     CommonControlBaseFields common{

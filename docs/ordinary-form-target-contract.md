@@ -55,6 +55,9 @@ CheckBox сохраняет булевое ThreeState с исходным зна
 колонки таблицы сохраняет прежние ограничения.
 Table сохраняет Enabled, ToolTip, Font, BorderColor и FieldBackColor через
 общий механизм свойств; ограничения редакторов колонок остаются прежними.
+Table сохраняет HeaderBackColor, HeaderTextColor, FooterBackColor,
+FooterTextColor, SelectionBackColor, SelectionTextColor, AlternationRowBackColor,
+HeaderFont и FooterFont с платформенными значениями по умолчанию.
 Table сохраняет AutoInsertNewRow, Footer, Header, EnableStartDrag, EnableDrag,
 ChangeSettingOfColumns, ChangePositionOfColumns, ChangeRowSet, HorizontalLines,
 VerticalLines и UseAlternationRowColor. ChoiceMode пока не поддерживается.

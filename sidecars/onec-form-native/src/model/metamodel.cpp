@@ -1011,6 +1011,13 @@ void apply_proven_storage_overrides(
 
     auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
     classify_property(table, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
+    for (const auto name : {"HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor"})
+        classify_property(table, name, StorageCodec::control_info, DefaultKind::color, "automatic");
+    classify_property(table, "SelectionBackColor", StorageCodec::control_info, DefaultKind::color, "RGB(83,106,194)");
+    classify_property(table, "SelectionTextColor", StorageCodec::control_info, DefaultKind::color, "StyleColors.FieldSelectedTextColor");
+    classify_property(table, "AlternationRowBackColor", StorageCodec::control_info, DefaultKind::color, "StyleColors.FieldAlternativeBackColor");
+    for (const auto name : {"HeaderFont", "FooterFont"})
+        classify_property(table, name, StorageCodec::control_info, DefaultKind::font, "StyleFonts.TextFont");
     for (const auto name : {"AutoInsertNewRow", "Footer", "EnableStartDrag", "EnableDrag", "UseAlternationRowColor"})
         classify_property(table, name, StorageCodec::control_info, DefaultKind::boolean, "false");
     for (const auto name : {"Header", "ChangeSettingOfColumns", "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines"})

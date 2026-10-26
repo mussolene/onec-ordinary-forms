@@ -331,13 +331,20 @@ std::optional<PropertyValue> materialize_default(
             return std::nullopt;
         case DefaultKind::color:
             if (value.canonical == "automatic") return PropertyValue{ColorValue{}};
+            if (value.canonical == "RGB(83,106,194)") {
+                ColorValue color;
+                color.kind = ColorKind::absolute;
+                color.red = 83; color.green = 106; color.blue = 194;
+                return PropertyValue{color};
+            }
             if (value.canonical == "StyleColors.ButtonTextColor" ||
                 value.canonical == "StyleColors.ButtonBackColor" ||
                 value.canonical == "StyleColors.ButtonBorderColor" ||
                 value.canonical == "StyleColors.BorderColor" ||
                 value.canonical == "StyleColors.SpecialTextColor" ||
                 value.canonical == "StyleColors.FieldSelectionBackColor" ||
-                value.canonical == "StyleColors.FieldSelectedTextColor") {
+                value.canonical == "StyleColors.FieldSelectedTextColor" ||
+                value.canonical == "StyleColors.FieldAlternativeBackColor") {
                 ColorValue color;
                 color.kind = ColorKind::style_reference;
                 color.style = QualifiedName{std::string(value.canonical)};
@@ -346,6 +353,12 @@ std::optional<PropertyValue> materialize_default(
             return std::nullopt;
         case DefaultKind::font:
             if (value.canonical == "automatic") return PropertyValue{FontValue{}};
+            if (value.canonical == "StyleFonts.TextFont") {
+                FontValue font;
+                font.kind = FontKind::style_reference;
+                font.style = QualifiedName{"StyleFonts.TextFont"};
+                return PropertyValue{font};
+            }
             if (value.canonical == "automatic,bold=true") {
                 FontValue font;
                 font.bold = true;
