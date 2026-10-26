@@ -58,6 +58,10 @@ TrackBar сохраняет MarkingAppearance (DontShow, TopLeft, BottomRight, B
 и Orientation. Orientation допускает только Auto, Horizontal и Vertical.
 Числовые LargeStep и MarkingStep не входят в это расширение.
 
+ChoiceField сохраняет ChoiceButton, ClearButton, SpinButton, OpenButton и ReadOnly
+как булевы свойства с default false. Проверка этих флагов не означает поддержки
+списков, дополнительных картинок или размеров списка выбора.
+
 CheckBox и RadioButton сохраняют HorizontalAlign (Left, Center, Right),
 VerticalAlign (Top, Center, Bottom) и TitleLocation (TitleLeft, TitleRight).
 HorizontalAlign.Auto и Justify отклоняются для этих владельцев в API и XSD,

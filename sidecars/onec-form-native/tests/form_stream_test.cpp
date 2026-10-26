@@ -2365,7 +2365,7 @@ void test_choice_field_static_profile_round_trip_and_validation() {
         }
         if (with_unmapped_property) {
             choice_field.properties().set_explicit(
-                model::PropertyId::from_name("ReadOnly"), false);
+                model::PropertyId::from_name("UnknownProperty"), false);
         }
         document.add_control(std::move(choice_field));
         return document;
@@ -2543,8 +2543,8 @@ void test_choice_field_static_profile_round_trip_and_validation() {
         "$/1/2/2/1/2/1/0/6/1", "ChoiceField must reject malformed color storage");
 
     auto unsupported_property = make_document(std::nullopt, true, false, true, true);
-    expect_failure(form_stream::encode_document(unsupported_property), "OOF1122", "$/ChoiceField",
-        "unmapped ChoiceField properties must not enter persisted XML or storage");
+    expect_failure(form_stream::encode_document(unsupported_property), "OOF1123", "$",
+        "unknown ChoiceField properties must fail model validation before storage encoding");
 
     auto wrong_type = make_document(std::nullopt, true, true);
     expect_failure(form_stream::encode_document(wrong_type), "OOF1122", "$/ChoiceField/DataPath",
@@ -2559,8 +2559,8 @@ void test_choice_field_static_profile_round_trip_and_validation() {
         "a linked ChoiceField must reject an independently encoded non-String Attribute link");
 
     auto malformed = encoded.value();
-    malformed.items[1].items[2].items[2].items[1].items[2].items[1].items[13] =
-        list_stream::ListValue::raw_atom("1");
+    malformed.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[15] =
+        list_stream::ListValue::raw_atom("99");
     const auto partial_profile = form_stream::decode_document(malformed, "ChoiceFieldProfile");
     expect(partial_profile.ok() && !partial_profile.value().reconstruction_complete() &&
                std::ranges::any_of(partial_profile.diagnostics(), [](const auto& diagnostic) {
@@ -8008,6 +8008,11 @@ void test_common_control_named_scalar_properties() {
         {model::ControlKind::radio_button, "RadioButton", "TitleLocation", enumeration("TitleLocation", "TitleRight"),
             {{enumeration("TitleLocation", "TitleLeft"), 0}, {enumeration("TitleLocation", "TitleRight"), 1}}, 3, false, true},
         {model::ControlKind::check_box, "CheckBox", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::choice_field, "ChoiceField", "ChoiceButton", false, {{false, 0}, {true, 1}}, 7, false},
+        {model::ControlKind::choice_field, "ChoiceField", "ClearButton", false, {{false, 0}, {true, 1}}, 8, false},
+        {model::ControlKind::choice_field, "ChoiceField", "SpinButton", false, {{false, 0}, {true, 1}}, 9, false},
+        {model::ControlKind::choice_field, "ChoiceField", "OpenButton", false, {{false, 0}, {true, 1}}, 10, false},
+        {model::ControlKind::choice_field, "ChoiceField", "ReadOnly", false, {{false, 0}, {true, 1}}, 13, false},
         {model::ControlKind::choice_field, "ChoiceField", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::radio_button, "RadioButton", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::label_decoration, "LabelDecoration", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},

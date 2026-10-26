@@ -879,6 +879,8 @@ void apply_proven_storage_overrides(
         "");
 
     auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
+    for (const auto name : {"ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly"})
+        classify_property(choice_field, name, StorageCodec::control_info, DefaultKind::boolean, "false");
     if (const auto choice_list = std::ranges::find(choice_field, "ChoiceList", &PropertyDescriptor::api_name);
         choice_list != choice_field.end()) {
         choice_list->persistence = PersistenceClass::runtime_only;

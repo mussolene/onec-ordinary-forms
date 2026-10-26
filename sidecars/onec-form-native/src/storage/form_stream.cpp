@@ -1545,7 +1545,12 @@ LV canonical_choice_field_info(
     std::string_view tool_tip,
     const model::ColorValue& border_color,
     const model::FontValue* font = nullptr,
-    bool transparent = false) {
+    bool transparent = false,
+    bool choice_button = false,
+    bool clear_button = false,
+    bool spin_button = false,
+    bool open_button = false,
+    bool read_only = false) {
     auto properties = parse_constant(R"OOF(
 {{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
 )OOF");
@@ -1555,6 +1560,11 @@ LV canonical_choice_field_info(
     properties.items[0] = canonical_control_base_properties(
         enabled, tool_tip, &border_color, "$/ChoiceField", font,
         model::ControlKind::choice_field, transparent);
+    properties.items[7] = raw(choice_button ? "1" : "0");
+    properties.items[8] = raw(clear_button ? "1" : "0");
+    properties.items[9] = raw(spin_button ? "1" : "0");
+    properties.items[10] = raw(open_button ? "1" : "0");
+    properties.items[13] = raw(read_only ? "1" : "0");
     return list({raw("2"), std::move(properties), list({raw("0")})});
 }
 
@@ -6633,6 +6643,11 @@ DecodedControl decode_choice_field(
     const auto& border_color = *common.border_color;
     const auto& tool_tip = common.tool_tip;
     const auto& font = *common.font;
+    const bool choice_button = bool_atom(info_properties.items[7], child_path(info_properties_path, 7));
+    const bool clear_button = bool_atom(info_properties.items[8], child_path(info_properties_path, 8));
+    const bool spin_button = bool_atom(info_properties.items[9], child_path(info_properties_path, 9));
+    const bool open_button = bool_atom(info_properties.items[10], child_path(info_properties_path, 10));
+    const bool read_only = bool_atom(info_properties.items[13], child_path(info_properties_path, 13));
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
         "ChoiceField cannot contain storage children");
     auto normalized_info = info;
@@ -6644,7 +6659,8 @@ DecodedControl decode_choice_field(
     normalized_info.items[1].items[0].items[6] =
         encode_control_color(border_color, child_path(base_path, 6));
     normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
-    const LV canonical_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font);
+    const LV canonical_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font, false,
+        choice_button, clear_button, spin_button, open_button, read_only);
     require_list_stream_shape(normalized_info, canonical_info, info_path,
         "ChoiceField profile with valid record arity and atom types");
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
@@ -6674,6 +6690,11 @@ DecodedControl decode_choice_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ChoiceFieldPayload{}};
     apply_common_control_base(control.properties(), common);
+    if (choice_button) control.properties().set_explicit(model::PropertyId::from_name("ChoiceButton"), true);
+    if (clear_button) control.properties().set_explicit(model::PropertyId::from_name("ClearButton"), true);
+    if (spin_button) control.properties().set_explicit(model::PropertyId::from_name("SpinButton"), true);
+    if (open_button) control.properties().set_explicit(model::PropertyId::from_name("OpenButton"), true);
+    if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -8686,7 +8707,7 @@ LV encode_choice_field(
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Border", "Transparent"}, "$/ChoiceField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Border", "Transparent", "ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly"}, "$/ChoiceField");
     if (control.data_path) {
         const auto* attribute = document.find_attribute(control.data_path->attribute.id());
         if (attribute == nullptr) {
@@ -8703,8 +8724,14 @@ LV encode_choice_field(
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto font = explicit_control_font(control.properties(), "$/ChoiceField/Font");
     const bool transparent = explicit_bool(control.properties(), "Transparent", false);
+    const bool choice_button = explicit_bool(control.properties(), "ChoiceButton", false);
+    const bool clear_button = explicit_bool(control.properties(), "ClearButton", false);
+    const bool spin_button = explicit_bool(control.properties(), "SpinButton", false);
+    const bool open_button = explicit_bool(control.properties(), "OpenButton", false);
+    const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
-    auto choice_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font, transparent);
+    auto choice_info = canonical_choice_field_info(enabled, tool_tip, border_color, &font, transparent,
+        choice_button, clear_button, spin_button, open_button, read_only);
     encode_named_control_colors(choice_info.items[1].items[0], model::ControlKind::choice_field,
         control.properties(), "$/ChoiceField");
     encode_named_control_border(choice_info.items[1].items[0], model::ControlKind::choice_field,
