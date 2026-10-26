@@ -6666,7 +6666,9 @@ DecodedControl decode_list_box(
     require_raw_constant(properties.items[3], "0", child_path(properties_path, 3));
     const bool show_picture = bool_atom(properties.items[4], child_path(properties_path, 4));
     const bool show_check_box = bool_atom(properties.items[5], child_path(properties_path, 5));
+    auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2), model::ControlKind::list_box);
     auto normalized_info = info;
+    normalized_info.items[2] = list({raw("0")});
     normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::list_box,
         child_path(child_path(info_path, 1), 0));
     normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::list_box,
@@ -6700,7 +6702,7 @@ DecodedControl decode_list_box(
     if (show_check_box) control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
     if (read_only == false) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
 
 DecodedControl decode_check_box(
@@ -8890,7 +8892,7 @@ LV encode_list_box(
             "ListBox is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8918,6 +8920,7 @@ LV encode_list_box(
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "ListBox");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
     auto list_info = canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip, border_color);
+    list_info.items.at(2) = encode_control_event_collection(document, control, "$/ListBox/Events");
     encode_named_control_colors(list_info.items[1].items[0], model::ControlKind::list_box,
         control.properties(), "$/ListBox");
     encode_named_control_border(list_info.items[1].items[0], model::ControlKind::list_box,

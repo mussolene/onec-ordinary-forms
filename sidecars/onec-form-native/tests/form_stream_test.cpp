@@ -8219,6 +8219,85 @@ void test_table_named_events() {
     expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown Table neighbor must remain incomplete");
 }
 
+void test_picture_and_list_named_events() {
+    constexpr std::array picture_events{std::pair{"Click", 0U}, std::pair{"DragStart", 3U},
+        std::pair{"DragCheck", 4U}, std::pair{"DragEnd", 5U}, std::pair{"Drag", 6U}};
+    constexpr std::array list_events{std::pair{"Selection", 34U}, std::pair{"OnActivateRow", 37U},
+        std::pair{"OnCheckChange", 17U}};
+    for (const auto kind : {model::ControlKind::picture_decoration, model::ControlKind::list_box}) {
+        const auto check = [&](std::span<const std::pair<const char*, unsigned int>> events, bool wrong_owner = false) {
+            model::Form form; form.id = model::ObjectId{1}; form.name = "PictureListEvents";
+            form.children = {model::ControlRef{model::ObjectId{2}}};
+            model::OrdinaryFormDocument document(std::move(form));
+            model::ControlNode control = kind == model::ControlKind::picture_decoration ?
+                model::ControlNode{model::ObjectId{2}, "Picture", model::PictureDecorationPayload{}} :
+                model::ControlNode{model::ObjectId{2}, "List", model::ListBoxPayload{}};
+            if (kind == model::ControlKind::list_box) {
+                model::TypeDomainEntry entry; entry.term = model::TypeDomainTerm::value_list;
+                document.add_attribute(model::Attribute{model::ObjectId{3}, "Value", model::TypeDomainPatternValue{{entry}}});
+                control.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+                control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
+            }
+            control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+            for (std::size_t i = 0; i < events.size(); ++i) {
+                const model::ObjectId id{100 + i}; control.events.push_back(model::EventRef{id});
+                document.add_event(model::Event{id, events[i].first, std::string("Handle") + events[i].first,
+                    wrong_owner ? model::EventOwner{model::FormRef{model::ObjectId{1}}} : model::EventOwner{model::ControlRef{model::ObjectId{2}}}});
+            }
+            document.add_control(std::move(control));
+            const auto encoded = form_stream::encode_document(document);
+            if (wrong_owner) { expect(!encoded, "foreign event owner must fail"); return; }
+            expect(encoded.ok(), "picture or list events must encode"); if (!encoded) return;
+            auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(kind).guid);
+            expect(record != nullptr, "event control record must exist"); if (!record) return;
+            const auto& collection = record->items.at(2).items.at(2);
+            expect(collection.items.size() == events.size() + 1, "event count must match");
+            for (const auto& [name, id] : events) {
+                expect(std::ranges::any_of(collection.items.begin() + 1, collection.items.end(), [&](const auto& item) {
+                    return item.items.at(0).atom == std::to_string(id) && item.items.at(1).atom == "e1692cc2-605b-4535-84dd-28440238746c";
+                }), std::string(name) + " must have the observed identity");
+            }
+            const auto decoded = form_stream::decode_document(encoded.value(), "PictureListEvents");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "event control must decode completely"); if (!decoded) return;
+            const auto* decoded_control = decoded.value().find_control(model::ObjectId{2});
+            expect(decoded_control && decoded_control->events.size() == events.size(), "event references must survive");
+            if (!decoded_control) return;
+            for (const auto& [name, id] : events) {
+                static_cast<void>(id);
+                expect(std::ranges::any_of(decoded_control->events, [&](const auto& ref) {
+                    const auto* event = decoded.value().find_event(ref.id());
+                    return event && event->name == name && event->handler == std::string("Handle") + name &&
+                        std::holds_alternative<model::ControlRef>(event->owner) && std::get<model::ControlRef>(event->owner).id() == decoded_control->id;
+                }), "event name, handler and owner must survive");
+            }
+            const auto xml = source::serialize_form_xml(decoded.value()); expect(xml.ok(), "events must serialize to XML"); if (!xml) return;
+            const auto parsed = source::parse_form_xml(xml.value()); expect(parsed.ok(), "event XML must parse"); if (!parsed) return;
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "event XML and storage must round-trip");
+            if (events.empty()) return;
+            auto unknown = encoded.value(); auto* unknown_record = find_record_with_guid(unknown, model::metamodel::descriptor_for(kind).guid);
+            unknown_record->items.at(2).items.at(2).items.at(1).items.at(0) = list_stream::ListValue::raw_atom("999");
+            expect(!form_stream::decode_document(unknown, "UnknownEvent"), "unknown event ID must fail");
+            auto duplicate = encoded.value(); auto* duplicate_record = find_record_with_guid(duplicate, model::metamodel::descriptor_for(kind).guid);
+            auto& duplicate_events = duplicate_record->items.at(2).items.at(2);
+            duplicate_events.items.at(0) = list_stream::ListValue::raw_atom(std::to_string(events.size() + 1));
+            duplicate_events.items.push_back(duplicate_events.items.at(1));
+            expect(!form_stream::decode_document(duplicate, "DuplicateEvent"), "duplicate event ID must fail");
+            auto neighbor = encoded.value(); auto* neighbor_record = find_record_with_guid(neighbor, model::metamodel::descriptor_for(kind).guid);
+            neighbor_record->items.at(2).items.at(1).items.at(0).items.at(15) = list_stream::ListValue::raw_atom("99");
+            const auto partial = form_stream::decode_document(neighbor, "UnknownEventNeighbor");
+            expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown neighbor must remain incomplete");
+        };
+        if (kind == model::ControlKind::picture_decoration) {
+            check({}); for (std::size_t i = 0; i < picture_events.size(); ++i) check(std::span(picture_events).subspan(i, 1));
+            check(picture_events); check(std::span(picture_events).first(1), true);
+        } else {
+            check({}); for (std::size_t i = 0; i < list_events.size(); ++i) check(std::span(list_events).subspan(i, 1));
+            check(list_events); check(std::span(list_events).first(1), true);
+        }
+    }
+}
+
 void test_choice_and_input_named_events() {
     constexpr std::array events{
         std::pair{"StartListChoice", 1U}, std::pair{"StartChoice", 2U}, std::pair{"Clearing", 3U},
@@ -15709,6 +15788,7 @@ int main() {
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_named_events_round_trip_and_rejections();
+        test_picture_and_list_named_events();
         test_choice_and_input_named_events();
         test_table_named_events();
         test_check_box_radio_button_track_bar_named_on_change_events();

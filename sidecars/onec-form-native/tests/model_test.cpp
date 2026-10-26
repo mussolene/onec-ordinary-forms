@@ -893,6 +893,20 @@ void test_help_metamodel() {
                picture_click->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
                picture_click->storage_event_id.has_value() && *picture_click->storage_event_id == 0,
         "PictureDecoration.Click must use the shared event record descriptor and observed storage ID zero");
+    for (const auto& [kind, name, id] : std::array{
+             std::tuple{ControlKind::picture_decoration, "DragStart", 3U},
+             std::tuple{ControlKind::picture_decoration, "DragCheck", 4U},
+             std::tuple{ControlKind::picture_decoration, "DragEnd", 5U},
+             std::tuple{ControlKind::picture_decoration, "Drag", 6U},
+             std::tuple{ControlKind::list_box, "Selection", 34U},
+             std::tuple{ControlKind::list_box, "OnActivateRow", 37U},
+             std::tuple{ControlKind::list_box, "OnCheckChange", 17U}}) {
+        const auto* descriptor = find_event(kind, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == StorageCodec::event_record &&
+            descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
+            descriptor->storage_event_id == id, std::string(name) + " must have its proven event descriptor");
+    }
     constexpr std::array calendar_event_storage{
         std::pair{"Selection", 1U}, std::pair{"DragStart", 3U}, std::pair{"DragEnd", 5U},
         std::pair{"Drag", 6U}, std::pair{"OnActivateDate", 0U}, std::pair{"OnPeriodOutput", 2U},

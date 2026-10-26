@@ -1190,6 +1190,28 @@ void apply_proven_storage_overrides(
     picture_click->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
     picture_click->storage_event_id = 0U;
 
+    constexpr std::array picture_drag_events{
+        std::pair{"DragStart", 3U}, std::pair{"DragCheck", 4U},
+        std::pair{"DragEnd", 5U}, std::pair{"Drag", 6U},
+    };
+    constexpr std::array list_box_events{
+        std::pair{"Selection", 34U}, std::pair{"OnActivateRow", 37U},
+        std::pair{"OnCheckChange", 17U},
+    };
+    const auto classify_control_events = [&](ControlKind kind, const auto& entries) {
+        auto& descriptors = events[static_cast<std::size_t>(kind)];
+        for (const auto& [name, id] : entries) {
+            const auto event = std::ranges::find(descriptors, std::string_view{name}, &EventDescriptor::api_name);
+            if (event == descriptors.end()) throw std::logic_error("missing proven control event");
+            event->persistence = PersistenceClass::persisted_editable;
+            event->storage_codec = StorageCodec::event_record;
+            event->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+            event->storage_event_id = id;
+        }
+    };
+    classify_control_events(ControlKind::picture_decoration, picture_drag_events);
+    classify_control_events(ControlKind::list_box, list_box_events);
+
     constexpr std::array calendar_event_storage{
         std::pair{"Selection", 1U},
         std::pair{"DragStart", 3U},

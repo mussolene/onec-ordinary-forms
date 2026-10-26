@@ -72,6 +72,9 @@ LabelDecoration также сохраняет VerticalAlign, MarkNegatives и Sc
 InputField и ChoiceField сохраняют общие события выбора, открытия, очистки,
 настройки и изменения; InputField также сохраняет AutoCompleteText и TextEditEnd.
 Редакторы колонок таблицы сохраняют прежние ограничения.
+PictureDecoration сохраняет DragStart, DragCheck, DragEnd и Drag; ListBox
+сохраняет Selection, OnActivateRow и OnCheckChange. Назначения проверены
+на платформе, фактический вызов через интерфейс отдельно не проверен.
 Обработчики LabelDecoration.Click и PictureDecoration.Click сохраняются как
 именованные события; их назначения проверены после выгрузки и повторного
 открытия. Фактический щелчок и вызов обработчиков в интерфейсе еще не проверены.
