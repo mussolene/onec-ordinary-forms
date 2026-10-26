@@ -1508,15 +1508,18 @@ LV canonical_radio_button_info(
     std::string_view tool_tip,
     const model::FontValue* font = nullptr,
     const model::ColorValue* border_color = nullptr,
-    bool transparent = false) {
+    bool transparent = false,
+    std::int32_t title_location = 1,
+    std::int32_t horizontal_align = 0,
+    std::int32_t vertical_align = 1) {
     const auto properties = list({
         canonical_button_base(enabled, tool_tip, border_color, nullptr, nullptr, font, "$/RadioButton",
             model::ControlKind::radio_button, transparent),
         raw("7"),
         encoded_localized(caption),
-        raw("1"),
-        raw("0"),
-        raw("1"),
+        raw(std::to_string(title_location)),
+        raw(std::to_string(horizontal_align)),
+        raw(std::to_string(vertical_align)),
         raw("0"),
         raw("100"),
         raw("1"),
@@ -1569,7 +1572,8 @@ LV canonical_html_document_field_data(std::int32_t output) {
 
 LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip,
     const model::FontValue* font = nullptr, const model::ColorValue* border_color = nullptr,
-    bool transparent = false) {
+    bool transparent = false, std::int32_t title_location = 1,
+    std::int32_t horizontal_align = 0, std::int32_t vertical_align = 1) {
     return list({
         raw("1"),
         list({
@@ -1578,9 +1582,9 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
                     model::ControlKind::check_box, transparent),
                 raw("7"),
                 encoded_localized(caption),
-                raw("1"),
-                raw("0"),
-                raw("1"),
+                raw(std::to_string(title_location)),
+                raw(std::to_string(horizontal_align)),
+                raw(std::to_string(vertical_align)),
                 raw("0"),
                 raw("100"),
                 raw("1"),
@@ -5105,6 +5109,18 @@ DecodedControl decode_radio_button(
     const std::string& tool_tip = common.tool_tip;
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
+    const auto title_location = integer_atom<std::int32_t>(properties.items[3], child_path(properties_path, 3));
+    const auto horizontal_align = integer_atom<std::int32_t>(properties.items[4], child_path(properties_path, 4));
+    const auto vertical_align = integer_atom<std::int32_t>(properties.items[5], child_path(properties_path, 5));
+    if (title_location < 0 || title_location > 1)
+        fail("OOF1114", child_path(properties_path, 3), "TitleLocation storage value 0 or 1",
+            std::to_string(title_location), "RadioButton.TitleLocation storage value is unsupported");
+    if (horizontal_align < 0 || horizontal_align > 2)
+        fail("OOF1114", child_path(properties_path, 4), "HorizontalAlign storage value 0, 1, or 2",
+            std::to_string(horizontal_align), "RadioButton.HorizontalAlign storage value is unsupported");
+    if (vertical_align < 0 || vertical_align > 2)
+        fail("OOF1114", child_path(properties_path, 5), "VerticalAlign storage value 0, 1, or 2",
+            std::to_string(vertical_align), "RadioButton.VerticalAlign storage value is unsupported");
     const auto selection_value = decoded_radio_selection_value(info.items[4], child_path(info_path, 4));
     const bool inherited_group_selection = selection_value && value_type.entries.empty() && linked_attribute == nullptr;
     if (selection_value && !inherited_group_selection && (!is_single_numeric_type_domain(value_type) ||
@@ -5125,7 +5141,7 @@ DecodedControl decode_radio_button(
     normalized_info.items[5] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
-            &*common.font, &*common.border_color)))
+            &*common.font, &*common.border_color, false, title_location, horizontal_align, vertical_align)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "RadioButton");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -5147,6 +5163,18 @@ DecodedControl decode_radio_button(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::RadioButtonPayload{}};
     apply_common_control_base(control.properties(), common);
+    if (title_location != 1) control.properties().set_explicit(model::PropertyId::from_name("TitleLocation"),
+        model::EnumerationValue{"TitleLocation", title_location == 0 ? "TitleLeft" : "TitleRight"});
+    if (horizontal_align != 0) {
+        static constexpr std::string_view members[] = {"Left", "Center", "Right"};
+        control.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
+            model::EnumerationValue{"HorizontalAlign", std::string(members[horizontal_align])});
+    }
+    if (vertical_align != 1) {
+        static constexpr std::string_view members[] = {"Top", "Center", "Bottom"};
+        control.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
+            model::EnumerationValue{"VerticalAlign", std::string(members[vertical_align])});
+    }
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (selection_value) control.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), *selection_value);
     if (first_in_group) control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
@@ -6504,6 +6532,18 @@ DecodedControl decode_check_box(
     const auto& border_color = *common.border_color;
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
+    const auto title_location = integer_atom<std::int32_t>(properties.items[3], child_path(properties_path, 3));
+    const auto horizontal_align = integer_atom<std::int32_t>(properties.items[4], child_path(properties_path, 4));
+    const auto vertical_align = integer_atom<std::int32_t>(properties.items[5], child_path(properties_path, 5));
+    if (title_location < 0 || title_location > 1)
+        fail("OOF1114", child_path(properties_path, 3), "TitleLocation storage value 0 or 1",
+            std::to_string(title_location), "CheckBox.TitleLocation storage value is unsupported");
+    if (horizontal_align < 0 || horizontal_align > 2)
+        fail("OOF1114", child_path(properties_path, 4), "HorizontalAlign storage value 0, 1, or 2",
+            std::to_string(horizontal_align), "CheckBox.HorizontalAlign storage value is unsupported");
+    if (vertical_align < 0 || vertical_align > 2)
+        fail("OOF1114", child_path(properties_path, 5), "VerticalAlign storage value 0, 1, or 2",
+            std::to_string(vertical_align), "CheckBox.VerticalAlign storage value is unsupported");
     auto normalized_info = info;
     normalize_named_control_colors(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
         child_path(child_path(child_path(info_path, 1), 0), 0));
@@ -6514,7 +6554,8 @@ DecodedControl decode_check_box(
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
     normalized_info.items[2] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
-        canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color)))
+        canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color, false,
+            title_location, horizontal_align, vertical_align)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CheckBox");
 
     const auto geometry_path = child_path(path, 3);
@@ -6536,6 +6577,18 @@ DecodedControl decode_check_box(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CheckBoxPayload{}};
     apply_common_control_base(control.properties(), common);
+    if (title_location != 1) control.properties().set_explicit(model::PropertyId::from_name("TitleLocation"),
+        model::EnumerationValue{"TitleLocation", "TitleLeft"});
+    if (horizontal_align != 0) {
+        static constexpr std::string_view members[] = {"Left", "Center", "Right"};
+        control.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
+            model::EnumerationValue{"HorizontalAlign", std::string(members[horizontal_align])});
+    }
+    if (vertical_align != 1) {
+        static constexpr std::string_view members[] = {"Top", "Center", "Bottom"};
+        control.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
+            model::EnumerationValue{"VerticalAlign", std::string(members[vertical_align])});
+    }
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
@@ -8576,7 +8629,7 @@ LV encode_check_box(
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent"}, "$/CheckBox");
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent", "TitleLocation", "HorizontalAlign", "VerticalAlign"}, "$/CheckBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
@@ -8592,8 +8645,15 @@ LV encode_check_box(
     const auto font = explicit_control_font(control.properties(), "$/CheckBox/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "CheckBox");
     const bool transparent = explicit_bool(control.properties(), "Transparent", false);
+    const auto title_location = explicit_enum_storage_value(control.properties(), "CheckBox", "TitleLocation",
+        "TitleLocation", 1, {{"TitleLeft", 0}, {"TitleRight", 1}});
+    const auto horizontal_align = explicit_enum_storage_value(control.properties(), "CheckBox", "HorizontalAlign",
+        "HorizontalAlign", 0, {{"Left", 0}, {"Center", 1}, {"Right", 2}});
+    const auto vertical_align = explicit_enum_storage_value(control.properties(), "CheckBox", "VerticalAlign",
+        "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}});
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
-    auto check_info = canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color, transparent);
+    auto check_info = canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color, transparent,
+        title_location, horizontal_align, vertical_align);
     encode_named_control_colors(check_info.items[1].items[0].items[0], model::ControlKind::check_box,
         control.properties(), "$/CheckBox");
     encode_named_control_border(check_info.items[1].items[0].items[0], model::ControlKind::check_box,
@@ -8677,7 +8737,7 @@ LV encode_radio_button(
             "RadioButton uses a storage concept outside the supported basic profile");
     }
     require_allowed_properties(control.properties(),
-        {"Enabled", "Caption", "ToolTip", "SelectionValue", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent"}, "$/RadioButton");
+        {"Enabled", "Caption", "ToolTip", "SelectionValue", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent", "TitleLocation", "HorizontalAlign", "VerticalAlign"}, "$/RadioButton");
     bool first_in_group = false;
     if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("FirstInGroup"))) {
         const auto* value = std::get_if<bool>(&entry->value);
@@ -8739,9 +8799,15 @@ LV encode_radio_button(
     const auto font = explicit_control_font(control.properties(), "$/RadioButton/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "RadioButton");
     const bool transparent = explicit_bool(control.properties(), "Transparent", false);
+    const auto title_location = explicit_enum_storage_value(control.properties(), "RadioButton", "TitleLocation",
+        "TitleLocation", 1, {{"TitleLeft", 0}, {"TitleRight", 1}});
+    const auto horizontal_align = explicit_enum_storage_value(control.properties(), "RadioButton", "HorizontalAlign",
+        "HorizontalAlign", 0, {{"Left", 0}, {"Center", 1}, {"Right", 2}});
+    const auto vertical_align = explicit_enum_storage_value(control.properties(), "RadioButton", "VerticalAlign",
+        "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}});
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
     auto radio_info = canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
-        &font, &border_color, transparent);
+        &font, &border_color, transparent, title_location, horizontal_align, vertical_align);
     encode_named_control_colors(radio_info.items[2].items[0].items[0], model::ControlKind::radio_button,
         control.properties(), "$/RadioButton");
     encode_named_control_border(radio_info.items[2].items[0].items[0], model::ControlKind::radio_button,

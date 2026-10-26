@@ -145,6 +145,11 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
     if ((property.control_kind == model::ControlKind::progress_bar ||
          property.control_kind == model::ControlKind::track_bar) && property.api_name == "Orientation")
         return "CommandBarOrientationValueType";
+    if (property.control_kind == model::ControlKind::check_box || property.control_kind == model::ControlKind::radio_button) {
+        if (property.api_name == "HorizontalAlign") return "IndicatorHorizontalAlignValueType";
+        if (property.api_name == "VerticalAlign") return "ControlVerticalAlignValueType";
+        if (property.api_name == "TitleLocation") return "IndicatorTitleLocationValueType";
+    }
     return xsd_type(property.value_codec);
 }
 
@@ -448,6 +453,33 @@ void append_value_types(std::string& output) {
     <xs:attribute name="member" use="required">
       <xs:simpleType><xs:restriction base="xs:string">
         <xs:enumeration value="DontShow"/><xs:enumeration value="TopLeft"/><xs:enumeration value="BottomRight"/><xs:enumeration value="BothSides"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="IndicatorHorizontalAlignValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="HorizontalAlign"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Left"/><xs:enumeration value="Center"/><xs:enumeration value="Right"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="ControlVerticalAlignValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="VerticalAlign"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Top"/><xs:enumeration value="Center"/><xs:enumeration value="Bottom"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="IndicatorTitleLocationValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="TitleLocation"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="TitleLeft"/><xs:enumeration value="TitleRight"/>
       </xs:restriction></xs:simpleType>
     </xs:attribute>
   </xs:complexType>

@@ -462,6 +462,23 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
     verify_type("CommandBarButtonsAlignmentValueType", "CommandBarButtonAlignment", {"Left", "Center", "Right"});
     verify_type("CommandBarOrientationValueType", "Orientation", {"Auto", "Horizontal", "Vertical"});
     verify_type("CalendarDateSelectionModeValueType", "DateSelectionMode", {"Single", "Multiple", "Interval"});
+    verify_type("IndicatorHorizontalAlignValueType", "HorizontalAlign", {"Left", "Center", "Right"});
+    verify_type("ControlVerticalAlignValueType", "VerticalAlign", {"Top", "Center", "Bottom"});
+    verify_type("IndicatorTitleLocationValueType", "TitleLocation", {"TitleLeft", "TitleRight"});
+    for (const auto owner : {"CheckBoxType", "RadioButtonType"})
+        expect(element_type(owner, "HorizontalAlign") == "IndicatorHorizontalAlignValueType" &&
+                   element_type(owner, "VerticalAlign") == "ControlVerticalAlignValueType" &&
+                   element_type(owner, "TitleLocation") == "IndicatorTitleLocationValueType",
+            "indicator alignments must use their observed finite domains");
+    for (const auto owner : {"CheckBox", "RadioButton"}) {
+        for (const auto member : {"Auto", "Justify"}) {
+            const auto xml = std::string("<Form id=\"1\" name=\"InvalidAlignment\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
+                owner + " id=\"2\" name=\"Control\"><Position/><HorizontalAlign type=\"HorizontalAlign\" member=\"" + member +
+                "\"/></" + owner + "></ChildItems></Form>";
+            expect(validate_document(compiled_schema, xml) != 0,
+                "indicator schema must reject Auto and Justify despite their shared enum membership");
+        }
+    }
     verify_type("ProgressBarSmoothingModeValueType", "ProgressBarSmoothingMode", {"Smooth", "Broken", "BrokenTilt"});
     verify_type("TrackBarMarkingAppearanceValueType", "TrackBarMarkingAppearance", {"DontShow", "TopLeft", "BottomRight", "BothSides"});
     expect(element_type("ProgressBarType", "ShowStyle") == "ProgressBarSmoothingModeValueType" &&

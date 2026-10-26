@@ -119,6 +119,17 @@ bool property_value_matches(
                         (typed_value.member == "DontShow" || typed_value.member == "TopLeft" ||
                          typed_value.member == "BottomRight" || typed_value.member == "BothSides");
                 }
+                if (descriptor.control_kind == ControlKind::check_box || descriptor.control_kind == ControlKind::radio_button) {
+                    if (descriptor.api_name == "HorizontalAlign")
+                        return typed_value.type_name == "HorizontalAlign" &&
+                            (typed_value.member == "Left" || typed_value.member == "Center" || typed_value.member == "Right");
+                    if (descriptor.api_name == "VerticalAlign")
+                        return typed_value.type_name == "VerticalAlign" &&
+                            (typed_value.member == "Top" || typed_value.member == "Center" || typed_value.member == "Bottom");
+                    if (descriptor.api_name == "TitleLocation")
+                        return typed_value.type_name == "TitleLocation" &&
+                            (typed_value.member == "TitleLeft" || typed_value.member == "TitleRight");
+                }
                 if (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") {
                     return typed_value.type_name == "DateSelectionMode" &&
                         (typed_value.member == "Single" || typed_value.member == "Multiple" || typed_value.member == "Interval");
@@ -159,6 +170,8 @@ bool property_api_enumeration_matches(
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
     if ((descriptor.control_kind == ControlKind::command_bar &&
          (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||
+        ((descriptor.control_kind == ControlKind::check_box || descriptor.control_kind == ControlKind::radio_button) &&
+         (descriptor.api_name == "HorizontalAlign" || descriptor.api_name == "VerticalAlign" || descriptor.api_name == "TitleLocation")) ||
         (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") ||
         (descriptor.control_kind == ControlKind::progress_bar &&
          (descriptor.api_name == "Orientation" || descriptor.api_name == "ShowStyle")) ||

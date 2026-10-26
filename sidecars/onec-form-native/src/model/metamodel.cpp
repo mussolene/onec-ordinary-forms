@@ -836,6 +836,14 @@ void apply_proven_storage_overrides(
     classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(radio_button, "SelectionValue", StorageCodec::control_info, DefaultKind::undefined, "undefined");
     std::ranges::find(radio_button, "SelectionValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::decimal;
+    classify_property(radio_button, "TitleLocation", StorageCodec::control_info,
+        DefaultKind::enumeration, "TitleRight");
+    classify_property(radio_button, "HorizontalAlign", StorageCodec::control_info,
+        DefaultKind::enumeration, "Left");
+    classify_property(radio_button, "VerticalAlign", StorageCodec::control_info,
+        DefaultKind::enumeration, "Center");
+    for (const auto name : {"TitleLocation", "HorizontalAlign", "VerticalAlign"})
+        std::ranges::find(radio_button, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
     auto& html_document_field = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
     classify_property(
@@ -884,6 +892,14 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::string,
         "");
+    classify_property(check_box, "TitleLocation", StorageCodec::control_info,
+        DefaultKind::enumeration, "TitleRight");
+    classify_property(check_box, "HorizontalAlign", StorageCodec::control_info,
+        DefaultKind::enumeration, "Left");
+    classify_property(check_box, "VerticalAlign", StorageCodec::control_info,
+        DefaultKind::enumeration, "Center");
+    for (const auto name : {"TitleLocation", "HorizontalAlign", "VerticalAlign"})
+        std::ranges::find(check_box, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
     auto& calendar_field = properties[static_cast<std::size_t>(ControlKind::calendar_field)];
     classify_property(

@@ -58,6 +58,12 @@ TrackBar сохраняет MarkingAppearance (DontShow, TopLeft, BottomRight, B
 и Orientation. Orientation допускает только Auto, Horizontal и Vertical.
 Числовые LargeStep и MarkingStep не входят в это расширение.
 
+CheckBox и RadioButton сохраняют HorizontalAlign (Left, Center, Right),
+VerticalAlign (Top, Center, Bottom) и TitleLocation (TitleLeft, TitleRight).
+HorizontalAlign.Auto и Justify отклоняются для этих владельцев в API и XSD,
+поскольку платформа их не принимает. ThreeState и числовая привязка CheckBox
+остаются за границей этой итерации.
+
 CalendarField поддерживает восемь именованных событий: Selection, DragStart,
 DragEnd, Drag, OnActivateDate, OnPeriodOutput, OnChange и DragCheck. События
 хранятся в Events самого контрола как имена обработчиков. Кодек проверяет
