@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "oof/form_bin.hpp"
 #include "oof/source/form_xml.hpp"
@@ -243,6 +244,65 @@ void test_module_newlines_are_canonical_at_container_boundary() {
     expect(empty_decoded.ok() && empty_decoded.value().module().text.empty(), "empty module must remain empty");
 }
 
+void test_module_utf8_validation() {
+    auto document = button_document();
+    const std::string valid = "Процедура Проверка()\n// Ω " "\xf0\x9f\x92\xa1" "\nКонецПроцедуры\n";
+    document.set_module(model::FormModule{valid});
+    const auto valid_bytes = oof::save_form_bin(document);
+    expect(valid_bytes.ok(), "valid Unicode module must encode");
+    const auto valid_decoded = oof::load_form_bin(valid_bytes.value(), "Main");
+    expect(valid_decoded.ok() && valid_decoded.value().module().text == valid,
+        "valid Unicode module and canonical line endings must survive loading");
+
+    const std::vector<std::string> invalid_values{
+        std::string("\xff", 1),                 // Invalid leading byte.
+        std::string("\xe2\x82", 2),           // Truncated multibyte character.
+        std::string("\xc0\xaf", 2),           // Overlong encoding.
+        std::string("\xed\xa0\x80", 3),       // UTF-16 surrogate.
+        std::string("\xe2\x28\xa1", 3),       // Invalid continuation.
+        std::string("\xf4\x90\x80\x80", 4), // Code point outside Unicode.
+        std::string("valid\n") + std::string("\x80", 1), // Invalid byte after valid text.
+    };
+    for (const auto& invalid : invalid_values) {
+        document.set_module(model::FormModule{invalid});
+        const auto rejected_save = oof::save_form_bin(document);
+        expect(!rejected_save && !rejected_save.diagnostics().empty() &&
+                   rejected_save.diagnostics().front().code == "OOF1204" &&
+                   rejected_save.diagnostics().front().path == "Form.bin/module",
+            "saving a malformed UTF-8 module must fail with a module diagnostic");
+
+        for (const bool has_bom : {false, true}) {
+            auto container = formbin::parse_container(valid_bytes.value());
+            auto module = std::find_if(container.files.begin(), container.files.end(),
+                [](const auto& file) { return file.name == "module"; });
+            expect(module != container.files.end(), "module fixture must exist");
+            module->payload.clear();
+            if (has_bom) module->payload.insert(module->payload.end(), {0xef, 0xbb, 0xbf});
+            module->payload.insert(module->payload.end(), invalid.begin(), invalid.end());
+            const auto rejected_load = oof::load_form_bin(formbin::serialize_container(container), "Main");
+            expect(!rejected_load && !rejected_load.diagnostics().empty() &&
+                       rejected_load.diagnostics().front().code == "OOF1204" &&
+                       rejected_load.diagnostics().front().path == "Form.bin/module",
+                "loading malformed UTF-8 module with or without BOM must fail closed");
+        }
+    }
+
+    auto bom_container = formbin::parse_container(valid_bytes.value());
+    auto module = std::find_if(bom_container.files.begin(), bom_container.files.end(),
+        [](const auto& file) { return file.name == "module"; });
+    expect(module != bom_container.files.end(), "Unicode module fixture must exist");
+    const std::string with_crlf = "Строка Ω\r\n";
+    module->payload.assign({0xef, 0xbb, 0xbf});
+    module->payload.insert(module->payload.end(), with_crlf.begin(), with_crlf.end());
+    const auto bom_decoded = oof::load_form_bin(formbin::serialize_container(bom_container), "Main");
+    expect(bom_decoded.ok() && bom_decoded.value().module().text == "Строка Ω\n",
+        "UTF-8 BOM and CRLF module must load as Unicode with canonical line endings");
+    module->payload.assign(with_crlf.begin(), with_crlf.end());
+    const auto no_bom_decoded = oof::load_form_bin(formbin::serialize_container(bom_container), "Main");
+    expect(no_bom_decoded.ok() && no_bom_decoded.value().module().text == "Строка Ω\n",
+        "UTF-8 module without BOM must load with canonical line endings");
+}
+
 }  // namespace
 
 int main() {
@@ -251,6 +311,7 @@ int main() {
         test_button_base_state_normalization();
         test_unknown_logical_file_is_rejected();
         test_module_newlines_are_canonical_at_container_boundary();
+        test_module_utf8_validation();
     } catch (const std::exception& error) {
         std::cerr << "form bin tests: FAIL: " << error.what() << '\n';
         return 1;

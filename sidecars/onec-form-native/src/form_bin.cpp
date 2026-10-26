@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <exception>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -48,6 +49,18 @@ std::string utf8_payload(const std::vector<std::uint8_t>& bytes) {
     return std::string(
         bytes.begin() + static_cast<std::ptrdiff_t>(offset),
         bytes.end());
+}
+
+bool valid_module_utf8(std::string_view text) {
+    try {
+        std::size_t offset = 0;
+        while (offset < text.size()) {
+            (void)storage::formbin::detail::read_utf8_code_point(text, offset);
+        }
+        return true;
+    } catch (const std::runtime_error&) {
+        return false;
+    }
 }
 
 std::vector<std::uint8_t> bom_payload(std::string_view text) {
@@ -114,6 +127,13 @@ Result<model::OrdinaryFormDocument> load_form_bin(
                 "Form.bin does not contain the product storage pair")});
         }
 
+        const std::string module_text = utf8_payload(module_file->payload);
+        if (!valid_module_utf8(module_text)) {
+            return Result<model::OrdinaryFormDocument>::failure({diagnostic(
+                "OOF1204", "Form.bin/module", "UTF-8 module text", "invalid UTF-8",
+                "Form.bin module contains invalid UTF-8")});
+        }
+
         storage::list_stream::ListValue payload;
         try {
             payload = storage::list_stream::parse(utf8_payload(form_file->payload));
@@ -131,7 +151,7 @@ Result<model::OrdinaryFormDocument> load_form_bin(
         }
         auto document = decoded.take_value();
         document.set_module(model::FormModule{
-            canonical_module_newlines(utf8_payload(module_file->payload), false)});
+            canonical_module_newlines(module_text, false)});
         return Result<model::OrdinaryFormDocument>::success(
             std::move(document), decoded.diagnostics());
     } catch (const std::exception& error) {
@@ -147,6 +167,11 @@ Result<model::OrdinaryFormDocument> load_form_bin(
 Result<std::vector<std::uint8_t>> save_form_bin(
     const model::OrdinaryFormDocument& document) {
     try {
+        if (!valid_module_utf8(document.module().text)) {
+            return Result<std::vector<std::uint8_t>>::failure({diagnostic(
+                "OOF1204", "Form.bin/module", "UTF-8 module text", "invalid UTF-8",
+                "Module text contains invalid UTF-8")});
+        }
         auto encoded = storage::form_stream::encode_document(document);
         if (!encoded) {
             return Result<std::vector<std::uint8_t>>::failure(encoded.diagnostics());
