@@ -4987,6 +4987,8 @@ DecodedControl decode_radio_button(
     require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const auto common = decode_common_control_base(
         base_properties, base_path, CommonControlBaseCapabilities{true, true, model::ControlKind::radio_button});
+    auto named_events = decode_control_event_collection(info.items[5], child_path(info_path, 5),
+        model::ControlKind::radio_button);
     const bool enabled = common.enabled;
     const std::string& tool_tip = common.tool_tip;
     const std::string caption = decoded_single_language_text(
@@ -5006,6 +5008,7 @@ DecodedControl decode_radio_button(
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[2] = encoded_localized(caption);
     normalized_info.items[2].items[0] = std::move(normalized_properties);
+    normalized_info.items[5] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip,
             &*common.font, &*common.border_color)))
@@ -5037,7 +5040,8 @@ DecodedControl decode_radio_button(
     if (linked_attribute != nullptr) control.data_path = model::DataPath{model::AttributeRef{
         model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 void validate_radio_group(
@@ -6120,6 +6124,8 @@ DecodedControl decode_track_bar(
     require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const auto common = decode_common_control_base(properties, properties_path,
         CommonControlBaseCapabilities{false, true, model::ControlKind::track_bar});
+    auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
+        model::ControlKind::track_bar);
     const auto& border_color = *common.border_color;
     const std::int32_t min_value = integer_atom<std::int32_t>(
         info_payload.items[2], child_path(payload_path, 2));
@@ -6152,6 +6158,7 @@ DecodedControl decode_track_bar(
     normalized_info.items[1].items[2] = raw("0");
     normalized_info.items[1].items[3] = raw("100");
     normalized_info.items[1].items[4] = raw("1");
+    normalized_info.items[2] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
             canonical_track_bar_info(true, "", 0, 100, 1, &border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "TrackBar");
@@ -6184,7 +6191,8 @@ DecodedControl decode_track_bar(
     if (step != 1) control.properties().set_explicit(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 DecodedControl decode_list_box(
@@ -6298,6 +6306,8 @@ DecodedControl decode_check_box(
     const auto base_path = child_path(properties_path, 0);
     const auto common = decode_common_control_base(base_properties, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::check_box});
+    auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
+        model::ControlKind::check_box);
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
     const auto& font = *common.font;
@@ -6309,6 +6319,7 @@ DecodedControl decode_check_box(
         child_path(child_path(child_path(info_path, 1), 0), 0));
     normalized_info.items[1].items[0].items[0].items[12] = encoded_localized(tool_tip);
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
+    normalized_info.items[2] = list({raw("0")});
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CheckBox");
@@ -6334,7 +6345,8 @@ DecodedControl decode_check_box(
     apply_common_control_base(control.properties(), common);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+        std::move(named_events)};
 }
 
 DecodedControl decode_choice_field(
@@ -8206,7 +8218,7 @@ LV encode_track_bar(
             "TrackBar is outside the supported profile");
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8247,6 +8259,7 @@ LV encode_track_bar(
     auto track_info = canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step, &border_color);
     encode_named_control_colors(track_info.items[1].items[0], model::ControlKind::track_bar,
         control.properties(), "$/TrackBar");
+    track_info.items[2] = encode_control_event_collection(document, control, "$/TrackBar/Events");
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         std::move(track_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
@@ -8313,7 +8326,7 @@ LV encode_check_box(
         fail("OOF1122", "$/Form/ChildItems", "CheckBox with positive int64 ID", control.name, "CheckBox is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8339,6 +8352,7 @@ LV encode_check_box(
     auto check_info = canonical_check_box_info(enabled, caption, tool_tip, &font, &border_color);
     encode_named_control_colors(check_info.items[1].items[0].items[0], model::ControlKind::check_box,
         control.properties(), "$/CheckBox");
+    check_info.items[2] = encode_control_event_collection(document, control, "$/CheckBox/Events");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
@@ -8406,7 +8420,7 @@ LV encode_radio_button(
             "RadioButton is outside the supported profile");
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
-        !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -8480,6 +8494,7 @@ LV encode_radio_button(
         &font, &border_color);
     encode_named_control_colors(radio_info.items[2].items[0].items[0], model::ControlKind::radio_button,
         control.properties(), "$/RadioButton");
+    radio_info.items[5] = encode_control_event_collection(document, control, "$/RadioButton/Events");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),

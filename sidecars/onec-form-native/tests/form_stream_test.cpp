@@ -6674,6 +6674,154 @@ void test_calendar_field_named_events_round_trip_and_rejections() {
     expect(!form_stream::encode_document(empty_handler), "empty CalendarField event handler must fail closed");
 }
 
+void test_check_box_radio_button_track_bar_named_on_change_events() {
+    constexpr std::array cases{
+        std::pair{model::ControlKind::check_box, std::string_view{"Check"}},
+        std::pair{model::ControlKind::radio_button, std::string_view{"Radio"}},
+        std::pair{model::ControlKind::track_bar, std::string_view{"Track"}},
+    };
+    const auto make_document = [](model::ControlKind kind, bool with_event,
+                                  bool wrong_owner = false, bool empty_handler = false,
+                                  bool duplicate_reference = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "NamedControlEvents";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        if (kind == model::ControlKind::check_box) {
+            model::TypeDomainEntry boolean_type;
+            boolean_type.term = model::TypeDomainTerm::boolean;
+            document.add_attribute(model::Attribute{model::ObjectId{3}, "Flag",
+                model::TypeDomainPatternValue{{boolean_type}}});
+        }
+        model::ControlNode control = kind == model::ControlKind::check_box
+            ? model::ControlNode{model::ObjectId{2}, "Check", model::CheckBoxPayload{}}
+            : kind == model::ControlKind::radio_button
+                ? model::ControlNode{model::ObjectId{2}, "Radio", model::RadioButtonPayload{}}
+                : model::ControlNode{model::ObjectId{2}, "Track", model::TrackBarPayload{}};
+        if (kind == model::ControlKind::check_box)
+            control.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        if (with_event) {
+            const model::ObjectId event_id{100};
+            control.events.push_back(model::EventRef{event_id});
+            if (duplicate_reference) control.events.push_back(model::EventRef{event_id});
+            document.add_event(model::Event{event_id, "OnChange",
+                empty_handler ? "" : "HandleChange",
+                wrong_owner ? model::EventOwner{model::FormRef{model::ObjectId{1}}} :
+                    model::EventOwner{model::ControlRef{model::ObjectId{2}}}});
+        }
+        document.add_control(std::move(control));
+        return document;
+    };
+    const auto event_collection = [](auto& stream, model::ControlKind kind) -> auto& {
+        auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(kind).guid);
+        if (kind == model::ControlKind::radio_button) return record->items[2].items[5];
+        return record->items[2].items[2];
+    };
+
+    for (const auto& [kind, name] : cases) {
+        const auto empty = form_stream::encode_document(make_document(kind, false));
+        expect(empty.ok(), std::string(name) + " without events must encode");
+        if (empty) {
+            expect(list_stream::dump_compact(event_collection(empty.value(), kind)) == "{0}",
+                std::string(name) + " without events must retain the canonical empty table");
+            const auto decoded_empty = form_stream::decode_document(empty.value(), std::string(name));
+            const auto* control = decoded_empty ? decoded_empty.value().find_control(model::ObjectId{2}) : nullptr;
+            expect(decoded_empty.ok() && decoded_empty.value().reconstruction_complete() &&
+                    control != nullptr && control->events.empty(),
+                std::string(name) + " empty event table must decode without a warning");
+        }
+
+        const auto encoded = form_stream::encode_document(make_document(kind, true));
+        expect(encoded.ok(), std::string(name) + " OnChange must encode");
+        if (!encoded) continue;
+        const auto& table = event_collection(encoded.value(), kind);
+        expect(table.items.size() == 2 && table.items[1].items[0].atom == "2147483647" &&
+                table.items[1].items[1].atom == "e1692cc2-605b-4535-84dd-28440238746c",
+            std::string(name) + " OnChange must use the proven event ID and tag");
+        const auto decoded = form_stream::decode_document(encoded.value(), std::string(name));
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            std::string(name) + " OnChange must decode without a profile warning");
+        if (!decoded) continue;
+        const auto* restored = decoded.value().find_control(model::ObjectId{2});
+        const auto* event = restored && restored->events.size() == 1
+            ? decoded.value().find_event(restored->events.front().id()) : nullptr;
+        expect(event && event->name == "OnChange" && event->handler == "HandleChange" &&
+                std::holds_alternative<model::ControlRef>(event->owner) &&
+                std::get<model::ControlRef>(event->owner).id() == restored->id,
+            std::string(name) + " event reference, name, handler and owner must restore");
+
+        for (const auto& invalid : {make_document(kind, true, true), make_document(kind, true, false, true),
+                 make_document(kind, true, false, false, true)}) {
+            expect(!form_stream::encode_document(invalid),
+                std::string(name) + " wrong owner, empty handler or duplicate reference must fail closed");
+        }
+
+        const auto reject_mutation = [&](auto mutate, std::string_view message) {
+            auto malformed = encoded.value();
+            mutate(event_collection(malformed, kind));
+            expect(!form_stream::decode_document(malformed, std::string(name)), message);
+        };
+        reject_mutation([](auto& events) { events.items[0] = list_stream::ListValue::raw_atom("2"); },
+            std::string(name) + " event count mismatch must fail closed");
+        reject_mutation([](auto& events) { events.items[1].items[0] = list_stream::ListValue::raw_atom("1"); },
+            std::string(name) + " unknown event ID must fail closed");
+        reject_mutation([](auto& events) { events.items[1].items[1] = list_stream::ListValue::raw_atom("bad-tag"); },
+            std::string(name) + " wrong event tag must fail closed");
+        reject_mutation([](auto& events) {
+            events.items[0] = list_stream::ListValue::raw_atom("2");
+            events.items.push_back(events.items[1]);
+        }, std::string(name) + " duplicate storage event reference must fail closed");
+    }
+
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "MixedNamedControlEvents";
+    for (std::uint64_t id = 2; id <= 5; ++id) form.children.push_back(model::ControlRef{model::ObjectId{id}});
+    model::OrdinaryFormDocument mixed(std::move(form));
+    model::TypeDomainEntry boolean_type;
+    boolean_type.term = model::TypeDomainTerm::boolean;
+    mixed.add_attribute(model::Attribute{model::ObjectId{10}, "Flag",
+        model::TypeDomainPatternValue{{boolean_type}}});
+    model::ControlNode check{model::ObjectId{2}, "Check", model::CheckBoxPayload{}};
+    check.data_path = model::DataPath{model::AttributeRef{model::ObjectId{10}}, {}};
+    model::ControlNode radio{model::ObjectId{3}, "Radio", model::RadioButtonPayload{}};
+    model::ControlNode track{model::ObjectId{4}, "Track", model::TrackBarPayload{}};
+    model::ControlNode calendar{model::ObjectId{5}, "Calendar", model::CalendarFieldPayload{}};
+    const std::array<model::ControlNode*, 4> controls{&check, &radio, &track, &calendar};
+    for (std::size_t index = 0; index < controls.size(); ++index) {
+        const model::ObjectId event_id{200 + index};
+        controls[index]->events.push_back(model::EventRef{event_id});
+        mixed.add_event(model::Event{event_id, "OnChange", "Handle" + std::to_string(index),
+            model::ControlRef{controls[index]->id}});
+    }
+    mixed.add_control(std::move(check));
+    mixed.add_control(std::move(radio));
+    mixed.add_control(std::move(track));
+    mixed.add_control(std::move(calendar));
+    const auto encoded_mixed = form_stream::encode_document(mixed);
+    expect(encoded_mixed.ok(), "three named OnChange events must coexist with CalendarField events");
+    if (encoded_mixed) {
+        const auto decoded_mixed = form_stream::decode_document(encoded_mixed.value(), "MixedNamedControlEvents");
+        expect(decoded_mixed.ok() && decoded_mixed.value().reconstruction_complete(),
+            "neighboring named events must decode completely");
+        if (decoded_mixed) {
+            const auto xml = source::serialize_form_xml(decoded_mixed.value());
+            expect(xml.ok(), "neighboring named events must serialize to public XML");
+            if (xml) {
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "neighboring named event XML must parse");
+                if (parsed) {
+                    const auto rebuilt = form_stream::encode_document(parsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(encoded_mixed.value()) ==
+                            list_stream::dump_compact(rebuilt.value()),
+                        "CheckBox, RadioButton, TrackBar and CalendarField events must survive XML round-trip");
+                }
+            }
+        }
+    }
+}
+
 void test_calendar_group_progress_track_common_base_font_border_color() {
     const auto make_document = [](model::ControlKind kind,
                                   std::optional<model::FontValue> font = std::nullopt,
@@ -13339,6 +13487,7 @@ int main() {
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_named_events_round_trip_and_rejections();
+        test_check_box_radio_button_track_bar_named_on_change_events();
         test_calendar_group_progress_track_common_base_font_border_color();
         test_all_named_base_color_pairs_public_xml_round_trip();
         test_text_document_field_persisted_profile_and_rejections();

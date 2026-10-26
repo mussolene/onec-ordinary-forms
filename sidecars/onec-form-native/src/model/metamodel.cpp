@@ -1059,6 +1059,19 @@ void apply_proven_storage_overrides(
         event->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
         event->storage_event_id = storage_id;
     }
+
+    for (const ControlKind kind : {ControlKind::check_box, ControlKind::radio_button, ControlKind::track_bar}) {
+        auto& control_events = events[static_cast<std::size_t>(kind)];
+        const auto event = std::ranges::find(control_events, std::string_view{"OnChange"},
+            &EventDescriptor::api_name);
+        if (event == control_events.end()) {
+            throw std::logic_error("missing control OnChange event for proven storage override");
+        }
+        event->persistence = PersistenceClass::persisted_editable;
+        event->storage_codec = StorageCodec::event_record;
+        event->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+        event->storage_event_id = 2147483647U;
+    }
 }
 
 }  // namespace

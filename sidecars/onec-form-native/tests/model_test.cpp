@@ -617,6 +617,14 @@ void test_help_metamodel() {
     expect(
         event_descriptors(ControlKind::input_field).size() == 9,
         "InputField must retain the exact 9-event TextBox surface");
+    for (const auto kind : {ControlKind::check_box, ControlKind::radio_button, ControlKind::track_bar}) {
+        const auto* on_change = find_event(kind, "OnChange");
+        expect(on_change && on_change->persistence == PersistenceClass::persisted_editable &&
+                on_change->storage_codec == StorageCodec::event_record &&
+                on_change->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
+                on_change->storage_event_id == 2147483647U,
+            "CheckBox, RadioButton and TrackBar OnChange must expose only the proven storage descriptor");
+    }
     expect(
         find_property(ControlKind::input_field, "ReadOnly")->russian_name == u8"ТолькоПросмотр",
         "ReadOnly must resolve from exact bilingual help");
