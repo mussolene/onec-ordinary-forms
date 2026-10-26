@@ -63,6 +63,9 @@ GanttChart сохраняет OnIntervalEditEnd, HTMLDocumentField сохран�
 DocumentComplete, GeographicalSchemaField сохраняет Selection, а
 GraphicalSchemaField сохраняет Selection и OnActivate. Назначения проверены
 в 1С и строгой выгрузкой Designer; вызов через интерфейс отдельно не проверен.
+Реквизит формы поддерживает именованный тип valueTree. Отдельные реквизиты
+проверены в 1С и строгой выгрузкой Designer. Табличное поле с источником
+ValueTree и его режимы пока не поддерживаются.
 Dendrogram сохраняет события Selection и DetailProcessing вместе с узлами
 и связями. Назначения проверены платформой; вызов событий интерфейсом
 отдельно не проверен.

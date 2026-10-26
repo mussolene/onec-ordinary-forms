@@ -525,7 +525,7 @@ model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
 }
 
 model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr node) {
-    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 12> terms{{
+    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 13> terms{{
         {"unknown", model::TypeDomainTerm::unknown},
         {"object", model::TypeDomainTerm::object},
         {"list", model::TypeDomainTerm::list},
@@ -538,6 +538,7 @@ model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr 
         {"type", model::TypeDomainTerm::type},
         {"valueList", model::TypeDomainTerm::value_list},
         {"valueTable", model::TypeDomainTerm::value_table},
+        {"valueTree", model::TypeDomainTerm::value_tree},
     }};
     const auto found = std::ranges::find(terms, value, &decltype(terms)::value_type::first);
     if (found == terms.end()) {
@@ -595,6 +596,11 @@ model::TypeDomainPatternValue parse_type_domain(xmlNodePtr node) {
 
         if (type_uuid.has_value()) {
             entry.type_uuid = model::UuidValue{canonical_uuid(*type_uuid)};
+            if (entry.term == model::TypeDomainTerm::object &&
+                entry.type_uuid->canonical == "e603c0f2-92fb-4d47-8f38-a44a381cf235") {
+                fail("OOF2003", entry_node, {}, "typeUuid", "named valueTree term", *type_uuid,
+                    "ValueTree requires its named type-domain term");
+            }
         }
         if (numeric) {
             if (length.has_value()) {
@@ -2509,6 +2515,7 @@ std::string_view type_domain_term_name(model::TypeDomainTerm term) {
         case model::TypeDomainTerm::type: return "type";
         case model::TypeDomainTerm::value_list: return "valueList";
         case model::TypeDomainTerm::value_table: return "valueTable";
+        case model::TypeDomainTerm::value_tree: return "valueTree";
     }
     return "unknown";
 }
@@ -2704,6 +2711,9 @@ private:
                     if (!entry.type_uuid)
                         serialization_fail(std::string(object_id), "TypeDomain", "encoding object type", "missing UUID",
                             "A concrete object type requires its UUID");
+                    if (canonical_uuid(entry.type_uuid->canonical) == "e603c0f2-92fb-4d47-8f38-a44a381cf235")
+                        serialization_fail(std::string(object_id), "TypeDomain", "named valueTree term", "object UUID",
+                            "ValueTree requires its named type-domain term");
                     [[fallthrough]];
                 case model::TypeDomainTerm::list:
                 case model::TypeDomainTerm::reference:
@@ -2732,6 +2742,17 @@ private:
                         serialization_fail(std::string(object_id), std::string(name),
                             "unqualified ValueTable descriptor", "UUID or qualifiers",
                             "ValueTable type-domain entry cannot carry UUID or qualifiers");
+                    }
+                    break;
+                case model::TypeDomainTerm::value_tree:
+                    if (entry.type_uuid.has_value() ||
+                        entry.numeric != model::NumericQualifiers{} ||
+                        entry.string != model::LengthQualifiers{} ||
+                        entry.binary != model::LengthQualifiers{} ||
+                        entry.date != model::DateQualifiers{}) {
+                        serialization_fail(std::string(object_id), std::string(name),
+                            "unqualified ValueTree descriptor", "UUID or qualifiers",
+                            "ValueTree type-domain entry cannot carry UUID or qualifiers");
                     }
                     break;
                 case model::TypeDomainTerm::boolean:

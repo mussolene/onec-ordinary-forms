@@ -58,6 +58,14 @@ constexpr std::string_view type_domain_root = "Pattern";
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 constexpr std::string_view value_list_type_uuid = "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3";
 constexpr std::string_view value_table_type_uuid = "acf6192e-81ca-46ef-93a6-5a6968b78663";
+constexpr std::string_view value_tree_type_uuid = "e603c0f2-92fb-4d47-8f38-a44a381cf235";
+
+bool known_uuid_equal(std::string_view value, std::string_view canonical) noexcept {
+    return std::equal(value.begin(), value.end(), canonical.begin(), canonical.end(),
+        [](char actual, char expected) {
+            return (actual >= 'A' && actual <= 'F' ? static_cast<char>(actual + ('a' - 'A')) : actual) == expected;
+        });
+}
 
 std::string_view term_token(model::TypeDomainTerm term) {
     switch (term) {
@@ -83,6 +91,7 @@ std::string_view term_token(model::TypeDomainTerm term) {
         case model::TypeDomainTerm::value_list:
             return "#";
         case model::TypeDomainTerm::value_table:
+        case model::TypeDomainTerm::value_tree:
             return "#";
     }
     throw std::runtime_error("unsupported type-domain term");
@@ -363,8 +372,9 @@ void write_type_domain(
                     (entry.term == model::TypeDomainTerm::unknown && entry.type_uuid))
                     throw std::runtime_error("Object type requires UUID; unknown type cannot carry an object UUID");
                 if (entry.term == model::TypeDomainTerm::object &&
-                    (entry.type_uuid->canonical == value_list_type_uuid || entry.type_uuid->canonical == value_table_type_uuid))
-                    throw std::runtime_error("Known collection types require the named ValueList or ValueTable term");
+                    (known_uuid_equal(entry.type_uuid->canonical, value_list_type_uuid) || known_uuid_equal(entry.type_uuid->canonical, value_table_type_uuid) ||
+                     known_uuid_equal(entry.type_uuid->canonical, value_tree_type_uuid)))
+                    throw std::runtime_error("Known collection types require their named type-domain term");
                 if (entry.type_uuid.has_value()) {
                     out.write_guid(entry.type_uuid->canonical);
                 }
@@ -386,6 +396,15 @@ void write_type_domain(
                     throw std::runtime_error("ValueTable type-domain term cannot carry UUID or qualifiers");
                 }
                 out.write_guid(std::string(value_table_type_uuid));
+                break;
+            case model::TypeDomainTerm::value_tree:
+                if (entry.type_uuid.has_value() || entry.numeric != model::NumericQualifiers{} ||
+                    entry.string != model::LengthQualifiers{} ||
+                    entry.binary != model::LengthQualifiers{} ||
+                    entry.date != model::DateQualifiers{}) {
+                    throw std::runtime_error("ValueTree type-domain term cannot carry UUID or qualifiers");
+                }
+                out.write_guid(std::string(value_tree_type_uuid));
                 break;
             case model::TypeDomainTerm::numeric:
                 if (entry.numeric.length != 0 || entry.numeric.precision != 0 ||
@@ -443,12 +462,16 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
                 if (in.has_next()) {
                     entry.type_uuid = model::UuidValue{in.read_guid()};
                     if (entry.term == model::TypeDomainTerm::unknown &&
-                        entry.type_uuid->canonical == value_list_type_uuid) {
+                        known_uuid_equal(entry.type_uuid->canonical, value_list_type_uuid)) {
                         entry.term = model::TypeDomainTerm::value_list;
                         entry.type_uuid.reset();
                     } else if (entry.term == model::TypeDomainTerm::unknown &&
-                        entry.type_uuid->canonical == value_table_type_uuid) {
+                        known_uuid_equal(entry.type_uuid->canonical, value_table_type_uuid)) {
                         entry.term = model::TypeDomainTerm::value_table;
+                        entry.type_uuid.reset();
+                    } else if (entry.term == model::TypeDomainTerm::unknown &&
+                        known_uuid_equal(entry.type_uuid->canonical, value_tree_type_uuid)) {
+                        entry.term = model::TypeDomainTerm::value_tree;
                         entry.type_uuid.reset();
                     } else if (entry.term == model::TypeDomainTerm::unknown) {
                         entry.term = model::TypeDomainTerm::object;
@@ -459,6 +482,8 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
                 throw std::runtime_error("ValueList uses the platform unknown type token");
             case model::TypeDomainTerm::value_table:
                 throw std::runtime_error("ValueTable uses the platform unknown type token");
+            case model::TypeDomainTerm::value_tree:
+                throw std::runtime_error("ValueTree uses the platform unknown type token");
             case model::TypeDomainTerm::numeric:
                 if (in.has_next()) {
                     entry.numeric.length = in.read_uint32();

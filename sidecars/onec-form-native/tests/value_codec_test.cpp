@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
+#include <tuple>
 #include <string>
 #include <string_view>
 
@@ -131,6 +132,34 @@ void test_type_domain() {
         codec::decode_type_domain("{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}") ==
             value_list_fixture,
         "ValueList platform type descriptor must decode as the named term");
+    model::TypeDomainEntry value_tree_entry;
+    value_tree_entry.term = model::TypeDomainTerm::value_tree;
+    const model::TypeDomainPatternValue value_tree_fixture{{value_tree_entry}};
+    // Независимая строгая выгрузка формы с реквизитом ДеревоЗначений.
+    constexpr std::string_view value_tree_pattern =
+        "{\"Pattern\",{\"#\",e603c0f2-92fb-4d47-8f38-a44a381cf235}}";
+    expect(codec::encode_type_domain(value_tree_fixture) == value_tree_pattern &&
+        codec::decode_type_domain(value_tree_pattern) == value_tree_fixture,
+        "ValueTree must roundtrip the independently captured platform type");
+    for (const auto token : {"T", "R", "L"}) {
+        const auto other = codec::decode_type_domain(std::string("{\"Pattern\",{\"") + token +
+            "\",e603c0f2-92fb-4d47-8f38-a44a381cf235}}");
+        expect(other.entries.front().term != model::TypeDomainTerm::value_tree,
+            "ValueTree recognition must be limited to the # token");
+    }
+    auto invalid_tree = value_tree_entry;
+    invalid_tree.type_uuid = model::UuidValue{"11111111-1111-1111-1111-111111111111"};
+    expect_rejected([&] { (void)codec::encode_type_domain(model::TypeDomainPatternValue{{invalid_tree}}); },
+        "ValueTree must reject caller-supplied UUID");
+    invalid_tree = value_tree_entry;
+    invalid_tree.numeric = {8, 2, false};
+    expect_rejected([&] { (void)codec::encode_type_domain(model::TypeDomainPatternValue{{invalid_tree}}); },
+        "ValueTree must reject qualifiers");
+    model::TypeDomainEntry disguised_tree;
+    disguised_tree.term = model::TypeDomainTerm::object;
+    disguised_tree.type_uuid = model::UuidValue{"e603c0f2-92fb-4d47-8f38-a44a381cf235"};
+    expect_rejected([&] { (void)codec::encode_type_domain(model::TypeDomainPatternValue{{disguised_tree}}); },
+        "ValueTree must not be encoded as a generic object");
     for (const auto token : {"T", "R", "L"}) {
         const auto other_platform_term = codec::decode_type_domain(
             std::string("{\"Pattern\",{\"") + token +
@@ -138,6 +167,30 @@ void test_type_domain() {
         expect(other_platform_term.entries.front().term != model::TypeDomainTerm::value_list,
             "ValueList recognition must be limited to the proven # type token");
     }
+
+    // Платформенный GUID может использовать любой регистр шестнадцатеричных цифр.
+    for (const auto& [upper_uuid, lower_uuid, term] : {
+             std::tuple{"4772B3B4-F4A3-49C0-A1A5-8CB5961511A3", "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3", model::TypeDomainTerm::value_list},
+             std::tuple{"ACF6192E-81CA-46EF-93A6-5A6968B78663", "acf6192e-81ca-46ef-93a6-5a6968b78663", model::TypeDomainTerm::value_table},
+             std::tuple{"E603C0F2-92FB-4D47-8F38-A44A381CF235", "e603c0f2-92fb-4d47-8f38-a44a381cf235", model::TypeDomainTerm::value_tree}}) {
+        const auto upper_stream = std::string("{\"Pattern\",{\"#\",") + upper_uuid + "}}";
+        const auto canonical_stream = std::string("{\"Pattern\",{\"#\",") + lower_uuid + "}}";
+        const auto parsed = codec::decode_type_domain(upper_stream);
+        expect(parsed.entries.size() == 1 && parsed.entries.front().term == term && !parsed.entries.front().type_uuid,
+            "Known uppercase UUID must resolve to its named type");
+        expect(codec::encode_type_domain(parsed) == canonical_stream,
+            "Named known UUID must rebuild in canonical lowercase");
+        model::TypeDomainEntry disguised;
+        disguised.term = model::TypeDomainTerm::object;
+        disguised.type_uuid = model::UuidValue{upper_uuid};
+        expect_rejected([&] { (void)codec::encode_type_domain(model::TypeDomainPatternValue{{disguised}}); },
+            "Known uppercase UUID must not be encoded as a generic object");
+    }
+    constexpr std::string_view unrelated_upper = "{\"Pattern\",{\"#\",ABCDEF12-1234-1234-1234-123456789ABC}}";
+    const auto unrelated = codec::decode_type_domain(unrelated_upper);
+    expect(unrelated.entries.front().term == model::TypeDomainTerm::object &&
+        codec::encode_type_domain(unrelated) == unrelated_upper,
+        "Unknown uppercase object UUID must retain its original representation");
 
     model::TypeDomainEntry value_table_entry;
     value_table_entry.term = model::TypeDomainTerm::value_table;

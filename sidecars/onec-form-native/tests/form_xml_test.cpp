@@ -10,6 +10,8 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
+#include "oof/storage/form_stream.hpp"
+#include "oof/storage/list_stream.hpp"
 
 namespace {
 
@@ -1282,6 +1284,38 @@ void test_value_table_type_domain_xml_roundtrip() {
         "OOF2003", "ValueTable term must reject qualifiers");
 }
 
+void test_value_tree_type_domain_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ValueTree" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTree"/></TypeDomain></Attribute></Attributes></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "named ValueTree TypeDomain must parse");
+    const auto& entry = parsed.value().collections().attributes.front().type.entries.front();
+    expect(entry.term == model::TypeDomainTerm::value_tree && !entry.type_uuid,
+        "ValueTree XML must not expose its platform UUID");
+    const auto native = oof::storage::form_stream::encode_document(parsed.value());
+    expect(native.ok(), "ValueTree Attribute must encode without a baseline");
+    const auto decoded = oof::storage::form_stream::decode_document(native.value());
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "ValueTree Attribute must decode completely");
+    const auto serialized = source::serialize_form_xml(decoded.value());
+    expect(serialized.ok() && serialized.value().find("<Entry term=\"valueTree\"/>") != std::string::npos,
+        "ValueTree must remain named through XML and native roundtrip");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "rebuilt ValueTree XML must parse");
+    const auto rebuilt = oof::storage::form_stream::encode_document(reparsed.value());
+    expect(rebuilt.ok() && oof::storage::list_stream::dump_compact(rebuilt.value()) ==
+        oof::storage::list_stream::dump_compact(native.value()), "ValueTree native roundtrip must be exact");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueTree\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"valueTree\" length=\"64\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueTree must reject qualifiers");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueTree\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"object\" typeUuid=\"e603c0f2-92fb-4d47-8f38-a44a381cf235\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueTree UUID must not be accepted as an object alias");
+    auto disguised = parsed.value();
+    auto& disguised_entry = const_cast<model::Attribute&>(disguised.collections().attributes.front()).type.entries.front();
+    disguised_entry.term = model::TypeDomainTerm::object;
+    disguised_entry.type_uuid = model::UuidValue{"e603c0f2-92fb-4d47-8f38-a44a381cf235"};
+    expect(!source::serialize_form_xml(disguised).ok(), "ValueTree UUID must not serialize as an object alias");
+}
+
 void test_table_columns_named_profile() {
     constexpr std::string_view valid = R"XML(
 <Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
@@ -2473,6 +2507,7 @@ int main() {
         test_boolean_type_domain_xml_roundtrip();
         test_value_list_type_domain_xml_roundtrip();
         test_value_table_type_domain_xml_roundtrip();
+        test_value_tree_type_domain_xml_roundtrip();
         test_table_columns_named_profile();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();

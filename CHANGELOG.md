@@ -2,6 +2,9 @@
 
 ## 1.0.0 - Не выпущен
 
+- Добавлен именованный тип реквизита valueTree и распознавание GUID
+  известных типов коллекций без учета регистра.
+
 - Добавлено сохранение пяти событий GanttChart, HTMLDocumentField,
   GeographicalSchemaField и GraphicalSchemaField.
 
