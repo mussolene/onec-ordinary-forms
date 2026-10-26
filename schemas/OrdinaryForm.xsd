@@ -2299,8 +2299,8 @@
       <xs:element name="ChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeBushThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ValueLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="PercentLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueLabelFormat" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PercentLabelFormat" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeBushColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelBorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

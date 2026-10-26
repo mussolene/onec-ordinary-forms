@@ -650,6 +650,12 @@ void test_track_bar_storage_descriptors() {
 
 void test_chart_integer_and_delimiter_descriptors() {
     using namespace oof::model::metamodel;
+    for (const auto name : {"ValueLabelFormat", "PercentLabelFormat"}) {
+        const auto* property = find_property(ControlKind::chart, name);
+        expect(property && property->storage_codec == StorageCodec::control_info &&
+            property->value_codec == ValueCodec::localized_text && property->default_value.kind == DefaultKind::string &&
+            property->default_value.canonical.empty(), "Chart format descriptor must use localized text and empty default");
+    }
     const auto* delimiter = find_property(ControlKind::chart, "LabelDelimiter");
     expect(delimiter && delimiter->storage_codec == StorageCodec::control_info &&
         delimiter->value_codec == ValueCodec::string && delimiter->default_value.kind == DefaultKind::string &&

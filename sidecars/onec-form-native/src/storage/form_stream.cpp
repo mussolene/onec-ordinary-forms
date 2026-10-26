@@ -367,11 +367,17 @@ LV encoded_localized(std::string_view text) {
     return list_stream::parse(value_codec::encode_localized_string(value));
 }
 
-LV encoded_localized_text(const model::PropertyValue& value, std::string_view path) {
-    if (const auto* plain = std::get_if<std::string>(&value)) return encoded_localized(*plain);
+LV encoded_localized_text(const model::PropertyValue& value, std::string_view path,
+    bool normalize_line_endings = true) {
+    if (const auto* plain = std::get_if<std::string>(&value)) {
+        if (normalize_line_endings) return encoded_localized(*plain);
+        model::LocalizedStringValue translations;
+        if (!plain->empty()) translations.items.push_back({"ru", *plain});
+        return list_stream::parse(value_codec::encode_localized_string(translations));
+    }
     if (const auto* translations = std::get_if<model::LocalizedStringValue>(&value)) {
         auto normalized = *translations;
-        for (auto& item : normalized.items) item.text = normalize_storage_line_endings(item.text);
+        if (normalize_line_endings) for (auto& item : normalized.items) item.text = normalize_storage_line_endings(item.text);
         return list_stream::parse(value_codec::encode_localized_string(normalized));
     }
     fail("OOF1122", std::string(path), "plain or localized text", "different value type",
@@ -573,7 +579,8 @@ std::string decoded_single_language_text(const LV& value, std::string_view path)
     return decoded.items.empty() ? std::string{} : normalize_model_line_endings(decoded.items.front().text);
 }
 
-model::PropertyValue decoded_localized_text(const LV& value, std::string_view path) {
+model::PropertyValue decoded_localized_text(const LV& value, std::string_view path,
+    bool normalize_line_endings = true) {
     static_assert(model::max_localized_text_items * 6 < list_stream::max_list_tokens);
     if (value.items.size() >= 2 &&
         integer_atom<std::uint32_t>(value.items[1], child_path(path, 1)) > model::max_localized_text_items) {
@@ -587,7 +594,7 @@ model::PropertyValue decoded_localized_text(const LV& value, std::string_view pa
     } catch (const std::exception& error) {
         fail("OOF1108", std::string(path), "localized text record", describe(value), error.what());
     }
-    for (auto& item : decoded.items) item.text = normalize_model_line_endings(item.text);
+    if (normalize_line_endings) for (auto& item : decoded.items) item.text = normalize_model_line_endings(item.text);
     if (decoded.items.empty()) return std::string{};
     if (decoded.items.size() == 1 && decoded.items.front().language == "ru" &&
         !decoded.items.front().text.empty()) return decoded.items.front().text;
@@ -6193,6 +6200,10 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
     const auto middle_start = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
     info.at(middle_start + 4) = string_value(explicit_string(properties, "LabelDelimiter", ", "));
+    for (const auto& [name, offset] : {std::pair{"ValueLabelFormat", 6U}, std::pair{"PercentLabelFormat", 7U}}) {
+        info.at(middle_start + offset) = encoded_localized_text(explicit_localized_text(properties, name, "$/Chart"),
+            std::string("$/Chart/") + name, false);
+    }
     for (const auto& spec : chart_integer_properties) {
         const auto path = std::string("$/Chart/") + std::string(spec.name);
         const auto value = explicit_integer(properties, spec.name, spec.default_value, path);
@@ -6233,7 +6244,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "Outline", "Light", "Gradient", "SeriesInRows", "HideBaseValue", "AutoTransposition",
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
-        "GaugeThickness", "GaugeBushThickness"}, "$/Chart");
+        "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6405,6 +6416,12 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     }
     const auto delimiter = string_atom(at(info, middle_start + 4, info_path), child_path(info_path, middle_start + 4));
     if (delimiter != ", ") properties.set_explicit(model::PropertyId::from_name("LabelDelimiter"), delimiter);
+    for (const auto& [name, offset] : {std::pair{"ValueLabelFormat", 6U}, std::pair{"PercentLabelFormat", 7U}}) {
+        const auto index = middle_start + offset;
+        auto value = decoded_localized_text(at(info, index, info_path), child_path(info_path, index), false);
+        const auto* plain = std::get_if<std::string>(&value);
+        if (plain == nullptr || !plain->empty()) properties.set_explicit(model::PropertyId::from_name(name), std::move(value));
+    }
     for (const auto& spec : chart_integer_properties) {
         const auto index = middle_start + spec.offset;
         const auto path = child_path(info_path, index);

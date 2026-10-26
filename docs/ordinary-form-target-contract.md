@@ -53,6 +53,9 @@ CheckBox, ChoiceField, RadioButton, LabelDecoration и PictureDecoration так�
 те же именованные типы значений, что и остальные подтвержденные владельцы.
 CheckBox сохраняет булевое ThreeState с исходным значением false. Редактор
 колонки таблицы сохраняет прежние ограничения.
+Chart сохраняет локализованные ValueLabelFormat и PercentLabelFormat,
+включая различия LF, CRLF и CR. Designer удаляет пустые языковые варианты
+при сохранении формы.
 Chart сохраняет LabelDelimiter, MaxSeriesCount, MaxSeriesPercent,
 BeginGaugeAngle, EndGaugeAngle, GaugeThickness и GaugeBushThickness.
 Числовые границы проверяются при чтении и записи.

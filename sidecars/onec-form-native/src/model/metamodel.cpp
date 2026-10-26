@@ -683,6 +683,10 @@ void apply_proven_storage_overrides(
     }
 
     classify_property(chart_properties, "LabelDelimiter", StorageCodec::control_info, DefaultKind::string, ", ");
+    for (const auto name : {"ValueLabelFormat", "PercentLabelFormat"}) {
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::string, "");
+        std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::localized_text;
+    }
     for (const auto& [name, default_value] : {std::pair{"MaxSeriesCount", "4"}, std::pair{"MaxSeriesPercent", "30"},
              std::pair{"BeginGaugeAngle", "0"}, std::pair{"EndGaugeAngle", "180"},
              std::pair{"GaugeThickness", "5"}, std::pair{"GaugeBushThickness", "4"}}) {

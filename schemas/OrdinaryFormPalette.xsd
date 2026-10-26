@@ -400,8 +400,8 @@
               <Property name="GaugeBushThickness" apiName="GaugeBushThickness" russianName="ТолщинаВтулкиИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
               <Property name="GaugeThickness" apiName="GaugeThickness" russianName="ТолщинаШкалыИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
               <Property name="Points" apiName="Points" russianName="Точки" russianType="ТочкиДиаграммы" valueCodec="unclassified"/>
-              <Property name="ValueLabelFormat" apiName="ValueLabelFormat" russianName="ФорматЗначенийВПодписях" russianType="Строка" valueCodec="string"/>
-              <Property name="PercentLabelFormat" apiName="PercentLabelFormat" russianName="ФорматПроцентовВПодписях" russianType="Строка" valueCodec="string"/>
+              <Property name="ValueLabelFormat" apiName="ValueLabelFormat" russianName="ФорматЗначенийВПодписях" russianType="Строка" valueCodec="localized-text"/>
+              <Property name="PercentLabelFormat" apiName="PercentLabelFormat" russianName="ФорматПроцентовВПодписях" russianType="Строка" valueCodec="localized-text"/>
               <Property name="GaugeBushColor" apiName="GaugeBushColor" russianName="ЦветВтулкиИзмерительнойДиаграммы" russianType="Цвет" valueCodec="color"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="LabelBorderColor" apiName="LabelBorderColor" russianName="ЦветРамкиПодписей" russianType="Цвет" valueCodec="color"/>

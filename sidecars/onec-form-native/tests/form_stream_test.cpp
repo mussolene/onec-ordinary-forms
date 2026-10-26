@@ -14943,6 +14943,9 @@ void test_chart_named_integer_and_delimiter_properties() {
             std::pair{"GaugeBushThickness", std::int64_t{10}}};
         for (const auto& [name, value] : values) chart.properties().set_explicit(model::PropertyId::from_name(name), value);
         chart.properties().set_explicit(model::PropertyId::from_name("LabelDelimiter"), std::string("Разделитель Ω & < >"));
+        chart.properties().set_explicit(model::PropertyId::from_name("ValueLabelFormat"),
+            model::LocalizedStringValue{{{"ru", "Формат Ω & < >"}, {"en", "Value format"}, {"de", ""}}});
+        chart.properties().set_explicit(model::PropertyId::from_name("PercentLabelFormat"), std::string("Процент %"));
         chart.events.push_back(model::EventRef{model::ObjectId{100}});
         document.add_event(model::Event{model::ObjectId{100}, "Selection", "OnSelection", model::ControlRef{model::ObjectId{2}}});
         document.add_control(std::move(chart));
@@ -14954,10 +14957,18 @@ void test_chart_named_integer_and_delimiter_properties() {
         for (std::size_t i = 0; i < values.size(); ++i)
             expect(info.items[middle + offsets[i]].atom == std::to_string(values[i].second), "Chart integer offset must match platform");
         expect(info.items[middle + 4].atom == "Разделитель Ω & < >", "Chart delimiter must preserve Unicode");
+        expect(list_stream::dump_compact(info.items[middle + 6]) == value_codec::encode_localized_string(
+            model::LocalizedStringValue{{{"ru", "Формат Ω & < >"}, {"en", "Value format"}, {"de", ""}}}),
+            "Chart value format must preserve all translations including explicit empty text");
+        expect(list_stream::dump_compact(info.items[middle + 7]) == value_codec::encode_localized_string(
+            model::LocalizedStringValue{{{"ru", "Процент %"}}}), "Chart percent format must encode plain text");
         auto decoded = form_stream::decode_document(encoded.value());
         expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart properties must decode completely");
         const auto xml = source::serialize_form_xml(decoded.value());
         expect(xml.ok(), "Chart properties must serialize to named XML");
+        expect(xml.value().find("ValueLabelFormat") != std::string::npos &&
+            xml.value().find("PercentLabelFormat") != std::string::npos &&
+            xml.value().find("Value format") != std::string::npos, "Chart XML must expose named multilingual formats");
         const auto parsed = source::parse_form_xml(xml.value());
         expect(parsed.ok(), "Chart properties must parse from named XML");
         const auto rebuilt = form_stream::encode_document(parsed.value());
@@ -14977,6 +14988,53 @@ void test_chart_named_integer_and_delimiter_properties() {
             invalid_chart->properties().set_explicit(model::PropertyId::from_name(name), invalid);
             expect(!form_stream::encode_document(invalid_document), "Chart encoder must reject an out-of-range integer");
         }
+        for (const auto name : {"ValueLabelFormat", "PercentLabelFormat"}) {
+            for (const model::PropertyValue& value : std::array<model::PropertyValue, 8>{
+                     std::string{}, std::string("Строка & < >"),
+                     std::string("A\nB"), std::string("A\r\nB"), std::string("A\rB"),
+                     model::LocalizedStringValue{{{"en", "English"}}},
+                     model::LocalizedStringValue{{{"ru", ""}, {"en", ""}}},
+                     model::LocalizedStringValue{{{"ru", "Привет\nмир"}, {"en", "A\r\nB\rC"}}}}) {
+                auto variant = document;
+                auto* control = const_cast<model::ControlNode*>(variant.find_control(model::ObjectId{2}));
+                control->properties().set_explicit(model::PropertyId::from_name(name), value);
+                auto native = form_stream::encode_document(variant);
+                expect(native.ok(), "Chart format variant must encode");
+                const auto offset = std::string_view(name) == "ValueLabelFormat" ? 6U : 7U;
+                model::LocalizedStringValue expected;
+                if (const auto* plain = std::get_if<std::string>(&value)) {
+                    if (!plain->empty()) expected.items.push_back({"ru", *plain});
+                } else expected = std::get<model::LocalizedStringValue>(value);
+                expect(list_stream::dump_compact(find_chart_record(native.value())->items[3].items[middle + offset]) ==
+                    value_codec::encode_localized_string(expected), "Chart format storage must preserve each line ending");
+                auto decoded_variant = form_stream::decode_document(native.value());
+                expect(decoded_variant.ok() && decoded_variant.value().reconstruction_complete(), "Chart format variant must decode completely");
+                auto variant_xml = source::serialize_form_xml(decoded_variant.value());
+                expect(variant_xml.ok(), "Chart format variant must serialize");
+                bool has_carriage_return = false;
+                for (const auto& item : expected.items) has_carriage_return |= item.text.find('\r') != std::string::npos;
+                if (has_carriage_return) expect(variant_xml.value().find("&#xD;") != std::string::npos,
+                    "Chart format XML must represent carriage return as a character reference");
+                auto parsed_variant = source::parse_form_xml(variant_xml.value());
+                expect(parsed_variant.ok(), "Chart format variant must parse");
+                auto rebuilt_variant = form_stream::encode_document(parsed_variant.value());
+                expect(rebuilt_variant.ok() && list_stream::dump_compact(rebuilt_variant.value()) == list_stream::dump_compact(native.value()),
+                    "Chart format variant must survive XML and native round trip");
+            }
+            auto invalid_document = document;
+            auto* control = const_cast<model::ControlNode*>(invalid_document.find_control(model::ObjectId{2}));
+            control->properties().set_explicit(model::PropertyId::from_name(name), true);
+            expect(!form_stream::encode_document(invalid_document), "Chart format must reject wrong value types");
+        }
+        for (const auto offset : {6U, 7U}) {
+            auto invalid = encoded.value();
+            find_chart_record(invalid)->items[3].items[middle + offset] = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(invalid), "Chart format must reject malformed native values");
+        }
+        auto unknown_neighbor = encoded.value();
+        find_chart_record(unknown_neighbor)->items[3].items[middle + 5] = list_stream::ListValue::raw_atom("987");
+        const auto partial = form_stream::decode_document(unknown_neighbor);
+        expect(!partial.ok() || !partial.value().reconstruction_complete(), "Unknown Chart neighbor must not be silently lost");
         auto wrong = encoded.value();
         find_chart_record(wrong)->items[3].items[middle + 4] = list_stream::ListValue::raw_atom("0");
         expect(!form_stream::decode_document(wrong), "Chart delimiter must reject a non-string field");
