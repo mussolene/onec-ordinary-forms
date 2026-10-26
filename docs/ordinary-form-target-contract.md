@@ -56,6 +56,9 @@ CheckBox сохраняет булевое ThreeState с исходным зна
 LabelDecoration сохраняет Hyperlink и Shortcut, PictureDecoration сохраняет
 Shortcut. Сочетание F2 с Alt и Ctrl проверено при открытии формы в режиме
 гиперссылки; физическое нажатие клавиш еще не проверено.
+LabelDecoration также сохраняет VerticalAlign, MarkNegatives и ScrollingText.
+Для ScrollingText проверены DontUse, Slow, Normal, Fast и VeryFast; внутренний
+код 1 отклоняется. Визуальное отображение этих свойств отдельно не проверено.
 Обработчики LabelDecoration.Click и PictureDecoration.Click сохраняются как
 именованные события; их назначения проверены после выгрузки и повторного
 открытия. Фактический щелчок и вызов обработчиков в интерфейсе еще не проверены.

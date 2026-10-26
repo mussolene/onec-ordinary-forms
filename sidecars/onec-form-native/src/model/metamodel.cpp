@@ -890,6 +890,12 @@ void apply_proven_storage_overrides(
     classify_property(splitter, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
+    classify_property(label_decoration, "VerticalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Center");
+    classify_property(label_decoration, "MarkNegatives", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(label_decoration, "ScrollingText", StorageCodec::control_info, DefaultKind::enumeration,
+        "ScrollingTextMode.DontUse");
+    for (const auto name : {"VerticalAlign", "ScrollingText"})
+        std::ranges::find(label_decoration, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     classify_property(label_decoration, "Hyperlink", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(label_decoration, "Shortcut", StorageCodec::control_info,
         DefaultKind::shortcut, "None");

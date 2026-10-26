@@ -141,6 +141,17 @@ void test_descriptors() {
                group_tool_tip->default_value.kind == DefaultKind::string && group_tool_tip->default_value.canonical.empty(),
         "UsualGroup named property descriptors must expose observed storage and defaults");
 
+    const auto* label_vertical = find_property(ControlKind::label_decoration, "VerticalAlign");
+    const auto* label_negatives = find_property(ControlKind::label_decoration, "MarkNegatives");
+    const auto* label_scrolling = find_property(ControlKind::label_decoration, "ScrollingText");
+    expect(label_vertical && label_vertical->storage_codec == StorageCodec::control_info &&
+               label_vertical->default_value.kind == DefaultKind::enumeration && label_vertical->default_value.canonical == "Center" &&
+               label_negatives && label_negatives->storage_codec == StorageCodec::control_info &&
+               label_negatives->default_value.kind == DefaultKind::boolean && label_negatives->default_value.canonical == "false" &&
+               label_scrolling && label_scrolling->storage_codec == StorageCodec::control_info &&
+               label_scrolling->default_value.kind == DefaultKind::enumeration &&
+               label_scrolling->default_value.canonical == "ScrollingTextMode.DontUse",
+        "LabelDecoration descriptors must expose typed control-info defaults");
     const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
     const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
     const auto* tool_tip = find_property(ControlKind::button, "ToolTip");

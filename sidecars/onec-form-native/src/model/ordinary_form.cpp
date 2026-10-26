@@ -166,6 +166,13 @@ bool property_value_matches(
                         return typed_value.type_name == "TitleLocation" &&
                             (typed_value.member == "TitleLeft" || typed_value.member == "TitleRight");
                 }
+                if (descriptor.control_kind == ControlKind::label_decoration && descriptor.api_name == "ScrollingText")
+                    return typed_value.type_name == "ScrollingTextMode" &&
+                        (typed_value.member == "DontUse" || typed_value.member == "Slow" ||
+                         typed_value.member == "Normal" || typed_value.member == "Fast" || typed_value.member == "VeryFast");
+                if (descriptor.control_kind == ControlKind::label_decoration && descriptor.api_name == "VerticalAlign")
+                    return typed_value.type_name == "VerticalAlign" &&
+                        (typed_value.member == "Top" || typed_value.member == "Center" || typed_value.member == "Bottom");
                 if (descriptor.control_kind == ControlKind::picture_decoration && descriptor.api_name == "PictureSize")
                     return typed_value.type_name == "PictureSize" &&
                         (typed_value.member == "RealSize" || typed_value.member == "Stretch" ||
@@ -213,6 +220,7 @@ bool property_api_enumeration_matches(
          (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||
         ((descriptor.control_kind == ControlKind::check_box || descriptor.control_kind == ControlKind::radio_button) &&
          (descriptor.api_name == "HorizontalAlign" || descriptor.api_name == "VerticalAlign" || descriptor.api_name == "TitleLocation")) ||
+        (descriptor.control_kind == ControlKind::label_decoration && descriptor.api_name == "ScrollingText") ||
         (descriptor.control_kind == ControlKind::picture_decoration && descriptor.api_name == "PictureSize") ||
         (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") ||
         (descriptor.control_kind == ControlKind::progress_bar &&

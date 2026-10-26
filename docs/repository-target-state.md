@@ -288,6 +288,11 @@ LabelDecoration.Hyperlink и Shortcut надписи и картинки про�
 `ev_ab0585d9b78d46bf82a3a7f9f5ecd383`. Физическое нажатие клавиш и вызов
 обработчика пока не проверены.
 
+LabelDecoration.VerticalAlign, MarkNegatives и ScrollingText проверены общей
+синтетической формой: 262 проверки запуска, строгий Designer, совпадение XML
+и модуля, Release и ASan/UBSan по 11 тестов: `ev_4e792dd695d04a4d87f284f45ccb7926`.
+Визуальный эффект отдельно не проверен; Format остается отдельной задачей.
+
 Form.Caption поддерживает именованные переводы. Непустые ru/en сохранились
 после Designer, совпали XML и модуль, 228 проверок запуска прошли:
 `ev_624cb0de4b644c9bbd8361bcc39f2d32`. Form.AutoTitle поддерживает булевы

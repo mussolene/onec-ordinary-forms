@@ -9143,6 +9143,14 @@ void test_common_control_named_scalar_properties() {
         {model::ControlKind::choice_field, "ChoiceField", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::radio_button, "RadioButton", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
         {model::ControlKind::label_decoration, "LabelDecoration", "Transparent", false, {{false, 0}, {true, 1}}, 5, true},
+        {model::ControlKind::label_decoration, "LabelDecoration", "VerticalAlign", enumeration("VerticalAlign", "Center"),
+            {{enumeration("VerticalAlign", "Top"), 0}, {enumeration("VerticalAlign", "Center"), 1},
+             {enumeration("VerticalAlign", "Bottom"), 2}}, 4, false},
+        {model::ControlKind::label_decoration, "LabelDecoration", "MarkNegatives", false, {{false, 0}, {true, 1}}, 6, false, false, "2"},
+        {model::ControlKind::label_decoration, "LabelDecoration", "ScrollingText", enumeration("ScrollingTextMode", "DontUse"),
+            {{enumeration("ScrollingTextMode", "DontUse"), 0}, {enumeration("ScrollingTextMode", "Slow"), 2},
+             {enumeration("ScrollingTextMode", "Normal"), 3}, {enumeration("ScrollingTextMode", "Fast"), 4},
+             {enumeration("ScrollingTextMode", "VeryFast"), 5}}, 9, false, false, "1"},
         {model::ControlKind::picture_decoration, "PictureDecoration", "Hyperlink", false, {{false, 0}, {true, 1}}, 3, false},
         {model::ControlKind::picture_decoration, "PictureDecoration", "UseContextMenu", true, {{false, 0}, {true, 1}}, 7, false},
         {model::ControlKind::picture_decoration, "PictureDecoration", "Zoomable", true, {{false, 0}, {true, 1}}, 6, false},
@@ -9227,7 +9235,7 @@ void test_common_control_named_scalar_properties() {
             const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(spec.kind).guid);
             const auto* block = spec.base ? base_block(*record) :
                 spec.nested_payload ? nested_block(*record) : &record->items[2].items[1];
-            expect(block->items[spec.slot].atom == std::to_string(code), label + " must use its independently observed slot and code");
+            expect(block->items.at(spec.slot).atom == std::to_string(code), label + " must use its independently observed slot and code");
             if (spec.kind == model::ControlKind::picture_decoration && spec.name == "PictureSize") {
                 expect(record->items[2].items[1].items[4].items[1].atom == std::to_string(code),
                     label + " must write both observed sizing slots consistently");
@@ -9258,7 +9266,7 @@ void test_common_control_named_scalar_properties() {
             auto* invalid_record = find_record_with_guid(invalid, model::metamodel::descriptor_for(spec.kind).guid);
             auto* invalid_block = spec.base ? base_block(*invalid_record) :
                 spec.nested_payload ? nested_block(*invalid_record) : &invalid_record->items[2].items[1];
-            invalid_block->items[spec.slot] = list_stream::ListValue::raw_atom(std::string(spec.invalid_native));
+            invalid_block->items.at(spec.slot) = list_stream::ListValue::raw_atom(std::string(spec.invalid_native));
             expect(!form_stream::decode_document(invalid, "InvalidScalar"), label + " must reject invalid native scalar codes");
             auto unknown = encoded.value();
             auto* unknown_record = find_record_with_guid(unknown, model::metamodel::descriptor_for(spec.kind).guid);
