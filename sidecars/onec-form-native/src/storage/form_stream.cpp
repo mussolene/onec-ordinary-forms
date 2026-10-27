@@ -2416,6 +2416,32 @@ void warn_incomplete_profile(
     std::string_view path,
     std::string_view kind);
 
+void decode_control_metadata(const LV& metadata, std::string_view path, model::ControlNode& control, bool action_source = false) {
+    require_arity(metadata, 6, path);
+    require_raw_constant(metadata.items[0], "14", child_path(path, 0));
+    if (!action_source) require_raw_constant(metadata.items[2], "4294967295", child_path(path, 2));
+    else static_cast<void>(integer_atom<std::uint32_t>(metadata.items[2], child_path(path, 2)));
+    constexpr std::array<std::string_view, 3> properties{"ModifiesData", "SkipOnInput", "FirstInGroup"};
+    for (std::size_t index = 0; index < properties.size(); ++index) {
+        if (bool_atom(metadata.items[index + 3], child_path(path, index + 3)))
+            control.extension_properties.set_explicit(model::PropertyId::from_name(properties[index]), true);
+    }
+}
+
+LV encode_control_metadata(const model::ControlNode& control, std::string_view path, std::uint32_t action_source = std::numeric_limits<std::uint32_t>::max()) {
+    if (control.kind() == model::ControlKind::command_bar)
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "ActionSource"}, path);
+    else if (control.kind() == model::ControlKind::radio_button)
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "ValueType"}, path);
+    else
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup"}, path);
+    return list({raw("14"), string_value(control.name), raw(std::to_string(action_source)),
+        raw(explicit_bool(control.extension_properties, "ModifiesData", false) ? "1" : "0"),
+        raw(explicit_bool(control.extension_properties, "SkipOnInput", false) ? "1" : "0"),
+        raw(explicit_bool(control.extension_properties, "FirstInGroup", false) ? "1" : "0")});
+}
+
+
 bool same_list_stream_shape(const LV& left, const LV& right) {
     if (left.is_list != right.is_list) return false;
     if (!left.is_list) return left.atom_kind == right.atom_kind;
@@ -4424,15 +4450,6 @@ DecodedControl decode_default_complex_control(
     require_arity(metadata, 6, metadata_path);
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Default complex control name is required");
-    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
-    require_raw_constant(metadata.items[2], "4294967295", child_path(metadata_path, 2));
-    constexpr std::array<std::string_view, 3> metadata_properties{"ModifiesData", "SkipOnInput", "FirstInGroup"};
-    std::array<bool, 3> metadata_values{};
-    for (std::size_t index = 0; index < metadata_values.size(); ++index) {
-        metadata_values[index] = bool_atom(metadata.items[index + 3], child_path(metadata_path, index + 3));
-        if (kind == model::ControlKind::pivot_chart && metadata_values[index])
-            fail("OOF1114", child_path(metadata_path, index + 3), "0", "1", "PivotChart metadata is unsupported");
-    }
     require_exact(record.items[geometry_slot + 2], list({raw("0")}), child_path(path, geometry_slot + 2),
         "Default complex control cannot contain form controls");
     model::ControlPayload payload = kind == model::ControlKind::graphical_schema_field
@@ -4441,8 +4458,7 @@ DecodedControl decode_default_complex_control(
         ? model::ControlPayload{model::PivotChartPayload{}}
         : model::ControlPayload{model::GeographicalSchemaFieldPayload{}};
     model::ControlNode control{model::ObjectId{id}, name, std::move(payload)};
-    for (std::size_t index = 0; index < metadata_values.size(); ++index)
-        if (metadata_values[index]) control.extension_properties.set_explicit(model::PropertyId::from_name(metadata_properties[index]), true);
+    decode_control_metadata(metadata, metadata_path, control);
     if (output != 0) {
         constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
         control.properties().set_explicit(model::PropertyId::from_name("Output"),
@@ -4862,24 +4878,6 @@ void normalize_gantt_runtime_layout_values(const LV& actual, LV& normalized, std
 }
 
 
-void decode_chart_control_metadata(const LV& metadata, std::string_view path, model::ControlNode& control) {
-    require_arity(metadata, 6, path);
-    require_raw_constant(metadata.items[0], "14", child_path(path, 0));
-    require_raw_constant(metadata.items[2], "4294967295", child_path(path, 2));
-    constexpr std::array<std::string_view, 3> properties{"ModifiesData", "SkipOnInput", "FirstInGroup"};
-    for (std::size_t index = 0; index < properties.size(); ++index) {
-        if (bool_atom(metadata.items[index + 3], child_path(path, index + 3)))
-            control.extension_properties.set_explicit(model::PropertyId::from_name(properties[index]), true);
-    }
-}
-
-LV encode_chart_control_metadata(const model::ControlNode& control, std::string_view path) {
-    require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup"}, path);
-    return list({raw("14"), string_value(control.name), raw("4294967295"),
-        raw(explicit_bool(control.extension_properties, "ModifiesData", false) ? "1" : "0"),
-        raw(explicit_bool(control.extension_properties, "SkipOnInput", false) ? "1" : "0"),
-        raw(explicit_bool(control.extension_properties, "FirstInGroup", false) ? "1" : "0")});
-}
 
 DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
                                   const GeometryContext& context, Diagnostics& warnings,
@@ -5000,7 +4998,7 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty Gantt name", "empty", "Control name is required");
-    decode_chart_control_metadata(metadata, metadata_path, control);
+    decode_control_metadata(metadata, metadata_path, control);
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "Gantt storage children are unsupported");
     control.name = name;
     const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -5107,11 +5105,10 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
 
     const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto action_source = integer_atom<std::uint32_t>(metadata.items[2], child_path(metadata_path, 2));
-    require_exact(metadata, list({raw("14"), string_value(name), raw(std::to_string(action_source)), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "CommandBar metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CommandBar cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CommandBarPayload{}};
+    decode_control_metadata(metadata, metadata_path, control, true);
     if (action_source == 0)
         control.extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"), model::FormRef{form_id});
     else if (action_source != std::numeric_limits<std::uint32_t>::max())
@@ -5196,12 +5193,11 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
         "Control name is required");
-    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "UsualGroup metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "UsualGroup children are not supported by the executable storage profile");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::UsualGroupPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     model::FontValue default_font;
     default_font.bold = true;
     apply_common_control_base(control.properties(), common, default_font);
@@ -5329,11 +5325,6 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
             picture->format, picture->bytes, picture->transparent};
     }
     require_exact(
-        metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path,
-        "Button metadata record is unsupported");
-    require_exact(
         record.items[5],
         list({raw("0")}),
         child_path(path, 5),
@@ -5344,6 +5335,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         name,
         model::ButtonPayload{},
     };
+    decode_control_metadata(metadata, metadata_path, control);
     if (caption != model::PropertyValue{std::string{}}) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
@@ -5496,11 +5488,6 @@ DecodedControl decode_picture_decoration(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "Control name is required");
     }
-    require_exact(
-        metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path,
-        "PictureDecoration metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "PictureDecoration cannot contain storage children");
 
@@ -5515,6 +5502,7 @@ DecodedControl decode_picture_decoration(
         name,
         model::PictureDecorationPayload{},
     };
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (picture_info.hyperlink) control.properties().set_explicit(
         model::PropertyId::from_name("Hyperlink"), true);
@@ -5599,12 +5587,11 @@ DecodedControl decode_splitter(
     const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
         "Control name is required");
-    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "Splitter metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Splitter cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::SplitterPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (orientation_member != "Auto") control.properties().set_explicit(
         model::PropertyId::from_name("Orientation"), model::EnumerationValue{"Orientation", orientation_member});
@@ -5702,19 +5689,16 @@ DecodedControl decode_radio_button(
     const auto metadata_path = child_path(path, 4);
     require_arity(metadata, 6, metadata_path);
     require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
-    const bool first_in_group = bool_atom(metadata.items[5], child_path(metadata_path, 5));
     const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) {
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "Control name is required");
     }
-    require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
-        metadata_path, "RadioButton metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "RadioButton cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::RadioButtonPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (title_location != 1) control.properties().set_explicit(model::PropertyId::from_name("TitleLocation"),
         model::EnumerationValue{"TitleLocation", title_location == 0 ? "TitleLeft" : "TitleRight"});
@@ -5731,7 +5715,6 @@ DecodedControl decode_radio_button(
     if (caption != model::PropertyValue{std::string{}})
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (selection_value) control.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), *selection_value);
-    if (first_in_group) control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
     if (!value_type.entries.empty()) control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), value_type);
     if (linked_attribute != nullptr) control.data_path = model::DataPath{model::AttributeRef{
         model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
@@ -5757,6 +5740,9 @@ void validate_radio_group(
             } else if (entry.id == model::PropertyId::from_name("ValueType")) {
                 const auto* value = std::get_if<model::TypeDomainPatternValue>(&entry.value);
                 if (value == nullptr || !value->entries.empty()) unsupported_extension = true;
+            } else if (entry.id == model::PropertyId::from_name("ModifiesData") ||
+                       entry.id == model::PropertyId::from_name("SkipOnInput")) {
+                if (!std::holds_alternative<bool>(entry.value)) unsupported_extension = true;
             } else {
                 unsupported_extension = true;
             }
@@ -5899,13 +5885,11 @@ DecodedControl decode_html_document_field(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "Control name is required");
     }
-    require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "HTMLDocumentField metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "HTMLDocumentField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::HtmlDocumentFieldPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     if (border != control_border_default(model::ControlKind::html_document_field))
         control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
@@ -6006,11 +5990,6 @@ DecodedControl decode_label(
     if (name.empty()) {
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     }
-    require_exact(
-        metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path,
-        "LabelDecoration metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "LabelDecoration cannot contain storage children");
 
     model::ControlNode control{
@@ -6018,6 +5997,7 @@ DecodedControl decode_label(
         name,
         model::LabelDecorationPayload{},
     };
+    decode_control_metadata(metadata, metadata_path, control);
     if (caption != model::PropertyValue{std::string{}}) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
@@ -6733,7 +6713,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Chart", "Chart payload with nonempty dimensions and positive ID", control.name, "Chart is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path  ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -6760,7 +6740,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         list({raw("11")}), std::move(info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")})});
 }
 
@@ -7149,8 +7129,7 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
     control.properties() = std::move(decoded.properties);
     if (!std::holds_alternative<std::string>(decoded.title) || !std::get<std::string>(decoded.title).empty())
         control.properties().set_explicit(model::PropertyId::from_name("Title"), decoded.title);
-    const auto expected_metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
-    require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");
+    decode_control_metadata(at(record, 5, path), child_path(path, 5), control);
     const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);
     control.position = geometry.position;
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}, std::move(decoded.events)};
@@ -7343,13 +7322,11 @@ DecodedControl decode_progress_bar(
     if (name.empty()) {
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     }
-    require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "ProgressBar metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "ProgressBar cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ProgressBarPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (max_value != 100) control.properties().set_explicit(
         model::PropertyId::from_name("MaxValue"), static_cast<std::int64_t>(max_value));
@@ -7478,13 +7455,11 @@ DecodedControl decode_track_bar(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "Control name is required");
     }
-    require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "TrackBar metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "TrackBar cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::TrackBarPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     if (linked_attribute != nullptr) control.data_path = model::DataPath{
         model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     apply_common_control_base(control.properties(), common);
@@ -7582,13 +7557,11 @@ DecodedControl decode_list_box(
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty ListBox Name", "empty",
         "ListBox Name is required");
-    require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")} ),
-        metadata_path, "ListBox metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "ListBox cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ListBoxPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (show_picture) control.properties().set_explicit(model::PropertyId::from_name("ShowPicture"), true);
     if (show_check_box) control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
@@ -7678,14 +7651,10 @@ DecodedControl decode_check_box(
     if (name.empty()) {
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     }
-    require_exact(
-        metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path,
-        "CheckBox metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CheckBox cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CheckBoxPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (title_location != 1) control.properties().set_explicit(model::PropertyId::from_name("TitleLocation"),
         model::EnumerationValue{"TitleLocation", "TitleLeft"});
@@ -7788,19 +7757,12 @@ DecodedControl decode_choice_field(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "ChoiceField name is required");
     }
-    for (std::size_t index = 3; index < metadata.items.size(); ++index) {
-        static_cast<void>(integer_atom<std::int64_t>(metadata.items[index], child_path(metadata_path, index)));
-    }
-    require_raw_constant(metadata.items[2], "4294967295", child_path(metadata_path, 2));
-    if (list_stream::dump_compact(metadata) != list_stream::dump_compact(
-            list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}))) {
-        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, metadata_path, "ChoiceField");
-    }
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "ChoiceField cannot contain storage children");
 
     std::vector<DecodedControl::PicturePropertyAsset> decoded_picture_assets;
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ChoiceFieldPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (choice_button) control.properties().set_explicit(model::PropertyId::from_name("ChoiceButton"), true);
     if (clear_button) control.properties().set_explicit(model::PropertyId::from_name("ClearButton"), true);
@@ -7860,10 +7822,9 @@ DecodedControl decode_text_document_field(
     require_raw_constant(metadata.items[0], "14", child_path(child_path(path, 4), 0));
     const auto name = string_atom(metadata.items[1], child_path(child_path(path, 4), 1));
     if (name.empty()) fail("OOF1115", child_path(path, 4), "non-empty control name", "empty", "Control name is required");
-    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        child_path(path, 4), "TextDocumentField metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "TextDocumentField cannot contain storage children");
     model::ControlNode control{model::ObjectId{raw_id}, name, model::TextDocumentFieldPayload{}};
+    decode_control_metadata(metadata, child_path(path, 4), control);
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     if (font != model::FontValue{}) control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
@@ -7965,15 +7926,11 @@ DecodedControl decode_calendar_field(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "Control name is required");
     }
-    require_exact(
-        metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path,
-        "CalendarField metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "CalendarField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     if (linked_attribute != nullptr) control.data_path = model::DataPath{
         model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     apply_common_control_base(control.properties(), common);
@@ -8433,7 +8390,7 @@ DecodedControl decode_dendrogram(
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Dendrogram cannot contain storage children");
     model::ControlNode control{model::ObjectId{raw_id}, name, std::move(graph)};
-    decode_chart_control_metadata(record.items[4], metadata_path, control);
+    decode_control_metadata(record.items[4], metadata_path, control);
     if (back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     if (orientation != 0) {
         control.properties().set_explicit(model::PropertyId::from_name("Orientation"), model::EnumerationValue{
@@ -8750,11 +8707,10 @@ DecodedControl decode_spreadsheet_document_field(
     require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
-    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "SpreadsheetDocumentField metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "SpreadsheetDocumentField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::SpreadsheetDocumentFieldPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     std::get<model::SpreadsheetDocumentFieldPayload>(control.payload) = std::move(payload);
     control.properties() = std::move(sheet_properties);
     control.position = std::move(geometry.position);
@@ -8767,8 +8723,8 @@ LV encode_spreadsheet_document_field(
     const GeometryContext& context) {
     if (control.kind() != model::ControlKind::spreadsheet_document_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
-        control.data_path || !control.extension_properties.empty() || !control.children.empty()) {
-        fail("OOF1122", "$", "SpreadsheetDocumentField without binding, extensions, or children",
+        control.data_path  || !control.children.empty()) {
+        fail("OOF1122", "$", "SpreadsheetDocumentField without binding or children",
             control.name, "Control uses an unsupported storage concept");
     }
     require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Border", "ShowSelection", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}, "$/SpreadsheetDocumentField");
@@ -8795,7 +8751,7 @@ LV encode_spreadsheet_document_field(
         info.items.at(27) = raw(value->member == "Always" ? "1" : "0");
     }
     info.items.at(17) = encode_control_event_collection(document, control, "$/SpreadsheetDocumentField/Events");
-    const auto metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+    const auto metadata = encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name));
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())), info,
         encode_geometry(control.position, context, IncomingAnchorLists{}), metadata, list({raw("0")})});
 }
@@ -8915,15 +8871,11 @@ DecodedControl decode_input_field(
     if (name.empty()) {
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     }
-    require_exact(
-        metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path,
-        "InputField metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "InputField cannot contain storage children");
 
     std::vector<DecodedControl::PicturePropertyAsset> decoded_picture_assets;
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
+    decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     if (!format.empty()) control.properties().set_explicit(model::PropertyId::from_name("Format"), format);
@@ -9251,12 +9203,7 @@ DecodedControl decode_table(
     control.data_path = model::DataPath{model::AttributeRef{
         model::ObjectId{static_cast<std::uint64_t>(linked_attribute.id.object_id)}}, {}};
     control.position = geometry.position;
-    const bool first_in_group = bool_atom(record.items[4].items[5], child_path(metadata_path, 5));
-    static_cast<void>(integer_atom<std::int64_t>(record.items[4].items[3], child_path(metadata_path, 3)));
-    static_cast<void>(integer_atom<std::int64_t>(record.items[4].items[4], child_path(metadata_path, 4)));
-    if (first_in_group) {
-        control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
-    }
+    decode_control_metadata(record.items[4], metadata_path, control);
     if (tree_source && !tree_mode) control.properties().set_explicit(model::PropertyId::from_name("Tree"), false);
     auto& table = std::get<model::TablePayload>(control.payload);
     table.columns.reserve(stored_columns.items.size() - 1);
@@ -9355,11 +9302,6 @@ DecodedControl decode_table(
         "Table with valid property and column record arity and atom types");
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "Table");
-    }
-    require_raw_constant(record.items[4].items[2], "4294967295", child_path(metadata_path, 2));
-    const LV expected_metadata = list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")});
-    if (list_stream::dump_compact(record.items[4]) != list_stream::dump_compact(expected_metadata)) {
-        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, metadata_path, "Table");
     }
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Table cannot contain storage children");
@@ -9497,7 +9439,7 @@ LV encode_button(
         control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$", "Button with positive int64 ID", std::to_string(control.id.value()), "Unsupported control record");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path  ||
         !control.children.empty() || control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty()) {
@@ -9572,14 +9514,7 @@ LV encode_button(
             canonical_event_table(handler),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({
-            raw("14"),
-            string_value(control.name),
-            raw("4294967295"),
-            raw("0"),
-            raw("0"),
-            raw("0"),
-        }),
+        encode_control_metadata(control, "$/Button"),
         list({raw("0")}),
     });
 }
@@ -9594,7 +9529,6 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
         fail("OOF1122", "$/CommandBar", "CommandBar without events, DataPath, or child controls",
             control.name, "CommandBar uses a storage concept outside the supported profile");
     require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor", "Border", "AutoFill", "Transparent", "ButtonBackColor", "Orientation", "ButtonsAlignment", "Font"}, "$/CommandBar");
-    require_allowed_properties(control.extension_properties, {"ActionSource"}, "$/CommandBar");
     std::uint32_t action_source = std::numeric_limits<std::uint32_t>::max();
     if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("ActionSource"))) {
         if (const auto* form = std::get_if<model::FormRef>(&entry->value)) {
@@ -9641,7 +9575,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
         &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color, &font);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     const auto info = list({raw("2"), properties});
-    const auto metadata = list({raw("14"), string_value(control.name), raw(std::to_string(action_source)), raw("0"), raw("0"), raw("0")});
+    const auto metadata = encode_control_metadata(control, "$/CommandBar", action_source);
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())), info,
         encode_geometry(control.position, context, IncomingAnchorLists{}), metadata, list({raw("0")})});
 }
@@ -9655,7 +9589,7 @@ LV encode_picture_decoration(
         fail("OOF1122", "$/Form/ChildItems", "PictureDecoration with positive int64 ID", control.name,
             "PictureDecoration is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path  ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -9731,7 +9665,7 @@ LV encode_picture_decoration(
         raw(std::to_string(control.id.value())),
         list({raw("1"), std::move(picture_properties), std::move(picture_events)}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -9742,7 +9676,7 @@ LV encode_splitter(const model::ControlNode& control, const GeometryContext& con
         fail("OOF1122", "$/Form/ChildItems", "Splitter with positive int64 ID", control.name,
             "Splitter is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path  ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -9766,7 +9700,7 @@ LV encode_splitter(const model::ControlNode& control, const GeometryContext& con
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         list({raw("0"), properties}), encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")})});
 }
 
@@ -9775,7 +9709,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$/Form/ChildItems", "LabelDecoration with positive int64 ID", control.name, "LabelDecoration is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path  ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -9831,7 +9765,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         raw(std::to_string(control.id.value())),
         list({raw("3"), std::move(label_properties), std::move(label_events)}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -9845,7 +9779,7 @@ LV encode_progress_bar(
         fail("OOF1122", "$/Form/ChildItems", "ProgressBar with positive int64 ID", control.name,
             "ProgressBar is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -9889,7 +9823,7 @@ LV encode_progress_bar(
         raw(std::to_string(control.id.value())),
         list({raw("0"), std::move(progress_info)}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -9903,7 +9837,7 @@ LV encode_track_bar(
         fail("OOF1122", "$/Form/ChildItems", "TrackBar with positive int64 ID", control.name,
             "TrackBar is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -9971,7 +9905,7 @@ LV encode_track_bar(
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         std::move(track_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")})});
 }
 
@@ -9985,7 +9919,7 @@ LV encode_list_box(
             "ListBox is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.extension_properties.empty() || !control.children.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -10023,7 +9957,7 @@ LV encode_list_box(
         raw(std::to_string(control.id.value())),
         std::move(list_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -10037,7 +9971,7 @@ LV encode_check_box(
         fail("OOF1122", "$/Form/ChildItems", "CheckBox with positive int64 ID", control.name, "CheckBox is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.extension_properties.empty() || !control.children.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -10080,7 +10014,7 @@ LV encode_check_box(
         raw(std::to_string(control.id.value())),
         std::move(check_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -10095,7 +10029,7 @@ LV encode_choice_field(
             "ChoiceField is outside the supported profile");
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
-        !control.extension_properties.empty() || !control.children.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -10145,7 +10079,7 @@ LV encode_choice_field(
         raw(std::to_string(control.id.value())),
         std::move(choice_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -10186,9 +10120,11 @@ LV encode_radio_button(
     bool unsupported_extension = false;
     control.extension_properties.for_each_explicit([&](const model::PropertyEntry& entry) {
         if (entry.id != model::PropertyId::from_name("FirstInGroup") &&
-            entry.id != model::PropertyId::from_name("ValueType")) unsupported_extension = true;
+            entry.id != model::PropertyId::from_name("ValueType") &&
+            entry.id != model::PropertyId::from_name("ModifiesData") &&
+            entry.id != model::PropertyId::from_name("SkipOnInput")) unsupported_extension = true;
     });
-    if (unsupported_extension) fail("OOF1122", "$/RadioButton", "FirstInGroup and ValueType extensions", "other property",
+    if (unsupported_extension) fail("OOF1122", "$/RadioButton", "supported RadioButton extensions", "other property",
         "RadioButton has an unsupported extension property");
     if (!value_type.entries.empty() && !is_single_numeric_type_domain(value_type)) {
         fail("OOF1122", "$/RadioButton/ValueType", "empty or single Numeric TypeDomainPattern", "other type",
@@ -10249,7 +10185,7 @@ LV encode_radio_button(
         raw(std::to_string(control.id.value())),
         std::move(radio_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -10260,7 +10196,7 @@ LV encode_html_document_field(const model::OrdinaryFormDocument& document, const
         fail("OOF1122", "$/Form/ChildItems", "HTMLDocumentField with positive int64 ID", control.name,
             "HTMLDocumentField is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path  ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -10284,7 +10220,7 @@ LV encode_html_document_field(const model::OrdinaryFormDocument& document, const
         raw(std::to_string(control.id.value())),
         std::move(data),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -10293,7 +10229,7 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
     if (control.kind() != model::ControlKind::text_document_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", "$/Form/ChildItems", "TextDocumentField with positive int64 ID", control.name, "TextDocumentField is outside the supported profile");
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+    if (control.name.empty() || control.data_path  || !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() || control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty())
         fail("OOF1122", "$/TextDocumentField", "named unbound TextDocumentField with plain Position", control.name, "TextDocumentField uses an unsupported storage concept");
@@ -10306,7 +10242,7 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         canonical_text_document_field_info(enabled, border_color, font, border),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}), list({raw("0")})});
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)), list({raw("0")})});
 }
 
 LV encode_default_complex_control(const model::OrdinaryFormDocument& document, const model::ControlNode& control, const GeometryContext& context) {
@@ -10316,14 +10252,12 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
         fail("OOF1122", path, "positive int64 control ID", std::to_string(control.id.value()), "Default complex control ID is invalid");
     if (control.name.empty() || control.data_path ||
         !control.children.empty() || (control.kind() == model::ControlKind::pivot_chart && !control.events.empty()))
-        fail("OOF1122", path, "named default complex control without DataPath, events, extensions, or children", control.name,
+        fail("OOF1122", path, "named default complex control without DataPath, unsupported events, or children", control.name,
             "Default complex control uses an unsupported storage concept");
     if (control.kind() == model::ControlKind::pivot_chart) {
         require_allowed_properties(control.properties(), {"BackColor"}, path);
-        require_allowed_properties(control.extension_properties, {}, path);
     } else {
         require_allowed_properties(control.properties(), {"BorderColor", "Output"}, path);
-        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup"}, path);
     }
     std::vector<LV> fields{raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value()))};
     if (control.kind() == model::ControlKind::graphical_schema_field) {
@@ -10344,10 +10278,7 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
             "GeographicalSchemaField", "Output", "Output", 0, {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}})));
     }
     fields.push_back(encode_geometry(control.position, context, IncomingAnchorLists{}));
-    fields.push_back(list({raw("14"), string_value(control.name), raw("4294967295"),
-        raw(explicit_bool(control.extension_properties, "ModifiesData", false) ? "1" : "0"),
-        raw(explicit_bool(control.extension_properties, "SkipOnInput", false) ? "1" : "0"),
-        raw(explicit_bool(control.extension_properties, "FirstInGroup", false) ? "1" : "0")}));
+    fields.push_back(encode_control_metadata(control, path));
     fields.push_back(list({raw("0")}));
     return list(std::move(fields));
 }
@@ -10361,7 +10292,7 @@ LV encode_calendar_field(
         fail("OOF1122", "$/Form/ChildItems", "CalendarField with positive int64 ID", control.name,
             "CalendarField is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -10431,7 +10362,7 @@ LV encode_calendar_field(
         raw(std::to_string(control.id.value())),
         std::move(info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -10484,7 +10415,7 @@ LV encode_dendrogram(const model::OrdinaryFormDocument& document, const model::C
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         std::move(data), encode_geometry(control.position, context, IncomingAnchorLists{}),
-        encode_chart_control_metadata(control, "$/Dendrogram"),
+        encode_control_metadata(control, "$/Dendrogram"),
         list({raw("0")})});
 }
 
@@ -10497,7 +10428,7 @@ LV encode_input_field(
         fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at its ChildItems index", control.name, "InputField is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.extension_properties.empty() || !control.children.empty() ||
+        !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -10557,7 +10488,7 @@ LV encode_input_field(
         raw(std::to_string(control.id.value())),
         std::move(input_info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")}),
     });
 }
@@ -10585,8 +10516,6 @@ LV encode_table(
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "RowSelectionMode", "InitialListView", "InitialTreeView",
         "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree"}, "$/Table");
-    require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
-    const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
@@ -10684,7 +10613,7 @@ LV encode_table(
         raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         std::move(info),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
+        encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name)),
         list({raw("0")})});
 }
 
@@ -11648,16 +11577,14 @@ Result<model::OrdinaryFormDocument> decode_document(
                         require_raw_constant(info.items[0], "14", child_path(child_path(record_path, 4), 0));
                         const auto name = string_atom(info.items[1], child_path(child_path(record_path, 4), 1));
                         if (name.empty()) fail("OOF1115", child_path(child_path(record_path, 4), 1), "non-empty Panel Name", "empty", "Panel Name is required");
-                        require_raw_constant(info.items[2], "4294967295", child_path(child_path(record_path, 4), 2));
-                        require_raw_constant(info.items[3], "0", child_path(child_path(record_path, 4), 3));
-                        require_raw_constant(info.items[4], "0", child_path(child_path(record_path, 4), 4));
-                        require_raw_constant(info.items[5], "0", child_path(child_path(record_path, 4), 5));
+
                         const model::ControlRef panel_ref{model::ObjectId{raw_id}};
                         auto panel_owner = decode_owner_pages(at(record, 2, record_path), next_page_id, panel_ref, true,
                             raw_id, warnings, reconstruction_complete, child_path(record_path, 2));
                         auto named_events = decode_control_event_collection(record.items[2].items[2],
                             child_path(child_path(record_path, 2), 2), model::ControlKind::panel);
                         model::ControlNode panel{panel_ref.id(), name, model::PanelPayload{}};
+                        decode_control_metadata(info, child_path(record_path, 4), panel);
                         panel.position = std::move(geometry.position);
                         panel.payload = std::move(panel_owner.panel);
                         for (const auto& page : panel_owner.pages) panel.children.push_back(model::PageRef{page.id});
@@ -12141,7 +12068,7 @@ Result<list_stream::ListValue> encode_document(
                     record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
                         std::move(gantt_info),
                         encode_geometry(control->position, context, IncomingAnchorLists{}),
-                        encode_chart_control_metadata(*control, "$/GanttChart"),
+                        encode_control_metadata(*control, "$/GanttChart"),
                         list({raw("0")})});
                 } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
@@ -12151,7 +12078,7 @@ Result<list_stream::ListValue> encode_document(
                         fail("OOF1122", "$/UsualGroup/ID", "positive int64 UsualGroup ID",
                             std::to_string(control->id.value()), "UsualGroup ID is invalid");
                     }
-                    if (control->name.empty() || control->data_path || !control->extension_properties.empty() ||
+                    if (control->name.empty() || control->data_path  ||
                         !control->children.empty() || !control->events.empty() ||
                         control->position.default_control.is_explicit() ||
                         control->position.z_order.is_explicit() || control->position.collapse.is_explicit() ||
@@ -12180,7 +12107,7 @@ Result<list_stream::ListValue> encode_document(
                     record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
                         std::move(group_properties),
                         encode_geometry(control->position, context, IncomingAnchorLists{}),
-                        list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+                        encode_control_metadata(*control, "$/" + std::string(model::metamodel::descriptor_for(control->kind()).public_name)),
                         list({raw("0")})});
                 } else if (control->kind() == model::ControlKind::radio_button) {
                     record = encode_radio_button(document, *control, context);
@@ -12219,8 +12146,8 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::table) {
                     record = encode_table(document, *control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
-                    if (control->data_path || !control->extension_properties.empty()) {
-                        fail("OOF1122", child_path(path, ordinal), "Panel without DataPath or extension properties",
+                    if (control->data_path) {
+                        fail("OOF1122", child_path(path, ordinal), "Panel without DataPath",
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
                     require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
@@ -12232,7 +12159,7 @@ Result<list_stream::ListValue> encode_document(
                         control->properties());
                     panel_properties.items[2] = encode_control_event_collection(document, *control, child_path(path, ordinal) + "/Panel/Events");
                     const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
-                    const auto info = list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+                    const auto info = encode_control_metadata(*control, "$/" + std::string(model::metamodel::descriptor_for(control->kind()).public_name));
                     record = list({raw(std::string(panel_descriptor.guid)), raw(std::to_string(control->id.value())),
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});

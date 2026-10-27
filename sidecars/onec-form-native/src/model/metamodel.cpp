@@ -547,6 +547,15 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
 #undef OOF_HELP_PROPERTY
 #undef OOF_HELP_CONTROL
     };
+    for (const auto name : {"ModifiesData", "SkipOnInput", "FirstInGroup"}) {
+        const auto property = std::ranges::find(descriptors, std::string_view{name}, &PropertyDescriptor::api_name);
+        if (property == descriptors.end()) {
+            throw std::logic_error("missing common Boolean control extension descriptor");
+        }
+        property->default_value = {DefaultKind::boolean, "false"};
+        property->persistence = PersistenceClass::persisted_editable;
+        property->storage_codec = StorageCodec::control_info;
+    }
     const auto action_source = std::ranges::find(
         descriptors, std::string_view{"ActionSource"}, &PropertyDescriptor::api_name);
     if (action_source == descriptors.end()) {

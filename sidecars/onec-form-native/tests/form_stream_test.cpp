@@ -1285,13 +1285,16 @@ void test_table_first_in_group_observed_metadata() {
         model::metamodel::descriptor_for(model::ControlKind::table).guid);
     record->items[4].items[4] = list_stream::ListValue::raw_atom("1");
     const auto partial = form_stream::decode_document(reordered, "ReorderedTableFirstInGroup");
-    expect(partial.ok() && !partial.value().reconstruction_complete(),
-        "unrepresented neighboring metadata must warn without changing FirstInGroup");
+    expect(partial.ok() && partial.value().reconstruction_complete(),
+        "observed SkipOnInput metadata must decode without changing FirstInGroup");
     const auto table = std::ranges::find_if(partial.value().collections().controls,
         [](const auto& control) { return control.kind() == model::ControlKind::table; });
     expect(table != partial.value().collections().controls.end() &&
         !table->extension_properties.contains(model::PropertyId::from_name("FirstInGroup")),
-        "unrepresented metadata must not become a named FirstInGroup value");
+        "SkipOnInput must not become a named FirstInGroup value");
+    const auto* skip = table->extension_properties.find(model::PropertyId::from_name("SkipOnInput"));
+    expect(skip && std::get_if<bool>(&skip->value) && std::get<bool>(skip->value),
+        "observed Table metadata must become the named SkipOnInput property");
 }
 
 void test_table_first_in_group_fresh_model_xml_bin() {
@@ -1333,11 +1336,14 @@ void test_table_first_in_group_fresh_model_xml_bin() {
         auto document = make_document(first_in_group);
         auto xml = source::serialize_form_xml(document);
         expect(xml.ok(), "fresh named Table model must serialize to XML");
-        if (first_in_group) {
-            expect(xml.value().find(*first_in_group ? "<FirstInGroup>true</FirstInGroup>"
-                                                    : "<FirstInGroup>false</FirstInGroup>") != std::string::npos,
-                "explicit Boolean values must use named FirstInGroup XML");
-        }
+        const auto* explicit_first = document.find_control(model::ObjectId{3})->extension_properties.find(
+            model::PropertyId::from_name("FirstInGroup"));
+        expect(first_in_group ? explicit_first && std::get<bool>(explicit_first->value) == *first_in_group :
+                                explicit_first == nullptr,
+            "the model must retain whether FirstInGroup was explicitly set");
+        expect((xml.value().find("<FirstInGroup>true</FirstInGroup>") != std::string::npos) == first_in_group.value_or(false) &&
+                   xml.value().find("<FirstInGroup>false</FirstInGroup>") == std::string::npos,
+            "named XML writes non-default true and omits the default false");
         auto parsed = source::parse_form_xml(xml.value());
         expect(parsed.ok(), "fresh named XML must parse without a baseline");
         auto binary = oof::save_form_bin(parsed.value());
@@ -1379,7 +1385,7 @@ void test_table_first_in_group_fresh_model_xml_bin() {
     expect(!form_stream::encode_document(invalid_type), "non-Boolean FirstInGroup must be rejected");
     auto unsupported = make_document(true);
     auto& other = const_cast<model::ControlNode&>(*unsupported.find_control(model::ObjectId{3}));
-    other.extension_properties.set_explicit(model::PropertyId::from_name("SkipOnInput"), false);
+    other.extension_properties.set_explicit(model::PropertyId::from_name("UnrelatedExperimentalProperty"), false);
     expect(!form_stream::encode_document(unsupported),
         "unproven Table extensions must be rejected even at their apparent default");
 }
@@ -4734,8 +4740,8 @@ void test_command_bar_named_action_source_references() {
     metadata.items[2] = list_stream::ListValue::raw_atom("4294967296");
     expect(!form_stream::decode_document(tree, "ActionSources"), "out-of-domain ActionSource ID must be rejected");
     metadata.items[2] = list_stream::ListValue::raw_atom("0");
-    metadata.items[3] = list_stream::ListValue::raw_atom("1");
-    expect(!form_stream::decode_document(tree, "ActionSources"), "neighbor metadata fields remain strict");
+    metadata.items[3] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(tree, "ActionSources"), "metadata Boolean fields remain strict");
 }
 
 void test_command_bar_standard_menu_action_round_trip_and_guards() {
@@ -7757,8 +7763,8 @@ void test_html_document_field_output_platform_record_and_guards() {
         "$/1/2/2/1/2", "unproven HTMLDocumentField data variations must be rejected");
     auto invalid_metadata = auto_stream.value();
     invalid_metadata.items[1].items[2].items[2].items[1].items[4].items[2] = list_stream::ListValue::raw_atom("7");
-    expect_failure(form_stream::decode_document(invalid_metadata, "HtmlOutput"), "OOF1114",
-        "$/1/2/2/1/4", "unproven HTMLDocumentField metadata variations must be rejected");
+    expect_failure(form_stream::decode_document(invalid_metadata, "HtmlOutput"), "OOF1106",
+        "$/1/2/2/1/4/2", "unsupported HTMLDocumentField metadata source must be rejected");
 
     for (const auto property : {"Border", "BorderColor", "Document", "Content"}) {
         auto unsupported = make_document(std::nullopt, [property](model::ControlNode& field) {
@@ -15506,9 +15512,9 @@ void test_recursive_panel_pages_keep_owner_geometry_separate() {
     auto unknown_property = encoded.value();
     auto& unknown_root_children = unknown_property.items[1].items[2].items[2];
     auto* unknown_panel = find_record(find_record, unknown_root_children, 2);
-    unknown_panel->items[4].items[3].atom = "1";
+    unknown_panel->items[4].items[3].atom = "2";
     expect(!form_stream::decode_document(unknown_property, "NestedPanels"),
-        "unknown explicit Panel property variation must fail closed");
+        "malformed explicit Panel Boolean must fail closed");
 
     model::OrdinaryFormDocument changed_panel_property{document.form()};
     for (const auto& page : document.collections().pages) changed_panel_property.add_page(page);
@@ -17434,6 +17440,103 @@ void test_chart_named_integer_and_delimiter_properties() {
         auto wrong = encoded.value();
         find_chart_record(wrong)->items[3].items[middle + 4] = list_stream::ListValue::raw_atom("0");
         expect(!form_stream::decode_document(wrong), "Chart delimiter must reject a non-string field");
+    }
+}
+
+void test_common_extension_metadata_for_all_control_types() {
+    struct Fixture {
+        std::string_view name;
+        std::string_view attribute_type;
+        std::string_view content;
+        std::size_t metadata_slot;
+    };
+    constexpr std::array fixtures{
+        Fixture{"Button", "", "", 4},
+        Fixture{"CalendarField", "", "", 4},
+        Fixture{"Chart", "", "<Series/><Points/><Values/>", 5},
+        Fixture{"PivotChart", "", "", 4},
+        Fixture{"CheckBox", "boolean", "", 4},
+        Fixture{"ChoiceField", "", "", 4},
+        Fixture{"CommandBar", "", "", 4},
+        Fixture{"Dendrogram", "", "", 4},
+        Fixture{"GeographicalSchemaField", "", "", 5},
+        Fixture{"GraphicalSchemaField", "", "", 4},
+        Fixture{"UsualGroup", "", "", 4},
+        Fixture{"HTMLDocumentField", "", "", 4},
+        Fixture{"InputField", "string", "", 4},
+        Fixture{"LabelDecoration", "", "", 4},
+        Fixture{"ListBox", "valueList", "", 4},
+        Fixture{"Panel", "", R"XML(<ChildItems><Page name="Tab"><Position><Width>100</Width><Bindings><AnchorBinding coordinate="right" targetCoordinate="right" targetId="2" offset="0"/><AnchorBinding coordinate="bottom" targetCoordinate="bottom" targetId="2" offset="0"/></Bindings></Position></Page></ChildItems>)XML", 4},
+        Fixture{"PictureDecoration", "", "", 4},
+        Fixture{"ProgressBar", "", "", 4},
+        Fixture{"RadioButton", "", "", 4},
+        Fixture{"Splitter", "", "", 4},
+        Fixture{"SpreadsheetDocumentField", "", "", 4},
+        Fixture{"Table", "valueTable", R"XML(<Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns>)XML", 4},
+        Fixture{"TextDocumentField", "", "", 4},
+        Fixture{"GanttChart", "", "", 4},
+        Fixture{"TrackBar", "", "", 4},
+    };
+    constexpr std::array names{"ModifiesData", "SkipOnInput", "FirstInGroup"};
+    for (const auto& fixture : fixtures) {
+        const auto tag = std::string(fixture.name);
+        const auto attribute = fixture.attribute_type.empty() ? std::string{} :
+            "<Attributes><Attribute id=\"3\" name=\"Value\"><TypeDomain><Entry term=\"" +
+            std::string(fixture.attribute_type) + "\"/></TypeDomain></Attribute></Attributes>";
+        const auto data_path = fixture.attribute_type.empty() ? "" : "<DataPath attributeId=\"3\"/>";
+        for (unsigned mask = 0; mask < 8; ++mask) {
+            const auto xml = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\">" + attribute +
+                "<ChildItems><" + tag + " id=\"2\" name=\"Item\">" + data_path + "<Position/>" +
+                std::string(fixture.content) + "</" + tag + "></ChildItems></Form>";
+            auto parsed = source::parse_form_xml(xml);
+            expect(parsed.ok(), tag + " common extension fixture must parse");
+            auto* control = const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{2}));
+            expect(control != nullptr, tag + " fixture control must exist");
+            if (fixture.name == "CommandBar")
+                control->extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"), model::FormRef{model::ObjectId{1}});
+            for (std::size_t i = 0; i < names.size(); ++i)
+                control->extension_properties.set_explicit(model::PropertyId::from_name(names[i]), bool(mask & (1U << i)));
+            auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), tag + " common extension must encode" + (encoded ? "" : ": " + encoded.diagnostics().front().message));
+            auto& record = encoded.value().items[1].items[2].items[2].items[1];
+            expect(record.items[0].atom == model::metamodel::descriptor_for(control->kind()).guid, tag + " record must exist");
+            auto& metadata = record.items[fixture.metadata_slot];
+            if (fixture.name == "CommandBar") expect(metadata.items[2].atom == "0", "CommandBar ActionSource must survive common extension values");
+            for (std::size_t i = 0; i < names.size(); ++i)
+                expect(metadata.items[i + 3].atom == ((mask & (1U << i)) ? "1" : "0"), tag + " metadata must match platform");
+            auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), tag + " common extension must decode completely");
+            const auto* restored = decoded.value().find_control(model::ObjectId{2});
+            expect(restored != nullptr, tag + " restored control must exist");
+            for (std::size_t i = 0; i < names.size(); ++i) {
+                const auto* entry = restored->extension_properties.find(model::PropertyId::from_name(names[i]));
+                expect((mask & (1U << i)) ? entry && std::get_if<bool>(&entry->value) && std::get<bool>(entry->value) :
+                    entry == nullptr || (std::get_if<bool>(&entry->value) && !std::get<bool>(entry->value)),
+                    tag + " must restore the named Boolean property " + names[i]);
+            }
+            auto public_xml = source::serialize_form_xml(decoded.value());
+            expect(public_xml.ok(), tag + " common extension XML must serialize");
+            auto reparsed = source::parse_form_xml(public_xml.value());
+            expect(reparsed.ok(), tag + " common extension XML must parse");
+            auto rebuilt = form_stream::encode_document(reparsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                tag + " common extension must roundtrip through named XML");
+            if (mask == 7) {
+                for (std::size_t i = 0; i < names.size(); ++i) {
+                    for (const auto& invalid : {list_stream::ListValue::raw_atom("2"), list_stream::ListValue::string_atom("1"),
+                                                list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")})}) {
+                        auto bad = encoded.value();
+                        bad.items[1].items[2].items[2].items[1].items[fixture.metadata_slot].items[i + 3] = invalid;
+                        expect(!form_stream::decode_document(bad), tag + " must reject malformed metadata Boolean");
+                    }
+                }
+                control->extension_properties.set_explicit(model::PropertyId::from_name("ModifiesData"), std::string("true"));
+                expect(!form_stream::encode_document(parsed.value()), tag + " must reject wrong extension value type");
+                control->extension_properties.set_explicit(model::PropertyId::from_name("ModifiesData"), false);
+                control->extension_properties.set_explicit(model::PropertyId::from_name("UnrelatedExperimentalProperty"), true);
+                expect(!form_stream::encode_document(parsed.value()), tag + " must reject unknown extension properties");
+            }
+        }
     }
 }
 
@@ -19368,6 +19471,7 @@ int main() {
         test_chart_named_events();
         test_dendrogram_named_events();
         test_schema_field_output();
+        test_common_extension_metadata_for_all_control_types();
         test_gantt_and_dendrogram_extension_metadata();
         test_complex_control_named_events();
         test_chart_named_dense_roundtrip_with_sibling_geometry();

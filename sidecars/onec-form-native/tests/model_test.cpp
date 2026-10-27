@@ -1399,6 +1399,19 @@ void test_help_metamodel() {
         find_property(ControlKind::radio_button, "FirstInGroup")->surface ==
             PropertySurface::control_extension,
         "inherited RadioButton FirstInGroup must have one shared extension owner");
+    for (const auto& control : control_descriptors()) {
+        if (control.kind == ControlKind::active_x_control) continue;
+        for (const auto name : {"ModifiesData", "SkipOnInput", "FirstInGroup"}) {
+            const auto* property = find_property(control.kind, name);
+            expect(property && property->surface == PropertySurface::control_extension &&
+                       property->value_codec == ValueCodec::boolean &&
+                       property->persistence == PersistenceClass::persisted_editable &&
+                       property->storage_codec == StorageCodec::control_info &&
+                       property->default_value.kind == DefaultKind::boolean &&
+                       property->default_value.canonical == "false",
+                "common Boolean extension must use the proven descriptor for every target control");
+        }
+    }
     const auto* sel_button_picture = find_property(ControlKind::input_field, "SelButtonPicture");
     const auto* choice_button_picture = find_property(ControlKind::input_field, "ChoiceButtonPicture");
     expect(sel_button_picture && sel_button_picture == choice_button_picture,
@@ -2104,6 +2117,19 @@ void test_document_property_api() {
                document.get_prop_val(input, PropertyId::from_name("AutoContextMenu")).status ==
                    PropertyReadStatus::explicit_value,
         "shared control extension properties must use the same owner API without claiming storage support");
+    for (const auto name : {"ModifiesData", "SkipOnInput", "FirstInGroup"}) {
+        const auto property = PropertyId::from_name(name);
+        const auto initial = document.get_prop_val(input, property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value == PropertyValue{false},
+            "common Boolean extension must expose its proven false default");
+        expect(document.set_prop_val(input, property, true) == PropertyMutationStatus::applied &&
+                   document.get_prop_val(input, property).value == PropertyValue{true} &&
+                   document.set_prop_val(input, property, std::string("true")) == PropertyMutationStatus::invalid_value &&
+                   document.get_prop_val(input, property).value == PropertyValue{true} &&
+                   document.reset_prop_val(input, property) == PropertyMutationStatus::reset &&
+                   document.get_prop_val(input, property).value == PropertyValue{false},
+            "common Boolean extension must support set, reject invalid values, and reset");
+    }
     expect(document.set_prop_val(
                OrdinaryFormDocument::ObjectKey{ObjectCategory::form, ObjectId{1}},
                PropertyId::from_name("ModalMode"), false) == PropertyMutationStatus::read_only,
