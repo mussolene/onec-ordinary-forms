@@ -734,6 +734,11 @@ struct ChartArea {
     std::optional<bool> vertical_lines_data_table;
     std::optional<bool> horizontal_lines_in_data_table;
     std::optional<bool> keys_in_data_table;
+    std::optional<ColorValue> back_color;
+    std::optional<ColorValue> border_color;
+    std::optional<ColorValue> text_color;
+    std::optional<ColorValue> surface_color;
+    std::optional<ColorValue> scale_color;
 
     friend bool operator==(const ChartArea&, const ChartArea&) = default;
 };

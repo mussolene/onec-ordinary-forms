@@ -664,6 +664,15 @@ void append_value_types(std::string& output) {
             append_attribute(output, "maxOccurs", "1");
             output += "/>";
         }
+        for (const auto& descriptor : model::metamodel::chart_area_color_descriptors()) {
+            if (descriptor.kind != kind) continue;
+            output += "<xs:element";
+            append_attribute(output, "name", descriptor.name);
+            append_attribute(output, "type", "ColorValueType");
+            append_attribute(output, "minOccurs", "0");
+            append_attribute(output, "maxOccurs", "1");
+            output += "/>";
+        }
         output += "</xs:sequence></xs:complexType>\n";
     }
     output += "\n";
@@ -1303,10 +1312,12 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеОбластиПостроенияДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
         "          <Property name=\"Transparent\" russianName=\"ПрозрачныйФон\" russianType=\"Булево\"/><Property name=\"ShowDataTable\" russianName=\"ОтображатьТаблицуДанных\" russianType=\"Булево\"/><Property name=\"ShowScales\" russianName=\"ОтображатьШкалы\" russianType=\"Булево\"/>\n"
         "          <Property name=\"VerticalLinesDataTable\" russianName=\"ВертикальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"HorizontalLinesInDataTable\" russianName=\"ГоризонтальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"KeysInDataTable\" russianName=\"КлючиВТаблицеДанных\" russianType=\"Булево\"/>\n"
+        "          <Property name=\"SurfaceColor\" russianName=\"ЦветПоверхности\" russianType=\"Цвет\"/><Property name=\"BorderColor\" russianName=\"ЦветРамки\" russianType=\"Цвет\"/><Property name=\"TextColor\" russianName=\"ЦветТекста\" russianType=\"Цвет\"/><Property name=\"BackColor\" russianName=\"ЦветФона\" russianType=\"Цвет\"/><Property name=\"ScaleColor\" russianName=\"ЦветШкал\" russianType=\"Цвет\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartLegendArea\" russianName=\"ОбластьЛегендыДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"
         "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеЛегендыДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
         "          <Property name=\"Transparent\" russianName=\"ПрозрачныйФон\" russianType=\"Булево\"/><Property name=\"Scrolling\" russianName=\"Прокрутка\" russianType=\"Булево\"/>\n"
+        "          <Property name=\"BackColor\" russianName=\"ЦветФона\" russianType=\"Цвет\"/><Property name=\"BorderColor\" russianName=\"ЦветРамки\" russianType=\"Цвет\"/><Property name=\"TextColor\" russianName=\"ЦветТекста\" russianType=\"Цвет\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPoint\" russianName=\"ТочкаДиаграммы\"><Properties>\n"
         "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/>\n"

@@ -1718,6 +1718,8 @@ private:
                         const auto id = model::PropertyId::from_name(field_name);
                         if (const auto* boolean = mm::find_chart_area_boolean(kind, id)) {
                             parsed.*(boolean->member) = parse_boolean(node_text(field), field, field_name, id_text);
+                        } else if (const auto* color = mm::find_chart_area_color(kind, id)) {
+                            parsed.*(color->member) = parse_color(field);
                         } else if (const auto* descriptor = mm::find_chart_area_property(id); descriptor && descriptor->coordinate) {
                             (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
                         } else fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
@@ -3712,6 +3714,12 @@ private:
                     const auto& value = (*area).*(descriptor.member);
                     if (descriptor.kind == kind && value) writer_.text(descriptor.name, *value ? "true" : "false");
                     else if (descriptor.kind != kind && value && mm::find_chart_area_boolean(kind, descriptor.id) == nullptr)
+                        serialization_fail(id, std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
+                }
+                for (const auto& descriptor : mm::chart_area_color_descriptors()) {
+                    const auto& value = (*area).*(descriptor.member);
+                    if (descriptor.kind == kind && value) write_color(descriptor.name, *value, id);
+                    else if (descriptor.kind != kind && value && mm::find_chart_area_color(kind, descriptor.id) == nullptr)
                         serialization_fail(id, std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
                 }
                 writer_.close(name);

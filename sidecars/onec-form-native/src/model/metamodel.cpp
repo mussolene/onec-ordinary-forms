@@ -2013,6 +2013,41 @@ const ControlDescriptor* find_by_russian_name(std::u8string_view name) noexcept 
     return Metamodel::instance().control_by_russian_name(name);
 }
 
+std::span<const ChartAreaColorDescriptor> chart_area_color_descriptors() noexcept {
+    static constexpr std::array descriptors{
+        ChartAreaColorDescriptor{PropertyId::from_name("BackColor"), "BackColor", u8"ЦветФона", ChartAreaKind::legend, &ChartArea::back_color, 25, 5, ChartAreaColorDefault::form_back},
+        ChartAreaColorDescriptor{PropertyId::from_name("BorderColor"), "BorderColor", u8"ЦветРамки", ChartAreaKind::legend, &ChartArea::border_color, 17, 0, ChartAreaColorDefault::border},
+        ChartAreaColorDescriptor{PropertyId::from_name("TextColor"), "TextColor", u8"ЦветТекста", ChartAreaKind::legend, &ChartArea::text_color, 29, 3, ChartAreaColorDefault::form_text},
+        ChartAreaColorDescriptor{PropertyId::from_name("SurfaceColor"), "SurfaceColor", u8"ЦветПоверхности", ChartAreaKind::plot, &ChartArea::surface_color, 66, 0, ChartAreaColorDefault::surface},
+        ChartAreaColorDescriptor{PropertyId::from_name("BorderColor"), "BorderColor", u8"ЦветРамки", ChartAreaKind::plot, &ChartArea::border_color, 19, 0, ChartAreaColorDefault::border},
+        ChartAreaColorDescriptor{PropertyId::from_name("TextColor"), "TextColor", u8"ЦветТекста", ChartAreaKind::plot, &ChartArea::text_color, 30, 2, ChartAreaColorDefault::form_text},
+        ChartAreaColorDescriptor{PropertyId::from_name("BackColor"), "BackColor", u8"ЦветФона", ChartAreaKind::plot, &ChartArea::back_color, 27, 7, ChartAreaColorDefault::white},
+        ChartAreaColorDescriptor{PropertyId::from_name("ScaleColor"), "ScaleColor", u8"ЦветШкал", ChartAreaKind::plot, &ChartArea::scale_color, 42, 0, ChartAreaColorDefault::automatic},
+    };
+    return descriptors;
+}
+
+const ChartAreaColorDescriptor* find_chart_area_color(ChartAreaKind kind, PropertyId id) noexcept {
+    const auto descriptors = chart_area_color_descriptors();
+    const auto found = std::ranges::find_if(descriptors, [&](const auto& descriptor) {
+        return descriptor.kind == kind && descriptor.id == id;
+    });
+    return found == descriptors.end() ? nullptr : &*found;
+}
+
+ColorValue chart_area_color_default(ChartAreaColorDefault kind) {
+    ColorValue value;
+    switch (kind) {
+        case ChartAreaColorDefault::automatic: break;
+        case ChartAreaColorDefault::white: value.kind = ColorKind::absolute; value.red = value.green = value.blue = 255; break;
+        case ChartAreaColorDefault::surface: value.kind = ColorKind::absolute; value.red = 169; break;
+        case ChartAreaColorDefault::form_back: value.kind = ColorKind::style_reference; value.style = QualifiedName{"StyleColors.FormBackColor"}; break;
+        case ChartAreaColorDefault::form_text: value.kind = ColorKind::style_reference; value.style = QualifiedName{"StyleColors.FormTextColor"}; break;
+        case ChartAreaColorDefault::border: value.kind = ColorKind::style_reference; value.style = QualifiedName{"StyleColors.BorderColor"}; break;
+    }
+    return value;
+}
+
 std::span<const ChartAreaBooleanDescriptor> chart_area_boolean_descriptors() noexcept {
     static constexpr std::array descriptors{
         ChartAreaBooleanDescriptor{PropertyId::from_name("Transparent"), "Transparent", u8"ПрозрачныйФон", ChartAreaKind::legend, &ChartArea::transparent, 24, true},

@@ -16428,8 +16428,8 @@ void test_chart_area_modes_round_trip() {
             payload.series.push_back(series); payload.points.push_back(point);
             payload.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
         }
-        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}};
-        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}};
+        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
+        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
         model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
         control.position.width.set(160); control.position.height.set(120);
         control.properties().set_explicit(model::PropertyId::from_name("ShowLegend"), i % 7 != 6);
@@ -16621,6 +16621,139 @@ void test_chart_area_boolean_properties_round_trip() {
     const auto rebuilt = form_stream::encode_document(loaded.value());
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
         "Chart area Boolean Form.bin round-trip must preserve storage");
+}
+
+void test_chart_area_color_properties_round_trip() {
+    struct AreaColorCase {
+        model::ChartAreaKind kind;
+        std::string_view name;
+        std::size_t middle_offset;
+    };
+    constexpr std::array specs{
+        AreaColorCase{model::ChartAreaKind::legend, "BackColor", 25},
+        AreaColorCase{model::ChartAreaKind::legend, "BorderColor", 17},
+        AreaColorCase{model::ChartAreaKind::legend, "TextColor", 29},
+        AreaColorCase{model::ChartAreaKind::plot, "SurfaceColor", 66},
+        AreaColorCase{model::ChartAreaKind::plot, "BorderColor", 19},
+        AreaColorCase{model::ChartAreaKind::plot, "TextColor", 30},
+        AreaColorCase{model::ChartAreaKind::plot, "BackColor", 27},
+        AreaColorCase{model::ChartAreaKind::plot, "ScaleColor", 42},
+    };
+    const model::ColorValue automatic{};
+    model::ColorValue styled; styled.kind = model::ColorKind::style_reference;
+    styled.style = model::QualifiedName{"StyleColors.FormTextColor"};
+    model::ColorValue rgb; rgb.kind = model::ColorKind::absolute;
+    rgb.red = 23; rgb.green = 67; rgb.blue = 101;
+    const std::array colors{automatic, styled, rgb};
+    constexpr std::array<std::string_view, 3> stored_colors{
+        "{4,4,{0},4}", "{4,3,{-3},3}", "{4,0,{6636311},0}"};
+    model::Form form; form.id = model::ObjectId{1}; form.name = "ChartAreaColors";
+    for (std::uint64_t i = 0; i < 12; ++i)
+        form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::ChartPayload payload;
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        for (std::size_t n = 0; n < series_count; ++n) {
+            model::ChartSeries series; series.id = model::ObjectId{1000 + i * 10 + n};
+            series.text = "Series" + std::to_string(n); series.color.kind = model::ColorKind::absolute;
+            series.marker = {"ChartMarkerType", "Auto"}; payload.series.push_back(std::move(series));
+        }
+        for (std::size_t n = 0; n < point_count; ++n) {
+            model::ChartPoint point; point.id = model::ObjectId{2000 + i * 10 + n};
+            point.text = "Point" + std::to_string(n); point.color.kind = model::ColorKind::absolute;
+            payload.points.push_back(std::move(point));
+        }
+        for (const auto& series : payload.series) for (const auto& point : payload.points)
+            payload.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
+        control.position.width.set(160); control.position.height.set(120);
+        control.properties().set_explicit(model::PropertyId::from_name("Light"), false);
+        if (i == 11) {
+            control.events.push_back(model::EventRef{model::ObjectId{3000}});
+            document.add_event(model::Event{model::ObjectId{3000}, "Selection", "OnSelection", model::ControlRef{control.id}});
+        }
+        document.add_control(std::move(control));
+    }
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (std::size_t n = 0; n < specs.size(); ++n) {
+            const auto area = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, specs[n].kind};
+            const auto property = model::PropertyId::from_name(specs[n].name);
+            const auto& expected = colors[(i + n) % colors.size()];
+            expect(document.set_prop_val(area, property, expected) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "Chart area color must be editable through the object API");
+            const auto changed = document.get_prop_val(area, property);
+            expect(changed.value && std::holds_alternative<model::ColorValue>(*changed.value) &&
+                std::get<model::ColorValue>(*changed.value) == expected, "Chart area color must read back through the object API");
+        }
+        const auto legend = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::legend};
+        const auto plot = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot};
+        expect(document.set_prop_val(legend, model::PropertyId::from_name("Scrolling"), true) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            document.set_prop_val(plot, model::PropertyId::from_name("ShowDataTable"), true) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "area colors must coexist with area Boolean properties");
+    }
+    const auto legend = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100}, model::ChartAreaKind::legend};
+    expect(document.set_prop_val(legend, model::PropertyId::from_name("BackColor"), true) == model::PropertyMutationStatus::invalid_value,
+        "Chart area color must reject a Boolean input");
+    expect(document.get_prop_val(legend, model::PropertyId::from_name("ScaleColor")).status == model::PropertyReadStatus::unknown_property,
+        "PlotArea colors must not be exposed on LegendArea");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& records = encoded.value().items.at(1).items.at(2).items.at(2).items;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto record = std::ranges::find(records, std::to_string(100 + i), [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        expect(record != records.end(), "each Chart color record must exist");
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        const auto middle = std::size_t{18} + 11 * (series_count + point_count);
+        for (std::size_t n = 0; n < specs.size(); ++n)
+            expect(list_stream::dump_compact(record->items.at(3).items.at(middle + specs[n].middle_offset)) ==
+                stored_colors[(i + n) % stored_colors.size()], "Chart area color must use its platform-confirmed storage position");
+    }
+    auto inconsistent = encoded.value();
+    auto* chart = find_chart_record(inconsistent);
+    expect(chart != nullptr, "Chart record must exist for paired color check");
+    auto& info = chart->items.at(3).items;
+    info.at(info.size() - 5) = list_stream::parse("{4,0,{6636311},0}");
+    const auto bad_pair = form_stream::decode_document(inconsistent, "ChartAreaColors");
+    expect(!bad_pair.ok() || !bad_pair.value().reconstruction_complete(),
+        "mismatched legend color companion must not be silently discarded");
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChartAreaColors");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart area colors must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "Chart area colors must serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "Chart area color XML must parse");
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), "Chart area color XML must rebuild Form.bin");
+    const auto loaded = oof::load_form_bin(binary.value(), "ChartAreaColors");
+    expect(loaded.ok() && loaded.value().reconstruction_complete(), "rebuilt Chart area color Form.bin must load completely");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto* control = loaded.value().find_control(model::ObjectId{100 + i});
+        expect(control != nullptr, "each Chart must survive area color XML and Form.bin");
+        const auto* light = control->properties().find(model::PropertyId::from_name("Light"));
+        expect(light && !std::get<bool>(light->value) && control->position.width.value() == 160 &&
+            control->position.height.value() == 120, "area colors must preserve neighboring Chart properties");
+        for (std::size_t n = 0; n < specs.size(); ++n) {
+            const auto area = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, control->id, specs[n].kind};
+            const auto value = loaded.value().get_prop_val(area, model::PropertyId::from_name(specs[n].name));
+            expect(value.value && std::holds_alternative<model::ColorValue>(*value.value) &&
+                std::get<model::ColorValue>(*value.value) == colors[(i + n) % colors.size()],
+                "Chart area color must survive XML and Form.bin");
+        }
+        const auto legend = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, control->id, model::ChartAreaKind::legend};
+        const auto plot = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, control->id, model::ChartAreaKind::plot};
+        const auto scrolling = loaded.value().get_prop_val(legend, model::PropertyId::from_name("Scrolling"));
+        const auto table = loaded.value().get_prop_val(plot, model::PropertyId::from_name("ShowDataTable"));
+        expect(scrolling.value && std::get<bool>(*scrolling.value) && table.value && std::get<bool>(*table.value),
+            "area color round-trip must preserve neighboring area Boolean properties");
+    }
+    const auto rebuilt = form_stream::encode_document(loaded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Chart area color Form.bin round-trip must preserve storage");
 }
 
 void test_chart_named_integer_and_delimiter_properties() {
@@ -18653,6 +18786,7 @@ int main() {
         test_chart_title_and_legend_visibility_round_trip();
         test_chart_area_modes_round_trip();
         test_chart_area_boolean_properties_round_trip();
+        test_chart_area_color_properties_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

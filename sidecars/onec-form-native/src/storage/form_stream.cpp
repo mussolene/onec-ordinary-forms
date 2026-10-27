@@ -6567,6 +6567,21 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
                 fail("OOF1120", std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
             }
         }
+        for (const auto& descriptor : model::metamodel::chart_area_color_descriptors()) {
+            const auto& explicit_value = area.*(descriptor.member);
+            if (descriptor.kind == kind) {
+                const auto default_value = model::metamodel::chart_area_color_default(descriptor.default_kind);
+                const auto value = explicit_value.value_or(default_value);
+                const auto encoded = encode_control_color(value, name);
+                info.at(middle_start + descriptor.storage_offset) = encoded;
+                if (descriptor.companion_from_end != 0) {
+                    info.at(info.size() - descriptor.companion_from_end) = value == default_value
+                        ? encode_control_color(model::ColorValue{}, name) : encoded;
+                }
+            } else if (explicit_value && model::metamodel::find_chart_area_color(kind, descriptor.id) == nullptr) {
+                fail("OOF1120", std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
+            }
+        }
     };
     if (chart.plot_area) write_area(*chart.plot_area, 12, 15, model::metamodel::chart_area_placements(model::ChartAreaKind::plot), "$/Chart/PlotArea");
     if (chart.legend_area) write_area(*chart.legend_area, 13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend), "$/Chart/LegendArea");
@@ -6961,6 +6976,19 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             const auto index = middle_start + descriptor.storage_offset;
             const bool value = bool_atom(at(info, index, info_path), child_path(info_path, index));
             if (value != descriptor.default_value) area.*(descriptor.member) = value;
+        }
+        for (const auto& descriptor : model::metamodel::chart_area_color_descriptors()) {
+            if (descriptor.kind != kind) continue;
+            const auto index = middle_start + descriptor.storage_offset;
+            const auto value = decode_control_color(at(info, index, info_path), child_path(info_path, index));
+            const auto default_value = model::metamodel::chart_area_color_default(descriptor.default_kind);
+            if (descriptor.companion_from_end != 0) {
+                const auto pair_index = info.items.size() - descriptor.companion_from_end;
+                const auto companion = decode_control_color(at(info, pair_index, info_path), child_path(info_path, pair_index));
+                if (companion != (value == default_value ? model::ColorValue{} : value))
+                    fail("OOF1114", child_path(info_path, pair_index), "matching Chart area color companion", "different color", "Chart area color pair disagrees");
+            }
+            if (value != default_value) area.*(descriptor.member) = value;
         }
         if (area == defaults) return std::nullopt;
         return area;
