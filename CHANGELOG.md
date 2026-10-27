@@ -2,6 +2,10 @@
 
 ## 1.0.0 - Не выпущен
 
+- Для 16 свойств AutoMax, Max и Stretch уточнена неприменимость к обычным
+  формам 1С 8.5.1.1343. API и XML отклоняют эти значения; записи сохранены
+  в палитре с явной отметкой доступности и целевой версией.
+
 - Общий API свойств элементов работает с Left, Top, Width, Height и Visible
   через Position. Размеры Dendrogram, GeographicalSchemaField и
   GraphicalSchemaField используют ту же геометрию.

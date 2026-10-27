@@ -2666,6 +2666,59 @@ void test_runtime_properties_are_not_public_xml() {
         "XML writer must reject explicit runtime state instead of silently losing it");
 }
 
+void test_unavailable_ordinary_geometry_properties_are_not_public_xml() {
+    struct Case { std::string_view element; std::string_view property; };
+    const std::array cases{
+        Case{"Dendrogram", "AutoMaxHeight"}, Case{"Dendrogram", "AutoMaxWidth"},
+        Case{"Dendrogram", "MaxHeight"}, Case{"Dendrogram", "MaxWidth"},
+        Case{"Dendrogram", "VerticalStretch"}, Case{"Dendrogram", "HorizontalStretch"},
+        Case{"GeographicalSchemaField", "AutoMaxHeight"}, Case{"GeographicalSchemaField", "AutoMaxWidth"},
+        Case{"GeographicalSchemaField", "MaxHeight"}, Case{"GeographicalSchemaField", "MaxWidth"},
+        Case{"GeographicalSchemaField", "VerticalStretch"}, Case{"GeographicalSchemaField", "HorizontalStretch"},
+        Case{"GraphicalSchemaField", "VerticalStretch"}, Case{"GraphicalSchemaField", "HorizontalStretch"},
+        Case{"GanttChart", "AutoMaxWidth"}, Case{"GanttChart", "MaxWidth"},
+    };
+    for (const auto& test : cases) {
+        const std::string prefix = std::string(R"XML(<Form id="1" name="Unavailable" ordinaryFormVersion="2.1"><ChildItems><)XML") +
+            std::string(test.element) + R"XML( id="2" name="Control"><Position/>)XML";
+        const std::string suffix = "</" + std::string(test.element) + "></ChildItems></Form>";
+        expect(source::parse_form_xml(prefix + suffix).ok(),
+            "XML rejection fixture must be valid before inserting an unavailable property");
+        const std::string xml = prefix + "<" + std::string(test.property) + ">" +
+            (test.property.starts_with("Max") ? "137" : "true") + "</" + std::string(test.property) + ">" + suffix;
+        expect(!source::parse_form_xml(xml),
+            "explicit platform-unavailable ordinary geometry property must fail at the public XML boundary");
+    }
+
+    auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Ordinary" ordinaryFormVersion="2.1"><ChildItems>
+      <Dendrogram id="2" name="D"><Position><Height>45</Height><Width>120</Width></Position></Dendrogram>
+      <GeographicalSchemaField id="3" name="Geo"><Position><Height>46</Height><Width>121</Width></Position></GeographicalSchemaField>
+      <GraphicalSchemaField id="4" name="Graph"><Position><Height>47</Height><Width>122</Width></Position></GraphicalSchemaField>
+      <GanttChart id="5" name="Gantt"><Position><Height>48</Height><Width>123</Width></Position></GanttChart>
+    </ChildItems></Form>)XML");
+    expect(parsed.ok(), "ordinary-form Position Width and Height must remain valid after unavailable-property filtering");
+    if (!parsed) return;
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Width>120</Width>") != std::string::npos &&
+               serialized.value().find("<Height>48</Height>") != std::string::npos,
+        "ordinary-form Position dimensions must serialize normally");
+
+    model::Form invalid_form;
+    invalid_form.id = model::ObjectId{1};
+    invalid_form.name = "RawUnavailable";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+    model::ControlNode dendrogram{model::ObjectId{2}, "D", model::DendrogramPayload{}};
+    dendrogram.properties().set_explicit(model::PropertyId::from_name("AutoMaxHeight"), true);
+    invalid_document.add_control(std::move(dendrogram));
+    expect(!source::serialize_form_xml(invalid_document),
+        "XML writer must reject a platform-unavailable property inserted through the raw PropertySet");
+
+    auto empty = source::parse_form_xml(R"XML(<Form id="1" name="Default" ordinaryFormVersion="2.1"/>)XML");
+    expect(empty.ok() && source::serialize_form_xml(empty.value()).ok(),
+        "a default ordinary Form.xml must remain parseable and serializable");
+}
+
 void test_typed_defaults_for_existing_codecs() {
     auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="TypedDefaults" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="B"><Position/></Button><CommandBar id="3" name="Bar"><Position/></CommandBar><InputField id="4" name="I"><Position/></InputField><HTMLDocumentField id="5" name="H"><Position/></HTMLDocumentField><Splitter id="6" name="S"><Position/></Splitter><RadioButton id="7" name="R"><Position/></RadioButton></ChildItems></Form>)XML");
     expect(parsed.ok(), "typed-default fixture must parse");
@@ -2805,6 +2858,7 @@ int main() {
         test_border_and_calendar_selection_xml_contract();
         test_typed_defaults_for_existing_codecs();
         test_runtime_properties_are_not_public_xml();
+        test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
         test_chart_base_value_xml();

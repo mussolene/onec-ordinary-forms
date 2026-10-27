@@ -2011,6 +2011,10 @@ private:
                     fail("OOF2003", child, id_text, name, "persisted control property", name,
                         "Runtime-only control properties cannot appear in public Form.xml");
                 }
+                if (property->persistence == mm::PersistenceClass::unsupported_by_platform) {
+                    fail("OOF2003", child, id_text, name, "available ordinary-form property", name,
+                        "Property is unavailable on the ordinary-form platform owner");
+                }
                 model::PropertyValue value =
                     parse_property_value(child, property->value_codec, id_text);
                 if (equals_descriptor_default(*property, value)) {

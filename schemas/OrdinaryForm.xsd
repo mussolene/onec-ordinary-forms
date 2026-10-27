@@ -2363,10 +2363,8 @@
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
-      <xs:element name="AutoMaxWidth" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PeriodicVariantUnit" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PeriodicVariantRepetition" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoFullInterval" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FullIntervalBegin" type="DateValueType" minOccurs="0" maxOccurs="1"/>
@@ -2393,12 +2391,6 @@
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
-      <xs:element name="AutoMaxHeight" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AutoMaxWidth" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="VerticalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="HorizontalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Items" type="DendrogramItemsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Links" type="DendrogramLinksType" minOccurs="0" maxOccurs="1"/>
@@ -2601,16 +2593,10 @@
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
-      <xs:element name="AutoMaxHeight" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AutoMaxWidth" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Scale" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowedArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ScaleKeeping" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="VerticalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="HorizontalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="GeographicalSchemaFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
@@ -2633,8 +2619,6 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Edit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="VerticalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="HorizontalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentItem" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="GraphicalSchemaFieldEventsType" minOccurs="0" maxOccurs="1"/>

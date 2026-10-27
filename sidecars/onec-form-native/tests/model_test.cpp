@@ -362,6 +362,75 @@ void test_descriptors() {
         "PictureDecoration Shortcut must use the shared typed Shortcut codec and None default");
 }
 
+void test_unavailable_ordinary_geometry_properties() {
+    using namespace oof::model::metamodel;
+
+    struct Case {
+        ControlKind kind;
+        std::string_view name;
+        ControlPayload payload;
+    };
+    const std::array cases{
+        Case{ControlKind::dendrogram, "AutoMaxHeight", DendrogramPayload{}},
+        Case{ControlKind::dendrogram, "AutoMaxWidth", DendrogramPayload{}},
+        Case{ControlKind::dendrogram, "MaxHeight", DendrogramPayload{}},
+        Case{ControlKind::dendrogram, "MaxWidth", DendrogramPayload{}},
+        Case{ControlKind::dendrogram, "VerticalStretch", DendrogramPayload{}},
+        Case{ControlKind::dendrogram, "HorizontalStretch", DendrogramPayload{}},
+        Case{ControlKind::geographical_schema_field, "AutoMaxHeight", GeographicalSchemaFieldPayload{}},
+        Case{ControlKind::geographical_schema_field, "AutoMaxWidth", GeographicalSchemaFieldPayload{}},
+        Case{ControlKind::geographical_schema_field, "MaxHeight", GeographicalSchemaFieldPayload{}},
+        Case{ControlKind::geographical_schema_field, "MaxWidth", GeographicalSchemaFieldPayload{}},
+        Case{ControlKind::geographical_schema_field, "VerticalStretch", GeographicalSchemaFieldPayload{}},
+        Case{ControlKind::geographical_schema_field, "HorizontalStretch", GeographicalSchemaFieldPayload{}},
+        Case{ControlKind::graphical_schema_field, "VerticalStretch", GraphicalSchemaFieldPayload{}},
+        Case{ControlKind::graphical_schema_field, "HorizontalStretch", GraphicalSchemaFieldPayload{}},
+        Case{ControlKind::gantt_chart, "AutoMaxWidth", GanttChartPayload{}},
+        Case{ControlKind::gantt_chart, "MaxWidth", GanttChartPayload{}},
+    };
+
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "UnavailableGeometry";
+    for (std::size_t index = 0; index < cases.size(); ++index)
+        form.children.push_back(ControlRef{ObjectId{100 + index}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < cases.size(); ++index)
+        document.add_control(ControlNode{ObjectId{100 + index}, "Unavailable" + std::to_string(index), cases[index].payload});
+    expect(document.validate().ok(), "unavailable-property fixture must be valid before inserting any property");
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        const auto& test = cases[index];
+        const auto* descriptor = find_property(test.kind, test.name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::unsupported_by_platform &&
+                   descriptor->storage_codec == StorageCodec::none &&
+                   descriptor->default_value.kind == DefaultKind::none,
+            "unavailable ordinary geometry property must have an unsupported descriptor without storage or default");
+
+        const ObjectId id{static_cast<std::uint64_t>(100 + index)};
+        const PropertyValue value = descriptor->value_kind == ValueKind::number
+            ? PropertyValue{DecimalValue{"137"}} : PropertyValue{true};
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        const auto property = PropertyId::from_name(test.name);
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface,
+            "unavailable ordinary geometry property reads must report unsupported_surface");
+        expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::unsupported_surface,
+            "unavailable ordinary geometry property writes must report unsupported_surface");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface,
+            "unavailable ordinary geometry property resets must report unsupported_surface");
+
+        Form invalid_form;
+        invalid_form.id = ObjectId{1};
+        invalid_form.name = "RawUnavailable";
+        invalid_form.children = {ControlRef{id}};
+        OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        ControlNode invalid_control{id, "Unavailable", test.payload};
+        invalid_control.properties().set_explicit(property, value);
+        invalid_document.add_control(std::move(invalid_control));
+        expect(!invalid_document.validate().ok(),
+            "raw PropertySet insertion must not bypass unsupported-property validation");
+    }
+}
+
 void test_command_bar_property_descriptors() {
     using namespace oof::model::metamodel;
     const auto* auto_fill = find_property(ControlKind::command_bar, "AutoFill");
@@ -2706,6 +2775,7 @@ void test_control_border_and_calendar_selection_descriptors() {
 int main() {
     try {
         test_descriptors();
+        test_unavailable_ordinary_geometry_properties();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
         test_standard_picture_descriptor_catalog();

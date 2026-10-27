@@ -3,7 +3,7 @@
   <xs:annotation>
     <xs:documentation>Generated bilingual annotations for the ordinary-form metamodel.</xs:documentation>
     <xs:appinfo>
-      <Palette ordinaryFormVersion="2.1">
+      <Palette ordinaryFormVersion="2.1" targetVersion="8.5.1.1343">
         <Form>
           <Properties>
             <Property name="AutoTitle" apiName="AutoTitle" russianName="АвтоЗаголовок" russianType="Булево" valueCodec="boolean"/>
@@ -430,10 +430,10 @@
           </Control>
           <Control name="GanttChart" apiName="GanttChart" russianName="ДиаграммаГанта" children="none">
             <Properties>
-              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="PeriodicVariantUnit" apiName="PeriodicVariantUnit" russianName="ЕдиницаПериодическогоВарианта" russianType="ТипЕдиницыШкалыВремени" valueCodec="enumeration"/>
               <Property name="PeriodicVariantRepetition" apiName="PeriodicVariantRepetition" russianName="КратностьПериодическогоВарианта" russianType="Число" valueCodec="decimal"/>
-              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" available="false" valueCodec="decimal"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="AutoFullInterval" apiName="AutoFullInterval" russianName="АвтоОпределениеПолногоИнтервала" russianType="Булево" valueCodec="boolean"/>
               <Property name="FullIntervalBegin" apiName="FullIntervalBegin" russianName="НачалоПолногоИнтервала" russianType="Дата" valueCodec="date"/>
@@ -445,13 +445,13 @@
           </Control>
           <Control name="Dendrogram" apiName="Dendrogram" russianName="Дендрограмма" children="none">
             <Properties>
-              <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" valueCodec="boolean"/>
-              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" available="false" valueCodec="boolean"/>
+              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
-              <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" valueCodec="decimal"/>
-              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
-              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
-              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" available="false" valueCodec="decimal"/>
+              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" available="false" valueCodec="decimal"/>
+              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" available="false" valueCodec="boolean"/>
+              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="Items" apiName="Items" russianName="Элементы" russianType="ЭлементыДендрограммы" valueCodec="dendrogram-items"/>
@@ -581,17 +581,17 @@
           </Control>
           <Control name="GeographicalSchemaField" apiName="GeographicalSchemaField" russianName="ПолеГеографическойСхемы" children="none">
             <Properties>
-              <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" valueCodec="boolean"/>
-              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" available="false" valueCodec="boolean"/>
+              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
-              <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" valueCodec="decimal"/>
-              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" available="false" valueCodec="decimal"/>
+              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" available="false" valueCodec="decimal"/>
               <Property name="Scale" apiName="Scale" russianName="Масштаб" russianType="Число" valueCodec="decimal"/>
               <Property name="ShowedArea" apiName="ShowedArea" russianName="ОтображаемаяОбласть" russianType="ПоказываемаяОбластьГеографическойСхемы" valueCodec="unclassified"/>
               <Property name="ScaleKeeping" apiName="ScaleKeeping" russianName="ПоддержкаМасштаба" russianType="РежимОтображенияГеографическойСхемы" valueCodec="enumeration"/>
-              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
-              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" available="false" valueCodec="boolean"/>
+              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
             </Properties>
@@ -604,8 +604,8 @@
               <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
               <Property name="Edit" apiName="Edit" russianName="Редактирование" russianType="Булево" valueCodec="boolean"/>
-              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
-              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" available="false" valueCodec="boolean"/>
+              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="CurrentItem" apiName="CurrentItem" russianName="ТекущийЭлемент" russianType="ЭлементГрафическойСхемы" valueCodec="unclassified"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>

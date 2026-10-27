@@ -1173,6 +1173,35 @@ void apply_proven_storage_overrides(
         }
     }
 
+    // Эти имена принадлежат расширениям полей формы и недоступны обычным контролам 8.5.1.1343.
+    constexpr std::array unavailable_geometry_properties{
+        std::pair{ControlKind::dendrogram, std::string_view{"AutoMaxHeight"}},
+        std::pair{ControlKind::dendrogram, std::string_view{"AutoMaxWidth"}},
+        std::pair{ControlKind::dendrogram, std::string_view{"MaxHeight"}},
+        std::pair{ControlKind::dendrogram, std::string_view{"MaxWidth"}},
+        std::pair{ControlKind::dendrogram, std::string_view{"VerticalStretch"}},
+        std::pair{ControlKind::dendrogram, std::string_view{"HorizontalStretch"}},
+        std::pair{ControlKind::geographical_schema_field, std::string_view{"AutoMaxHeight"}},
+        std::pair{ControlKind::geographical_schema_field, std::string_view{"AutoMaxWidth"}},
+        std::pair{ControlKind::geographical_schema_field, std::string_view{"MaxHeight"}},
+        std::pair{ControlKind::geographical_schema_field, std::string_view{"MaxWidth"}},
+        std::pair{ControlKind::geographical_schema_field, std::string_view{"VerticalStretch"}},
+        std::pair{ControlKind::geographical_schema_field, std::string_view{"HorizontalStretch"}},
+        std::pair{ControlKind::graphical_schema_field, std::string_view{"VerticalStretch"}},
+        std::pair{ControlKind::graphical_schema_field, std::string_view{"HorizontalStretch"}},
+        std::pair{ControlKind::gantt_chart, std::string_view{"AutoMaxWidth"}},
+        std::pair{ControlKind::gantt_chart, std::string_view{"MaxWidth"}},
+    };
+    for (const auto& [kind, name] : unavailable_geometry_properties) {
+        auto& control_properties = properties[static_cast<std::size_t>(kind)];
+        auto property = std::ranges::find(control_properties, name, &PropertyDescriptor::api_name);
+        if (property == control_properties.end())
+            throw std::logic_error("unavailable ordinary-form property is missing from the help catalog");
+        property->persistence = PersistenceClass::unsupported_by_platform;
+        property->storage_codec = StorageCodec::none;
+        property->default_value = {DefaultKind::none, {}};
+    }
+
     for (const auto kind : {ControlKind::dendrogram, ControlKind::geographical_schema_field,
                             ControlKind::graphical_schema_field}) {
         auto& control_properties = properties[static_cast<std::size_t>(kind)];

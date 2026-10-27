@@ -943,6 +943,7 @@ void test_control_surfaces_and_property_order(
                 if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
                     expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
                 } else if (descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only ||
+                           descriptor.persistence == oof::model::metamodel::PersistenceClass::unsupported_by_platform ||
                            descriptor.surface == oof::model::metamodel::PropertySurface::panel_placement) {
                     continue;
                 } else {
@@ -1178,6 +1179,9 @@ void expect_palette_properties(
         expect(attribute(nodes[index], "surface") ==
                    (descriptor.surface == oof::model::metamodel::PropertySurface::panel_placement ? "panelPlacement" : ""),
                "palette must identify properties represented by Position");
+        expect(attribute(nodes[index], "available") ==
+                   (descriptor.persistence == oof::model::metamodel::PersistenceClass::unsupported_by_platform ? "false" : ""),
+               "palette must identify properties unavailable on ordinary-form owners");
     }
 }
 
@@ -1207,6 +1211,8 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     expect(
         attribute(palette, "ordinaryFormVersion") == "2.1",
         "palette version must be 2.1");
+    expect(attribute(palette, "targetVersion") == metamodel.coverage().target_platform_version,
+           "palette availability must be bound to the verified target version");
 
     xmlNodePtr form = direct_child(palette, "Form");
     expect_palette_properties(direct_child(form, "Properties"), metamodel.form_properties());

@@ -1060,6 +1060,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
                     output +=
                         "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
                 } else if (property.persistence == model::metamodel::PersistenceClass::runtime_only ||
+                           property.persistence == model::metamodel::PersistenceClass::unsupported_by_platform ||
                            property.surface == PropertySurface::panel_placement) {
                     continue;
                 } else {
@@ -1118,6 +1119,8 @@ void append_palette_properties(
         append_attribute(output, "russianType", as_utf8(property.platform_type));
         if (property.surface == PropertySurface::panel_placement)
             append_attribute(output, "surface", "panelPlacement");
+        if (property.persistence == model::metamodel::PersistenceClass::unsupported_by_platform)
+            append_attribute(output, "available", "false");
         append_attribute(
             output,
             "valueCodec",
@@ -1153,8 +1156,10 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "    <xs:appinfo>\n"
         "      <Palette ordinaryFormVersion=\"";
     append_xml_escaped(output, ordinary_form_xml_version);
+    output += "\"";
+    append_attribute(output, "targetVersion", metamodel.coverage().target_platform_version);
     output +=
-        "\">\n"
+        ">\n"
         "        <Form>\n"
         "          <Properties>\n";
     append_palette_properties(output, metamodel.form_properties(), "            ");

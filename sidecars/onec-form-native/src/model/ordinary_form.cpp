@@ -826,6 +826,9 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
     if (descriptor->api_access == metamodel::ApiAccess::write_only) {
         return {PropertyReadStatus::write_only, std::nullopt};
     }
+    if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform) {
+        return {PropertyReadStatus::unsupported_surface, std::nullopt};
+    }
     if (position_control != nullptr) {
         const auto position_property = find_position_property(position_control->position, descriptor->api_name);
         if (!position_property) return {PropertyReadStatus::unsupported_surface, std::nullopt};
@@ -1212,6 +1215,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     source,
                     {},
                     "property is not declared for this ordinary-form object surface");
+            } else if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform) {
+                add_violation(report, InvariantCode::invalid_property, source, {},
+                    "property is unavailable on the ordinary-form platform owner");
             } else if (!property_value_matches(*descriptor, property.value)) {
                 add_violation(
                     report,
