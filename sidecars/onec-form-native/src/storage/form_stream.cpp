@@ -8908,6 +8908,12 @@ DecodedControl decode_table(
                 model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[static_cast<std::size_t>(code)])});
         normalized_table_properties.items.at(spec.slot) = raw(std::to_string(spec.default_ordinal));
     }
+    for (const auto& [name, slot] : std::array{std::pair<std::string_view, std::size_t>{"HeaderHeight", 16},
+                                              std::pair<std::string_view, std::size_t>{"FooterHeight", 17}}) {
+        const auto value = integer_atom<std::int16_t>(info.items[2].items[1].items.at(slot), child_path(table_properties_path, slot));
+        if (value != 1) control.properties().set_explicit(model::PropertyId::from_name(name), static_cast<std::int64_t>(value));
+        normalized_table_properties.items.at(slot) = raw("1");
+    }
     const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path);
     for (const auto& spec : table_appearance_properties) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
@@ -10147,7 +10153,8 @@ LV encode_table(
         "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines", "UseAlternationRowColor",
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
-        "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView"}, "$/Table");
+        "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView",
+        "HeaderHeight", "FooterHeight"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -10191,6 +10198,14 @@ LV encode_table(
             ordinal = static_cast<int>(std::distance(spec.members.begin(), member));
         }
         table_properties.items.at(spec.slot) = raw(std::to_string(ordinal));
+    }
+    for (const auto& [name, slot] : std::array{std::pair<std::string_view, std::size_t>{"HeaderHeight", 16},
+                                              std::pair<std::string_view, std::size_t>{"FooterHeight", 17}}) {
+        const auto path = std::string("$/Table/") + std::string(name);
+        const auto value = explicit_integer(control.properties(), name, 1, path);
+        if (value < std::numeric_limits<std::int16_t>::min() || value > std::numeric_limits<std::int16_t>::max())
+            fail("OOF1120", path, "int16 property", std::to_string(value), "Table height is out of range");
+        table_properties.items.at(slot) = raw(std::to_string(value));
     }
     for (const auto& spec : table_appearance_properties) {
         const auto* property = control.properties().find(model::PropertyId::from_name(spec.name));

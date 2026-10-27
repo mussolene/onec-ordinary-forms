@@ -689,6 +689,100 @@ void test_table_appearance_properties() {
         "combined appearance must survive XML/native round-trip");
 }
 
+void test_table_header_footer_heights() {
+    struct Case { std::string_view name; std::size_t slot; };
+    constexpr std::array cases{
+        Case{"HeaderHeight", 16}, Case{"FooterHeight", 17},
+    };
+    constexpr std::array<std::int64_t, 6> values{
+        -32768, -1, 0, 1, 2, 32767,
+    };
+    auto seed = form_stream::decode_document(captured_table_payload(), "TableHeaderFooterHeights");
+    expect(seed.ok(), "Table height fixture must decode");
+    const auto table = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table != seed.value().collections().controls.end(), "fixture must contain Table");
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, table->id};
+    const auto baseline = form_stream::encode_document(seed.value());
+    expect(baseline.ok(), "default Table height fixture must encode");
+    const auto* baseline_record = find_record_with_guid(
+        baseline.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(baseline_record != nullptr, "default stream must contain Table record");
+    for (const auto& spec : cases) {
+        const auto property = model::PropertyId::from_name(spec.name);
+        const auto default_value = seed.value().get_prop_val(key, property);
+        expect(default_value.status == model::PropertyReadStatus::proven_default && default_value.value &&
+            *default_value.value == model::PropertyValue{std::int64_t{1}},
+            std::string(spec.name) + " must expose default 1");
+        expect(baseline_record->items.at(2).items.at(2).items.at(1).items.at(spec.slot).atom == "1",
+            std::string(spec.name) + " default must occupy its observed storage slot");
+        auto explicit_default = seed.value();
+        expect(explicit_default.set_prop_val(key, property, std::int64_t{1}) == model::PropertyMutationStatus::applied,
+            std::string(spec.name) + " must accept its default");
+        const auto default_encoded = form_stream::encode_document(explicit_default);
+        expect(default_encoded.ok() && list_stream::dump_compact(default_encoded.value()) ==
+            list_stream::dump_compact(baseline.value()),
+            std::string(spec.name) + " explicit and omitted defaults must match");
+        for (const auto value : values) {
+            auto document = seed.value();
+            expect(document.set_prop_val(key, property, value) == model::PropertyMutationStatus::applied,
+                std::string(spec.name) + " must accept signed int16 values");
+            const auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), encoded ? "Table height must encode" : encoded.diagnostics().front().message);
+            const auto* record = find_record_with_guid(
+                encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            expect(record && record->items.at(2).items.at(2).items.at(1).items.at(spec.slot).atom ==
+                std::to_string(value), std::string(spec.name) + " must persist its signed int16 value in the observed slot");
+            const auto decoded = form_stream::decode_document(encoded.value(), "TableHeaderFooterHeights");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                std::string(spec.name) + " must decode completely");
+            const auto actual = decoded.value().get_prop_val(key, property);
+            expect(actual.value && *actual.value == model::PropertyValue{value},
+                std::string(spec.name) + " must survive native storage round-trip");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), std::string(spec.name) + " must serialize as named XML");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), std::string(spec.name) + " XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                list_stream::dump_compact(encoded.value()),
+                std::string(spec.name) + " must survive symmetric XML/native round-trip");
+        }
+        expect(seed.value().set_prop_val(key, property, std::string{"1"}) ==
+            model::PropertyMutationStatus::invalid_value,
+            std::string(spec.name) + " must reject an incompatible type");
+        for (const auto value : {std::int64_t{-32769}, std::int64_t{32768}}) {
+            auto out_of_range = seed.value();
+            expect(out_of_range.set_prop_val(key, property, value) == model::PropertyMutationStatus::applied,
+                std::string(spec.name) + " accepts an integer before storage validation");
+            expect(!form_stream::encode_document(out_of_range).ok(),
+                std::string(spec.name) + " must reject values outside signed int16 storage range");
+        }
+    }
+
+    auto combined = seed.value();
+    expect(combined.set_prop_val(key, model::PropertyId::from_name("HeaderHeight"), std::int64_t{-32768}) ==
+        model::PropertyMutationStatus::applied, "HeaderHeight must compose with FooterHeight");
+    expect(combined.set_prop_val(key, model::PropertyId::from_name("FooterHeight"), std::int64_t{32767}) ==
+        model::PropertyMutationStatus::applied, "FooterHeight must compose with HeaderHeight");
+    const auto combined_encoded = form_stream::encode_document(combined);
+    expect(combined_encoded.ok(), "combined Table heights must encode");
+    const auto* combined_record = find_record_with_guid(
+        combined_encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(combined_record && combined_record->items.at(2).items.at(2).items.at(1).items.at(16).atom == "-32768" &&
+        combined_record->items.at(2).items.at(2).items.at(1).items.at(17).atom == "32767",
+        "both Table heights must persist in their independent observed slots");
+    const auto combined_decoded = form_stream::decode_document(combined_encoded.value(), "CombinedTableHeights");
+    expect(combined_decoded.ok() && combined_decoded.value().reconstruction_complete(),
+        "combined Table heights must decode completely");
+    for (const auto& [name, value] : {std::pair<std::string_view, std::int64_t>{"HeaderHeight", -32768},
+             {"FooterHeight", 32767}}) {
+        const auto actual = combined_decoded.value().get_prop_val(key, model::PropertyId::from_name(name));
+        expect(actual.value && *actual.value == model::PropertyValue{value},
+            std::string(name) + " must survive combined native storage");
+    }
+}
+
 void test_table_named_common_properties() {
     auto seed = form_stream::decode_document(captured_table_payload(), "TableCommon");
     expect(seed.ok(), "captured Table fixture must decode");
@@ -17346,6 +17440,7 @@ int main() {
         test_table_boolean_properties();
         test_table_enumeration_properties();
         test_table_appearance_properties();
+        test_table_header_footer_heights();
         test_table_first_in_group_observed_metadata();
         test_table_first_in_group_fresh_model_xml_bin();
         test_table_column_name_and_data_path_runtime_slots();

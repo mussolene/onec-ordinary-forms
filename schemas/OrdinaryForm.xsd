@@ -2667,8 +2667,8 @@
       <xs:element name="VerticalLines" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectedRows" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="FooterHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="HeaderHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FooterHeight" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HeaderHeight" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalScrollBar" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalLines" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

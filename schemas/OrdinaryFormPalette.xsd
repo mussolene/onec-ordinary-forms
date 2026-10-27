@@ -622,8 +622,8 @@
               <Property name="VerticalLines" apiName="VerticalLines" russianName="ВертикальныеЛинии" russianType="Булево" valueCodec="boolean"/>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
               <Property name="SelectedRows" apiName="SelectedRows" russianName="ВыделенныеСтроки" russianType="ВыделенныеСтрокиТабличногоПоля" valueCodec="unclassified"/>
-              <Property name="FooterHeight" apiName="FooterHeight" russianName="ВысотаПодвала" russianType="Число" valueCodec="decimal"/>
-              <Property name="HeaderHeight" apiName="HeaderHeight" russianName="ВысотаШапки" russianType="Число" valueCodec="decimal"/>
+              <Property name="FooterHeight" apiName="FooterHeight" russianName="ВысотаПодвала" russianType="Число" valueCodec="integer32"/>
+              <Property name="HeaderHeight" apiName="HeaderHeight" russianName="ВысотаШапки" russianType="Число" valueCodec="integer32"/>
               <Property name="HorizontalScrollBar" apiName="HorizontalScrollBar" russianName="ГоризонтальнаяПолосаПрокрутки" russianType="ИспользованиеПолосыПрокрутки" valueCodec="enumeration"/>
               <Property name="HorizontalLines" apiName="HorizontalLines" russianName="ГоризонтальныеЛинии" russianType="Булево" valueCodec="boolean"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
