@@ -11382,7 +11382,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(payload.items[6], "4", "$/6");
         require_raw_constant(payload.items[7], "1", "$/7");
         require_raw_constant(payload.items[8], "0", "$/8");
-        require_raw_constant(payload.items[9], "0", "$/9");
+        const bool center_window = bool_atom(payload.items[9], "$/9");
         const bool dont_change_size = bool_atom(payload.items[10], "$/10");
         require_list(payload.items[11], "$/11");
         require_exact(payload.items[12], list({raw("0")}), "$/12", "Unsupported root table");
@@ -11391,7 +11391,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto window_appearance_change = integer_atom<std::int32_t>(payload.items[15], "$/15");
         if (window_appearance_change < 0 || window_appearance_change > 2)
             fail("OOF1114", "$/15", "WindowAppearanceModeChange ordinal 0..2", std::to_string(window_appearance_change), "Unsupported window appearance change mode");
-        require_raw_constant(payload.items[16], "0", "$/16");
+        const bool avoid_owner = bool_atom(payload.items[16], "$/16");
+        if (center_window && avoid_owner)
+            fail("OOF1114", "$/Form/WindowLocation", "at most one location flag", "both flags set", "Conflicting window location modes");
         const bool desktop_mode = bool_atom(payload.items[17], "$/17");
         const bool allow_close = bool_atom(payload.items[18], "$/18");
         require_raw_constant(payload.items[19], "1", "$/19");
@@ -11480,6 +11482,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (center_window || avoid_owner) form.properties.set_explicit(model::PropertyId::from_name("WindowLocation"),
+            model::EnumerationValue{"WindowLocationVariant", center_window ? "Center" : "DontOverlapOwner"});
         if (window_appearance_change != 2) form.properties.set_explicit(model::PropertyId::from_name("ChangeWindowAppearanceMode"),
             model::EnumerationValue{"WindowAppearanceModeChange", window_appearance_change == 0 ? "Enable" : "Disable"});
         if (dont_change_size) form.properties.set_explicit(model::PropertyId::from_name("SizeChange"),
@@ -12186,7 +12190,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowLocation"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12200,6 +12204,8 @@ Result<list_stream::ListValue> encode_document(
             "WindowSizeChange", 0, {{"Change", 0}, {"DontChange", 1}});
         const auto window_appearance_change = explicit_enum_storage_value(document.form().properties, "Form", "ChangeWindowAppearanceMode",
             "WindowAppearanceModeChange", 2, {{"Enable", 0}, {"Disable", 1}, {"Auto", 2}});
+        const auto window_location = explicit_enum_storage_value(document.form().properties, "Form", "WindowLocation",
+            "WindowLocationVariant", 0, {{"Auto", 0}, {"Center", 1}, {"DontOverlapOwner", 2}});
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -12658,14 +12664,14 @@ Result<list_stream::ListValue> encode_document(
             raw("4"),
             raw("1"),
             raw("0"),
-            raw("0"),
+            raw(window_location == 1 ? "1" : "0"),
             raw(std::to_string(size_change)),
             list(std::move(context_rows)),
             list({raw("0")}),
             canonical_style_record(10),
             raw("1"),
             raw(std::to_string(window_appearance_change)),
-            raw("0"),
+            raw(window_location == 2 ? "1" : "0"),
             raw(desktop_mode ? "1" : "0"),
             raw(allow_close ? "1" : "0"),
             raw("1"),

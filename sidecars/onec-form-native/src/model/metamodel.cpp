@@ -1390,6 +1390,9 @@ void apply_proven_storage_overrides(
     classify_property(form_properties, "ChangeWindowAppearanceMode", StorageCodec::root_record,
         DefaultKind::enumeration, "WindowAppearanceModeChange.Auto");
     std::ranges::find(form_properties, "ChangeWindowAppearanceMode", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    classify_property(form_properties, "WindowLocation", StorageCodec::root_record,
+        DefaultKind::enumeration, "WindowLocationVariant.Auto");
+    std::ranges::find(form_properties, "WindowLocation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     std::ranges::find(form_properties, "ThisForm", &PropertyDescriptor::api_name)->value_codec = ValueCodec::form_reference;
 
     classify_property(

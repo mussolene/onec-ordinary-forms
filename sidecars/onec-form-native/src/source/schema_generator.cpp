@@ -140,6 +140,8 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
         return "WindowSizeChangeValueType";
     if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "ChangeWindowAppearanceMode")
         return "WindowAppearanceModeChangeValueType";
+    if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "WindowLocation")
+        return "WindowLocationVariantValueType";
     if (property.value_codec == ValueCodec::form_reference &&
         property.persistence == model::metamodel::PersistenceClass::runtime_only) {
         return "UnclassifiedValueType";
@@ -459,6 +461,12 @@ void append_value_types(std::string& output) {
     <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowAppearanceModeChange"/>
     <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
       <xs:enumeration value="Auto"/><xs:enumeration value="Enable"/><xs:enumeration value="Disable"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType>
+  <xs:complexType name="WindowLocationVariantValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowLocationVariant"/>
+    <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="Auto"/><xs:enumeration value="Center"/><xs:enumeration value="DontOverlapOwner"/>
     </xs:restriction></xs:simpleType></xs:attribute>
   </xs:complexType>
   <xs:complexType name="InputIncompleteChoiceModeValueType">

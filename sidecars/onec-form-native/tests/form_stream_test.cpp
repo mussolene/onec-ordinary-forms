@@ -8579,6 +8579,40 @@ void test_form_size_change() {
         document.get_prop_val(owner, property).value == initial.value, "reset must restore the proven default");
 }
 
+void test_form_window_location() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "WindowLocation";
+    model::OrdinaryFormDocument document(std::move(form));
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("WindowLocation");
+    const auto initial = document.get_prop_val(owner, property);
+    expect(initial.status == model::PropertyReadStatus::proven_default &&
+        initial.value == model::PropertyValue{model::EnumerationValue{"WindowLocationVariant", "Auto"}},
+        "WindowLocation must default to Auto");
+    for (const auto& [member, center, owner_flag] : {std::tuple{"Auto", "0", "0"}, std::tuple{"Center", "1", "0"}, std::tuple{"DontOverlapOwner", "0", "1"}}) {
+        expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowLocationVariant", member}) ==
+            model::PropertyMutationStatus::applied, "WindowLocation assignment must succeed");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok() && encoded.value().items[9].atom == center && encoded.value().items[16].atom == owner_flag,
+            "WindowLocation must use the two confirmed flags");
+        const auto decoded = form_stream::decode_document(encoded.value(), "WindowLocation");
+        expect(decoded.ok() && decoded.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowLocationVariant", member}}, "WindowLocation must decode");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "WindowLocation must serialize to XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowLocationVariant", member}}, "WindowLocation XML must roundtrip");
+        auto bad = encoded.value();
+        bad.items[9] = list_stream::ListValue::raw_atom("1");
+        bad.items[16] = list_stream::ListValue::raw_atom("1");
+        expect_failure(form_stream::decode_document(bad, "WindowLocation"), "OOF1114", "$/Form/WindowLocation", "conflicting flags must fail");
+    }
+    expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowLocationVariant", "Invalid"}) ==
+        model::PropertyMutationStatus::invalid_value, "unknown window location must fail");
+    expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, property).value == initial.value, "reset must restore Auto");
+}
+
 void test_form_window_appearance_change() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "WindowAppearanceChange";
     model::OrdinaryFormDocument document(std::move(form));
@@ -20080,6 +20114,7 @@ int main() {
         test_form_enter_key_behavior();
         test_form_size_change();
         test_form_window_appearance_change();
+        test_form_window_location();
         test_form_allow_close_round_trip();
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
