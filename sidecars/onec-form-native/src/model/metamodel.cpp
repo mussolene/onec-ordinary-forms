@@ -1080,6 +1080,10 @@ void apply_proven_storage_overrides(
     std::ranges::find(track_bar, "MinValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(track_bar, "Step", StorageCodec::control_info, DefaultKind::integer, "1");
     std::ranges::find(track_bar, "Step", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(track_bar, "LargeStep", StorageCodec::control_info, DefaultKind::integer, "10");
+    std::ranges::find(track_bar, "LargeStep", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(track_bar, "MarkingStep", StorageCodec::control_info, DefaultKind::integer, "5");
+    std::ranges::find(track_bar, "MarkingStep", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(track_bar, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
     classify_property(track_bar, "MarkingAppearance", StorageCodec::control_info,
         DefaultKind::enumeration, "TrackBarMarkingAppearance.BottomRight");

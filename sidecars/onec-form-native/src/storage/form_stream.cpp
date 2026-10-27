@@ -6788,6 +6788,8 @@ DecodedControl decode_track_bar(
         info_payload.items[3], child_path(payload_path, 3));
     const std::int32_t step = integer_atom<std::int32_t>(
         info_payload.items[4], child_path(payload_path, 4));
+    const std::int32_t large_step = integer_atom<std::int32_t>(info_payload.items[5], child_path(payload_path, 5));
+    const std::int32_t marking_step = integer_atom<std::int32_t>(info_payload.items[8], child_path(payload_path, 8));
     const auto marking_appearance = integer_atom<std::int32_t>(info_payload.items[6], child_path(payload_path, 6));
     const auto orientation = integer_atom<std::int32_t>(info_payload.items[7], child_path(payload_path, 7));
     if (marking_appearance < 0 || marking_appearance > 3)
@@ -6808,6 +6810,14 @@ DecodedControl decode_track_bar(
         fail("OOF1122", child_path(payload_path, 4), "positive TrackBar Step", std::to_string(step),
             "TrackBar Step at or below zero was not accepted by the platform runtime");
     }
+    if (large_step <= 0) {
+        fail("OOF1122", child_path(payload_path, 5), "positive TrackBar LargeStep", std::to_string(large_step),
+            "TrackBar LargeStep at or below zero was not accepted by the platform runtime");
+    }
+    if (marking_step < 0) {
+        fail("OOF1122", child_path(payload_path, 8), "non-negative TrackBar MarkingStep", std::to_string(marking_step),
+            "TrackBar MarkingStep below zero was not accepted by the platform runtime");
+    }
     if (linked_attribute != nullptr && !is_single_track_bar_type_domain(linked_attribute->type)) {
         fail("OOF1122", "$/2/3", "single Numeric(10,0,nonnegative) Attribute for TrackBar",
             linked_attribute->name, "TrackBar DataPath TypeDomain is unsupported");
@@ -6824,6 +6834,8 @@ DecodedControl decode_track_bar(
     normalized_info.items[1].items[2] = raw("0");
     normalized_info.items[1].items[3] = raw("100");
     normalized_info.items[1].items[4] = raw("1");
+    normalized_info.items[1].items[5] = raw("10");
+    normalized_info.items[1].items[8] = raw("5");
     normalized_info.items[1].items[6] = raw("2");
     normalized_info.items[1].items[7] = raw("2");
     normalized_info.items[2] = list({raw("0")});
@@ -6858,6 +6870,10 @@ DecodedControl decode_track_bar(
         model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
     if (step != 1) control.properties().set_explicit(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
+    if (large_step != 10) control.properties().set_explicit(
+        model::PropertyId::from_name("LargeStep"), static_cast<std::int64_t>(large_step));
+    if (marking_step != 5) control.properties().set_explicit(
+        model::PropertyId::from_name("MarkingStep"), static_cast<std::int64_t>(marking_step));
     if (marking_appearance != 2) {
         constexpr std::array<std::string_view, 4> members{"DontShow", "TopLeft", "BottomRight", "BothSides"};
         control.properties().set_explicit(model::PropertyId::from_name("MarkingAppearance"),
@@ -9147,7 +9163,7 @@ LV encode_track_bar(
             "TrackBar DataPath must target the supported numeric domain");
     }
     require_allowed_properties(
-        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "BorderColor", "TextColor", "BackColor",
+        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step", "LargeStep", "MarkingStep", "BorderColor", "TextColor", "BackColor",
             "ButtonBackColor", "Border", "Transparent", "MarkingAppearance", "Orientation"}, "$/TrackBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const auto tool_tip = explicit_localized_text(control.properties(), "ToolTip", "$/TrackBar");
@@ -9157,6 +9173,8 @@ LV encode_track_bar(
     const std::int32_t min_value = explicit_integer(
         control.properties(), "MinValue", 0, "$/TrackBar/MinValue");
     const std::int32_t step = explicit_integer(control.properties(), "Step", 1, "$/TrackBar/Step");
+    const std::int32_t large_step = explicit_integer(control.properties(), "LargeStep", 10, "$/TrackBar/LargeStep");
+    const std::int32_t marking_step = explicit_integer(control.properties(), "MarkingStep", 5, "$/TrackBar/MarkingStep");
     const bool transparent = explicit_bool(control.properties(), "Transparent", false);
     const std::int32_t marking_appearance = explicit_enum_storage_value(control.properties(), "TrackBar",
         "MarkingAppearance", "TrackBarMarkingAppearance", 2,
@@ -9175,9 +9193,19 @@ LV encode_track_bar(
         fail("OOF1122", "$/TrackBar/Step", "positive TrackBar Step", std::to_string(step),
             "TrackBar Step values at or below zero were not accepted by the platform runtime");
     }
+    if (large_step <= 0) {
+        fail("OOF1122", "$/TrackBar/LargeStep", "positive TrackBar LargeStep", std::to_string(large_step),
+            "TrackBar LargeStep at or below zero was not accepted by the platform runtime");
+    }
+    if (marking_step < 0) {
+        fail("OOF1122", "$/TrackBar/MarkingStep", "non-negative TrackBar MarkingStep", std::to_string(marking_step),
+            "TrackBar MarkingStep below zero was not accepted by the platform runtime");
+    }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
     auto track_info = canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step,
         &border_color, transparent, marking_appearance, orientation);
+    track_info.items[1].items[5] = raw(std::to_string(large_step));
+    track_info.items[1].items[8] = raw(std::to_string(marking_step));
     encode_named_control_colors(track_info.items[1].items[0], model::ControlKind::track_bar,
         control.properties(), "$/TrackBar");
     encode_named_control_border(track_info.items[1].items[0], model::ControlKind::track_bar,

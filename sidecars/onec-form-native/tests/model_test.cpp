@@ -621,6 +621,8 @@ void test_track_bar_storage_descriptors() {
     const auto* max_value = find_property(ControlKind::track_bar, "MaxValue");
     const auto* min_value = find_property(ControlKind::track_bar, "MinValue");
     const auto* step = find_property(ControlKind::track_bar, "Step");
+    const auto* large_step = find_property(ControlKind::track_bar, "LargeStep");
+    const auto* marking_step = find_property(ControlKind::track_bar, "MarkingStep");
     expect(enabled && enabled->persistence == PersistenceClass::persisted_editable &&
                enabled->storage_codec == StorageCodec::control_base &&
                enabled->default_value.kind == DefaultKind::boolean &&
@@ -646,6 +648,13 @@ void test_track_bar_storage_descriptors() {
                step->default_value.kind == DefaultKind::integer &&
                step->default_value.canonical == "1" && step->value_codec == ValueCodec::integer32,
         "TrackBar Step must use named int32 input, observed control-info storage, and default 1");
+    for (const auto [property, value] : {std::pair{large_step, "10"}, std::pair{marking_step, "5"}}) {
+        expect(property && property->persistence == PersistenceClass::persisted_editable &&
+                   property->storage_codec == StorageCodec::control_info &&
+                   property->default_value.kind == DefaultKind::integer &&
+                   property->default_value.canonical == value && property->value_codec == ValueCodec::integer32,
+            "TrackBar step descriptors must expose their observed int32 storage and defaults");
+    }
 }
 
 void test_chart_integer_and_delimiter_descriptors() {

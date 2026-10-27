@@ -513,7 +513,7 @@
           </Control>
           <Control name="TrackBar" apiName="TrackBar" russianName="ПолосаРегулирования" children="none">
             <Properties>
-              <Property name="LargeStep" apiName="LargeStep" russianName="БольшойШаг" russianType="Число" valueCodec="decimal"/>
+              <Property name="LargeStep" apiName="LargeStep" russianName="БольшойШаг" russianType="Число" valueCodec="integer32"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="integer32"/>
               <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="integer32"/>
@@ -527,7 +527,7 @@
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
               <Property name="Step" apiName="Step" russianName="Шаг" russianType="Число" valueCodec="integer32"/>
-              <Property name="MarkingStep" apiName="MarkingStep" russianName="ШагРазметки" russianType="Число" valueCodec="decimal"/>
+              <Property name="MarkingStep" apiName="MarkingStep" russianName="ШагРазметки" russianType="Число" valueCodec="integer32"/>
             </Properties>
             <Events>
               <Event name="OnChange" apiName="OnChange" russianName="ПриИзменении"/>

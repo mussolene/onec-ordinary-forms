@@ -10938,7 +10938,9 @@ void test_track_bar_observed_record_and_named_round_trip() {
                track_bar->properties().find(model::PropertyId::from_name("Enabled")) == nullptr &&
                track_bar->properties().find(model::PropertyId::from_name("MaxValue")) == nullptr &&
                track_bar->properties().find(model::PropertyId::from_name("MinValue")) == nullptr &&
-               track_bar->properties().find(model::PropertyId::from_name("Step")) == nullptr,
+               track_bar->properties().find(model::PropertyId::from_name("Step")) == nullptr &&
+               track_bar->properties().find(model::PropertyId::from_name("LargeStep")) == nullptr &&
+               track_bar->properties().find(model::PropertyId::from_name("MarkingStep")) == nullptr,
         "fresh TrackBar Add record must decode to the named control with omitted defaults");
     const auto default_reencoded = form_stream::encode_document(decoded.value());
     expect(default_reencoded.ok() &&
@@ -10950,18 +10952,20 @@ void test_track_bar_observed_record_and_named_round_trip() {
                default_serialized_xml.value().find("<Step>") == std::string::npos,
         "TrackBar XML writer must omit explicit properties equal to descriptor defaults");
     constexpr std::string_view explicit_defaults_xml =
-        R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><ChildItems><TrackBar id="4" name="TrackBarResearch"><Position/><MaxValue>100</MaxValue><MinValue>0</MinValue><Step>1</Step></TrackBar></ChildItems></Form>)OOF";
+        R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><ChildItems><TrackBar id="4" name="TrackBarResearch"><Position/><LargeStep>10</LargeStep><MaxValue>100</MaxValue><MinValue>0</MinValue><Step>1</Step><MarkingStep>5</MarkingStep></TrackBar></ChildItems></Form>)OOF";
     const auto explicit_defaults = oof::source::parse_form_xml(explicit_defaults_xml);
     expect(explicit_defaults.ok(), "explicit TrackBar defaults must parse");
     const auto explicit_defaults_serialized = oof::source::serialize_form_xml(explicit_defaults.value());
     expect(explicit_defaults.ok() && explicit_defaults_serialized.ok() &&
                explicit_defaults_serialized.value().find("<MaxValue>") == std::string::npos &&
                explicit_defaults_serialized.value().find("<MinValue>") == std::string::npos &&
-               explicit_defaults_serialized.value().find("<Step>") == std::string::npos,
+               explicit_defaults_serialized.value().find("<Step>") == std::string::npos &&
+               explicit_defaults_serialized.value().find("<LargeStep>") == std::string::npos &&
+               explicit_defaults_serialized.value().find("<MarkingStep>") == std::string::npos,
         "TrackBar XML writer must omit explicitly authored numeric values equal to defaults");
 
     constexpr std::string_view numeric_xml =
-        R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><ChildItems><TrackBar id="4" name="TrackBarResearch"><Position><Top>12</Top><Visible>false</Visible><Height>45</Height><Left>23</Left><Width>234</Width></Position><Enabled>false</Enabled><MaxValue>321</MaxValue><MinValue>17</MinValue><ToolTip>TrackBar runtime probe</ToolTip><Step>25</Step></TrackBar></ChildItems></Form>)OOF";
+        R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><ChildItems><TrackBar id="4" name="TrackBarResearch"><Position><Top>12</Top><Visible>false</Visible><Height>45</Height><Left>23</Left><Width>234</Width></Position><LargeStep>17</LargeStep><Enabled>false</Enabled><MaxValue>321</MaxValue><MinValue>17</MinValue><ToolTip>TrackBar runtime probe</ToolTip><Step>25</Step><MarkingStep>0</MarkingStep></TrackBar></ChildItems></Form>)OOF";
     const auto numeric_parsed = oof::source::parse_form_xml(numeric_xml);
     expect(numeric_parsed.ok(), numeric_parsed ? "" : numeric_parsed.diagnostics().front().path + ": " +
         numeric_parsed.diagnostics().front().message);
@@ -10978,6 +10982,8 @@ void test_track_bar_observed_record_and_named_round_trip() {
     numeric_observed.items[2].items[1].items[2] = list_stream::ListValue::raw_atom("17");
     numeric_observed.items[2].items[1].items[3] = list_stream::ListValue::raw_atom("321");
     numeric_observed.items[2].items[1].items[4] = list_stream::ListValue::raw_atom("25");
+    numeric_observed.items[2].items[1].items[5] = list_stream::ListValue::raw_atom("17");
+    numeric_observed.items[2].items[1].items[8] = list_stream::ListValue::raw_atom("0");
     *numeric_record = numeric_observed;
     const auto numeric_decoded = form_stream::decode_document(numeric_stream, "TrackBarNumeric");
     expect(numeric_decoded.ok(), "observed TrackBar MaxValue, MinValue, Step and base changes must decode");
@@ -10985,17 +10991,26 @@ void test_track_bar_observed_record_and_named_round_trip() {
     const auto* max_value = numeric_control->properties().find(model::PropertyId::from_name("MaxValue"));
     const auto* min_value = numeric_control->properties().find(model::PropertyId::from_name("MinValue"));
     const auto* step = numeric_control->properties().find(model::PropertyId::from_name("Step"));
+    const auto* large_step = numeric_control->properties().find(model::PropertyId::from_name("LargeStep"));
+    const auto* marking_step = numeric_control->properties().find(model::PropertyId::from_name("MarkingStep"));
     const auto* enabled = numeric_control->properties().find(model::PropertyId::from_name("Enabled"));
     const auto* tool_tip = numeric_control->properties().find(model::PropertyId::from_name("ToolTip"));
     expect(max_value && std::get<std::int64_t>(max_value->value) == 321 &&
                min_value && std::get<std::int64_t>(min_value->value) == 17 &&
                step && std::get<std::int64_t>(step->value) == 25 &&
+               large_step && std::get<std::int64_t>(large_step->value) == 17 &&
+               marking_step && std::get<std::int64_t>(marking_step->value) == 0 &&
                enabled && !std::get<bool>(enabled->value) &&
                tool_tip && std::get<std::string>(tool_tip->value) == "TrackBar runtime probe" &&
                numeric_control->position.top.value() == 12 && numeric_control->position.left.value() == 23 &&
                numeric_control->position.width.value() == 234 && numeric_control->position.height.value() == 45 &&
                !numeric_control->position.visible.value(),
         "TrackBar named properties and Position including Visible must decode from the observed record");
+    const auto numeric_serialized = oof::source::serialize_form_xml(numeric_decoded.value());
+    expect(numeric_serialized.ok() && numeric_serialized.value().find("<LargeStep>17</LargeStep>") != std::string::npos &&
+               numeric_serialized.value().find("<MarkingStep>0</MarkingStep>") != std::string::npos &&
+               oof::source::parse_form_xml(numeric_serialized.value()).ok(),
+        "TrackBar step properties must survive named XML serialization and parsing");
     const auto numeric_reencoded = form_stream::encode_document(numeric_decoded.value());
     expect(numeric_reencoded.ok() &&
                list_stream::dump_compact(numeric_reencoded.value()) == list_stream::dump_compact(numeric_encoded.value()),
@@ -11029,8 +11044,21 @@ void test_track_bar_observed_record_and_named_round_trip() {
             "TrackBar int32 overflow and fractional values must fail parsing or serialization");
     }
 
+    for (const std::string_view property : {"LargeStep", "MarkingStep"}) {
+        for (const std::string_view value : {"2147483648", "1.5"}) {
+            const std::string invalid_xml =
+                "<Form id=\"1\" name=\"TrackBarForm\" ordinaryFormVersion=\"2.1\"><ChildItems><TrackBar id=\"4\" name=\"P\"><Position/><" +
+                std::string(property) + ">" + std::string(value) + "</" + std::string(property) +
+                "></TrackBar></ChildItems></Form>";
+            const auto invalid_input = oof::source::parse_form_xml(invalid_xml);
+            expect(!invalid_input || !form_stream::encode_document(invalid_input.value()),
+                "TrackBar step overflow and fractional XML values must fail parsing or serialization");
+        }
+    }
+
     for (const auto [property, value] : {std::pair<std::string_view, std::string_view>{"MaxValue", "-1"},
-             {"MinValue", "-1"}, {"Step", "0"}, {"Step", "-1"}}) {
+             {"MinValue", "-1"}, {"Step", "0"}, {"Step", "-1"},
+             {"LargeStep", "0"}, {"LargeStep", "-1"}, {"MarkingStep", "-1"}}) {
         const std::string rejected_xml =
             "<Form id=\"1\" name=\"TrackBarForm\" ordinaryFormVersion=\"2.1\"><ChildItems><TrackBar id=\"4\" name=\"P\"><Position/><" +
             std::string(property) + ">" + std::string(value) + "</" + std::string(property) +
@@ -11038,15 +11066,14 @@ void test_track_bar_observed_record_and_named_round_trip() {
         const auto rejected = oof::source::parse_form_xml(rejected_xml);
         expect(rejected.ok(), "TrackBar integer property inputs must parse before runtime-evidence validation");
         const auto rejected_encoding = form_stream::encode_document(rejected.value());
-        const std::string expected_path = property == "MaxValue" ? "$/TrackBar/MaxValue" :
-            property == "MinValue" ? "$/TrackBar/MinValue" : "$/TrackBar/Step";
+        const std::string expected_path = "$/TrackBar/" + std::string(property);
         expect_failure(rejected_encoding, "OOF1122", expected_path,
             "TrackBar MinValue below zero and Step at or below zero must fail closed");
     }
 
     auto unsupported = encoded.value();
     auto* unsupported_record = find_track_bar(find_track_bar, unsupported);
-    unsupported_record->items[2].items[1].items[5] = list_stream::ListValue::raw_atom("11");
+    unsupported_record->items[2].items[1].items[9] = list_stream::ListValue::raw_atom("11");
     const auto unsupported_decoded = form_stream::decode_document(unsupported, "TrackBarUnsupported");
     const auto* partial_track_bar = unsupported_decoded ?
         unsupported_decoded.value().find_control(model::ObjectId{4}) : nullptr;
@@ -11059,7 +11086,8 @@ void test_track_bar_observed_record_and_named_round_trip() {
     for (const auto [path_slot, value, path] : {
              std::tuple<std::size_t, std::string_view, std::string_view>{2, "-1", "$/1/2/2/1/2/1/2"},
              {3, "-1", "$/1/2/2/1/2/1/3"}, {4, "0", "$/1/2/2/1/2/1/4"},
-             {4, "-1", "$/1/2/2/1/2/1/4"}}) {
+             {4, "-1", "$/1/2/2/1/2/1/4"}, {5, "0", "$/1/2/2/1/2/1/5"},
+             {5, "-1", "$/1/2/2/1/2/1/5"}, {8, "-1", "$/1/2/2/1/2/1/8"}}) {
         auto invalid = encoded.value();
         auto* invalid_record = find_track_bar(find_track_bar, invalid);
         invalid_record->items[2].items[1].items[path_slot] = list_stream::ListValue::raw_atom(std::string(value));
@@ -11067,12 +11095,6 @@ void test_track_bar_observed_record_and_named_round_trip() {
         expect_failure(invalid_decoded, "OOF1122", path,
             "observed TrackBar numeric constraints must reject unsupported stored values");
     }
-
-    constexpr std::string_view unsupported_property_xml =
-        R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><ChildItems><TrackBar id="4" name="P"><Position/><LargeStep>5</LargeStep></TrackBar></ChildItems></Form>)OOF";
-    const auto unsupported_property = oof::source::parse_form_xml(unsupported_property_xml);
-    expect(unsupported_property.ok() && !form_stream::encode_document(unsupported_property.value()),
-        "TrackBar LargeStep remains unsupported until its storage slot is observed");
 
     constexpr std::string_view data_path_xml =
         R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="numeric" length="10" precision="2"/></TypeDomain></Attribute></Attributes><ChildItems><TrackBar id="4" name="P"><DataPath attributeId="3"/><Position/></TrackBar></ChildItems></Form>)OOF";
