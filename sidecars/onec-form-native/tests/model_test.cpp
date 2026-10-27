@@ -11,6 +11,7 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/model/ordinary_form.hpp"
+#include "oof/form_bin.hpp"
 #include "oof/source/form_xml.hpp"
 
 namespace {
@@ -3470,28 +3471,92 @@ void test_panel_initial_current_page() {
         const ObjectId panel_id{100 + index};
         const ObjectId first_id{200 + index * 2};
         const ObjectId second_id{201 + index * 2};
+        const ObjectId hidden_id{300 + index};
         ControlNode panel{panel_id, "Panel" + std::to_string(index), PanelPayload{}};
-        panel.children = {PageRef{first_id}, PageRef{second_id}};
+        panel.children = {PageRef{first_id}, PageRef{second_id}, PageRef{hidden_id}};
         Page first;
         first.id = first_id;
-        first.visible.set(false);
+        if (index % 2 == 0) first.visible.set(false);
         Page second;
         second.id = second_id;
+        second.enabled.set(false);
+        Page hidden;
+        hidden.id = hidden_id;
+        hidden.visible.set(false);
         document.add_page(std::move(first));
         document.add_page(std::move(second));
+        document.add_page(std::move(hidden));
         document.add_control(std::move(panel));
         const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, panel_id};
         const auto initial = document.get_prop_val(owner, current_page);
         expect(initial.status == PropertyReadStatus::computed_value && initial.value == PropertyValue{PageRef{first_id}},
-            "initial current page must be the first page even if hidden");
-        expect(document.set_prop_val(owner, current_page, PageRef{second_id}) == PropertyMutationStatus::unsupported_surface &&
-                document.reset_prop_val(owner, current_page) == PropertyMutationStatus::unsupported_surface &&
-                document.get_prop_val(owner, current_page).value == initial.value,
-            "unimplemented current page mutations must not change the initial page");
+            "initial current page must be the first page regardless of visibility");
+        expect(document.set_prop_val(owner, current_page, PageRef{second_id}) == PropertyMutationStatus::applied_runtime_only &&
+                document.get_prop_val(owner, current_page).value == PropertyValue{PageRef{second_id}},
+            "a visible but disabled page must be selectable at runtime");
+        expect(document.set_prop_val(owner, current_page, PageRef{hidden_id}) == PropertyMutationStatus::applied_runtime_only &&
+                document.get_prop_val(owner, current_page).value == PropertyValue{PageRef{second_id}},
+            "selecting a hidden page must leave the selection unchanged");
+        expect(document.set_prop_val(owner, current_page, UndefinedValue{}) == PropertyMutationStatus::invalid_value &&
+                document.set_prop_val(owner, current_page, PageRef{ObjectId{9999}}) == PropertyMutationStatus::invalid_reference &&
+                document.reset_prop_val(owner, current_page) == PropertyMutationStatus::unsupported_surface,
+            "invalid assignments and unimplemented reset must not change the selection");
+        if (index != 0) {
+            expect(document.set_prop_val(owner, current_page, PageRef{ObjectId{201}}) == PropertyMutationStatus::applied_runtime_only &&
+                    document.get_prop_val(owner, current_page).value == PropertyValue{PageRef{second_id}},
+                "a page belonging to another panel must not change the selection");
+        }
+        expect(document.set_prop_val(owner, PropertyId::from_name("ScrollPageMode"), true) == PropertyMutationStatus::applied &&
+                document.set_prop_val(owner, current_page, PageRef{first_id}) == PropertyMutationStatus::applied_runtime_only &&
+                document.get_prop_val(owner, current_page).value == PropertyValue{PageRef{second_id}},
+            "scrolling mode must preserve the current page on assignment");
     }
     document.add_control(ControlNode{ObjectId{400}, "Empty", PanelPayload{}});
     expect(document.get_prop_val({ObjectCategory::control, ObjectId{400}}, current_page).status == PropertyReadStatus::unsupported_surface,
         "an incomplete panel must not invent a current page");
+}
+
+void test_current_page_is_runtime_only() {
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "PanelState";
+    form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument document(std::move(form));
+    ControlNode panel{ObjectId{2}, "Tabs", PanelPayload{}};
+    for (std::uint64_t id = 3; id <= 4; ++id) {
+        Page page;
+        page.id = ObjectId{id};
+        page.name = "Page" + std::to_string(id);
+        Position position;
+        position.left.set(6);
+        position.top.set(7);
+        position.width.set(200);
+        position.height.set(100);
+        for (const auto edge : {BindingCoordinate::right, BindingCoordinate::bottom}) {
+            AnchorBinding binding;
+            binding.coordinate = edge;
+            binding.target_coordinate = edge;
+            binding.target = ControlRef{ObjectId{2}};
+            binding.offset.set(-6);
+            position.bindings.anchors.push_back(std::move(binding));
+        }
+        page.position.set(std::move(position));
+        panel.children.push_back(PageRef{page.id});
+        document.add_page(std::move(page));
+    }
+    document.add_control(std::move(panel));
+    const auto before_xml = oof::source::serialize_form_xml(document);
+    const auto before_bin = oof::save_form_bin(document);
+    expect(before_xml.ok() && before_bin.ok(), "synthetic panel must serialize before changing current page");
+    expect(document.set_prop_val({ObjectCategory::control, ObjectId{2}}, PropertyId::from_name("CurrentPage"),
+               PageRef{ObjectId{4}}) == PropertyMutationStatus::applied_runtime_only,
+        "runtime current page assignment must succeed");
+    const auto after_xml = oof::source::serialize_form_xml(document);
+    const auto after_bin = oof::save_form_bin(document);
+    expect(after_xml.ok() && after_xml.value() == before_xml.value(),
+        "runtime page selection must not alter persisted XML");
+    expect(after_bin.ok() && after_bin.value() == before_bin.value(),
+        "runtime page selection must not alter Form.bin");
 }
 
 }  // namespace
@@ -3504,6 +3569,7 @@ int main() {
         test_input_incomplete_choice_mode_api();
         test_panel_scrolling_tab_read();
         test_panel_initial_current_page();
+        test_current_page_is_runtime_only();
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();

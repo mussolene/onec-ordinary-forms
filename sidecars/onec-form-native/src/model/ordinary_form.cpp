@@ -977,9 +977,11 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
+            const auto& selected = std::get<PanelPayload>(control.payload).current_page;
             for (const auto& child : control.children) {
                 const auto* page = std::get_if<PageRef>(&child);
                 if (page == nullptr) continue;
+                if (selected && *selected != *page) continue;
                 if (find_page(page->id()) == nullptr) return {PropertyReadStatus::unsupported_surface, std::nullopt};
                 return {PropertyReadStatus::computed_value, PropertyValue{*page}};
             }
@@ -1157,8 +1159,22 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         property_control = &control;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
-        if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage")
-            return PropertyMutationStatus::unsupported_surface;
+        if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
+            const auto* page_ref = std::get_if<PageRef>(&value);
+            if (page_ref == nullptr) return PropertyMutationStatus::invalid_value;
+            const auto* page = find_page(page_ref->id());
+            if (page == nullptr) return PropertyMutationStatus::invalid_reference;
+            const auto belongs = std::ranges::any_of(control.children, [&](const ChildItemRef& child) {
+                const auto* candidate = std::get_if<PageRef>(&child);
+                return candidate != nullptr && *candidate == *page_ref;
+            });
+            const auto* scroll = control.properties().find(PropertyId::from_name("ScrollPageMode"));
+            if (!belongs || !page->visible.value() ||
+                (scroll != nullptr && std::get_if<bool>(&scroll->value) && std::get<bool>(scroll->value)))
+                return PropertyMutationStatus::applied_runtime_only;
+            std::get<PanelPayload>(control.payload).current_page = *page_ref;
+            return PropertyMutationStatus::applied_runtime_only;
+        }
         if (descriptor->api_name == "TabOrder") {
             const auto group = tab_order_group(*this, control.id);
             if (!group) return PropertyMutationStatus::unsupported_surface;

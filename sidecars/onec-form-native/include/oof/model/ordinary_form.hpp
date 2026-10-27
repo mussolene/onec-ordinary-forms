@@ -692,7 +692,9 @@ struct TypedControlPayload {
     PropertySet properties;
 };
 
-struct PanelPayload final : TypedControlPayload<ControlKind::panel> {};
+struct PanelPayload final : TypedControlPayload<ControlKind::panel> {
+    std::optional<PageRef> current_page;
+};
 struct CommandBarPayload final : TypedControlPayload<ControlKind::command_bar> {
     std::vector<CommandBarButton> buttons;
 };
