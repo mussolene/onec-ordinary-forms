@@ -517,6 +517,29 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_chart_computed_counts() {
+    Form form; form.id = ObjectId{1}; form.name = "ChartCounts";
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        ChartPayload chart;
+        for (std::uint64_t n = 0; n < i % 3; ++n) { ChartSeries s; s.id = ObjectId{n + 1}; chart.series.push_back(s); }
+        for (std::uint64_t n = 0; n < i % 4; ++n) { ChartPoint p; p.id = ObjectId{n + 1}; chart.points.push_back(p); }
+        document.add_control(ControlNode{ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(chart)});
+    }
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        for (const auto& [name, expected] : {std::pair{"SeriesCount", i % 3}, std::pair{"PointCount", i % 4}}) {
+            const auto property = PropertyId::from_name(name);
+            const auto result = document.get_prop_val(owner, property);
+            expect(result.status == PropertyReadStatus::computed_value && result.value == PropertyValue{static_cast<std::int64_t>(expected)},
+                "chart counts must reflect named series and points");
+            expect(document.set_prop_val(owner, property, std::int64_t{2}) == PropertyMutationStatus::unsupported_surface &&
+                document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface &&
+                document.get_prop_val(owner, property).value == result.value, "unmodeled resizing must not mutate or report success");
+        }
+    }
+}
+
 void test_form_runtime_variant_values() {
     Form form; form.id = ObjectId{1}; form.name = "RuntimeVariants";
     OrdinaryFormDocument document(std::move(form));
@@ -3893,6 +3916,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
+        test_chart_computed_counts();
         test_form_runtime_variant_values();
         test_window_options_aliases();
         test_form_runtime_boolean_values();

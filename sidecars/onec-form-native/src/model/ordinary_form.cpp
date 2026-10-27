@@ -1048,6 +1048,14 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
         const auto& control = collections_.controls[location->index];
         if (control.kind() == ControlKind::chart &&
+            (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount"))) {
+            const auto& chart = std::get<ChartPayload>(control.payload);
+            const auto count = property == PropertyId::from_name("SeriesCount") ? chart.series.size() : chart.points.size();
+            if (count > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()))
+                return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            return {PropertyReadStatus::computed_value, PropertyValue{static_cast<std::int64_t>(count)}};
+        }
+        if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("PlotArea") || property == PropertyId::from_name("LegendArea") || property == PropertyId::from_name("TitleArea"))) {
             const auto kind = property == PropertyId::from_name("PlotArea") ? ChartAreaKind::plot : property == PropertyId::from_name("TitleArea") ? ChartAreaKind::title : ChartAreaKind::legend;
             return {PropertyReadStatus::computed_value, PropertyValue{ChartAreaRef{control.id, kind}}};
@@ -1322,6 +1330,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (!location) return PropertyMutationStatus::unknown_owner;
         auto& control = collections_.controls[location->index];
         property_control = &control;
+        if (control.kind() == ControlKind::chart &&
+            (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount")))
+            return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
@@ -1660,6 +1671,9 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (!location) return PropertyMutationStatus::unknown_owner;
         auto& control = collections_.controls[location->index];
         property_control = &control;
+        if (control.kind() == ControlKind::chart &&
+            (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount")))
+            return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage")
