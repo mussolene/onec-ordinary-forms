@@ -162,6 +162,12 @@ private:
 
 using FormRef = Reference<Form>;
 using ControlRef = Reference<ControlNode>;
+
+struct CommandBarButtonRef {
+    ControlRef owner;
+    std::vector<std::string> path;
+    friend bool operator==(const CommandBarButtonRef&, const CommandBarButtonRef&) = default;
+};
 using PageRef = Reference<Page>;
 using AttributeRef = Reference<Attribute>;
 using CommandRef = Reference<Command>;
@@ -476,7 +482,8 @@ using PropertyValue = std::variant<
     FormRef,
     AttributeRef,
     CommandRef,
-    ChartAreaRef>;
+    ChartAreaRef,
+    CommandBarButtonRef>;
 
 struct PropertyEntry {
     PropertyId id{};

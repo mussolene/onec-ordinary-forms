@@ -1052,6 +1052,35 @@ model::PropertyValue parse_property_value(
             return parse_shortcut(node);
         case mm::ValueCodec::picture:
             return parse_picture_reference(node, property, object_id);
+        case mm::ValueCodec::context_menu_reference: {
+            const auto control_id = optional_attribute(node, "controlId");
+            const auto children = element_children(node);
+            if (!children.empty() && !control_id)
+                fail("OOF2003", node, std::string(object_id), property,
+                    "controlId for a button path", "missing", "ContextMenu button path needs an owner");
+            for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
+                if (child->type == XML_COMMENT_NODE || child->type == XML_PI_NODE || child->type == XML_ELEMENT_NODE) continue;
+                if ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) &&
+                    child->content != nullptr && trim_ascii(reinterpret_cast<const char*>(child->content)).empty()) continue;
+                fail("OOF2003", child, std::string(object_id), property,
+                    "Button elements only", "text or unsupported content", "ContextMenu has unexpected content");
+            }
+            if (!control_id) return model::UndefinedValue{};
+            const model::ControlRef owner{parse_object_id(*control_id, node, property, object_id)};
+            if (children.empty()) return owner;
+            model::CommandBarButtonRef reference{owner, {}};
+            for (auto* child : children) {
+                if (node_name(child) != "Button" || !element_children(child).empty() ||
+                    !trim_ascii(node_text(child)).empty())
+                    fail("OOF2003", child, std::string(object_id), property,
+                        "empty Button with name", node_name(child), "Invalid ContextMenu button path");
+                auto name = required_attribute(child, "name", object_id);
+                if (name.empty()) fail("OOF2003", child, std::string(object_id), property,
+                    "non-empty button name", "empty", "ContextMenu button path is empty");
+                reference.path.push_back(std::move(name));
+            }
+            return reference;
+        }
         case mm::ValueCodec::action_source_reference: {
             const auto form_id = optional_attribute(node, "formId");
             const auto control_id = optional_attribute(node, "controlId");
@@ -3209,6 +3238,24 @@ private:
                 write_picture_reference(name, reference, object_id);
                 return;
             }
+            case mm::ValueCodec::context_menu_reference:
+                if (std::holds_alternative<model::UndefinedValue>(value)) {
+                    writer_.empty(name);
+                } else if (const auto* control = std::get_if<model::ControlRef>(&value)) {
+                    writer_.empty(name, {{"controlId", object_id_text(control->id())}});
+                } else {
+                    const auto& reference = require_value<model::CommandBarButtonRef>(value, object_id, name, "context menu reference");
+                    if (reference.path.empty()) serialization_fail(std::string(object_id), std::string(name),
+                        "non-empty button path", "empty", "ContextMenu button path is empty");
+                    writer_.open(name, {{"controlId", object_id_text(reference.owner.id())}});
+                    for (const auto& segment : reference.path) {
+                        if (segment.empty()) serialization_fail(std::string(object_id), std::string(name),
+                            "non-empty button name", "empty", "ContextMenu button path is empty");
+                        writer_.empty("Button", {{"name", segment}});
+                    }
+                    writer_.close(name);
+                }
+                return;
             case mm::ValueCodec::action_source_reference:
                 if (std::holds_alternative<model::UndefinedValue>(value)) {
                     writer_.empty(name);

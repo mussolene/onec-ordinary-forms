@@ -117,6 +117,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "FontValueType";
         case ValueCodec::picture:
             return "PictureReferenceValueType";
+        case ValueCodec::context_menu_reference:
+            return "ContextMenuReferenceValueType";
         case ValueCodec::action_source_reference:
             return "ActionSourceReferenceValueType";
         case ValueCodec::control_reference:
@@ -603,6 +605,13 @@ void append_value_types(std::string& output) {
   <xs:simpleType name="ControlReferenceValueType">
     <xs:restriction base="ObjectIdType"/>
   </xs:simpleType>
+
+  <xs:complexType name="ContextMenuReferenceValueType">
+    <xs:sequence><xs:element name="Button" minOccurs="0" maxOccurs="unbounded">
+      <xs:complexType><xs:attribute name="name" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:minLength value="1"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
+    </xs:element></xs:sequence>
+    <xs:attribute name="controlId" type="ObjectIdType" use="optional"/>
+  </xs:complexType>
 
   <xs:complexType name="ActionSourceReferenceValueType">
     <xs:attribute name="formId" type="ObjectIdType" use="optional"/>

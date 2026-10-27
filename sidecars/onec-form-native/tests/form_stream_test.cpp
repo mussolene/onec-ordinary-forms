@@ -17443,6 +17443,208 @@ void test_chart_named_integer_and_delimiter_properties() {
     }
 }
 
+void test_form_context_menu_roundtrip() {
+    constexpr std::array types{"CalendarField", "ChoiceField", "Dendrogram", "GeographicalSchemaField",
+        "GraphicalSchemaField", "UsualGroup", "HTMLDocumentField", "LabelDecoration", "ProgressBar", "TrackBar"};
+    std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Shared"><Position/></Button><CommandBar id="3" name="Tools"><Position/></CommandBar>)XML";
+    for (std::size_t index = 0; index < types.size(); ++index)
+        xml += "<" + std::string(types[index]) + " id=\"" + std::to_string(index + 10) + "\" name=\"Probe" +
+            std::to_string(index) + "\"><Position/></" + types[index] + ">";
+    xml += "</ChildItems></Form>";
+    const auto auto_id = model::PropertyId::from_name("AutoContextMenu");
+    const auto context_id = model::PropertyId::from_name("ContextMenu");
+    const model::ControlRef bar_ref{model::ObjectId{3}};
+    const model::CommandBarButtonRef nested_ref{bar_ref, {"Parent", "Inner"}};
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        auto document = source::parse_form_xml(xml);
+        expect(document.ok(), "form context menu batch fixture must parse");
+        auto* bar = const_cast<model::ControlNode*>(document.value().find_control(model::ObjectId{3}));
+        auto* button = const_cast<model::ControlNode*>(document.value().find_control(model::ObjectId{2}));
+        expect(bar && button, "form context menu owner controls must exist");
+        model::CommandBarButton inner;
+        inner.name = "Inner";
+        inner.type = model::CommandBarButtonKind::submenu;
+        model::CommandBarButton parent;
+        parent.name = "Parent";
+        parent.type = model::CommandBarButtonKind::submenu;
+        parent.buttons = {inner};
+        std::get<model::CommandBarPayload>(bar->payload).buttons = {parent};
+        auto& form = const_cast<model::Form&>(document.value().form());
+        form.properties.set_explicit(auto_id, (mode % 2) != 0);
+        if (mode / 2 == 1) form.properties.set_explicit(context_id, bar_ref);
+        if (mode / 2 == 2) form.properties.set_explicit(context_id, nested_ref);
+        button->extension_properties.set_explicit(auto_id, false);
+        button->extension_properties.set_explicit(context_id, bar_ref);
+        for (std::size_t index = 0; index < types.size(); ++index) {
+            auto* control = const_cast<model::ControlNode*>(document.value().find_control(model::ObjectId{index + 10}));
+            expect(control, "context menu batch control must exist");
+            control->extension_properties.set_explicit(auto_id, false);
+        }
+        auto encoded = form_stream::encode_document(document.value());
+        expect(encoded.ok(), encoded ? "form context menu batch must encode" : encoded.diagnostics().front().message);
+        const auto& rows = encoded.value().items[11];
+        expect(rows.is_list && !rows.items.empty(), "form context table must have a header");
+        const auto count = std::stoul(rows.items[0].atom);
+        bool form_row = false;
+        bool control_row = false;
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto owner = rows.items.at(1 + index * 5).atom;
+            form_row = form_row || owner == "0";
+            control_row = control_row || owner == "2";
+        }
+        expect(form_row == (mode % 2 == 0 || mode / 2 != 0), "form row must use owner zero and respect its default");
+        expect(control_row, "control row must retain positive control identity");
+        auto check = [&](const model::OrdinaryFormDocument& restored) {
+            const auto* automatic = restored.form().properties.find(auto_id);
+            const auto* context = restored.form().properties.find(context_id);
+            if (mode % 2 == 0)
+                expect(automatic && std::get_if<bool>(&automatic->value) && !std::get<bool>(automatic->value), "form auto-menu false must survive");
+            else
+                expect(!automatic || (std::get_if<bool>(&automatic->value) && std::get<bool>(automatic->value)), "form auto-menu true must remain default");
+            if (mode / 2 == 0)
+                expect(!context || std::holds_alternative<model::UndefinedValue>(context->value), "form default context menu must survive");
+            else if (mode / 2 == 1)
+                expect(context && std::get_if<model::ControlRef>(&context->value) && std::get<model::ControlRef>(context->value) == bar_ref, "form command bar context menu must survive");
+            else
+                expect(context && std::get_if<model::CommandBarButtonRef>(&context->value) && std::get<model::CommandBarButtonRef>(context->value) == nested_ref, "form nested context menu must survive");
+            const auto* item = restored.find_control(model::ObjectId{2});
+            expect(item != nullptr, "context-menu-bearing control must survive");
+            const auto* item_auto = item->extension_properties.find(auto_id);
+            const auto* item_menu = item->extension_properties.find(context_id);
+            expect(item_auto && std::get_if<bool>(&item_auto->value) && !std::get<bool>(item_auto->value) &&
+                item_menu && std::get_if<model::ControlRef>(&item_menu->value) && std::get<model::ControlRef>(item_menu->value) == bar_ref,
+                "form owner zero and control owner two must not collide");
+        };
+        auto decoded = form_stream::decode_document(encoded.value());
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "form context menu batch must decode");
+        check(decoded.value());
+        auto output = source::serialize_form_xml(decoded.value());
+        expect(output.ok(), "form context menu XML must serialize");
+        auto parsed = source::parse_form_xml(output.value());
+        expect(parsed.ok(), "form context menu XML must parse");
+        auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok(), "form context menu XML must rebuild");
+        auto reread = form_stream::decode_document(rebuilt.value());
+        expect(reread.ok() && reread.value().reconstruction_complete(), "rebuilt form context menu must decode");
+        check(reread.value());
+        form.properties.set_explicit(context_id, model::ControlRef{model::ObjectId{99999}});
+        expect(!form_stream::encode_document(document.value()), "form must reject missing context menu owner");
+        form.properties.set_explicit(context_id, model::CommandBarButtonRef{bar_ref, {"Parent", "Missing"}});
+        expect(!form_stream::encode_document(document.value()), "form must reject missing submenu path");
+    }
+}
+
+void test_context_menu_named_reference_roundtrip() {
+    constexpr std::array types{
+        "Button", "CalendarField", "ChoiceField", "Dendrogram", "GeographicalSchemaField",
+        "GraphicalSchemaField", "UsualGroup", "HTMLDocumentField", "LabelDecoration",
+        "PictureDecoration", "ProgressBar", "Splitter", "SpreadsheetDocumentField",
+        "TextDocumentField", "GanttChart", "TrackBar"};
+    std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><CommandBar id="2" name="Tools"><Position/></CommandBar>)XML";
+    for (std::size_t index = 0; index < types.size(); ++index)
+        xml += "<" + std::string(types[index]) + " id=\"" + std::to_string(index + 10) + "\" name=\"Probe" +
+            std::to_string(index) + "\"><Position/></" + types[index] + ">";
+    xml += "</ChildItems></Form>";
+    auto document = source::parse_form_xml(xml);
+    expect(document.ok(), "context menu batch fixture must parse");
+    auto* bar = const_cast<model::ControlNode*>(document.value().find_control(model::ObjectId{2}));
+    expect(bar != nullptr, "context menu command bar must exist");
+    model::CommandBarButton action;
+    action.name = "Run";
+    action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}};
+    model::CommandBarButton separator;
+    separator.name = "Separator";
+    separator.type = model::CommandBarButtonKind::separator;
+    model::CommandBarButton inner;
+    inner.name = "Inner";
+    inner.type = model::CommandBarButtonKind::submenu;
+    model::CommandBarButton parent;
+    parent.name = "Parent";
+    parent.type = model::CommandBarButtonKind::submenu;
+    parent.buttons = {separator, inner};
+    std::get<model::CommandBarPayload>(bar->payload).buttons = {action, parent};
+    const auto auto_id = model::PropertyId::from_name("AutoContextMenu");
+    const auto context_id = model::PropertyId::from_name("ContextMenu");
+    const model::ControlRef bar_ref{model::ObjectId{2}};
+    const model::CommandBarButtonRef nested_ref{bar_ref, {"Parent", "Inner"}};
+    for (std::size_t index = 0; index < types.size(); ++index) {
+        auto* control = const_cast<model::ControlNode*>(document.value().find_control(model::ObjectId{index + 10}));
+        expect(control != nullptr, "context menu batch control must exist");
+        control->extension_properties.set_explicit(auto_id, (index % 2) != 0);
+        if (index % 3 == 1) control->extension_properties.set_explicit(context_id, bar_ref);
+        if (index % 3 == 2) control->extension_properties.set_explicit(context_id, nested_ref);
+    }
+    auto check = [&](const model::OrdinaryFormDocument& restored) {
+        for (std::size_t index = 0; index < types.size(); ++index) {
+            const auto* control = restored.find_control(model::ObjectId{index + 10});
+            expect(control != nullptr, "context menu batch control must survive");
+            const auto* automatic = control->extension_properties.find(auto_id);
+            expect(index % 2 ? !automatic || (std::get_if<bool>(&automatic->value) && std::get<bool>(automatic->value)) :
+                automatic && std::get_if<bool>(&automatic->value) && !std::get<bool>(automatic->value),
+                "automatic context menu flag must be independent");
+            const auto* context = control->extension_properties.find(context_id);
+            if (index % 3 == 0)
+                expect(!context || std::holds_alternative<model::UndefinedValue>(context->value), "absent context menu must remain absent");
+            else if (index % 3 == 1)
+                expect(context && std::get_if<model::ControlRef>(&context->value) && std::get<model::ControlRef>(context->value) == bar_ref,
+                    "context menu command bar reference must survive");
+            else
+                expect(context && std::get_if<model::CommandBarButtonRef>(&context->value) &&
+                    std::get<model::CommandBarButtonRef>(context->value) == nested_ref,
+                    "nested context menu must retain owner and named path");
+        }
+    };
+    auto encoded = form_stream::encode_document(document.value());
+    expect(encoded.ok(), encoded ? "context menu batch must encode" : encoded.diagnostics().front().message);
+    auto decoded = form_stream::decode_document(encoded.value());
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "context menu batch must decode completely");
+    check(decoded.value());
+    auto public_xml = source::serialize_form_xml(decoded.value());
+    expect(public_xml.ok(), "named context menu XML must serialize");
+    auto parsed = source::parse_form_xml(public_xml.value());
+    expect(parsed.ok(), "named context menu XML must parse");
+    auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok(), "named context menu XML must rebuild");
+    auto reread = form_stream::decode_document(rebuilt.value());
+    expect(reread.ok() && reread.value().reconstruction_complete(), "rebuilt context menu stream must decode");
+    check(reread.value());
+
+    auto& menu = std::get<model::CommandBarPayload>(bar->payload).buttons;
+    std::reverse(menu.begin(), menu.end());
+    auto reordered = form_stream::encode_document(document.value());
+    expect(reordered.ok(), "reordered menu must encode");
+    auto reordered_read = form_stream::decode_document(reordered.value());
+    expect(reordered_read.ok() && reordered_read.value().reconstruction_complete(), "reordered menu must decode");
+    check(reordered_read.value());
+
+    auto* target = const_cast<model::ControlNode*>(document.value().find_control(model::ObjectId{12}));
+    for (const auto& invalid : {model::CommandBarButtonRef{bar_ref, {"Run"}},
+                                model::CommandBarButtonRef{bar_ref, {"Parent", "Separator"}},
+                                model::CommandBarButtonRef{bar_ref, {"Missing"}},
+                                model::CommandBarButtonRef{model::ControlRef{model::ObjectId{99999}}, {"Parent"}}}) {
+        target->extension_properties.set_explicit(context_id, invalid);
+        expect(!form_stream::encode_document(document.value()), "invalid context menu reference must be rejected");
+    }
+    target->extension_properties.set_explicit(context_id, nested_ref);
+    menu.push_back(menu.front());
+    expect(!form_stream::encode_document(document.value()), "duplicate button names must be rejected");
+
+    auto bad = encoded.value();
+    auto& rows = bad.items[11];
+    expect(rows.is_list && rows.items.size() >= 6, "context menu table must contain rows");
+    const auto row_count = static_cast<unsigned long>(std::stoul(rows.items[0].atom));
+    const auto duplicate = std::vector<list_stream::ListValue>(rows.items.begin() + 1, rows.items.begin() + 6);
+    rows.items.insert(rows.items.end(), duplicate.begin(), duplicate.end());
+    rows.items[0] = list_stream::ListValue::raw_atom(std::to_string(row_count + 1));
+    expect(!form_stream::decode_document(bad), "duplicate context menu rows must be rejected");
+    bad = encoded.value();
+    bad.items[11].items[1] = list_stream::ListValue::raw_atom("99999");
+    expect(!form_stream::decode_document(bad), "dangling context menu row owner must be rejected");
+    bad = encoded.value();
+    bad.items[11].items[5] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad), "invalid automatic menu Boolean must be rejected");
+}
+
 void test_common_extension_metadata_for_all_control_types() {
     struct Fixture {
         std::string_view name;
@@ -19471,6 +19673,8 @@ int main() {
         test_chart_named_events();
         test_dendrogram_named_events();
         test_schema_field_output();
+        test_form_context_menu_roundtrip();
+        test_context_menu_named_reference_roundtrip();
         test_common_extension_metadata_for_all_control_types();
         test_gantt_and_dendrogram_extension_metadata();
         test_complex_control_named_events();

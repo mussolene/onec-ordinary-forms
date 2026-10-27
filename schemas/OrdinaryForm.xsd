@@ -304,6 +304,13 @@
     <xs:restriction base="ObjectIdType"/>
   </xs:simpleType>
 
+  <xs:complexType name="ContextMenuReferenceValueType">
+    <xs:sequence><xs:element name="Button" minOccurs="0" maxOccurs="unbounded">
+      <xs:complexType><xs:attribute name="name" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:minLength value="1"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
+    </xs:element></xs:sequence>
+    <xs:attribute name="controlId" type="ObjectIdType" use="optional"/>
+  </xs:complexType>
+
   <xs:complexType name="ActionSourceReferenceValueType">
     <xs:attribute name="formId" type="ObjectIdType" use="optional"/>
     <xs:attribute name="controlId" type="ObjectIdType" use="optional"/>
@@ -1856,6 +1863,8 @@
       <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Controls" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ThisForm" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MainAttribute" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="ObjectIdType" use="required"/></xs:complexType></xs:element>
       <xs:element name="DataProcessorFormExtension" minOccurs="0" maxOccurs="1"><xs:complexType/></xs:element>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
@@ -1921,7 +1930,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -1960,7 +1969,7 @@
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ActionSource" type="ActionSourceReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -1993,7 +2002,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2028,7 +2037,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2064,7 +2073,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2098,7 +2107,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2137,7 +2146,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2171,7 +2180,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2231,7 +2240,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2260,7 +2269,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2285,7 +2294,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2363,7 +2372,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2386,7 +2395,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2414,7 +2423,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2437,7 +2446,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2460,7 +2469,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2489,7 +2498,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2520,7 +2529,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2554,7 +2563,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2592,7 +2601,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2615,7 +2624,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2639,7 +2648,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2662,7 +2671,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2723,7 +2732,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2751,7 +2760,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -2789,7 +2798,7 @@
       <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>

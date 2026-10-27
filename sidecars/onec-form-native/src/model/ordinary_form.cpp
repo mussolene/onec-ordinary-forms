@@ -104,6 +104,7 @@ bool property_value_matches(
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
                 return expected == metamodel::ValueCodec::date ||
                        expected == metamodel::ValueCodec::action_source_reference ||
+                       expected == metamodel::ValueCodec::context_menu_reference ||
                        (descriptor.control_kind == ControlKind::radio_button &&
                         descriptor.api_name == "SelectionValue" && expected == metamodel::ValueCodec::decimal);
             } else if constexpr (std::is_same_v<Value, bool>) {
@@ -233,7 +234,10 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::picture;
             } else if constexpr (std::is_same_v<Value, ControlRef>) {
                 return expected == metamodel::ValueCodec::control_reference ||
-                       expected == metamodel::ValueCodec::action_source_reference;
+                       expected == metamodel::ValueCodec::action_source_reference ||
+                       expected == metamodel::ValueCodec::context_menu_reference;
+            } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
+                return expected == metamodel::ValueCodec::context_menu_reference;
             } else if constexpr (std::is_same_v<Value, FormRef>) {
                 return expected == metamodel::ValueCodec::action_source_reference;
             } else if constexpr (std::is_same_v<Value, AttributeRef>) {
@@ -308,6 +312,26 @@ bool property_api_enumeration_matches(
     return false;
 }
 
+bool context_menu_button_resolves(const OrdinaryFormDocument& document, const CommandBarButtonRef& reference) noexcept {
+    const auto* owner = document.find_control(reference.owner.id());
+    if (owner == nullptr || reference.path.empty()) return false;
+    const std::vector<CommandBarButton>* items = nullptr;
+    if (const auto* bar = std::get_if<CommandBarPayload>(&owner->payload)) items = &bar->buttons;
+    if (items == nullptr) return false;
+    for (const auto& name : reference.path) {
+        if (name.empty()) return false;
+        const CommandBarButton* match = nullptr;
+        for (const auto& item : *items) {
+            if (item.name != name) continue;
+            if (match != nullptr) return false;
+            match = &item;
+        }
+        if (match == nullptr || match->type != CommandBarButtonKind::submenu) return false;
+        items = &match->buttons;
+    }
+    return true;
+}
+
 bool property_value_references_resolve(
     const OrdinaryFormDocument& document,
     const PropertyValue& value) noexcept {
@@ -316,6 +340,8 @@ bool property_value_references_resolve(
             using Value = std::remove_cvref_t<decltype(typed_value)>;
             if constexpr (std::is_same_v<Value, ControlRef>) {
                 return document.find_control(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
+                return context_menu_button_resolves(document, typed_value);
             } else if constexpr (std::is_same_v<Value, FormRef>) {
                 return typed_value.id() == document.form().id;
             } else if constexpr (std::is_same_v<Value, AttributeRef>) {
@@ -1103,6 +1129,13 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     if (!property_value_references_resolve(*this, value)) {
         return PropertyMutationStatus::invalid_reference;
     }
+    if (descriptor->value_codec == metamodel::ValueCodec::context_menu_reference) {
+        if (const auto* target = std::get_if<ControlRef>(&value)) {
+            const auto* control = find_control(target->id());
+            if (control == nullptr || control->kind() != ControlKind::command_bar)
+                return PropertyMutationStatus::invalid_reference;
+        }
+    }
     if (position_control != nullptr) {
         const auto position_property = find_position_property(position_control->position, descriptor->api_name);
         if (!position_property) return PropertyMutationStatus::unsupported_surface;
@@ -1470,6 +1503,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 using Value = std::remove_cvref_t<decltype(typed_value)>;
                 if constexpr (std::is_same_v<Value, ControlRef>) {
                     require_control(source, typed_value);
+                } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
+                    if (!context_menu_button_resolves(*this, typed_value)) {
+                        add_violation(report, InvariantCode::dangling_reference, source,
+                            typed_value.owner.id(), "context menu button path does not resolve uniquely");
+                    }
                 } else if constexpr (std::is_same_v<Value, FormRef>) {
                     if (typed_value.id() != form_.id) {
                         add_violation(report, InvariantCode::dangling_reference, source,
@@ -1532,6 +1570,14 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         add_violation(report, InvariantCode::invalid_property, source,
                             target->id(), "CommandBar ActionSource control must be Table or HTMLDocumentField");
                     }
+                }
+            }
+            if (descriptor != nullptr && descriptor->value_codec == metamodel::ValueCodec::context_menu_reference) {
+                if (const auto* target = std::get_if<ControlRef>(&property.value)) {
+                    const auto* control = find_control(target->id());
+                    if (control != nullptr && control->kind() != ControlKind::command_bar)
+                        add_violation(report, InvariantCode::invalid_property, source,
+                            target->id(), "ContextMenu control reference must resolve to a CommandBar");
                 }
             }
             validate_property_value(source, property.value);

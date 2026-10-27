@@ -500,6 +500,105 @@ void test_command_bar_property_descriptors() {
         "CommandBar Orientation must reject an unknown enumeration member");
 }
 
+void test_context_menu_reference_model() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "ContextMenu";
+    form.children = {ControlRef{ObjectId{2}}, ControlRef{ObjectId{3}}, ControlRef{ObjectId{4}}, ControlRef{ObjectId{5}}};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_control(ControlNode{ObjectId{2}, "Label", LabelDecorationPayload{}});
+    CommandBarPayload bar;
+    CommandBarButton parent;
+    parent.name = "Parent";
+    parent.type = CommandBarButtonKind::submenu;
+    CommandBarButton nested;
+    nested.name = "Nested/Name";
+    nested.type = CommandBarButtonKind::submenu;
+    parent.buttons.push_back(nested);
+    bar.buttons.push_back(parent);
+    document.add_control(ControlNode{ObjectId{3}, "Tools", std::move(bar)});
+    document.add_control(ControlNode{ObjectId{4}, "Other", LabelDecorationPayload{}});
+    ButtonPayload button;
+    button.buttons.push_back(parent);
+    document.add_control(ControlNode{ObjectId{5}, "Button", std::move(button)});
+    const OrdinaryFormDocument::ObjectKey label{ObjectCategory::control, ObjectId{2}};
+    const OrdinaryFormDocument::ObjectKey form_owner{ObjectCategory::form, ObjectId{1}};
+    const auto property = PropertyId::from_name("ContextMenu");
+    const auto automatic = PropertyId::from_name("AutoContextMenu");
+    const auto* descriptor = find_property(ControlKind::label_decoration, property);
+    expect(descriptor && descriptor->value_codec == ValueCodec::context_menu_reference &&
+           descriptor->persistence == PersistenceClass::persisted_editable &&
+           descriptor->storage_codec == StorageCodec::root_record &&
+           descriptor->default_value.kind == DefaultKind::undefined,
+        "ContextMenu should have a typed value, proven default, and root record storage");
+    const auto* auto_descriptor = find_property(ControlKind::label_decoration, automatic);
+    expect(auto_descriptor && auto_descriptor->value_codec == ValueCodec::boolean &&
+           auto_descriptor->persistence == PersistenceClass::persisted_editable &&
+           auto_descriptor->storage_codec == StorageCodec::root_record &&
+           auto_descriptor->default_value.kind == DefaultKind::boolean &&
+           auto_descriptor->default_value.canonical == "true",
+        "AutoContextMenu must expose its proven default and root record storage");
+    expect(document.get_prop_val(label, automatic).value == PropertyValue{true},
+        "AutoContextMenu must expose its proven true default");
+    expect(document.get_prop_val(label, property).value == PropertyValue{UndefinedValue{}},
+        "ContextMenu must expose Undefined by default");
+    const auto* form_auto = find_form_property("AutoContextMenu");
+    const auto* form_context = find_form_property("ContextMenu");
+    expect(form_auto && form_auto->value_codec == ValueCodec::boolean &&
+               form_auto->persistence == PersistenceClass::persisted_editable &&
+               form_auto->storage_codec == StorageCodec::root_record &&
+               form_auto->default_value.kind == DefaultKind::boolean && form_auto->default_value.canonical == "true" &&
+               form_context && form_context->value_codec == ValueCodec::context_menu_reference &&
+               form_context->persistence == PersistenceClass::persisted_editable &&
+               form_context->storage_codec == StorageCodec::root_record &&
+               form_context->default_value.kind == DefaultKind::undefined,
+        "form context properties must use proven defaults and root record storage");
+    expect(document.get_prop_val(form_owner, automatic).value == PropertyValue{true} &&
+               document.get_prop_val(form_owner, property).value == PropertyValue{UndefinedValue{}},
+        "form context properties must return their proven defaults");
+    expect(document.set_prop_val(form_owner, automatic, false) == PropertyMutationStatus::applied &&
+               document.set_prop_val(form_owner, property, ControlRef{ObjectId{3}}) == PropertyMutationStatus::applied &&
+               document.set_prop_val(form_owner, property, ControlRef{ObjectId{4}}) == PropertyMutationStatus::invalid_reference,
+        "form context properties must accept writable values and reject a wrong menu owner");
+    expect(document.set_prop_val(label, property, ControlRef{ObjectId{3}}) == PropertyMutationStatus::applied,
+        "ContextMenu must accept a CommandBar reference");
+    expect(document.set_prop_val(label, property, ControlRef{ObjectId{4}}) == PropertyMutationStatus::invalid_reference,
+        "ContextMenu must reject a reference to a non-CommandBar control");
+    const CommandBarButtonRef reference{ControlRef{ObjectId{3}}, {"Parent", "Nested/Name"}};
+    expect(document.set_prop_val(form_owner, property, reference) == PropertyMutationStatus::applied &&
+               document.get_prop_val(form_owner, property).value == PropertyValue{reference},
+        "form ContextMenu must accept and return a nested button reference");
+    auto& form_properties = const_cast<Form&>(document.form()).properties;
+    form_properties.set_explicit(property, ControlRef{ObjectId{4}});
+    expect(document.validate().has(InvariantCode::invalid_property),
+        "form validation must reject a context menu pointing at a non-CommandBar control");
+    form_properties.set_explicit(property, CommandBarButtonRef{ControlRef{ObjectId{3}}, {"Parent", "Missing"}});
+    expect(document.validate().has(InvariantCode::dangling_reference),
+        "form validation must reject an unresolved nested context menu path");
+    form_properties.set_explicit(property, reference);
+    expect(document.set_prop_val(label, property, reference) == PropertyMutationStatus::applied,
+        "ContextMenu must accept an existing nested menu path without delimiter ambiguity");
+    expect(document.validate().ok(), "named nested context menu path must validate");
+    expect(document.set_prop_val(label, property, CommandBarButtonRef{ControlRef{ObjectId{3}}, {"Parent", "Missing"}}) == PropertyMutationStatus::invalid_reference &&
+           document.set_prop_val(label, property, CommandBarButtonRef{ControlRef{ObjectId{3}}, {}}) == PropertyMutationStatus::invalid_reference &&
+           document.set_prop_val(label, property, CommandBarButtonRef{ControlRef{ObjectId{99}}, {"Parent"}}) == PropertyMutationStatus::invalid_reference &&
+           document.set_prop_val(label, property, CommandBarButtonRef{ControlRef{ObjectId{5}}, {"Parent"}}) == PropertyMutationStatus::invalid_reference,
+        "missing owner, non-CommandBar owner, empty path, and missing path elements must be rejected");
+    expect(document.set_prop_val(label, property, true) == PropertyMutationStatus::invalid_value,
+        "ContextMenu must reject unrelated value types");
+    auto* menu = const_cast<ControlNode*>(document.find_control(ObjectId{3}));
+    auto& buttons = std::get<CommandBarPayload>(menu->payload).buttons;
+    buttons.front().buttons.front().type = CommandBarButtonKind::separator;
+    expect(document.set_prop_val(label, property, reference) == PropertyMutationStatus::invalid_reference,
+        "ContextMenu must reject a non-submenu button");
+    buttons.front().buttons.front().type = CommandBarButtonKind::submenu;
+    buttons.push_back(buttons.front());
+    expect(document.validate().has(InvariantCode::dangling_reference),
+        "ambiguous context menu path must not resolve");
+}
+
 void test_command_bar_action_source_model() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
@@ -1216,7 +1315,7 @@ void test_help_metamodel() {
     expect(
         coverage.panel_placement_property_count == 9,
         "panel-control extension must retain its 9 properties");
-    expect(coverage.form_property_count == 37, "Form help must retain 37 fixed properties");
+    expect(coverage.form_property_count == 39, "Form descriptors must include the two platform-confirmed context properties");
     expect(coverage.form_event_count == 13, "Form help must retain 13 events");
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
@@ -1411,6 +1510,22 @@ void test_help_metamodel() {
                        property->default_value.canonical == "false",
                 "common Boolean extension must use the proven descriptor for every target control");
         }
+        const auto* automatic = find_property(control.kind, "AutoContextMenu");
+        const auto* context = find_property(control.kind, "ContextMenu");
+        expect(automatic && automatic->surface == PropertySurface::control_extension &&
+                   automatic->value_codec == ValueCodec::boolean &&
+                   automatic->persistence == PersistenceClass::persisted_editable &&
+                   automatic->storage_codec == StorageCodec::root_record &&
+                   automatic->default_value.kind == DefaultKind::boolean &&
+                   automatic->default_value.canonical == "true",
+            "AutoContextMenu must expose the proven descriptor for every target control");
+        expect(context && context->surface == PropertySurface::control_extension &&
+                   context->value_codec == ValueCodec::context_menu_reference &&
+                   context->persistence == PersistenceClass::persisted_editable &&
+                   context->storage_codec == StorageCodec::root_record &&
+                   context->default_value.kind == DefaultKind::undefined &&
+                   context->default_value.canonical == "undefined",
+            "ContextMenu must expose the proven descriptor for every target control");
     }
     const auto* sel_button_picture = find_property(ControlKind::input_field, "SelButtonPicture");
     const auto* choice_button_picture = find_property(ControlKind::input_field, "ChoiceButtonPicture");
@@ -2113,10 +2228,10 @@ void test_document_property_api() {
                    PropertyMutationStatus::reset_runtime_only,
         "runtime-only explicit values must be readable and resettable");
     expect(document.set_prop_val(input, PropertyId::from_name("AutoContextMenu"), true) ==
-               PropertyMutationStatus::applied_unclassified_storage &&
+               PropertyMutationStatus::applied &&
                document.get_prop_val(input, PropertyId::from_name("AutoContextMenu")).status ==
                    PropertyReadStatus::explicit_value,
-        "shared control extension properties must use the same owner API without claiming storage support");
+        "AutoContextMenu must use the shared owner API and report persisted storage");
     for (const auto name : {"ModifiesData", "SkipOnInput", "FirstInGroup"}) {
         const auto property = PropertyId::from_name(name);
         const auto initial = document.get_prop_val(input, property);
@@ -3118,6 +3233,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
+        test_context_menu_reference_model();
         test_standard_picture_descriptor_catalog();
         test_button_alignment_xml_defaults();
         test_progress_bar_storage_descriptors();

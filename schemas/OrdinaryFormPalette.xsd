@@ -43,6 +43,8 @@
             <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
             <Property name="Controls" apiName="Controls" russianName="ЭлементыФормы" russianType="ЭлементыФормы" valueCodec="unclassified"/>
             <Property name="ThisForm" apiName="ThisForm" russianName="ЭтаФорма" russianType="Форма" valueCodec="unclassified"/>
+            <Property name="AutoContextMenu" apiName="AutoContextMenu" russianName="АвтоКонтекстноеМеню" russianType="Булево" valueCodec="boolean"/>
+            <Property name="ContextMenu" apiName="ContextMenu" russianName="КонтекстноеМеню" russianType="Неопределено ; КоманднаяПанель ; КнопкаКоманднойПанели" valueCodec="context-menu-reference"/>
           </Properties>
           <Events>
             <Event name="ExternalEvent" apiName="ExternalEvent" russianName="ВнешнееСобытие"/>
@@ -68,7 +70,7 @@
           <Property name="Name" apiName="Name" russianName="Имя" russianType="Строка" valueCodec="string"/>
           <Property name="ActionSource" apiName="ActionSource" russianName="ИсточникДействий" russianType="" valueCodec="action-source-reference"/>
           <Property name="DefaultButton" apiName="DefaultButton" russianName="КнопкаПоУмолчанию" russianType="Булево" valueCodec="boolean"/>
-          <Property name="ContextMenu" apiName="ContextMenu" russianName="КонтекстноеМеню" russianType="Неопределено ; КоманднаяПанель ; КнопкаКоманднойПанели" valueCodec="unclassified"/>
+          <Property name="ContextMenu" apiName="ContextMenu" russianName="КонтекстноеМеню" russianType="Неопределено ; КоманднаяПанель ; КнопкаКоманднойПанели" valueCodec="context-menu-reference"/>
           <Property name="FirstInGroup" apiName="FirstInGroup" russianName="ПервыйВГруппе" russianType="Булево" valueCodec="boolean"/>
           <Property name="SkipOnInput" apiName="SkipOnInput" russianName="ПропускатьПриВводе" russianType="Булево" valueCodec="boolean"/>
           <Property name="ValueType" apiName="ValueType" russianName="ТипЗначения" russianType="ОписаниеТипов" valueCodec="type-domain"/>

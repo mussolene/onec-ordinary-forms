@@ -2430,11 +2430,11 @@ void decode_control_metadata(const LV& metadata, std::string_view path, model::C
 
 LV encode_control_metadata(const model::ControlNode& control, std::string_view path, std::uint32_t action_source = std::numeric_limits<std::uint32_t>::max()) {
     if (control.kind() == model::ControlKind::command_bar)
-        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "ActionSource"}, path);
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "ActionSource"}, path);
     else if (control.kind() == model::ControlKind::radio_button)
-        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "ValueType"}, path);
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "ValueType"}, path);
     else
-        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup"}, path);
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu"}, path);
     return list({raw("14"), string_value(control.name), raw(std::to_string(action_source)),
         raw(explicit_bool(control.extension_properties, "ModifiesData", false) ? "1" : "0"),
         raw(explicit_bool(control.extension_properties, "SkipOnInput", false) ? "1" : "0"),
@@ -4010,6 +4010,8 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
 }
 
 struct DecodedMenu {
+    std::string owner;
+    std::unordered_map<std::uint64_t, std::vector<std::string>> paths;
     std::vector<model::CommandBarButton> entries;
     std::vector<model::PictureAsset> assets;
 };
@@ -4096,6 +4098,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         }
     }
     DecodedMenu decoded;
+    decoded.owner = owner;
+    std::vector<std::string> current_names;
     std::unordered_set<std::string> consumed_groups;
     std::unordered_set<std::uint64_t> entry_ids;
     std::unordered_set<std::string> consumed_actions;
@@ -4151,6 +4155,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto id = integer_atom<std::uint64_t>(props.items[7], path);
             if (id == 0 || id > max_id || !entry_ids.insert(id).second)
                 fail("OOF1114", std::string(path), "positive unique item ID within maximum", std::to_string(id), "Menu identity is invalid");
+            current_names.push_back(entry.name);
+            decoded.paths.emplace(id, current_names);
             const auto type = integer_atom<unsigned>(props.items[9], path);
             if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
             entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
@@ -4264,6 +4270,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 entry.buttons = visit(owner, id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
             }
             entries.push_back(std::move(entry));
+            current_names.pop_back();
         }
         submenu_refs[0] = raw(std::to_string(submenu_count));
         require_exact(group.items.back(), list({group.items.back().items[0], raw("0"), list(std::move(submenu_refs))}),
@@ -4290,6 +4297,8 @@ struct DecodedControl {
         model::PictureAsset asset;
     };
     std::vector<PicturePropertyAsset> picture_property_assets{};
+    std::string menu_owner{};
+    std::unordered_map<std::uint64_t, std::vector<std::string>> menu_paths{};
 };
 
 struct DecodedChartInfo {
@@ -5135,7 +5144,10 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (border != model::BorderValue{}) control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
     std::get<model::CommandBarPayload>(control.payload).buttons = std::move(menu.entries);
     control.position = geometry.position;
-    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
+    DecodedControl result{std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
+    result.menu_owner = std::move(menu.owner);
+    result.menu_paths = std::move(menu.paths);
+    return result;
 }
 
 
@@ -5400,7 +5412,10 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         menu = decode_button_menu(properties.items[12], child_path(properties_path, 12), name, warnings, reconstruction_complete);
         std::get<model::ButtonPayload>(control.payload).buttons = std::move(menu.entries);
     }
-    return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
+    DecodedControl result{std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
+    result.menu_owner = std::move(menu.owner);
+    result.menu_paths = std::move(menu.paths);
+    return result;
 }
 
 DecodedControl decode_picture_decoration(
@@ -5743,6 +5758,9 @@ void validate_radio_group(
             } else if (entry.id == model::PropertyId::from_name("ModifiesData") ||
                        entry.id == model::PropertyId::from_name("SkipOnInput")) {
                 if (!std::holds_alternative<bool>(entry.value)) unsupported_extension = true;
+            } else if (entry.id == model::PropertyId::from_name("AutoContextMenu") ||
+                       entry.id == model::PropertyId::from_name("ContextMenu")) {
+                // Validated by the common context menu serializer.
             } else {
                 unsupported_extension = true;
             }
@@ -10122,7 +10140,9 @@ LV encode_radio_button(
         if (entry.id != model::PropertyId::from_name("FirstInGroup") &&
             entry.id != model::PropertyId::from_name("ValueType") &&
             entry.id != model::PropertyId::from_name("ModifiesData") &&
-            entry.id != model::PropertyId::from_name("SkipOnInput")) unsupported_extension = true;
+            entry.id != model::PropertyId::from_name("SkipOnInput") &&
+            entry.id != model::PropertyId::from_name("AutoContextMenu") &&
+            entry.id != model::PropertyId::from_name("ContextMenu")) unsupported_extension = true;
     });
     if (unsupported_extension) fail("OOF1122", "$/RadioButton", "supported RadioButton extensions", "other property",
         "RadioButton has an unsupported extension property");
@@ -11212,7 +11232,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(payload.items[8], "0", "$/8");
         require_raw_constant(payload.items[9], "0", "$/9");
         require_raw_constant(payload.items[10], "0", "$/10");
-        require_exact(payload.items[11], list({raw("0")}), "$/11", "Unsupported root table");
+        require_list(payload.items[11], "$/11");
         require_exact(payload.items[12], list({raw("0")}), "$/12", "Unsupported root table");
         require_exact(payload.items[13], canonical_style_record(10), "$/13", "Unsupported page-style record");
         require_raw_constant(payload.items[14], "1", "$/14");
@@ -11765,6 +11785,44 @@ Result<model::OrdinaryFormDocument> decode_document(
             document.add_event(model::Event{event_id, named_event.name, named_event.handler, model::FormRef{form.id}, named_event.action_metadata});
         }
 
+        {
+            const auto& table = payload.items[11];
+            if (table.items.empty()) fail("OOF1102", "$/11", "context menu table header", "empty", "Context menu table is incomplete");
+            const auto count = integer_atom<std::size_t>(table.items[0], "$/11/0");
+            if (count > (table.items.size() - 1) / 5 || table.items.size() != 1 + count * 5)
+                fail("OOF1102", "$/11", "exact context menu table size", "invalid", "Context menu table size is invalid");
+            std::unordered_map<std::uint64_t, DecodedControl*> controls;
+            for (auto& item : pending_controls) controls.emplace(item.control.id.value(), &item);
+            std::unordered_set<std::uint64_t> seen;
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto base = 1 + 5 * i;
+                const auto control_id = integer_atom<std::uint64_t>(table.items[base], child_path("$/11", base));
+                const auto owner_id = integer_atom<std::uint64_t>(table.items[base + 1], child_path("$/11", base + 1));
+                const auto marker = uuid_atom(table.items[base + 2], child_path("$/11", base + 2)).canonical;
+                const auto item_id = integer_atom<std::uint64_t>(table.items[base + 3], child_path("$/11", base + 3));
+                const auto automatic = bool_atom(table.items[base + 4], child_path("$/11", base + 4));
+                if ((control_id != 0 && !controls.contains(control_id)) || !seen.insert(control_id).second)
+                    fail("OOF1123", "$/11", "unique form or existing control", std::to_string(control_id), "Context menu owner is invalid");
+                auto& properties = control_id == 0 ? form.properties : controls.at(control_id)->control.extension_properties;
+                if (!automatic) properties.set_explicit(model::PropertyId::from_name("AutoContextMenu"), false);
+                if (owner_id == std::numeric_limits<std::uint32_t>::max()) {
+                    if (marker != standard_menu_default_context_marker || item_id != std::numeric_limits<std::int32_t>::max())
+                        fail("OOF1114", "$/11", "default context menu", "unknown", "Default context menu record is invalid");
+                } else {
+                    if (!controls.contains(owner_id) || controls.at(owner_id)->control.kind() != model::ControlKind::command_bar)
+                        fail("OOF1123", "$/11", "existing CommandBar", std::to_string(owner_id), "Context menu target is invalid");
+                    auto* owner = controls.at(owner_id);
+                    if (owner->control.kind() == model::ControlKind::command_bar && marker == command_bar_root_marker && item_id == owner_id)
+                        properties.set_explicit(model::PropertyId::from_name("ContextMenu"), model::ControlRef{model::ObjectId{owner_id}});
+                    else {
+                        if (marker != owner->menu_owner || !owner->menu_paths.contains(item_id))
+                            fail("OOF1123", "$/11", "known menu button", "missing or ambiguous", "Context menu button is invalid");
+                        properties.set_explicit(model::PropertyId::from_name("ContextMenu"), model::CommandBarButtonRef{model::ControlRef{model::ObjectId{owner_id}}, owner->menu_paths.at(item_id)});
+                    }
+                }
+            }
+        }
+
         for (auto& decoded_control : pending_controls) {
             for (const auto& named_event : decoded_control.named_events) {
                 if (synthetic_event_offset >=
@@ -11958,7 +12016,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12350,6 +12408,67 @@ Result<list_stream::ListValue> encode_document(
             encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
                 parse_constant("{2,0,{0,0},{0},1}")});
         }
+        std::vector<LV> context_rows{raw("0")};
+        std::size_t context_count = 0;
+        const auto append_context_row = [&](const model::PropertySet& properties, std::uint64_t source_id) {
+            const bool automatic = explicit_bool(properties, "AutoContextMenu", true);
+            const auto* context = properties.find(model::PropertyId::from_name("ContextMenu"));
+            if (automatic && (!context || std::holds_alternative<model::UndefinedValue>(context->value))) return;
+            std::uint64_t owner_id = std::numeric_limits<std::uint32_t>::max();
+            std::uint64_t menu_id = std::numeric_limits<std::int32_t>::max();
+            std::string marker(standard_menu_default_context_marker);
+            if (context && !std::holds_alternative<model::UndefinedValue>(context->value)) {
+                if (const auto* bar = std::get_if<model::ControlRef>(&context->value)) {
+                    const auto* owner = document.find_control(bar->id());
+                    if (!owner || owner->kind() != model::ControlKind::command_bar)
+                        fail("OOF1123", "$/ContextMenu", "existing CommandBar", "invalid", "Context menu target is invalid");
+                    owner_id = bar->id().value(); menu_id = owner_id; marker = command_bar_root_marker;
+                } else if (const auto* button = std::get_if<model::CommandBarButtonRef>(&context->value)) {
+                    const auto* owner = document.find_control(button->owner.id());
+                    if (!owner || owner->kind() != model::ControlKind::command_bar || button->path.empty())
+                        fail("OOF1123", "$/ContextMenu", "existing CommandBar and named submenu", "invalid", "Context menu target is invalid");
+                    owner_id = button->owner.id().value();
+                    marker = menu_identity(owner_id | 0x8000000000000000ULL, 0);
+                    std::size_t next_id = 0;
+                    std::function<bool(const std::vector<model::CommandBarButton>&, std::size_t)> resolve;
+                    resolve = [&](const auto& buttons, std::size_t depth) {
+                        for (const auto& item : buttons) {
+                            const auto id = ++next_id;
+                            const bool matching = depth < button->path.size() && item.name == button->path[depth];
+                            if (matching && depth + 1 == button->path.size()) {
+                                if (item.type != model::CommandBarButtonKind::submenu)
+                                    fail("OOF1123", "$/ContextMenu", "submenu button", item.name, "Context menu target is not a submenu");
+                                menu_id = id; return true;
+                            }
+                            if (matching) {
+                                if (item.type != model::CommandBarButtonKind::submenu)
+                                    fail("OOF1123", "$/ContextMenu", "submenu path", item.name, "Context menu path is invalid");
+                                if (resolve(item.buttons, depth + 1)) return true;
+                            } else {
+                                const auto skip = [&](const auto& self, const auto& entries) -> void {
+                                    for (const auto& child : entries) { ++next_id; self(self, child.buttons); }
+                                };
+                                skip(skip, item.buttons);
+                            }
+                        }
+                        return false;
+                    };
+                    const auto& menu = std::get<model::CommandBarPayload>(owner->payload).buttons;
+                    if (!resolve(menu, 0))
+                        fail("OOF1123", "$/ContextMenu", "existing submenu path", "missing", "Context menu button was not found");
+                } else fail("OOF1122", "$/ContextMenu", "Undefined, CommandBar or submenu reference", "other type", "Context menu type is invalid");
+            }
+            ++context_count;
+            context_rows.push_back(raw(std::to_string(source_id)));
+            context_rows.push_back(raw(std::to_string(owner_id)));
+            context_rows.push_back(raw(marker));
+            context_rows.push_back(raw(std::to_string(menu_id)));
+            context_rows.push_back(raw(automatic ? "1" : "0"));
+        };
+        append_context_row(document.form().properties, 0);
+        for (const auto& control : document.collections().controls)
+            append_context_row(control.extension_properties, control.id.value());
+        context_rows[0] = raw(std::to_string(context_count));
         const auto encoded = list({
             raw("27"),
             form_section,
@@ -12362,7 +12481,7 @@ Result<list_stream::ListValue> encode_document(
             raw("0"),
             raw("0"),
             raw("0"),
-            list({raw("0")}),
+            list(std::move(context_rows)),
             list({raw("0")}),
             canonical_style_record(10),
             raw("1"),

@@ -2701,6 +2701,74 @@ void test_command_bar_action_source_xml_contract() {
         "OOF2002", "ActionSource must not be declared on other control types");
 }
 
+void test_context_menu_named_xml_contract() {
+    const std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+      <CommandBar id="2" name="Menu"><Position/><Buttons><CommandBarButton name="Parent" type="Submenu"><Buttons><CommandBarButton name="Child" type="Submenu"/></Buttons></CommandBarButton></Buttons></CommandBar>
+      <InputField id="3" name="PanelMenu"><ContextMenu controlId="2"/><Position/></InputField>
+      <InputField id="4" name="NestedMenu"><ContextMenu controlId="2"><Button name="Parent"/><Button name="Child"/></ContextMenu><Position/></InputField>
+      <InputField id="5" name="NoMenu"><ContextMenu/><Position/></InputField>
+    </ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto id = model::PropertyId::from_name("ContextMenu");
+    const auto& panel = parsed.value().find_control(model::ObjectId{3})->extension_properties.find(id)->value;
+    expect(std::get<model::ControlRef>(panel).id() == model::ObjectId{2}, "ContextMenu must reference CommandBar");
+    const auto& nested = parsed.value().find_control(model::ObjectId{4})->extension_properties.find(id)->value;
+    const auto& ref = std::get<model::CommandBarButtonRef>(nested);
+    expect(ref.owner.id() == model::ObjectId{2} && ref.path == std::vector<std::string>{"Parent", "Child"},
+        "ContextMenu must preserve the complete named button path");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), "ContextMenu XML must serialize");
+    expect(serialized.value().find("<ContextMenu controlId=\"2\">") != std::string::npos &&
+           serialized.value().find("<Button name=\"Parent\"/>") != std::string::npos &&
+           serialized.value().find("<Button name=\"Child\"/>") != std::string::npos,
+        "ContextMenu XML must contain the named button path");
+    expect(source::parse_form_xml(serialized.value()).ok(), "serialized ContextMenu XML must reparse");
+    const auto replace_once = [](std::string text, std::string_view from, std::string_view to) {
+        const auto pos = text.find(from);
+        if (pos == std::string::npos) throw std::runtime_error("ContextMenu XML marker is missing");
+        text.replace(pos, from.size(), to);
+        return text;
+    };
+    for (const auto invalid : {"<ContextMenu><Button name=\"Parent\"/></ContextMenu>",
+             "<ContextMenu controlId=\"2\"><Button name=\"\"/></ContextMenu>",
+             "<ContextMenu controlId=\"2\"><Button name=\"Parent\">text</Button></ContextMenu>",
+             "<ContextMenu controlId=\"2\"><Index>1</Index></ContextMenu>"})
+        expect(!source::parse_form_xml(replace_once(xml, "<ContextMenu/>", invalid)),
+            "ContextMenu must reject malformed button paths");
+}
+
+void test_form_context_menu_named_xml_contract() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+      <CommandBar id="2" name="Menu"><Position/><Buttons><CommandBarButton name="Parent" type="Submenu"><Buttons><CommandBarButton name="Child" type="Submenu"/></Buttons></CommandBarButton></Buttons></CommandBar>
+      <InputField id="3" name="Input"><Position/></InputField>
+    </ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    auto& form = const_cast<model::Form&>(parsed.value().form());
+    const auto auto_id = model::PropertyId::from_name("AutoContextMenu");
+    const auto menu_id = model::PropertyId::from_name("ContextMenu");
+    form.properties.set_explicit(auto_id, false);
+    form.properties.set_explicit(menu_id, model::CommandBarButtonRef{model::ControlRef{model::ObjectId{2}}, {"Parent", "Child"}});
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), serialized ? "" : serialized.diagnostics().front().message);
+    expect(serialized.value().find("<AutoContextMenu>false</AutoContextMenu>") != std::string::npos &&
+        serialized.value().find("<ContextMenu controlId=\"2\">") != std::string::npos &&
+        serialized.value().find("<Button name=\"Parent\"/>") != std::string::npos &&
+        serialized.value().find("<Button name=\"Child\"/>") != std::string::npos,
+        "Form ContextMenu must use named XML and preserve AutoContextMenu=false");
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+    const auto* auto_value = reparsed.value().form().properties.find(auto_id);
+    const auto* menu_value = reparsed.value().form().properties.find(menu_id);
+    expect(auto_value && std::get_if<bool>(&auto_value->value) && !std::get<bool>(auto_value->value),
+        "Form AutoContextMenu=false must survive XML");
+    const auto* reference = menu_value ? std::get_if<model::CommandBarButtonRef>(&menu_value->value) : nullptr;
+    expect(reference && reference->owner.id() == model::ObjectId{2} &&
+        reference->path == std::vector<std::string>{"Parent", "Child"},
+        "Form ContextMenu must preserve the nested button reference");
+}
+
 void test_command_bar_border_xml_contract() {
     const auto xml_for = [](std::string_view border) {
         return std::string{"<Form id=\"1\" name=\"Border\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -3228,6 +3296,8 @@ int main() {
         test_command_bar_buttons_xml_only_contract();
         test_standard_menu_action_xml_contract();
         test_command_bar_action_source_xml_contract();
+        test_context_menu_named_xml_contract();
+        test_form_context_menu_named_xml_contract();
         test_command_bar_default_button_xml_contract();
         test_command_bar_border_xml_contract();
         test_main_panel_typed_xml_contract();

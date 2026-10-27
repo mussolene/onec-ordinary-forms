@@ -487,7 +487,7 @@ std::vector<EventDescriptor> make_control_event_descriptors() {
 }
 
 std::vector<PropertyDescriptor> make_form_property_descriptors() {
-    return {
+    auto descriptors = std::vector<PropertyDescriptor>{
 #define OOF_HELP_CONTROL(...)
 #define OOF_HELP_PROPERTY(...)
 #define OOF_HELP_EVENT(...)
@@ -505,6 +505,18 @@ std::vector<PropertyDescriptor> make_form_property_descriptors() {
 #undef OOF_HELP_PROPERTY
 #undef OOF_HELP_CONTROL
     };
+    descriptors.push_back({PropertyId::from_name("AutoContextMenu"), DescriptorOwner::form,
+        PropertySurface::form, ControlKind::panel, 37, "AutoContextMenu", "AutoContextMenu",
+        u8"АвтоКонтекстноеМеню", u8"Булево", ValueKind::boolean, ValueCodec::boolean,
+        ApiAccess::read_write, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+        StorageCodec::root_record, {DefaultKind::boolean, "true"}});
+    descriptors.push_back({PropertyId::from_name("ContextMenu"), DescriptorOwner::form,
+        PropertySurface::form, ControlKind::panel, 38, "ContextMenu", "ContextMenu",
+        u8"КонтекстноеМеню", u8"Неопределено ; КоманднаяПанель ; КнопкаКоманднойПанели",
+        ValueKind::variant, ValueCodec::context_menu_reference, ApiAccess::read_write,
+        VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+        StorageCodec::root_record, {DefaultKind::undefined, "undefined"}});
+    return descriptors;
 }
 
 std::vector<EventDescriptor> make_form_event_descriptors() {
@@ -556,6 +568,18 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
         property->persistence = PersistenceClass::persisted_editable;
         property->storage_codec = StorageCodec::control_info;
     }
+    const auto auto_context = std::ranges::find(descriptors, std::string_view{"AutoContextMenu"}, &PropertyDescriptor::api_name);
+    const auto context = std::ranges::find(descriptors, std::string_view{"ContextMenu"}, &PropertyDescriptor::api_name);
+    if (auto_context == descriptors.end() || context == descriptors.end()) {
+        throw std::logic_error("missing control context menu descriptor");
+    }
+    auto_context->default_value = {DefaultKind::boolean, "true"};
+    auto_context->persistence = PersistenceClass::persisted_editable;
+    auto_context->storage_codec = StorageCodec::root_record;
+    context->default_value = {DefaultKind::undefined, "undefined"};
+    context->value_codec = ValueCodec::context_menu_reference;
+    context->persistence = PersistenceClass::persisted_editable;
+    context->storage_codec = StorageCodec::root_record;
     const auto action_source = std::ranges::find(
         descriptors, std::string_view{"ActionSource"}, &PropertyDescriptor::api_name);
     if (action_source == descriptors.end()) {
@@ -2343,6 +2367,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "picture";
         case ValueCodec::action_source_reference:
             return "action-source-reference";
+        case ValueCodec::context_menu_reference:
+            return "context-menu-reference";
         case ValueCodec::control_reference:
             return "control-reference";
         case ValueCodec::attribute_reference:
