@@ -13250,6 +13250,67 @@ void test_input_field_alignment_and_choice_list_height_round_trip() {
         "ChoiceListHeight outside int32 must be rejected by model validation");
 }
 
+void test_input_list_choice_mode_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "InputListChoice";
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        form.children.push_back(model::ControlRef{model::ObjectId{10 + index}});
+    }
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainPatternValue type;
+    model::TypeDomainEntry entry;
+    entry.term = model::TypeDomainTerm::string;
+    entry.string = model::LengthQualifiers{20, false};
+    type.entries.push_back(entry);
+    document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+    const auto mode_id = model::PropertyId::from_name("ListChoiceMode");
+    const auto button_id = model::PropertyId::from_name("ChoiceListButton");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        model::ControlNode input{model::ObjectId{10 + index}, "Input" + std::to_string(index), model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        input.position.top.set(static_cast<std::int32_t>(index * 30));
+        input.position.width.set(180);
+        input.position.height.set(24);
+        if ((index % 4) >= 2) input.properties().set_explicit(mode_id, true);
+        if (index % 2 != 0) input.properties().set_explicit(button_id, true);
+        input.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        input.properties().set_explicit(model::PropertyId::from_name("Wrap"), false);
+        input.properties().set_explicit(model::PropertyId::from_name("AutoMarkIncomplete"), true);
+        input.properties().set_explicit(model::PropertyId::from_name("ChoiceListWidth"), std::int64_t{17});
+        document.add_control(std::move(input));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "InputListChoice");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        decoded ? "all list choice mode records must decode completely" : decoded.diagnostics().front().message);
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto* input = decoded.value().find_control(model::ObjectId{10 + index});
+        expect(input != nullptr, "every list choice input must survive the round trip");
+        const auto* mode = input->properties().find(mode_id);
+        const auto* button = input->properties().find(button_id);
+        expect((index % 4 >= 2) ? mode && std::get<bool>(mode->value) : mode == nullptr,
+            "list choice mode must retain its value independently of the button");
+        expect((index % 2 != 0) ? button && std::get<bool>(button->value) : button == nullptr,
+            "choice list button must retain its value independently of mode");
+        const auto* enabled = input->properties().find(model::PropertyId::from_name("Enabled"));
+        const auto* wrap = input->properties().find(model::PropertyId::from_name("Wrap"));
+        const auto* marked = input->properties().find(model::PropertyId::from_name("AutoMarkIncomplete"));
+        const auto* width = input->properties().find(model::PropertyId::from_name("ChoiceListWidth"));
+        expect(enabled && !std::get<bool>(enabled->value) && wrap && !std::get<bool>(wrap->value) &&
+            marked && std::get<bool>(marked->value) && width && std::get<std::int64_t>(width->value) == 17,
+            "list choice mode must coexist with named InputField properties");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "list choice mode must serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "list choice mode XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "list choice mode must rebuild without changing storage");
+}
+
 void test_input_incomplete_choice_mode_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -18240,6 +18301,7 @@ int main() {
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_input_incomplete_choice_mode_round_trip();
+        test_input_list_choice_mode_round_trip();
         test_single_input_field_round_trip();
         test_spreadsheet_cell_controls();
         test_spreadsheet_document_field_named_properties_and_events();

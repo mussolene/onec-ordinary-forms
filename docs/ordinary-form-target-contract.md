@@ -1383,3 +1383,9 @@ CurrentRow, CurrentData и SelectedRows относятся к работающе
 `IncompleteChoiceMode` задается перечислением `IncompleteChoiceMode` со
 значениями `OnEnterPressed` и `OnActivate`. Значение по умолчанию в проверенной
 платформе 8.5.1.1343: `OnEnterPressed`.
+
+## Режим выбора из списка
+
+Для поля ввода `ListChoiceMode` и `ChoiceListButton` сохраняются раздельно.
+Коллекция `ChoiceList` и побочные действия включения режима в объектном API
+пока не реализованы.

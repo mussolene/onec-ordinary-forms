@@ -1833,6 +1833,7 @@ constexpr std::size_t no_paired_slot = std::numeric_limits<std::size_t>::max();
 constexpr std::array input_field_flag_mappings{
     InputFieldFlagMapping{"Wrap", InputFieldFlagScope::payload, 4, true, no_paired_slot},
     InputFieldFlagMapping{"ChooseType", InputFieldFlagScope::root_info, 6, true, no_paired_slot},
+    InputFieldFlagMapping{"ListChoiceMode", InputFieldFlagScope::root_info, 9, false, no_paired_slot},
     InputFieldFlagMapping{"MarkNegatives", InputFieldFlagScope::payload, 27, false, no_paired_slot},
     InputFieldFlagMapping{"ChoiceButton", InputFieldFlagScope::payload, 7, false, no_paired_slot},
     InputFieldFlagMapping{"OpenButton", InputFieldFlagScope::payload, 10, false, no_paired_slot},
@@ -1977,6 +1978,9 @@ LV canonical_input_field_info(
         if (mapping.paired_slot != no_paired_slot) {
             value.items[3].items[1].items[1].items[mapping.paired_slot] = raw(encoded ? "1" : "0");
         }
+    }
+    if (bool_atom(value.items[9], "$/InputField/ListChoiceMode")) {
+        value.items[3] = parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}");
     }
     return value;
 }
@@ -8651,8 +8655,13 @@ DecodedControl decode_input_field(
         fail("OOF1114", child_path(payload_path, 37), "IncompleteChoiceMode storage value 0 or 1",
             std::to_string(incomplete_choice_mode), "InputField.IncompleteChoiceMode storage value is unsupported");
     }
-    const auto input_field_flags = decode_input_field_flags(
-        info, info_path, InputFieldPairMode::require_matching_pair);
+    const bool list_choice_mode = bool_atom(info.items[9], child_path(info_path, 9));
+    if (list_choice_mode) {
+        require_exact(info.items[3], parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}"),
+            child_path(info_path, 3), "InputField list choice record is unsupported");
+    }
+    const auto input_field_flags = decode_input_field_flags(info, info_path,
+        list_choice_mode ? InputFieldPairMode::payload_only : InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width,
         incomplete_choice_mode};
@@ -10263,7 +10272,7 @@ LV encode_input_field(
     }
     require_allowed_properties(control.properties(), {
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
-        "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
+        "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
         "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
