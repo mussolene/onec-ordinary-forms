@@ -502,6 +502,28 @@ bool canonical_chart_decimal(std::string_view value) {
     return !(value == "-0");
 }
 
+using PositionPropertyRef = std::variant<Property<std::int32_t>*, Property<bool>*>;
+using ConstPositionPropertyRef = std::variant<const Property<std::int32_t>*, const Property<bool>*>;
+
+std::optional<PositionPropertyRef> find_position_property(Position& position, std::string_view name) {
+    if (name == "Left") return PositionPropertyRef{&position.left};
+    if (name == "Top") return PositionPropertyRef{&position.top};
+    if (name == "Width") return PositionPropertyRef{&position.width};
+    if (name == "Height") return PositionPropertyRef{&position.height};
+    if (name == "Visible") return PositionPropertyRef{&position.visible};
+    return std::nullopt;
+}
+
+std::optional<ConstPositionPropertyRef> find_position_property(
+    const Position& position, std::string_view name) {
+    if (name == "Left") return ConstPositionPropertyRef{&position.left};
+    if (name == "Top") return ConstPositionPropertyRef{&position.top};
+    if (name == "Width") return ConstPositionPropertyRef{&position.width};
+    if (name == "Height") return ConstPositionPropertyRef{&position.height};
+    if (name == "Visible") return ConstPositionPropertyRef{&position.visible};
+    return std::nullopt;
+}
+
 }  // namespace
 
 const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
@@ -765,6 +787,7 @@ std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
 PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyId property) const {
     const metamodel::PropertyDescriptor* descriptor = nullptr;
     const PropertySet* properties = nullptr;
+    const ControlNode* position_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
         descriptor = metamodel::find_form_property(property);
@@ -775,11 +798,12 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const auto& control = collections_.controls[location->index];
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
-        if (is_typed_collection_property(*descriptor) ||
-            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+        if (is_typed_collection_property(*descriptor)) {
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
         }
-        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+        if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            position_control = &control;
+        } else if (descriptor->surface == metamodel::PropertySurface::control_payload) {
             properties = &control.properties();
         } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
             properties = &control.extension_properties;
@@ -793,7 +817,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         return {PropertyReadStatus::unsupported_surface, std::nullopt};
     }
 
-    if (descriptor == nullptr || properties == nullptr) {
+    if (descriptor == nullptr || (properties == nullptr && position_control == nullptr)) {
         return {PropertyReadStatus::unknown_property, std::nullopt};
     }
     if (is_typed_collection_property(*descriptor)) {
@@ -801,6 +825,20 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
     }
     if (descriptor->api_access == metamodel::ApiAccess::write_only) {
         return {PropertyReadStatus::write_only, std::nullopt};
+    }
+    if (position_control != nullptr) {
+        const auto position_property = find_position_property(position_control->position, descriptor->api_name);
+        if (!position_property) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        return std::visit([](const auto* property_value) -> PropertyReadResult {
+            using Value = std::remove_cvref_t<decltype(property_value->value())>;
+            if constexpr (std::is_same_v<Value, std::int32_t>) {
+                return {property_value->is_explicit() ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                    PropertyValue{static_cast<std::int64_t>(property_value->value())}};
+            } else {
+                return {property_value->is_explicit() ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                    PropertyValue{property_value->value()}};
+            }
+        }, *position_property);
     }
     if (const PropertyEntry* entry = properties->find(property)) {
         return {PropertyReadStatus::explicit_value, entry->value};
@@ -821,6 +859,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     PropertyValue value) {
     const metamodel::PropertyDescriptor* descriptor = nullptr;
     PropertySet* properties = nullptr;
+    ControlNode* position_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
         descriptor = metamodel::find_form_property(property);
@@ -831,11 +870,12 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         auto& control = collections_.controls[location->index];
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
-        if (is_typed_collection_property(*descriptor) ||
-            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+        if (is_typed_collection_property(*descriptor)) {
             return PropertyMutationStatus::unsupported_surface;
         }
-        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+        if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            position_control = &control;
+        } else if (descriptor->surface == metamodel::PropertySurface::control_payload) {
             properties = &control.properties();
         } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
             properties = &control.extension_properties;
@@ -846,7 +886,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (!find_location(owner.category, owner.id)) return PropertyMutationStatus::unknown_owner;
         return PropertyMutationStatus::unsupported_surface;
     }
-    if (descriptor == nullptr || properties == nullptr) return PropertyMutationStatus::unknown_property;
+    if (descriptor == nullptr || (properties == nullptr && position_control == nullptr)) return PropertyMutationStatus::unknown_property;
     if (is_typed_collection_property(*descriptor)) return PropertyMutationStatus::unsupported_surface;
     if (descriptor->api_access == metamodel::ApiAccess::read_only) {
         return PropertyMutationStatus::read_only;
@@ -865,6 +905,27 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     }
     if (!property_value_references_resolve(*this, value)) {
         return PropertyMutationStatus::invalid_reference;
+    }
+    if (position_control != nullptr) {
+        const auto position_property = find_position_property(position_control->position, descriptor->api_name);
+        if (!position_property) return PropertyMutationStatus::unsupported_surface;
+        const bool nonnegative_dimension = descriptor->api_name == "Width" || descriptor->api_name == "Height";
+        const bool applied = std::visit([&](auto* property_value) {
+            using Value = std::remove_cvref_t<decltype(property_value->value())>;
+            if constexpr (std::is_same_v<Value, std::int32_t>) {
+                const auto* integer = std::get_if<std::int64_t>(&value);
+                if (integer == nullptr || *integer < std::numeric_limits<std::int32_t>::min() ||
+                    *integer > std::numeric_limits<std::int32_t>::max() ||
+                    (nonnegative_dimension && *integer < 0)) return false;
+                property_value->set(static_cast<std::int32_t>(*integer));
+            } else {
+                const auto* boolean = std::get_if<bool>(&value);
+                if (boolean == nullptr) return false;
+                property_value->set(*boolean);
+            }
+            return true;
+        }, *position_property);
+        return applied ? PropertyMutationStatus::applied : PropertyMutationStatus::invalid_value;
     }
     if (descriptor->api_name == "ActionSource" &&
         descriptor->control_kind == ControlKind::command_bar) {
@@ -892,6 +953,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
 PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, PropertyId property) {
     const metamodel::PropertyDescriptor* descriptor = nullptr;
     PropertySet* properties = nullptr;
+    ControlNode* position_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
         descriptor = metamodel::find_form_property(property);
@@ -902,11 +964,12 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         auto& control = collections_.controls[location->index];
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
-        if (is_typed_collection_property(*descriptor) ||
-            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+        if (is_typed_collection_property(*descriptor)) {
             return PropertyMutationStatus::unsupported_surface;
         }
-        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+        if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            position_control = &control;
+        } else if (descriptor->surface == metamodel::PropertySurface::control_payload) {
             properties = &control.properties();
         } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
             properties = &control.extension_properties;
@@ -917,7 +980,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (!find_location(owner.category, owner.id)) return PropertyMutationStatus::unknown_owner;
         return PropertyMutationStatus::unsupported_surface;
     }
-    if (descriptor == nullptr || properties == nullptr) return PropertyMutationStatus::unknown_property;
+    if (descriptor == nullptr || (properties == nullptr && position_control == nullptr)) return PropertyMutationStatus::unknown_property;
     if (is_typed_collection_property(*descriptor)) return PropertyMutationStatus::unsupported_surface;
     if (descriptor->api_access == metamodel::ApiAccess::read_only) {
         return PropertyMutationStatus::read_only;
@@ -928,6 +991,13 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
         descriptor->persistence == metamodel::PersistenceClass::version_specific) {
         return PropertyMutationStatus::unsupported_surface;
+    }
+
+    if (position_control != nullptr) {
+        const auto position_property = find_position_property(position_control->position, descriptor->api_name);
+        if (!position_property) return PropertyMutationStatus::unsupported_surface;
+        std::visit([](auto* property_value) { property_value->reset(); }, *position_property);
+        return PropertyMutationStatus::reset;
     }
 
     properties->unset(property);

@@ -1173,6 +1173,17 @@ void apply_proven_storage_overrides(
         }
     }
 
+    for (const auto kind : {ControlKind::dendrogram, ControlKind::geographical_schema_field,
+                            ControlKind::graphical_schema_field}) {
+        auto& control_properties = properties[static_cast<std::size_t>(kind)];
+        for (const auto name : {"Width", "Height"}) {
+            classify_property(control_properties, name, StorageCodec::position_record, DefaultKind::integer, "0");
+            auto property = std::ranges::find(control_properties, name, &PropertyDescriptor::api_name);
+            property->surface = PropertySurface::panel_placement;
+            property->value_codec = ValueCodec::integer32;
+        }
+    }
+
     classify_property(
         panel_placement_properties,
         "Left",

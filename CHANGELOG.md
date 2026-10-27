@@ -2,6 +2,10 @@
 
 ## 1.0.0 - Не выпущен
 
+- Общий API свойств элементов работает с Left, Top, Width, Height и Visible
+  через Position. Размеры Dendrogram, GeographicalSchemaField и
+  GraphicalSchemaField используют ту же геометрию.
+
 - Для Table добавлено сохранение высот шапки и подвала.
 
 - Для ChoiceField и InputField добавлено сохранение Picture и

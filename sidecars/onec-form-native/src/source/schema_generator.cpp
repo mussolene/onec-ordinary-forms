@@ -204,11 +204,14 @@ void validate_property_group(
     std::span<const PropertyDescriptor> descriptors,
     std::string_view owner,
     DescriptorOwner descriptor_owner,
-    PropertySurface surface
+    PropertySurface surface,
+    bool allow_panel_placement = false
 ) {
     validate_ordered_descriptors(descriptors, owner);
     for (const auto& descriptor : descriptors) {
-        if (descriptor.owner != descriptor_owner || descriptor.surface != surface) {
+        if (descriptor.owner != descriptor_owner ||
+            (descriptor.surface != surface &&
+             !(allow_panel_placement && descriptor.surface == PropertySurface::panel_placement))) {
             throw std::logic_error(
                 "ordinary-form property surface mismatch for " + std::string(owner));
         }
@@ -247,7 +250,8 @@ void validate_metamodel(const Metamodel& metamodel) {
             properties,
             control.public_name,
             DescriptorOwner::control,
-            PropertySurface::control_payload);
+            PropertySurface::control_payload,
+            true);
         for (const auto& property : properties) {
             if (property.control_kind != control.kind) {
                 throw std::logic_error("ordinary-form property owner mismatch");
@@ -1055,7 +1059,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
                 if (control.kind == model::ControlKind::table && property.api_name == "Columns") {
                     output +=
                         "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
-                } else if (property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+                } else if (property.persistence == model::metamodel::PersistenceClass::runtime_only ||
+                           property.surface == PropertySurface::panel_placement) {
                     continue;
                 } else {
                     append_property_element(output, property, "      ");
@@ -1111,6 +1116,8 @@ void append_palette_properties(
         append_attribute(output, "apiName", property.api_name);
         append_attribute(output, "russianName", as_utf8(property.russian_name));
         append_attribute(output, "russianType", as_utf8(property.platform_type));
+        if (property.surface == PropertySurface::panel_placement)
+            append_attribute(output, "surface", "panelPlacement");
         append_attribute(
             output,
             "valueCodec",

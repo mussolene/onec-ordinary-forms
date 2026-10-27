@@ -942,7 +942,8 @@ void test_control_surfaces_and_property_order(
             for (const auto& descriptor : metamodel.properties_for(control.kind)) {
                 if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
                     expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
-                } else if (descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only) {
+                } else if (descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only ||
+                           descriptor.surface == oof::model::metamodel::PropertySurface::panel_placement) {
                     continue;
                 } else {
                     expect_property_element(descriptor, elements[cursor++]);
@@ -1174,6 +1175,9 @@ void expect_palette_properties(
             attribute(nodes[index], "valueCodec") ==
                 oof::model::metamodel::value_codec_name(descriptor.value_codec),
             "palette property value-codec drift");
+        expect(attribute(nodes[index], "surface") ==
+                   (descriptor.surface == oof::model::metamodel::PropertySurface::panel_placement ? "panelPlacement" : ""),
+               "palette must identify properties represented by Position");
     }
 }
 

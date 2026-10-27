@@ -1898,6 +1898,123 @@ void test_document_property_api() {
         "a valid typed reference must round-trip through the property API");
 }
 
+void test_control_position_property_api() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+
+    Form form;
+    form.id = ObjectId{1};
+    OrdinaryFormDocument document(std::move(form));
+    const std::array<ControlPayload, 12> payloads{{
+        PanelPayload{},
+        ButtonPayload{},
+        CheckBoxPayload{},
+        ChoiceFieldPayload{},
+        RadioButtonPayload{},
+        InputFieldPayload{},
+        UsualGroupPayload{},
+        SplitterPayload{},
+        DendrogramPayload{},
+        GeographicalSchemaFieldPayload{},
+        GraphicalSchemaFieldPayload{},
+        CalendarFieldPayload{},
+    }};
+    for (std::size_t index = 0; index < payloads.size(); ++index) {
+        document.add_control(ControlNode{
+            ObjectId{static_cast<unsigned>(100 + index)},
+            "PositionControl" + std::to_string(index),
+            payloads[index]});
+    }
+
+    const std::array<std::pair<std::string_view, PropertyValue>, 5> values{{
+        {"Left", std::int64_t{13}},
+        {"Top", std::int64_t{17}},
+        {"Width", std::int64_t{120}},
+        {"Height", std::int64_t{45}},
+        {"Visible", false},
+    }};
+    for (std::size_t index = 0; index < payloads.size(); ++index) {
+        const ObjectId control_id{static_cast<unsigned>(100 + index)};
+        const auto owner = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, control_id};
+        const auto* control = document.find_control(control_id);
+        expect(control != nullptr, "position API fixture control must exist");
+        if (!control) continue;
+
+        for (const auto& [name, value] : values) {
+            const auto property = PropertyId::from_name(name);
+            const auto* descriptor = find_property(control->kind(), name);
+            expect(descriptor && descriptor->surface == PropertySurface::panel_placement &&
+                       descriptor->persistence == PersistenceClass::persisted_editable &&
+                       descriptor->storage_codec == StorageCodec::position_record &&
+                       descriptor->default_value.canonical == (name == "Visible" ? "true" : "0"),
+                "shared Position fields must have persisted position-record descriptors");
+            if (name != "Visible") {
+                expect(descriptor && descriptor->value_codec == ValueCodec::integer32,
+                    "Position coordinates and dimensions must use the int32 codec");
+            }
+
+            const auto default_value = document.get_prop_val(owner, property);
+            expect(default_value.status == PropertyReadStatus::proven_default && default_value.value &&
+                       *default_value.value == (name == "Visible" ? PropertyValue{true} : PropertyValue{std::int64_t{0}}),
+                "Position API must expose the shared default");
+            expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::applied,
+                "Position API must accept a valid shared field value");
+            const auto explicit_value = document.get_prop_val(owner, property);
+            expect(explicit_value.status == PropertyReadStatus::explicit_value && explicit_value.value &&
+                       *explicit_value.value == value,
+                "Position API must return the explicit shared field value");
+
+            const auto* updated = document.find_control(control_id);
+            bool position_matches = false;
+            if (updated) {
+                if (name == "Left") position_matches = updated->position.left.is_explicit() && updated->position.left.value() == 13;
+                else if (name == "Top") position_matches = updated->position.top.is_explicit() && updated->position.top.value() == 17;
+                else if (name == "Width") position_matches = updated->position.width.is_explicit() && updated->position.width.value() == 120;
+                else if (name == "Height") position_matches = updated->position.height.is_explicit() && updated->position.height.value() == 45;
+                else position_matches = updated->position.visible.is_explicit() && !updated->position.visible.value();
+            }
+            expect(position_matches,
+                "Position API mutation must synchronize the named Position member");
+            expect(updated && !updated->properties().contains(property) &&
+                       !updated->extension_properties.contains(property),
+                "Position API fields must not be stored in payload or extension properties");
+
+            expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset,
+                "Position API fields must reset through the common API");
+            const auto reset_value = document.get_prop_val(owner, property);
+            expect(reset_value.status == PropertyReadStatus::proven_default && reset_value.value &&
+                       *reset_value.value == (name == "Visible" ? PropertyValue{true} : PropertyValue{std::int64_t{0}}),
+                "reset Position API fields must restore their defaults");
+            const auto* reset = document.find_control(control_id);
+            bool position_is_implicit = false;
+            if (reset) {
+                if (name == "Left") position_is_implicit = !reset->position.left.is_explicit();
+                else if (name == "Top") position_is_implicit = !reset->position.top.is_explicit();
+                else if (name == "Width") position_is_implicit = !reset->position.width.is_explicit();
+                else if (name == "Height") position_is_implicit = !reset->position.height.is_explicit();
+                else position_is_implicit = !reset->position.visible.is_explicit();
+            }
+            expect(position_is_implicit,
+                "reset Position API fields must clear the matching explicit Position member");
+        }
+
+        for (const auto dimension : {std::string_view{"Width"}, std::string_view{"Height"}}) {
+            expect(document.set_prop_val(owner, PropertyId::from_name(dimension), std::int64_t{-1}) ==
+                       PropertyMutationStatus::invalid_value,
+                "negative Position dimensions must be rejected");
+        }
+        const auto left = PropertyId::from_name("Left");
+        expect(document.set_prop_val(owner, left, std::int64_t{2147483648LL}) ==
+                   PropertyMutationStatus::invalid_value &&
+                   document.get_prop_val(owner, left).status == PropertyReadStatus::proven_default,
+            "Position int32 overflow must be rejected without changing the default");
+        expect(document.set_prop_val(owner, left, std::string{"13"}) ==
+                   PropertyMutationStatus::invalid_value &&
+                   document.get_prop_val(owner, left).status == PropertyReadStatus::proven_default,
+            "wrong-typed Position values must be rejected without changing the default");
+    }
+}
+
 void test_id_lookup() {
     Form form;
     form.id = ObjectId{1};
@@ -2607,6 +2724,7 @@ int main() {
         test_property_default_semantics();
         test_typed_property_set();
         test_document_property_api();
+        test_control_position_property_api();
         test_id_lookup();
         test_duplicate_rejection();
         test_category_scoped_object_ids();

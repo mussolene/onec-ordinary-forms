@@ -74,15 +74,15 @@
           <Property name="ValueType" apiName="ValueType" russianName="ТипЗначения" russianType="ОписаниеТипов" valueCodec="type-domain"/>
         </SharedProperties>
         <SharedProperties surface="panelPlacement">
-          <Property name="DefaultControl" apiName="DefaultControl" russianName="АктивизироватьПоУмолчанию" russianType="Булево" valueCodec="boolean"/>
-          <Property name="Top" apiName="Top" russianName="Верх" russianType="Число" valueCodec="integer32"/>
-          <Property name="Visible" apiName="Visible" russianName="Видимость" russianType="Булево" valueCodec="boolean"/>
-          <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="integer32"/>
-          <Property name="Left" apiName="Left" russianName="Лево" russianType="Число" valueCodec="integer32"/>
-          <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" valueCodec="integer32"/>
-          <Property name="ZOrder" apiName="ZOrder" russianName="ПорядокОтображения" russianType="Число" valueCodec="integer32"/>
-          <Property name="Collapse" apiName="Collapse" russianName="Свертка" russianType="РежимСверткиЭлементаУправления" valueCodec="enumeration"/>
-          <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="integer32"/>
+          <Property name="DefaultControl" apiName="DefaultControl" russianName="АктивизироватьПоУмолчанию" russianType="Булево" surface="panelPlacement" valueCodec="boolean"/>
+          <Property name="Top" apiName="Top" russianName="Верх" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
+          <Property name="Visible" apiName="Visible" russianName="Видимость" russianType="Булево" surface="panelPlacement" valueCodec="boolean"/>
+          <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
+          <Property name="Left" apiName="Left" russianName="Лево" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
+          <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
+          <Property name="ZOrder" apiName="ZOrder" russianName="ПорядокОтображения" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
+          <Property name="Collapse" apiName="Collapse" russianName="Свертка" russianType="РежимСверткиЭлементаУправления" surface="panelPlacement" valueCodec="enumeration"/>
+          <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
         </SharedProperties>
         <NamedConcept name="MainAttribute" russianName="Основной реквизит"/>
         <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
@@ -447,12 +447,12 @@
             <Properties>
               <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" valueCodec="boolean"/>
               <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
+              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" valueCodec="decimal"/>
               <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
               <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
               <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="Items" apiName="Items" russianName="Элементы" russianType="ЭлементыДендрограммы" valueCodec="dendrogram-items"/>
               <Property name="Links" apiName="Links" russianName="Связи" russianType="СвязиДендрограммы" valueCodec="dendrogram-links"/>
@@ -583,7 +583,7 @@
             <Properties>
               <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" valueCodec="boolean"/>
               <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
+              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
               <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" valueCodec="decimal"/>
               <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
@@ -593,7 +593,7 @@
               <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
               <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
-              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>
@@ -601,14 +601,14 @@
           </Control>
           <Control name="GraphicalSchemaField" apiName="GraphicalSchemaField" russianName="ПолеГрафическойСхемы" children="none">
             <Properties>
-              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
+              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
               <Property name="Edit" apiName="Edit" russianName="Редактирование" russianType="Булево" valueCodec="boolean"/>
               <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
               <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
               <Property name="CurrentItem" apiName="CurrentItem" russianName="ТекущийЭлемент" russianType="ЭлементГрафическойСхемы" valueCodec="unclassified"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
-              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>
