@@ -375,6 +375,58 @@ void test_descriptors() {
         "PictureDecoration Shortcut must use the shared typed Shortcut codec and None default");
 }
 
+void test_z_order_reorders_siblings() {
+    const std::array<ControlPayload, 12> payloads{
+        CalendarFieldPayload{}, ChoiceFieldPayload{}, CommandBarPayload{}, CheckBoxPayload{},
+        RadioButtonPayload{}, InputFieldPayload{}, ListBoxPayload{}, UsualGroupPayload{},
+        ProgressBarPayload{}, TrackBarPayload{}, LabelDecorationPayload{}, PanelPayload{}};
+    Form form; form.id = ObjectId{1}; form.name = "ZOrder";
+    for (std::uint64_t id = 10; id < 22; ++id) form.children.push_back(ControlRef{ObjectId{id}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < payloads.size(); ++index)
+        document.add_control(ControlNode{ObjectId{10 + index}, "Control" + std::to_string(index), payloads[index]});
+    const auto z = PropertyId::from_name("ZOrder");
+    const auto tab = PropertyId::from_name("TabOrder");
+    const auto owner = [](std::uint64_t id) { return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}}; };
+    for (std::uint64_t id = 10; id < 22; ++id) {
+        expect(document.set_prop_val(owner(id), z, std::int64_t{0}) == PropertyMutationStatus::applied_unclassified_storage &&
+                document.get_prop_val(owner(id), z).value == PropertyValue{std::int64_t{1}},
+            "ZOrder below range must move each control to the first position");
+        for (std::uint64_t sibling = 10; sibling < 22; ++sibling)
+            expect(document.get_prop_val(owner(sibling), tab).value == PropertyValue{static_cast<std::int64_t>(sibling - 9)},
+                "ZOrder must preserve every sibling TabOrder");
+    }
+    expect(document.set_prop_val(owner(10), z, std::int64_t{99999}) == PropertyMutationStatus::applied_unclassified_storage &&
+            document.get_prop_val(owner(10), z).value == PropertyValue{std::int64_t{12}},
+        "ZOrder above range must move the control to the last position");
+    expect(document.set_prop_val(owner(10), z, DecimalValue{"1.5"}) == PropertyMutationStatus::applied_unclassified_storage &&
+            document.get_prop_val(owner(10), z).value == PropertyValue{std::int64_t{1}},
+        "fractional ZOrder must truncate");
+    expect(document.set_prop_val(owner(10), z, std::string{"1"}) == PropertyMutationStatus::invalid_value,
+        "ZOrder must reject nonnumeric values");
+
+    Form nested_form; nested_form.id = ObjectId{1000}; nested_form.name = "NestedZOrder";
+    OrdinaryFormDocument nested(std::move(nested_form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId panel_id{1100 + index}, page_id{1200 + index};
+        const ObjectId first_id{1300 + 2 * index}, second_id{1301 + 2 * index};
+        Page page; page.id = page_id; page.name = "Page" + std::to_string(index);
+        page.children = {ControlRef{first_id}, ControlRef{second_id}};
+        ControlNode panel{panel_id, "Panel" + std::to_string(index), PanelPayload{}};
+        panel.children = {PageRef{page_id}};
+        nested.add_page(std::move(page));
+        nested.add_control(std::move(panel));
+        nested.add_control(ControlNode{first_id, "First" + std::to_string(index), LabelDecorationPayload{}});
+        nested.add_control(ControlNode{second_id, "Second" + std::to_string(index), LabelDecorationPayload{}});
+        expect(nested.set_prop_val({ObjectCategory::control, second_id}, z, std::int64_t{1}) == PropertyMutationStatus::applied_unclassified_storage &&
+                nested.get_prop_val({ObjectCategory::control, first_id}, z).value == PropertyValue{std::int64_t{2}} &&
+                nested.get_prop_val({ObjectCategory::control, second_id}, z).value == PropertyValue{std::int64_t{1}} &&
+                nested.get_prop_val({ObjectCategory::control, first_id}, tab).value == PropertyValue{std::int64_t{1}} &&
+                nested.get_prop_val({ObjectCategory::control, second_id}, tab).value == PropertyValue{std::int64_t{2}},
+            "nested ZOrder must reorder only the page siblings and preserve their TabOrder");
+    }
+}
+
 void test_tab_order_reorders_siblings() {
     const std::array<ControlPayload, 12> payloads{
         CalendarFieldPayload{}, ChoiceFieldPayload{}, CommandBarPayload{}, CheckBoxPayload{},
@@ -3575,6 +3627,7 @@ int main() {
         test_form_runtime_state_properties();
         test_label_picture_api_access();
         test_tab_order_reorders_siblings();
+        test_z_order_reorders_siblings();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
         test_default_button_model();

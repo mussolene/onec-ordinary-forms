@@ -987,6 +987,14 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             }
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
         }
+        if (descriptor->api_name == "ZOrder") {
+            const auto group = tab_order_group(*this, control.id);
+            if (!group) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            if (std::ranges::any_of(group->ids, [&](ObjectId id) {
+                    return find_control(id)->position.z_order.is_explicit();
+                })) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            return {PropertyReadStatus::computed_value, PropertyValue{static_cast<std::int64_t>(group->target_index + 1)}};
+        }
         if (descriptor->api_name == "TabOrder") {
             const auto group = tab_order_group(*this, control.id);
             if (!group) return {PropertyReadStatus::unsupported_surface, std::nullopt};
@@ -1174,6 +1182,58 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 return PropertyMutationStatus::applied_runtime_only;
             std::get<PanelPayload>(control.payload).current_page = *page_ref;
             return PropertyMutationStatus::applied_runtime_only;
+        }
+        if (descriptor->api_name == "ZOrder") {
+            const auto group = tab_order_group(*this, control.id);
+            if (!group) return PropertyMutationStatus::unsupported_surface;
+            if (std::ranges::any_of(group->ids, [&](ObjectId id) {
+                    return find_control(id)->position.z_order.is_explicit();
+                })) return PropertyMutationStatus::unsupported_surface;
+            std::int64_t requested = 0;
+            if (const auto* integer = std::get_if<std::int64_t>(&value)) requested = *integer;
+            else if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
+                if (!canonical_chart_decimal(decimal->canonical)) return PropertyMutationStatus::invalid_value;
+                const auto whole = std::string_view(decimal->canonical).substr(0, decimal->canonical.find('.'));
+                if (whole != "-" && !whole.empty()) {
+                    const auto parsed = std::from_chars(whole.data(), whole.data() + whole.size(), requested);
+                    if (parsed.ec == std::errc::result_out_of_range)
+                        requested = whole.front() == '-' ? std::numeric_limits<std::int64_t>::min() : std::numeric_limits<std::int64_t>::max();
+                    else if (parsed.ec != std::errc{} || parsed.ptr != whole.data() + whole.size())
+                        return PropertyMutationStatus::invalid_value;
+                }
+            } else return PropertyMutationStatus::invalid_value;
+            const auto bounded = std::clamp(requested, std::int64_t{1}, static_cast<std::int64_t>(group->ids.size()));
+            const auto target = static_cast<std::size_t>(bounded - 1);
+            if (target == group->target_index) return PropertyMutationStatus::applied_unclassified_storage;
+            std::vector<ChildItemRef>* siblings = nullptr;
+            const auto consider = [&](std::vector<ChildItemRef>& children) {
+                if (std::ranges::any_of(children, [&](const ChildItemRef& item) {
+                        const auto* ref = std::get_if<ControlRef>(&item);
+                        return ref != nullptr && ref->id() == control.id;
+                    })) siblings = &children;
+            };
+            consider(form_.children);
+            for (auto& page : collections_.pages) consider(page.children);
+            for (auto& candidate : collections_.controls) consider(candidate.children);
+            if (!siblings || siblings->size() != group->ids.size()) return PropertyMutationStatus::unsupported_surface;
+            if (target < group->target_index)
+                std::rotate(siblings->begin() + static_cast<std::ptrdiff_t>(target),
+                    siblings->begin() + static_cast<std::ptrdiff_t>(group->target_index),
+                    siblings->begin() + static_cast<std::ptrdiff_t>(group->target_index + 1));
+            else
+                std::rotate(siblings->begin() + static_cast<std::ptrdiff_t>(group->target_index),
+                    siblings->begin() + static_cast<std::ptrdiff_t>(group->target_index + 1),
+                    siblings->begin() + static_cast<std::ptrdiff_t>(target + 1));
+            for (std::size_t index = 0; index < siblings->size(); ++index) {
+                const auto id = std::get<ControlRef>((*siblings)[index]).id();
+                const auto old = std::ranges::find(group->ids, id);
+                const auto ordinal = group->orders[static_cast<std::size_t>(old - group->ids.begin())];
+                const auto sibling = find_location(ObjectCategory::control, id);
+                auto& tab = collections_.controls[sibling->index].position.tab_order;
+                if (ordinal == static_cast<std::int32_t>(index + 1)) tab.reset();
+                else tab.set(std::optional<std::int32_t>{ordinal});
+            }
+            return PropertyMutationStatus::applied_unclassified_storage;
         }
         if (descriptor->api_name == "TabOrder") {
             const auto group = tab_order_group(*this, control.id);
