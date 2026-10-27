@@ -6593,6 +6593,29 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
                     (area.*(descriptor.font)).value_or(model::FontValue{}), name);
             }
         }
+        for (const auto& descriptor : model::metamodel::chart_plot_format_descriptors()) {
+            if (descriptor.text) {
+                const auto& explicit_value = area.*(descriptor.text);
+                if (kind != model::ChartAreaKind::plot) {
+                    if (explicit_value) fail("OOF1120", std::string(name), "PlotArea property", std::string(descriptor.name), "Chart area property belongs to another area");
+                    continue;
+                }
+                info.at(middle_start + descriptor.storage_offset) = encoded_localized_text(
+                    explicit_value.value_or(model::PropertyValue{std::string{}}), name, false);
+            } else {
+                const auto& explicit_value = area.*(descriptor.enumeration);
+                if (kind != model::ChartAreaKind::plot) {
+                    if (explicit_value) fail("OOF1120", std::string(name), "PlotArea property", std::string(descriptor.name), "Chart area property belongs to another area");
+                    continue;
+                }
+                const auto value = explicit_value.value_or(model::EnumerationValue{
+                    std::string(descriptor.enumeration_type), std::string(descriptor.members[descriptor.default_ordinal])});
+                const auto found = std::ranges::find(descriptor.members, value.member);
+                if (value.type_name != descriptor.enumeration_type || found == descriptor.members.end())
+                    fail("OOF1120", std::string(name), "supported PlotArea enumeration", value.member, "PlotArea enumeration is invalid");
+                info.at(middle_start + descriptor.storage_offset) = raw(std::to_string(std::distance(descriptor.members.begin(), found)));
+            }
+        }
     };
     if (chart.plot_area) write_area(*chart.plot_area, 12, 15, model::metamodel::chart_area_placements(model::ChartAreaKind::plot), "$/Chart/PlotArea");
     if (chart.legend_area) write_area(*chart.legend_area, 13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend), "$/Chart/LegendArea");
@@ -7010,6 +7033,22 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             } else {
                 auto value = decode_control_font(at(info, index, info_path), child_path(info_path, index));
                 if (value != model::FontValue{}) area.*(descriptor.font) = std::move(value);
+            }
+        }
+        if (kind == model::ChartAreaKind::plot) {
+            for (const auto& descriptor : model::metamodel::chart_plot_format_descriptors()) {
+                const auto index = middle_start + descriptor.storage_offset;
+                if (descriptor.text) {
+                    auto value = decoded_localized_text(at(info, index, info_path), child_path(info_path, index), false);
+                    const auto* plain = std::get_if<std::string>(&value);
+                    if (plain == nullptr || !plain->empty()) area.*(descriptor.text) = std::move(value);
+                } else {
+                    const auto ordinal = integer_atom<std::size_t>(at(info, index, info_path), child_path(info_path, index));
+                    if (ordinal >= descriptor.members.size())
+                        fail("OOF1115", child_path(info_path, index), "known PlotArea enumeration", std::to_string(ordinal), "PlotArea enumeration is invalid");
+                    if (ordinal != descriptor.default_ordinal) area.*(descriptor.enumeration) = model::EnumerationValue{
+                        std::string(descriptor.enumeration_type), std::string(descriptor.members[ordinal])};
+                }
             }
         }
         if (area == defaults) return std::nullopt;

@@ -1725,6 +1725,16 @@ private:
                             else parsed.*(style->font) = parse_font(field);
                         } else if (const auto* descriptor = mm::find_chart_area_property(id); descriptor && descriptor->coordinate) {
                             (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
+                        } else if (const auto* descriptor = kind == model::ChartAreaKind::plot ? mm::find_chart_plot_format(id) : nullptr) {
+                            auto value = parse_property_value(field, descriptor->value_codec, id_text);
+                            if (descriptor->text) parsed.*(descriptor->text) = std::move(value);
+                            else {
+                                const auto& enumeration = std::get<model::EnumerationValue>(value);
+                                if (enumeration.type_name != descriptor->enumeration_type ||
+                                    std::ranges::find(descriptor->members, enumeration.member) == descriptor->members.end())
+                                    fail("OOF2003", field, id_text, field_name, "valid PlotArea enumeration", enumeration.member, "Invalid PlotArea enumeration");
+                                parsed.*(descriptor->enumeration) = enumeration;
+                            }
                         } else fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
                     }
                 }
@@ -3731,6 +3741,25 @@ private:
                         write_border(descriptor.name, *((*area).*(descriptor.border)), id);
                     if (descriptor.font && ((*area).*(descriptor.font)))
                         write_font(descriptor.name, *((*area).*(descriptor.font)), id);
+                }
+                for (const auto& descriptor : mm::chart_plot_format_descriptors()) {
+                    if (descriptor.text) {
+                        const auto& value = (*area).*(descriptor.text);
+                        if (!value) continue;
+                        if (kind != model::ChartAreaKind::plot)
+                            serialization_fail(id, std::string(name), "PlotArea property", std::string(descriptor.name), "Chart area property belongs to another area");
+                        mm::PropertyDescriptor property;
+                        property.xml_name = descriptor.name;
+                        property.value_codec = descriptor.value_codec;
+                        write_property(property, *value, id);
+                    } else {
+                        const auto& value = (*area).*(descriptor.enumeration);
+                        if (!value) continue;
+                        if (kind != model::ChartAreaKind::plot || value->type_name != descriptor.enumeration_type ||
+                            std::ranges::find(descriptor.members, value->member) == descriptor.members.end())
+                            serialization_fail(id, std::string(name), "valid PlotArea enumeration", value->member, "Invalid PlotArea enumeration");
+                        write_enumeration(descriptor.name, *value);
+                    }
                 }
                 writer_.close(name);
             };

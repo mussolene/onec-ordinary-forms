@@ -545,6 +545,15 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
         validate_document(compiled_schema, chart_area("Unknown", "0.11")) != 0,
         "Chart area XSD must accept platform names and reject invalid bounds or placement");
 
+    const auto plot_align = [](std::string_view member) {
+        return std::string(R"XML(<Form id="1" name="Area" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><PlotArea><Placement>Auto</Placement><Left>0</Left><Top>0</Top><Right>1</Right><Bottom>1</Bottom><AlignDataTable type="HorizontalAlign" member=")XML") +
+            std::string(member) + R"XML("/></PlotArea><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    };
+    expect(validate_document(compiled_schema, plot_align("Right")) == 0 &&
+        validate_document(compiled_schema, plot_align("Auto")) != 0 &&
+        validate_document(compiled_schema, plot_align("Justify")) != 0,
+        "PlotArea XSD must reject unsupported alignment members");
+
     const auto instance = [](std::string_view alignment_type, std::string_view alignment_member,
                              std::string_view orientation_type, std::string_view orientation_member) {
         return "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -944,7 +953,8 @@ void test_control_surfaces_and_property_order(
                     [&](const auto& descriptor) { return descriptor.kind == kind; });
                 const auto style_count = std::ranges::count_if(oof::model::metamodel::chart_area_style_descriptors(),
                     [&](const auto& descriptor) { return descriptor.kind == kind; });
-                expect(fields.size() == 5 + static_cast<std::size_t>(bool_count + color_count + style_count) && attribute(fields[0], "name") == "Placement" &&
+                const auto format_count = kind == oof::model::ChartAreaKind::plot ? oof::model::metamodel::chart_plot_format_descriptors().size() : 0;
+                expect(fields.size() == 5 + static_cast<std::size_t>(bool_count + color_count + style_count) + format_count && attribute(fields[0], "name") == "Placement" &&
                     attribute(fields[1], "name") == "Left" && attribute(fields[2], "name") == "Top" &&
                     attribute(fields[3], "name") == "Right" && attribute(fields[4], "name") == "Bottom" &&
                     attribute(fields[1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
@@ -960,6 +970,14 @@ void test_control_surfaces_and_property_order(
                 for (const auto& descriptor : oof::model::metamodel::chart_area_style_descriptors()) {
                     if (descriptor.kind == kind)
                         expect_element_shape(fields[boolean_index++], descriptor.name, descriptor.border ? "BorderValueType" : "FontValueType", "0", "1");
+                }
+                if (kind == oof::model::ChartAreaKind::plot) {
+                    for (const auto& descriptor : oof::model::metamodel::chart_plot_format_descriptors()) {
+                        const std::string type = descriptor.text ? "LocalizedTextValueType" :
+                            descriptor.enumeration_type == "HorizontalAlign" ? "IndicatorHorizontalAlignValueType" :
+                            std::string(descriptor.enumeration_type) + "ValueType";
+                        expect_element_shape(fields[boolean_index++], descriptor.name, type, "0", "1");
+                    }
                 }
             }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");

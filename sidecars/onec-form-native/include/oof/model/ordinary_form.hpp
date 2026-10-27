@@ -741,6 +741,9 @@ struct ChartArea {
     std::optional<ColorValue> scale_color;
     std::optional<BorderValue> border;
     std::optional<FontValue> font;
+    std::optional<PropertyValue> data_table_format;
+    std::optional<EnumerationValue> align_data_table;
+    std::optional<EnumerationValue> radar_chart_scale_type;
 
     friend bool operator==(const ChartArea&, const ChartArea&) = default;
 };

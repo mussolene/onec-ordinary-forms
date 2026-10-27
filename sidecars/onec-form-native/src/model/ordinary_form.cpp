@@ -850,6 +850,19 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
                 PropertyValue{value.value_or(metamodel::chart_area_color_default(descriptor->default_kind))}};
         }
+        if (owner.chart_area == ChartAreaKind::plot) {
+            if (const auto* descriptor = metamodel::find_chart_plot_format(property)) {
+                if (descriptor->text) {
+                    const auto& value = area.*(descriptor->text);
+                    return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                        value.value_or(PropertyValue{std::string{}})};
+                }
+                const auto& value = area.*(descriptor->enumeration);
+                const auto fallback = EnumerationValue{std::string(descriptor->enumeration_type), std::string(descriptor->members[descriptor->default_ordinal])};
+                return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                    PropertyValue{value.value_or(fallback)}};
+            }
+        }
         if (const auto* descriptor = metamodel::find_chart_area_style(owner.chart_area, property)) {
             if (descriptor->border) {
                 const auto& value = area.*(descriptor->border);
@@ -989,6 +1002,20 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 const auto* font = std::get_if<FontValue>(&value);
                 if (font == nullptr) return PropertyMutationStatus::invalid_value;
                 updated.*(descriptor->font) = *font;
+            }
+        } else if (owner.chart_area == ChartAreaKind::plot && metamodel::find_chart_plot_format(property) != nullptr) {
+            const auto* descriptor = metamodel::find_chart_plot_format(property);
+            if (descriptor->text) {
+                if (!std::holds_alternative<std::string>(value) &&
+                    !(std::holds_alternative<LocalizedStringValue>(value) && valid_localized_string(std::get<LocalizedStringValue>(value))))
+                    return PropertyMutationStatus::invalid_value;
+                updated.*(descriptor->text) = value;
+            } else {
+                const auto* enumeration = std::get_if<EnumerationValue>(&value);
+                if (enumeration == nullptr || enumeration->type_name != descriptor->enumeration_type ||
+                    std::ranges::find(descriptor->members, enumeration->member) == descriptor->members.end())
+                    return PropertyMutationStatus::invalid_value;
+                updated.*(descriptor->enumeration) = *enumeration;
             }
         } else if (chart_area_coordinate(updated, property) != nullptr) {
             std::string canonical;
@@ -1143,6 +1170,15 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             if (area && descriptor->border) ((*area).*(descriptor->border)).reset();
             if (area && descriptor->font) ((*area).*(descriptor->font)).reset();
             return PropertyMutationStatus::reset_unclassified_storage;
+        }
+        if (owner.chart_area == ChartAreaKind::plot) {
+            if (const auto* descriptor = metamodel::find_chart_plot_format(property)) {
+                const auto location = find_location(ObjectCategory::control, owner.id);
+                auto& area = std::get<ChartPayload>(collections_.controls[location->index].payload).plot_area;
+                if (area && descriptor->text) ((*area).*(descriptor->text)).reset();
+                if (area && descriptor->enumeration) ((*area).*(descriptor->enumeration)).reset();
+                return PropertyMutationStatus::reset_unclassified_storage;
+            }
         }
         const auto defaults = default_chart_area(owner.chart_area, true);
         PropertyValue value;

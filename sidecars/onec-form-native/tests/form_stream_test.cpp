@@ -16428,8 +16428,8 @@ void test_chart_area_modes_round_trip() {
             payload.series.push_back(series); payload.points.push_back(point);
             payload.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
         }
-        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
-        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
+        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
+        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
         model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
         control.position.width.set(160); control.position.height.set(120);
         control.properties().set_explicit(model::PropertyId::from_name("ShowLegend"), i % 7 != 6);
@@ -16895,6 +16895,116 @@ void test_chart_area_border_font_round_trip() {
     model::FontValue invalid_font; invalid_font.kind = model::FontKind::windows_font;
     expect(unsupported.set_prop_val(invalid_area, model::PropertyId::from_name("Font"), invalid_font) == model::PropertyMutationStatus::applied_unclassified_storage &&
         !form_stream::encode_document(unsupported), "unsupported Chart area font must fail encoding");
+}
+
+void test_chart_plot_area_formats_round_trip() {
+    constexpr std::array<std::string_view, 3> alignments{"Left", "Center", "Right"};
+    constexpr std::array<std::string_view, 2> radar_modes{"Circle", "Polygon"};
+    const std::array<model::PropertyValue, 3> formats{
+        std::string{}, std::string{"ЧДЦ=2"},
+        model::LocalizedStringValue{{{"ru", "ЧДЦ=3"}, {"en", "NFD=3"}}}};
+    const std::array<model::LocalizedStringValue, 3> encoded_formats{
+        model::LocalizedStringValue{}, model::LocalizedStringValue{{{"ru", "ЧДЦ=2"}}},
+        model::LocalizedStringValue{{{"ru", "ЧДЦ=3"}, {"en", "NFD=3"}}}};
+    model::Form form; form.id = model::ObjectId{1}; form.name = "ChartPlotFormats";
+    for (std::uint64_t i = 0; i < 12; ++i)
+        form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::ChartPayload payload;
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        for (std::size_t n = 0; n < series_count; ++n) {
+            model::ChartSeries series; series.id = model::ObjectId{1000 + i * 10 + n};
+            series.text = "Series"; series.color.kind = model::ColorKind::absolute;
+            series.marker = {"ChartMarkerType", "Auto"}; payload.series.push_back(std::move(series));
+        }
+        for (std::size_t n = 0; n < point_count; ++n) {
+            model::ChartPoint point; point.id = model::ObjectId{2000 + i * 10 + n};
+            point.text = "Point"; point.color.kind = model::ColorKind::absolute;
+            payload.points.push_back(std::move(point));
+        }
+        for (const auto& series : payload.series) for (const auto& point : payload.points)
+            payload.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode chart{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
+        chart.position.width.set(160); chart.position.height.set(120);
+        if (i == 11) {
+            chart.events.push_back(model::EventRef{model::ObjectId{3000}});
+            document.add_event(model::Event{model::ObjectId{3000}, "Selection", "OnSelection", model::ControlRef{chart.id}});
+        }
+        document.add_control(std::move(chart));
+    }
+    model::ColorValue color; color.kind = model::ColorKind::absolute;
+    color.red = 23; color.green = 67; color.blue = 101;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot};
+        const auto align_id = model::PropertyId::from_name("AlignDataTable");
+        const auto radar_id = model::PropertyId::from_name("RadarChartScaleType");
+        const auto format_id = model::PropertyId::from_name("DataTableFormat");
+        const auto initial_align = document.get_prop_val(owner, align_id);
+        const auto initial_radar = document.get_prop_val(owner, radar_id);
+        const auto initial_format = document.get_prop_val(owner, format_id);
+        expect(initial_align.value && std::get<model::EnumerationValue>(*initial_align.value) == model::EnumerationValue{"HorizontalAlign", "Right"} &&
+            initial_radar.value && std::get<model::EnumerationValue>(*initial_radar.value) == model::EnumerationValue{"RadarChartScaleType", "Circle"} &&
+            initial_format.value && std::get<std::string>(*initial_format.value).empty(), "PlotArea format defaults must match the platform");
+        expect(document.set_prop_val(owner, align_id, model::EnumerationValue{"HorizontalAlign", std::string(alignments[i % 3])}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            document.set_prop_val(owner, radar_id, model::EnumerationValue{"RadarChartScaleType", std::string(radar_modes[i % 2])}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            document.set_prop_val(owner, format_id, formats[i % 3]) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "PlotArea formats must be editable through the object API");
+        expect(document.set_prop_val(owner, model::PropertyId::from_name("ShowDataTable"), true) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            document.set_prop_val(owner, model::PropertyId::from_name("BackColor"), color) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "PlotArea formats must coexist with boolean and color properties");
+    }
+    const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100}, model::ChartAreaKind::plot};
+    for (const auto* invalid : {"Auto", "Justify", "Unknown"})
+        expect(document.set_prop_val(owner, model::PropertyId::from_name("AlignDataTable"), model::EnumerationValue{"HorizontalAlign", invalid}) == model::PropertyMutationStatus::invalid_value,
+            "PlotArea must reject alignment values rejected by the platform");
+    expect(document.set_prop_val(owner, model::PropertyId::from_name("RadarChartScaleType"), model::EnumerationValue{"RadarChartScaleType", "Unknown"}) == model::PropertyMutationStatus::invalid_value &&
+        document.set_prop_val(owner, model::PropertyId::from_name("DataTableFormat"), true) == model::PropertyMutationStatus::invalid_value,
+        "PlotArea must reject unknown radar types and non-text formats");
+    auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& records = encoded.value().items.at(1).items.at(2).items.at(2).items;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto record = std::ranges::find(records, std::to_string(100 + i), [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        expect(record != records.end(), "each Chart format record must exist");
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        const auto middle = std::size_t{18} + 11 * (series_count + point_count);
+        const auto& info = record->items.at(3).items;
+        expect(info.at(middle + 60).atom == std::to_string(i % 3) &&
+            info.at(middle + 67).atom == std::to_string(i % 2) &&
+            list_stream::dump_compact(info.at(middle + 61)) == value_codec::encode_localized_string(encoded_formats[i % 3]),
+            "PlotArea format and enum positions must match the platform");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChartPlotFormats");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "PlotArea formats must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "PlotArea formats must serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "PlotArea formats must parse from named XML");
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), "PlotArea formats must rebuild Form.bin");
+    const auto loaded = oof::load_form_bin(binary.value(), "ChartPlotFormats");
+    expect(loaded.ok() && loaded.value().reconstruction_complete(), "rebuilt PlotArea formats must load completely");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto current = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot};
+        const auto align = loaded.value().get_prop_val(current, model::PropertyId::from_name("AlignDataTable"));
+        const auto radar = loaded.value().get_prop_val(current, model::PropertyId::from_name("RadarChartScaleType"));
+        const auto format = loaded.value().get_prop_val(current, model::PropertyId::from_name("DataTableFormat"));
+        const auto table = loaded.value().get_prop_val(current, model::PropertyId::from_name("ShowDataTable"));
+        const auto back = loaded.value().get_prop_val(current, model::PropertyId::from_name("BackColor"));
+        expect(align.value && std::get<model::EnumerationValue>(*align.value).member == alignments[i % 3] &&
+            radar.value && std::get<model::EnumerationValue>(*radar.value).member == radar_modes[i % 2] &&
+            format.value && *format.value == formats[i % 3] && table.value && std::get<bool>(*table.value) &&
+            back.value && std::get<model::ColorValue>(*back.value) == color,
+            "PlotArea formats and neighboring properties must survive XML and Form.bin");
+    }
+    const auto rebuilt = form_stream::encode_document(loaded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "PlotArea formats must survive a full native round trip");
 }
 
 void test_chart_named_integer_and_delimiter_properties() {
@@ -18937,6 +19047,7 @@ int main() {
         test_chart_area_boolean_properties_round_trip();
         test_chart_area_color_properties_round_trip();
         test_chart_area_border_font_round_trip();
+        test_chart_plot_area_formats_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

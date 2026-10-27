@@ -642,6 +642,20 @@ void append_value_types(std::string& output) {
         }
         output += "</xs:restriction></xs:simpleType>\n";
     }
+    for (const auto& descriptor : model::metamodel::chart_plot_format_descriptors()) {
+        if (descriptor.enumeration == nullptr || descriptor.enumeration_type == "HorizontalAlign") continue;
+        output += "  <xs:complexType";
+        append_attribute(output, "name", std::string(descriptor.enumeration_type) + "ValueType");
+        output += "><xs:attribute name=\"type\" type=\"NonEmptyTokenType\" use=\"required\"";
+        append_attribute(output, "fixed", descriptor.enumeration_type);
+        output += "/><xs:attribute name=\"member\" use=\"required\"><xs:simpleType><xs:restriction base=\"xs:string\">";
+        for (const auto member : descriptor.members) {
+            output += "<xs:enumeration";
+            append_attribute(output, "value", member);
+            output += "/>";
+        }
+        output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
+    }
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
     for (const auto& [type_name, placement_type, kind] : {
             std::tuple{"ChartPlotAreaType", "ChartPlotAreaPlacementType", model::ChartAreaKind::plot},
@@ -681,6 +695,19 @@ void append_value_types(std::string& output) {
             append_attribute(output, "minOccurs", "0");
             append_attribute(output, "maxOccurs", "1");
             output += "/>";
+        }
+        if (kind == model::ChartAreaKind::plot) {
+            for (const auto& descriptor : model::metamodel::chart_plot_format_descriptors()) {
+                output += "<xs:element";
+                append_attribute(output, "name", descriptor.name);
+                const std::string type = descriptor.text ? "LocalizedTextValueType" :
+                    descriptor.enumeration_type == "HorizontalAlign" ? "IndicatorHorizontalAlignValueType" :
+                    std::string(descriptor.enumeration_type) + "ValueType";
+                append_attribute(output, "type", type);
+                append_attribute(output, "minOccurs", "0");
+                append_attribute(output, "maxOccurs", "1");
+                output += "/>";
+            }
         }
         output += "</xs:sequence></xs:complexType>\n";
     }
@@ -1323,6 +1350,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"VerticalLinesDataTable\" russianName=\"ВертикальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"HorizontalLinesInDataTable\" russianName=\"ГоризонтальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"KeysInDataTable\" russianName=\"КлючиВТаблицеДанных\" russianType=\"Булево\"/>\n"
         "          <Property name=\"SurfaceColor\" russianName=\"ЦветПоверхности\" russianType=\"Цвет\"/><Property name=\"BorderColor\" russianName=\"ЦветРамки\" russianType=\"Цвет\"/><Property name=\"TextColor\" russianName=\"ЦветТекста\" russianType=\"Цвет\"/><Property name=\"BackColor\" russianName=\"ЦветФона\" russianType=\"Цвет\"/><Property name=\"ScaleColor\" russianName=\"ЦветШкал\" russianType=\"Цвет\"/>\n"
         "          <Property name=\"Border\" russianName=\"Рамка\" russianType=\"Рамка\"/><Property name=\"Font\" russianName=\"Шрифт\" russianType=\"Шрифт\"/>\n"
+        "          <Property name=\"DataTableFormat\" russianName=\"ФорматВТаблицеДанных\" russianType=\"Строка\"/><Property name=\"AlignDataTable\" russianName=\"ВыравниваниеВТаблицеДанных\" russianType=\"ГоризонтальноеПоложение\"/><Property name=\"RadarChartScaleType\" russianName=\"ТипШкалыРадарнойДиаграммы\" russianType=\"ТипШкалыРадарнойДиаграммы\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartLegendArea\" russianName=\"ОбластьЛегендыДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"
         "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеЛегендыДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"

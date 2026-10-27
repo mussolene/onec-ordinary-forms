@@ -239,6 +239,22 @@ struct ChartAreaBooleanDescriptor {
     bool default_value = false;
 };
 
+struct ChartPlotFormatDescriptor {
+    PropertyId id{};
+    std::string_view name;
+    std::u8string_view russian_name;
+    ValueCodec value_codec = ValueCodec::unclassified;
+    std::optional<PropertyValue> ChartArea::*text = nullptr;
+    std::optional<EnumerationValue> ChartArea::*enumeration = nullptr;
+    std::string_view enumeration_type;
+    std::span<const std::string_view> members;
+    std::size_t default_ordinal = 0;
+    std::size_t storage_offset = 0;
+};
+
+[[nodiscard]] std::span<const ChartPlotFormatDescriptor> chart_plot_format_descriptors() noexcept;
+[[nodiscard]] const ChartPlotFormatDescriptor* find_chart_plot_format(PropertyId id) noexcept;
+
 struct ChartAreaStyleDescriptor {
     PropertyId id{};
     std::string_view name;

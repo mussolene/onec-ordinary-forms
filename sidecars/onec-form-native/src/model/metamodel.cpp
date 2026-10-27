@@ -2013,6 +2013,23 @@ const ControlDescriptor* find_by_russian_name(std::u8string_view name) noexcept 
     return Metamodel::instance().control_by_russian_name(name);
 }
 
+std::span<const ChartPlotFormatDescriptor> chart_plot_format_descriptors() noexcept {
+    static constexpr std::array<std::string_view, 3> alignment{"Left", "Center", "Right"};
+    static constexpr std::array<std::string_view, 2> radar{"Circle", "Polygon"};
+    static constexpr std::array descriptors{
+        ChartPlotFormatDescriptor{PropertyId::from_name("DataTableFormat"), "DataTableFormat", u8"ФорматВТаблицеДанных", ValueCodec::localized_text, &ChartArea::data_table_format, nullptr, {}, {}, 0, 61},
+        ChartPlotFormatDescriptor{PropertyId::from_name("AlignDataTable"), "AlignDataTable", u8"ВыравниваниеВТаблицеДанных", ValueCodec::enumeration, nullptr, &ChartArea::align_data_table, "HorizontalAlign", alignment, 2, 60},
+        ChartPlotFormatDescriptor{PropertyId::from_name("RadarChartScaleType"), "RadarChartScaleType", u8"ТипШкалыРадарнойДиаграммы", ValueCodec::enumeration, nullptr, &ChartArea::radar_chart_scale_type, "RadarChartScaleType", radar, 0, 67},
+    };
+    return descriptors;
+}
+
+const ChartPlotFormatDescriptor* find_chart_plot_format(PropertyId id) noexcept {
+    const auto descriptors = chart_plot_format_descriptors();
+    const auto found = std::ranges::find(descriptors, id, &ChartPlotFormatDescriptor::id);
+    return found == descriptors.end() ? nullptr : &*found;
+}
+
 std::span<const ChartAreaStyleDescriptor> chart_area_style_descriptors() noexcept {
     static constexpr std::array descriptors{
         ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::legend, &ChartArea::border, nullptr, 16},
