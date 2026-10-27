@@ -1185,11 +1185,13 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::boolean,
         "false");
-    for (const auto property_name : {"ChoiceIncomplete", "MarkIncomplete"}) {
+    for (const auto property_name : {"ChoiceIncomplete", "MarkIncomplete", "SelectedText"}) {
         if (const auto property = std::ranges::find(input_field, property_name, &PropertyDescriptor::api_name);
             property != input_field.end()) {
             property->persistence = PersistenceClass::runtime_only;
             property->storage_codec = StorageCodec::none;
+            if (property_name == std::string_view{"SelectedText"})
+                property->default_value = {DefaultKind::none, {}};
         }
     }
 

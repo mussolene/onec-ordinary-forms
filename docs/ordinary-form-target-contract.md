@@ -1317,6 +1317,6 @@ Date-only, Boolean или ValueList. Enabled и ReadOnly принимают Bool
 
 ## Выделение текста документа
 
-TextDocumentField.SelectedText относится к состоянию времени исполнения и
-не входит в Form.xml. Модель не воспроизводит выделение в интерфейсе или
-замену содержимого документа. Для InputField классификация еще не завершена.
+TextDocumentField.SelectedText и InputField.SelectedText относятся к
+состоянию времени исполнения и не входят в Form.xml. Модель не воспроизводит
+выделение в интерфейсе или замену текста в редакторе.

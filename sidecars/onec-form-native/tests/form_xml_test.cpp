@@ -1927,6 +1927,14 @@ void test_text_document_selected_text_runtime_only() {
     expect(source::serialize_form_xml(parsed.value()).ok(), "form must serialize after runtime selection is reset");
     constexpr std::string_view bad = R"XML(<Form id="1" name="TextSelection" ordinaryFormVersion="2.1"><ChildItems><TextDocumentField id="2" name="Text"><Position/><SelectedText>abc</SelectedText></TextDocumentField></ChildItems></Form>)XML";
     expect(!source::parse_form_xml(bad).ok(), "runtime selection must not be accepted in public XML");
+    constexpr std::string_view input_xml = R"XML(<Form id="1" name="InputSelection" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Value"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="Input"><DataPath attributeId="3"/><Position/></InputField></ChildItems></Form>)XML";
+    auto input = source::parse_form_xml(input_xml);
+    expect(input.ok(), "InputField selection fixture must parse");
+    expect(input.value().set_prop_val(owner, property, std::string("abc")) == model::PropertyMutationStatus::applied_runtime_only,
+        "InputField selection must be runtime-only");
+    expect(!source::serialize_form_xml(input.value()).ok(), "InputField runtime selection must not serialize");
+    expect(input.value().reset_prop_val(owner, property) == model::PropertyMutationStatus::reset_runtime_only &&
+        source::serialize_form_xml(input.value()).ok(), "InputField must serialize after selection reset");
 }
 
 void test_choice_and_input_field_picture_references_xml() {
