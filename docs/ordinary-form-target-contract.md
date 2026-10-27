@@ -64,8 +64,8 @@ DocumentComplete, GeographicalSchemaField сохраняет Selection, а
 GraphicalSchemaField сохраняет Selection и OnActivate. Назначения проверены
 в 1С и строгой выгрузкой Designer; вызов через интерфейс отдельно не проверен.
 Реквизит формы поддерживает именованный тип valueTree. Отдельные реквизиты
-проверены в 1С и строгой выгрузкой Designer. Табличное поле с источником
-ValueTree и его режимы пока не поддерживаются.
+проверены в 1С и строгой выгрузкой Designer. Табличное поле поддерживает
+источник ValueTree и свойство Tree; для ValueTable это свойство недоступно.
 Dendrogram сохраняет события Selection и DetailProcessing вместе с узлами
 и связями. Назначения проверены платформой; вызов событий интерфейсом
 отдельно не проверен.
@@ -92,8 +92,8 @@ HeaderFont и FooterFont с платформенными значениями п
 Table сохраняет AutoInsertNewRow, Footer, Header, EnableStartDrag, EnableDrag,
 ChangeSettingOfColumns, ChangePositionOfColumns, ChangeRowSet, HorizontalLines,
 VerticalLines и UseAlternationRowColor. ChoiceMode пока не поддерживается.
-Table также сохраняет 21 именованное событие. OnCurrentParentChange остается
-неподдерживаемым до отдельной проверки; вызов событий в интерфейсе не проверен.
+Table сохраняет 22 именованных события. OnCurrentParentChange доступно при
+источнике ValueTree; вызов событий в интерфейсе отдельно не проверен.
 LabelDecoration сохраняет Hyperlink и Shortcut, PictureDecoration сохраняет
 Shortcut. Сочетание F2 с Alt и Ctrl проверено при открытии формы в режиме
 гиперссылки; физическое нажатие клавиш еще не проверено.
@@ -1285,8 +1285,8 @@ XML содержит только именованные значения. Чи�
 
 На целевой платформе проверены 12 колонок с ширинами 0, 100, 140 и 210 и
 тремя шрифтами. Все чтения и строгий цикл Designer прошли, XML и модуль
-совпали. Поддержка источника ValueTree и полный набор свойств Columns еще
-не завершены; эта возможность не закрывает их классификацию. Свидетельство:
+совпали. Полный набор свойств Columns еще не завершен; эта возможность
+не закрывает их классификацию. Свидетельство:
 `ev_7ae706b44fb34425b0ef6ac66b518f3d`.
 
 ## Типы редактора колонки Table

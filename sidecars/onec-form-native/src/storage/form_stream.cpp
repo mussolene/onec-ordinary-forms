@@ -2645,6 +2645,12 @@ bool is_single_value_table_type_domain(const model::TypeDomainPatternValue& valu
     return value.entries.size() == 1 && value.entries.front() == expected;
 }
 
+bool is_single_value_tree_type_domain(const model::TypeDomainPatternValue& value) {
+    model::TypeDomainEntry expected;
+    expected.term = model::TypeDomainTerm::value_tree;
+    return value.entries.size() == 1 && value.entries.front() == expected;
+}
+
 LV encode_action(std::string_view handler, std::string_view path) {
     if (handler.empty()) {
         fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
@@ -3448,7 +3454,7 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
         "Table Column editor kind is unsupported");
 }
 
-LV canonical_table_column_record(const model::TableColumn& column, std::string_view path) {
+LV canonical_table_column_record(const model::TableColumn& column, std::string_view path, bool tree_source = false, std::size_t ordinal = 0) {
     auto properties = parse_constant(R"OOF(
 {23,{0},{1,0},{1,0},2.1e2,0,0,-1,-1,12590592,
 {4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},
@@ -3461,6 +3467,10 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         throw std::logic_error("canonical Table Column property record has the wrong arity");
     }
     properties.items[1] = encoded_localized(column.header);
+    if (tree_source) {
+        properties.items[5] = raw(std::to_string(ordinal));
+        properties.items[6] = raw("-1");
+    }
     if (column.layout_width) {
         std::string width;
         try { width = value_codec::canonical_decimal(column.layout_width->canonical); }
@@ -3532,9 +3542,11 @@ LV canonical_table_control_info(
     const model::TypeDomainPatternValue& source_type,
     const std::vector<model::TableColumn>& columns,
     bool read_only,
-    std::string_view path) {
-    if (columns.empty() || columns.size() > 256) {
-        fail("OOF1122", std::string(path) + "/Columns", "1 to 256 Columns",
+    std::string_view path,
+    bool tree_mode = true) {
+    const bool tree_source = is_single_value_tree_type_domain(source_type);
+    if ((!tree_source && columns.empty()) || columns.size() > 256) {
+        fail("OOF1122", std::string(path) + "/Columns", "supported Table Column count",
             std::to_string(columns.size()), "Table Columns collection is outside the supported profile");
     }
     auto base = parse_constant(R"OOF(
@@ -3549,19 +3561,24 @@ LV canonical_table_control_info(
     if (base.items.size() != 21 || properties.items.size() != 39) {
         throw std::logic_error("canonical Table control property record has the wrong arity");
     }
-    if (!read_only) properties.items[1] = raw(std::to_string(117643809U | 0x400U));
+    std::uint32_t flags = 117643809U | (!read_only ? 0x400U : 0U);
+    if (tree_source && !tree_mode) flags &= ~0x220U;
+    properties.items[1] = raw(std::to_string(flags));
     std::vector<LV> column_records;
     column_records.reserve(columns.size() + 1);
     column_records.push_back(raw(std::to_string(columns.size())));
     for (std::size_t index = 0; index < columns.size(); ++index) {
         column_records.push_back(canonical_table_column_record(
-            columns[index], std::string(path) + "/Columns/Column[" + std::to_string(index) + "]"));
+            columns[index], std::string(path) + "/Columns/Column[" + std::to_string(index) + "]", tree_source, index));
     }
     properties.items[23] = list(std::move(column_records));
     return list({
         raw("5"), encoded_type_domain(source_type, std::string(path) + "/ValueType"),
         list({std::move(base), std::move(properties)}),
-        list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
+        tree_source
+            ? list({raw("9ab3fa70-d2e0-4e44-baac-730682272ed2"),
+                    list({raw("4"), raw(tree_mode ? "1" : "0"), raw("1"), list({raw("0")})})})
+            : list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
         list({raw("0")})});
 }
 
@@ -8660,7 +8677,7 @@ DecodedControl decode_input_field(
 
 model::TableColumn decode_table_column(
     const LV& value, std::string_view path, std::uint64_t table_id,
-    Diagnostics& warnings, bool& reconstruction_complete) {
+    Diagnostics& warnings, bool& reconstruction_complete, bool tree_source, std::size_t ordinal) {
     require_arity(value, 2, path);
     require_raw_constant(value.items[0], "737535a4-21e6-4971-8513-3e3173a9fedd", child_path(path, 0));
     const auto body_path = child_path(path, 1);
@@ -8843,7 +8860,7 @@ model::TableColumn decode_table_column(
         warn_incomplete_profile(warnings, reconstruction_complete, table_id, editor_path, "TableColumn");
     }
     LV normalized = value;
-    const LV canonical = canonical_table_column_record(column, path);
+    const LV canonical = canonical_table_column_record(column, path, tree_source, ordinal);
     for (const auto slot : {4U, 22U, 32U, 39U, 45U})
         normalized.items[1].items[1].items[1].items[slot] = canonical.items[1].items[1].items[1].items[slot];
     require_list_stream_shape(normalized, canonical, path,
@@ -8868,9 +8885,10 @@ DecodedControl decode_table(
     if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", child_path(path, 1), "positive int64 Table ID", std::to_string(raw_id), "Table ID is invalid");
     }
-    if (!is_single_value_table_type_domain(linked_attribute.type)) {
-        fail("OOF1122", child_path(path, 1), "DataPath to an unqualified ValueTable Attribute",
-            linked_attribute.name, "Table DataPath target must have the named ValueTable type");
+    const bool tree_source = is_single_value_tree_type_domain(linked_attribute.type);
+    if (!tree_source && !is_single_value_table_type_domain(linked_attribute.type)) {
+        fail("OOF1122", child_path(path, 1), "DataPath to an unqualified ValueTable or ValueTree Attribute",
+            linked_attribute.name, "Table DataPath target must have a supported named collection type");
     }
     const auto info_path = child_path(path, 2);
     const auto& info = record.items[2];
@@ -8883,11 +8901,27 @@ DecodedControl decode_table(
         child_path(child_path(child_path(info_path, 2), 0), 0));
     require_raw_constant(info.items[2].items[1].items[0], "23",
         child_path(child_path(child_path(info_path, 2), 1), 0));
-    require_exact(info.items[3],
-        list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
-        child_path(info_path, 3), "Table editor envelope header is unsupported");
+    bool tree_mode = true;
+    if (tree_source) {
+        const auto mode_path = child_path(info_path, 3);
+        require_arity(info.items[3], 2, mode_path);
+        require_raw_constant(info.items[3].items[0], "9ab3fa70-d2e0-4e44-baac-730682272ed2", child_path(mode_path, 0));
+        const auto& mode = info.items[3].items[1];
+        require_arity(mode, 4, child_path(mode_path, 1));
+        require_raw_constant(mode.items[0], "4", child_path(mode_path, 1));
+        tree_mode = bool_atom(mode.items[1], child_path(mode_path, 1));
+        require_exact(mode, list({raw("4"), raw(tree_mode ? "1" : "0"), raw("1"), list({raw("0")})}),
+            child_path(mode_path, 1), "ValueTree Table mode record is unsupported");
+    } else {
+        require_exact(info.items[3],
+            list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
+            child_path(info_path, 3), "Table editor envelope header is unsupported");
+    }
     auto named_events = decode_control_event_collection(info.items[4], child_path(info_path, 4),
         model::ControlKind::table);
+    if (!tree_source && std::ranges::any_of(named_events, [](const auto& event) { return event.name == "OnCurrentParentChange"; }))
+        fail("OOF1122", child_path(info_path, 4), "ValueTree source for OnCurrentParentChange", "ValueTable",
+            "OnCurrentParentChange is unavailable for a ValueTable source");
     const auto stored_type = type_domain(info.items[1], child_path(info_path, 1));
     if (stored_type != linked_attribute.type) {
         fail("OOF1122", child_path(info_path, 1), "Table ValueType matching linked ValueTable Attribute",
@@ -8896,9 +8930,9 @@ DecodedControl decode_table(
     const auto columns_path = child_path(child_path(child_path(info_path, 2), 1), 23);
     const auto& stored_columns = info.items[2].items[1].items[23];
     require_list(stored_columns, columns_path);
-    if (stored_columns.items.empty() || stored_columns.items.size() < 2 || stored_columns.items.size() > 257 ||
+    if (stored_columns.items.empty() || (!tree_source && stored_columns.items.size() < 2) || stored_columns.items.size() > 257 ||
         integer_atom<std::size_t>(stored_columns.items[0], columns_path) != stored_columns.items.size() - 1) {
-        fail("OOF1114", columns_path, "matching Table Column count from 1 to 256",
+        fail("OOF1114", columns_path, "matching supported Table Column count",
             std::to_string(stored_columns.items.size()), "Table Column collection is malformed");
     }
     auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -8918,12 +8952,13 @@ DecodedControl decode_table(
     if (first_in_group) {
         control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
     }
+    if (tree_source && !tree_mode) control.properties().set_explicit(model::PropertyId::from_name("Tree"), false);
     auto& table = std::get<model::TablePayload>(control.payload);
     table.columns.reserve(stored_columns.items.size() - 1);
     for (std::size_t index = 1; index < stored_columns.items.size(); ++index) {
         table.columns.push_back(decode_table_column(
             stored_columns.items[index], child_path(columns_path, index), raw_id,
-            warnings, reconstruction_complete));
+            warnings, reconstruction_complete, tree_source, index - 1));
     }
     const auto base_path = child_path(child_path(info_path, 2), 0);
     const auto common = decode_common_control_base(info.items[2].items[0], base_path,
@@ -8933,6 +8968,9 @@ DecodedControl decode_table(
     normalized_info.items[4] = list({raw("0")});
     const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
         child_path(child_path(child_path(info_path, 2), 1), 1));
+    if (tree_source && (flags & 0x220U) != (tree_mode ? 0x220U : 0U))
+        fail("OOF1114", child_path(info_path, 3), "Table Tree mode matching its flags", std::to_string(flags),
+            "ValueTree Table mode and flags disagree");
     const bool read_only = (flags & 0x400U) == 0;
     if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     auto& normalized_table_properties = normalized_info.items[2].items[1];
@@ -8972,7 +9010,7 @@ DecodedControl decode_table(
         if (value != 1) control.properties().set_explicit(model::PropertyId::from_name(name), static_cast<std::int64_t>(value));
         normalized_table_properties.items.at(slot) = raw("1");
     }
-    const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path);
+    const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path, tree_mode);
     for (const auto& spec : table_appearance_properties) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
         const auto& stored = info.items[2].items[1].items.at(spec.slot);
@@ -10221,7 +10259,7 @@ LV encode_table(
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView",
-        "HeaderHeight", "FooterHeight", "Output", "Border"}, "$/Table");
+        "HeaderHeight", "FooterHeight", "Output", "Border", "Tree"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -10230,13 +10268,25 @@ LV encode_table(
         fail("OOF1123", "$/Table/DataPath", "existing ValueTable Attribute",
             std::to_string(control.data_path->attribute.id().value()), "Table DataPath does not resolve");
     }
-    if (!is_single_value_table_type_domain(attribute->type)) {
-        fail("OOF1122", "$/Table/DataPath", "unqualified ValueTable Attribute", attribute->name,
-            "Table DataPath must target the named ValueTable type");
+    const bool tree_source = is_single_value_tree_type_domain(attribute->type);
+    if (!tree_source && !is_single_value_table_type_domain(attribute->type)) {
+        fail("OOF1122", "$/Table/DataPath", "unqualified ValueTable or ValueTree Attribute", attribute->name,
+            "Table DataPath must target a supported named collection type");
     }
+    if (!tree_source && control.properties().find(model::PropertyId::from_name("Tree")))
+        fail("OOF1122", "$/Table/Tree", "ValueTree source", "ValueTable", "Tree is unavailable for a ValueTable source");
+    if (!tree_source) {
+        for (const auto& reference : control.events) {
+            const auto* event = document.find_event(reference.id());
+            if (event && event->name == "OnCurrentParentChange")
+                fail("OOF1122", "$/Table/Events", "ValueTree source for OnCurrentParentChange", "ValueTable",
+                    "OnCurrentParentChange is unavailable for a ValueTable source");
+        }
+    }
+    const bool tree_mode = tree_source ? explicit_bool(control.properties(), "Tree", true) : true;
     const auto& table = std::get<model::TablePayload>(control.payload);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
-    auto info = canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table");
+    auto info = canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table", tree_mode);
     encode_named_control_border(info.items[2].items[0], model::ControlKind::table, control.properties(), "$/Table");
     info.items.at(4) = encode_control_event_collection(document, control, "$/Table/Events");
     auto& table_properties = info.items.at(2).items.at(1);

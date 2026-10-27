@@ -372,7 +372,7 @@ math(EXPR remaining_total "${remaining_properties}+${remaining_events}+${remaini
 if(NOT coverage_ok OR NOT coverage_version STREQUAL "8.5.1.1343" OR
    NOT catalog_controls EQUAL 26 OR NOT target_controls EQUAL 25 OR
    NOT excluded_count EQUAL 1 OR NOT excluded_control STREQUAL "ActiveXControl" OR
-   NOT catalog_properties EQUAL 423 OR NOT excluded_properties EQUAL 2 OR
+   NOT catalog_properties EQUAL 424 OR NOT excluded_properties EQUAL 2 OR
    NOT descriptor_complete STREQUAL "OFF" OR remaining_total LESS 1)
   message(FATAL_ERROR "coverage JSON has unexpected values: ${CLI_STDOUT}")
 endif()

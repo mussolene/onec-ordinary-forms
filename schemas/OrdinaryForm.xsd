@@ -2693,6 +2693,7 @@
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FooterFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HeaderFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Tree" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="TableEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

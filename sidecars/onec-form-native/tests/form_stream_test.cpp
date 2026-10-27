@@ -8618,6 +8618,92 @@ void test_calendar_field_named_events_round_trip_and_rejections() {
     expect(!form_stream::encode_document(empty_handler), "empty CalendarField event handler must fail closed");
 }
 
+void test_value_tree_tables_and_parent_change() {
+    const auto make_document = [](model::TypeDomainTerm source_type, bool set_tree, bool attach_event) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "TreeTableBatch";
+        for (std::uint64_t i = 0; i < 12; ++i)
+            form.children.emplace_back(model::ControlRef{model::ObjectId{100 + i}});
+        model::OrdinaryFormDocument document(std::move(form));
+        for (std::uint64_t i = 0; i < 12; ++i) {
+            model::TypeDomainEntry entry;
+            entry.term = source_type;
+            const model::ObjectId attribute_id{10 + i}, control_id{100 + i}, event_id{200 + i};
+            document.add_attribute(model::Attribute{attribute_id, "Rows" + std::to_string(i),
+                model::TypeDomainPatternValue{{entry}}});
+            model::ControlNode table{control_id, "Table" + std::to_string(i), model::TablePayload{}};
+            table.data_path = model::DataPath{model::AttributeRef{attribute_id}, {}};
+            if (set_tree)
+                table.properties().set_explicit(model::PropertyId::from_name("Tree"), i % 2 == 0);
+            auto& columns = std::get<model::TablePayload>(table.payload).columns;
+            for (const auto* name : {"Code", "Extra"}) {
+                model::TableColumn column;
+                column.name = name;
+                column.data_path = name;
+                column.header.items.push_back({"en", name});
+                column.control.kind = model::ControlKind::input_field;
+                columns.push_back(std::move(column));
+            }
+            if (attach_event) {
+                table.events.emplace_back(event_id);
+                document.add_event(model::Event{event_id, "OnCurrentParentChange", "HandleParentChange",
+                    model::ControlRef{control_id}});
+            }
+            document.add_control(std::move(table));
+        }
+        return document;
+    };
+
+    auto document = make_document(model::TypeDomainTerm::value_tree, true, true);
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "ValueTree batch must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    const auto* first_record = find_record_with_guid(encoded.value(),
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(first_record != nullptr && first_record->items.at(2).items.at(4).items.at(1).items.at(0).atom == "46",
+        "OnCurrentParentChange must use the observed native event ID 46");
+    const auto decoded = form_stream::decode_document(encoded.value(), "TreeTableBatch");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "ValueTree batch must decode with complete reconstruction");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto* table = decoded.value().find_control(model::ObjectId{100 + i});
+        expect(table != nullptr && std::get<model::TablePayload>(table->payload).columns.size() == 2,
+            "each ValueTree table must keep both named columns");
+        const auto tree = decoded.value().get_prop_val({model::ObjectCategory::control, table->id},
+            model::PropertyId::from_name("Tree"));
+        expect(tree.value && std::get<bool>(*tree.value) == (i % 2 == 0),
+            "Tree must retain the selected mode for every table");
+        expect(table->events.size() == 1, "each ValueTree table must retain its parent-change event");
+        const auto* event = decoded.value().find_event(table->events.front().id());
+        expect(event && event->name == "OnCurrentParentChange" && event->handler == "HandleParentChange" &&
+            std::holds_alternative<model::ControlRef>(event->owner) &&
+            std::get<model::ControlRef>(event->owner).id() == table->id,
+            "parent-change action must retain its name, handler, and owner");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<Tree>false</Tree>") != std::string::npos &&
+        xml.value().find("OnCurrentParentChange") != std::string::npos,
+        "ValueTree modes and actions must be represented by named XML");
+    const auto reparsed = source::parse_form_xml(xml.value());
+    expect(reparsed.ok(), "ValueTree batch XML must parse again");
+    const auto rebuilt = form_stream::encode_document(reparsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "ValueTree batch must survive the named XML and native roundtrip");
+
+    const auto default_tree = form_stream::encode_document(make_document(model::TypeDomainTerm::value_tree, false, false));
+    expect(default_tree.ok(), "ValueTree table must encode with its default Tree mode");
+    const auto default_decoded = form_stream::decode_document(default_tree.value(), "TreeDefault");
+    expect(default_decoded.ok(), "default ValueTree table must decode");
+    const auto default_value = default_decoded.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{100}},
+        model::PropertyId::from_name("Tree"));
+    expect(default_value.value && std::get<bool>(*default_value.value), "ValueTree Tree default must be true");
+    expect(!form_stream::encode_document(make_document(model::TypeDomainTerm::value_table, true, false)),
+        "Tree must be rejected for a ValueTable source");
+    expect(!form_stream::encode_document(make_document(model::TypeDomainTerm::value_table, false, true)),
+        "parent-change event must be rejected for a ValueTable source");
+}
+
 void test_table_named_events() {
     constexpr std::array events{
         std::pair{"Selection", 34U}, std::pair{"ValueChoice", 48U}, std::pair{"DragStart", 900U},
@@ -17683,6 +17769,7 @@ int main() {
         test_calendar_field_named_events_round_trip_and_rejections();
         test_picture_and_list_named_events();
         test_choice_and_input_named_events();
+        test_value_tree_tables_and_parent_change();
         test_table_named_events();
         test_check_box_radio_button_track_bar_named_on_change_events();
         test_common_control_font_and_border_color();

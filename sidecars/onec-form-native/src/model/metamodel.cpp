@@ -1402,6 +1402,7 @@ void apply_proven_storage_overrides(
 
     constexpr std::array table_event_storage{
         std::pair{"Selection", 34U}, std::pair{"ValueChoice", 48U}, std::pair{"DragStart", 900U},
+        std::pair{"OnCurrentParentChange", 46U},
         std::pair{"ChoiceProcessing", 52U}, std::pair{"NewObjectWriteProcessing", 50U},
         std::pair{"DragEnd", 902U}, std::pair{"BeforeAddRow", 40U}, std::pair{"BeforeRowChange", 41U},
         std::pair{"BeforeEditEnd", 44U}, std::pair{"BeforeDeleteRow", 42U}, std::pair{"Drag", 903U},
@@ -1510,6 +1511,13 @@ struct Metamodel::Impl {
         for (auto descriptor : make_control_property_descriptors()) {
             properties[static_cast<std::size_t>(descriptor.control_kind)].push_back(descriptor);
         }
+        properties[static_cast<std::size_t>(ControlKind::table)].push_back(PropertyDescriptor{
+            PropertyId::from_name("Tree"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::table, 46,
+            "Tree", "Tree", u8"Дерево", u8"Булево",
+            ValueKind::boolean, ValueCodec::boolean, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::control_info, {DefaultKind::boolean, "true"}});
         auto& dendrogram_properties = properties[static_cast<std::size_t>(ControlKind::dendrogram)];
         dendrogram_properties.push_back(PropertyDescriptor{
             PropertyId::from_name("Items"), DescriptorOwner::control,

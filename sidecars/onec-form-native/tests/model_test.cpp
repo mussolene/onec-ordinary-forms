@@ -1065,10 +1065,10 @@ void test_help_metamodel() {
         "coverage target must explicitly exclude ActiveX without changing the help catalog");
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 423,
+        coverage.control_property_occurrences == 424,
         "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 206,
+        coverage.unique_control_property_names == 207,
         "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,
@@ -1323,8 +1323,8 @@ void test_help_metamodel() {
             std::string(name) + " must have its observed Table event descriptor");
     }
     const auto* current_parent = find_event(ControlKind::table, "OnCurrentParentChange");
-    expect(current_parent && current_parent->persistence != PersistenceClass::persisted_editable,
-        "Table OnCurrentParentChange must remain unsupported");
+    expect(current_parent && current_parent->persistence == PersistenceClass::persisted_editable &&
+        current_parent->storage_event_id == 46, "Table OnCurrentParentChange must use the observed storage ID");
     constexpr std::array form_event_ids{
         std::pair{"BeforeOpen", 70000U}, std::pair{"OnOpen", 70001U},
         std::pair{"BeforeClose", 70002U}, std::pair{"OnClose", 70003U},
@@ -1424,9 +1424,6 @@ void test_help_metamodel() {
         spreadsheet_activate_area->storage_codec == StorageCodec::none &&
         spreadsheet_activate_area->storage_tag.empty() && !spreadsheet_activate_area->storage_event_id,
         "SpreadsheetDocumentField OnActivateArea must be unsupported without storage metadata");
-    const auto* table_parent_change = find_event(ControlKind::table, "OnCurrentParentChange");
-    expect(table_parent_change && table_parent_change->persistence == PersistenceClass::unclassified,
-        "Table OnCurrentParentChange must remain unclassified without evidence");
     for (const auto& [kind, name, id] : std::array{
              std::tuple{ControlKind::gantt_chart, "OnIntervalEditEnd", 2U},
              std::tuple{ControlKind::html_document_field, "DocumentComplete", 0U},

@@ -1373,6 +1373,50 @@ void test_table_enum_properties_xml() {
     }
 }
 
+void test_value_tree_table_xml_contract() {
+    const auto xml = [](std::string_view source_type, std::string_view property, std::string_view events) {
+        return std::string("<Form id=\"1\" name=\"TreeForm\" ordinaryFormVersion=\"2.1\"><Attributes>") +
+            "<Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"" + std::string(source_type) +
+            "\"/></TypeDomain></Attribute></Attributes><ChildItems><Table id=\"3\" name=\"Table\">" +
+            "<DataPath attributeId=\"2\"/><Position/>" +
+            "<Columns><Column name=\"Code\"><DataPath>Code</DataPath><Header><Item language=\"en\">Code</Item>"
+            "</Header><Control type=\"InputField\"/></Column></Columns>" + std::string(property) + std::string(events) + "</Table></ChildItems></Form>";
+    };
+    constexpr std::string_view action = "<Events><OnCurrentParentChange id=\"4\">HandleParent</OnCurrentParentChange></Events>";
+    const model::OrdinaryFormDocument::ObjectKey table{model::ObjectCategory::control, model::ObjectId{3}};
+    const auto tree_id = model::PropertyId::from_name("Tree");
+    for (const bool tree : {false, true}) {
+        const auto parsed = source::parse_form_xml(xml("valueTree", tree ? "<Tree>true</Tree>" : "<Tree>false</Tree>", action));
+        expect(parsed.ok(), "ValueTree Table with Tree mode and parent-change action must parse");
+        const auto value = parsed.value().get_prop_val(table, tree_id);
+        expect(value.value && std::get<bool>(*value.value) == tree, "XML must expose the selected Tree mode");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok() && serialized.value().find("OnCurrentParentChange") != std::string::npos,
+            "ValueTree action must remain named in XML");
+        const auto again = source::parse_form_xml(serialized.value());
+        expect(again.ok(), "serialized ValueTree Table must parse again");
+        const auto repeated = again.value().get_prop_val(table, tree_id);
+        expect(repeated.value && std::get<bool>(*repeated.value) == tree, "Tree mode must survive XML roundtrip");
+    }
+    const auto implicit = source::parse_form_xml(xml("valueTree", "", ""));
+    expect(implicit.ok(), "ValueTree Table must parse without an explicit Tree property");
+    const auto default_tree = implicit.value().get_prop_val(table, tree_id);
+    expect(default_tree.value && std::get<bool>(*default_tree.value), "implicit ValueTree mode must be Tree");
+    expect(!source::parse_form_xml(xml("valueTree", "<Tree>unknown</Tree>", "")).ok(),
+        "Tree must reject a non-Boolean value");
+    expect(!source::parse_form_xml(xml("valueTable", "<Tree>false</Tree>", "")).ok(),
+        "ValueTable must reject an explicit Tree property");
+    auto value_table = source::parse_form_xml(xml("valueTable", "", ""));
+    expect(value_table.ok(), "ValueTable fixture must parse");
+    expect(value_table.value().get_prop_val(table, tree_id).status == model::PropertyReadStatus::unsupported_surface,
+        "ValueTable must not report a Tree default");
+    expect(value_table.value().set_prop_val(table, tree_id, false) == model::PropertyMutationStatus::unsupported_surface &&
+        value_table.value().reset_prop_val(table, tree_id) == model::PropertyMutationStatus::unsupported_surface,
+        "ValueTable must reject Tree mutation and reset");
+    expect(!source::parse_form_xml(xml("valueTable", "", action)).ok(),
+        "ValueTable must reject the parent-change action");
+}
+
 void test_table_columns_named_profile() {
     constexpr std::string_view valid = R"XML(
 <Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
@@ -2973,6 +3017,7 @@ int main() {
         test_value_table_type_domain_xml_roundtrip();
         test_value_tree_type_domain_xml_roundtrip();
         test_table_enum_properties_xml();
+        test_value_tree_table_xml_contract();
         test_table_columns_named_profile();
         test_table_column_layout_xml();
         test_inherited_property_has_one_surface();

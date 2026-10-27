@@ -663,6 +663,7 @@
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
               <Property name="FooterFont" apiName="FooterFont" russianName="ШрифтПодвала" russianType="Шрифт" valueCodec="font"/>
               <Property name="HeaderFont" apiName="HeaderFont" russianName="ШрифтШапки" russianType="Шрифт" valueCodec="font"/>
+              <Property name="Tree" apiName="Tree" russianName="Дерево" russianType="Булево" valueCodec="boolean"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>

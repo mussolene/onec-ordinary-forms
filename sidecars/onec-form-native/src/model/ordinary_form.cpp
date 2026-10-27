@@ -786,6 +786,16 @@ std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
     return index_.size();
 }
 
+namespace {
+bool table_tree_property_available(const OrdinaryFormDocument& document, const ControlNode& control) {
+    if (!control.data_path || !control.data_path->members.empty()) return false;
+    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    TypeDomainEntry expected;
+    expected.term = TypeDomainTerm::value_tree;
+    return attribute && attribute->type.entries.size() == 1 && attribute->type.entries.front() == expected;
+}
+}
+
 PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyId property) const {
     const metamodel::PropertyDescriptor* descriptor = nullptr;
     const PropertySet* properties = nullptr;
@@ -800,6 +810,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const auto& control = collections_.controls[location->index];
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
+            !table_tree_property_available(*this, control)) return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (is_typed_collection_property(*descriptor)) {
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
         }
@@ -875,6 +887,8 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         auto& control = collections_.controls[location->index];
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
+            !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
             return PropertyMutationStatus::unsupported_surface;
         }
@@ -969,6 +983,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         auto& control = collections_.controls[location->index];
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
+            !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
             return PropertyMutationStatus::unsupported_surface;
         }
@@ -1710,16 +1726,30 @@ ValidationReport OrdinaryFormDocument::validate() const {
             const auto invalid_table = [&](std::string reason) {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
+            bool tree_source = false;
             if (!control.data_path || !control.data_path->members.empty()) {
-                invalid_table("Table requires a direct DataPath to a ValueTable Attribute");
-            } else if (const Attribute* attribute = find_attribute(control.data_path->attribute.id());
-                       attribute == nullptr || attribute->type.entries.size() != 1 ||
-                       [&] {
-                           TypeDomainEntry expected;
-                           expected.term = TypeDomainTerm::value_table;
-                           return attribute->type.entries.front() != expected;
-                       }()) {
-                invalid_table("Table DataPath must reference the named ValueTable type");
+                invalid_table("Table requires a direct DataPath to a ValueTable or ValueTree Attribute");
+            } else {
+                const Attribute* attribute = find_attribute(control.data_path->attribute.id());
+                const TypeDomainEntry value_table{.term = TypeDomainTerm::value_table};
+                const TypeDomainEntry value_tree{.term = TypeDomainTerm::value_tree};
+                if (attribute == nullptr || attribute->type.entries.size() != 1 ||
+                    (attribute->type.entries.front() != value_table && attribute->type.entries.front() != value_tree)) {
+                    invalid_table("Table DataPath must reference the named ValueTable or ValueTree type");
+                } else {
+                    tree_source = attribute->type.entries.front() == value_tree;
+                }
+            }
+            if (!tree_source && control.properties().find(PropertyId::from_name("Tree")) != nullptr) {
+                invalid_table("Table Tree property requires a ValueTree DataPath");
+            }
+            if (!tree_source) {
+                for (const EventRef reference : control.events) {
+                    const Event* event = find_event(reference.id());
+                    if (event != nullptr && event->name == "OnCurrentParentChange") {
+                        invalid_table("Table OnCurrentParentChange requires a ValueTree DataPath");
+                    }
+                }
             }
             std::set<std::string> column_names;
             for (const auto& column : table->columns) {
