@@ -1347,12 +1347,13 @@ void apply_proven_storage_overrides(
         DefaultKind::boolean,
         "true");
 
-    for (const auto name : {"ModalMode", "Modified"}) {
+    for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode"}) {
         auto property = std::ranges::find(form_properties, name, &PropertyDescriptor::api_name);
         if (property == form_properties.end()) throw std::logic_error("missing runtime Form property");
         property->persistence = PersistenceClass::runtime_only;
         property->storage_codec = StorageCodec::none;
-        property->default_value = {DefaultKind::none, {}};
+        property->default_value = name == std::string_view{"CloseOnChoice"}
+            ? DefaultValue{DefaultKind::boolean, "true"} : DefaultValue{DefaultKind::none, {}};
     }
 
     classify_property(

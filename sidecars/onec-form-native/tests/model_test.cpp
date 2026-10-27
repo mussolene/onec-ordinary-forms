@@ -389,6 +389,27 @@ void test_form_runtime_state_properties() {
         expect(document.get_prop_val(owner, PropertyId::from_name(name)).status == PropertyReadStatus::no_default,
             "form runtime state must not fabricate an initial value");
     }
+    for (const auto name : {"CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode"}) {
+        const auto* descriptor = find_form_property(name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::runtime_only &&
+                descriptor->storage_codec == StorageCodec::none,
+            "choice and owner behavior must be runtime-only");
+        const auto property = PropertyId::from_name(name);
+        const auto initial = document.get_prop_val(owner, property);
+        if (std::string_view{name} == "CloseOnChoice")
+            expect(initial.status == PropertyReadStatus::proven_default && initial.value == PropertyValue{true},
+                "CloseOnChoice must expose the documented true default");
+        else
+            expect(initial.status == PropertyReadStatus::no_default,
+                "runtime state without a documented default must not invent one");
+        expect(document.set_prop_val(owner, property, false) == PropertyMutationStatus::applied_runtime_only &&
+                document.get_prop_val(owner, property).value == PropertyValue{false} &&
+                !oof::source::serialize_form_xml(document),
+            "runtime choice state must be readable without being serialized");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset_runtime_only &&
+                oof::source::serialize_form_xml(document).ok(),
+            "resetting runtime choice state must restore serialization");
+    }
     const auto modal = PropertyId::from_name("ModalMode");
     const auto modified = PropertyId::from_name("Modified");
     expect(document.set_prop_val(owner, modal, true) == PropertyMutationStatus::read_only,
