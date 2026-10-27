@@ -129,6 +129,12 @@
     <xs:attribute name="member" type="NonEmptyTokenType" use="required"/>
   </xs:complexType>
 
+  <xs:complexType name="EnterKeyBehaviorValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="EnterKeyBehaviorType"/>
+    <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="ControlNavigation"/><xs:enumeration value="DefaultButton"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType>
   <xs:complexType name="InputIncompleteChoiceModeValueType">
     <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="IncompleteChoiceMode"/>
     <xs:attribute name="member" use="required">
@@ -1846,7 +1852,7 @@
       <xs:element name="Modified" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChoiceInitialValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Panel" type="FormPanelType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="EnterKeyBehavior" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnterKeyBehavior" type="EnterKeyBehaviorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowDockLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AllowClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

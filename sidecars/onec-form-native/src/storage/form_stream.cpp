@@ -11417,7 +11417,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 std::to_string(width) + "x" + std::to_string(height),
                 "Stored form dimensions are invalid");
         }
-        require_raw_constant(form_section.items[5], "1", "$/1/5");
+        const bool navigate_on_enter = bool_atom(form_section.items[5], "$/1/5");
         require_raw_constant(form_section.items[6], "0", "$/1/6");
         require_raw_constant(form_section.items[7], "1", "$/1/7");
         require_raw_constant(form_section.items[8], "4", "$/1/8");
@@ -11478,6 +11478,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (!navigate_on_enter) form.properties.set_explicit(model::PropertyId::from_name("EnterKeyBehavior"),
+            model::EnumerationValue{"EnterKeyBehaviorType", "DefaultButton"});
         if (caption != model::PropertyValue{std::string{}}) {
             form.properties.set_explicit(model::PropertyId::from_name("Caption"), caption);
         }
@@ -12178,7 +12180,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12186,6 +12188,8 @@ Result<list_stream::ListValue> encode_document(
         const bool auto_title = explicit_bool(document.form().properties, "AutoTitle", true);
         const bool allow_close = explicit_bool(document.form().properties, "AllowClose", true);
         const bool desktop_mode = explicit_bool(document.form().properties, "DesktopMode", false);
+        const auto enter_behavior = explicit_enum_storage_value(document.form().properties, "Form", "EnterKeyBehavior",
+            "EnterKeyBehaviorType", 1, {{"DefaultButton", 0}, {"ControlNavigation", 1}});
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -12557,7 +12561,7 @@ Result<list_stream::ListValue> encode_document(
             root_panel,
             raw(std::to_string(width)),
             raw(std::to_string(height)),
-            raw("1"),
+            raw(std::to_string(enter_behavior)),
             raw("0"),
             raw("1"),
             raw("4"),

@@ -134,6 +134,8 @@ std::string_view xsd_type(ValueCodec codec) {
 }
 
 std::string_view xsd_type(const PropertyDescriptor& property) {
+    if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "EnterKeyBehavior")
+        return "EnterKeyBehaviorValueType";
     if (property.value_codec == ValueCodec::form_reference &&
         property.persistence == model::metamodel::PersistenceClass::runtime_only) {
         return "UnclassifiedValueType";
@@ -437,6 +439,12 @@ void append_value_types(std::string& output) {
     <xs:attribute name="member" type="NonEmptyTokenType" use="required"/>
   </xs:complexType>
 
+  <xs:complexType name="EnterKeyBehaviorValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="EnterKeyBehaviorType"/>
+    <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="ControlNavigation"/><xs:enumeration value="DefaultButton"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType>
   <xs:complexType name="InputIncompleteChoiceModeValueType">
     <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="IncompleteChoiceMode"/>
     <xs:attribute name="member" use="required">

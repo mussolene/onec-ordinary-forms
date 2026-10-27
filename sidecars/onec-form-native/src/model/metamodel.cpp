@@ -1381,6 +1381,9 @@ void apply_proven_storage_overrides(
         property->default_value = name == std::string_view{"CloseOnChoice"}
             ? DefaultValue{DefaultKind::boolean, "true"} : DefaultValue{DefaultKind::none, {}};
     }
+    classify_property(form_properties, "EnterKeyBehavior", StorageCodec::root_record,
+        DefaultKind::enumeration, "EnterKeyBehaviorType.ControlNavigation");
+    std::ranges::find(form_properties, "EnterKeyBehavior", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     std::ranges::find(form_properties, "ThisForm", &PropertyDescriptor::api_name)->value_codec = ValueCodec::form_reference;
 
     classify_property(
