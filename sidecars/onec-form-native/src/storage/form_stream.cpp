@@ -4274,7 +4274,7 @@ struct DecodedChartInfo {
 };
 
 DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
-    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete);
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style = true);
 std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path);
 
 struct EmbeddedChartEvents {
@@ -4323,8 +4323,9 @@ void validate_embedded_chart_info(const LV& actual, const LV& expected,
         "Embedded Chart geometry header is unsupported");
     Diagnostics chart_warnings;
     bool chart_complete = true;
+    // Embedded profiles have owner-specific area styles checked against the owner record below.
     static_cast<void>(decode_chart_info(actual.items[2], child_path(path, 2), owner_id,
-        chart_warnings, chart_complete));
+        chart_warnings, chart_complete, false));
     // Эти свойства еще не представлены у владельца, поэтому проекция неполна.
     if (list_stream::dump_compact(actual) != list_stream::dump_compact(expected))
         warn_incomplete_profile(warnings, reconstruction_complete, owner_id, path, owner_kind);
@@ -6582,6 +6583,16 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
                 fail("OOF1120", std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
             }
         }
+        for (const auto& descriptor : model::metamodel::chart_area_style_descriptors()) {
+            if (descriptor.kind != kind) continue;
+            if (descriptor.border) {
+                info.at(middle_start + descriptor.storage_offset) = encode_control_border(
+                    (area.*(descriptor.border)).value_or(model::BorderValue{}), name);
+            } else {
+                info.at(middle_start + descriptor.storage_offset) = encode_control_font(
+                    (area.*(descriptor.font)).value_or(model::FontValue{}), name);
+            }
+        }
     };
     if (chart.plot_area) write_area(*chart.plot_area, 12, 15, model::metamodel::chart_area_placements(model::ChartAreaKind::plot), "$/Chart/PlotArea");
     if (chart.legend_area) write_area(*chart.legend_area, 13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend), "$/Chart/LegendArea");
@@ -6701,7 +6712,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
 }
 
 DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& info_path,
-    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete) {
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style) {
     require_list(stored_info, info_path);
     LV info = stored_info;
     if (info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(info), "Chart Info is truncated");
@@ -6989,6 +7000,17 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
                     fail("OOF1114", child_path(info_path, pair_index), "matching Chart area color companion", "different color", "Chart area color pair disagrees");
             }
             if (value != default_value) area.*(descriptor.member) = value;
+        }
+        for (const auto& descriptor : model::metamodel::chart_area_style_descriptors()) {
+            if (!include_area_style || descriptor.kind != kind) continue;
+            const auto index = middle_start + descriptor.storage_offset;
+            if (descriptor.border) {
+                auto value = decode_control_border(at(info, index, info_path), child_path(info_path, index));
+                if (value != model::BorderValue{}) area.*(descriptor.border) = std::move(value);
+            } else {
+                auto value = decode_control_font(at(info, index, info_path), child_path(info_path, index));
+                if (value != model::FontValue{}) area.*(descriptor.font) = std::move(value);
+            }
         }
         if (area == defaults) return std::nullopt;
         return area;

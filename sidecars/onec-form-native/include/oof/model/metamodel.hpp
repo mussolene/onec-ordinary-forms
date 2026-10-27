@@ -239,6 +239,19 @@ struct ChartAreaBooleanDescriptor {
     bool default_value = false;
 };
 
+struct ChartAreaStyleDescriptor {
+    PropertyId id{};
+    std::string_view name;
+    std::u8string_view russian_name;
+    ChartAreaKind kind = ChartAreaKind::none;
+    std::optional<BorderValue> ChartArea::*border = nullptr;
+    std::optional<FontValue> ChartArea::*font = nullptr;
+    std::size_t storage_offset = 0;
+};
+
+[[nodiscard]] std::span<const ChartAreaStyleDescriptor> chart_area_style_descriptors() noexcept;
+[[nodiscard]] const ChartAreaStyleDescriptor* find_chart_area_style(ChartAreaKind kind, PropertyId id) noexcept;
+
 enum class ChartAreaColorDefault : std::uint8_t { automatic, form_back, form_text, border, white, surface };
 
 struct ChartAreaColorDescriptor {

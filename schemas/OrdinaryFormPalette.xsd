@@ -1055,11 +1055,13 @@
           <Property name="Transparent" russianName="ПрозрачныйФон" russianType="Булево"/><Property name="ShowDataTable" russianName="ОтображатьТаблицуДанных" russianType="Булево"/><Property name="ShowScales" russianName="ОтображатьШкалы" russianType="Булево"/>
           <Property name="VerticalLinesDataTable" russianName="ВертикальныеЛинииВТаблицеДанных" russianType="Булево"/><Property name="HorizontalLinesInDataTable" russianName="ГоризонтальныеЛинииВТаблицеДанных" russianType="Булево"/><Property name="KeysInDataTable" russianName="КлючиВТаблицеДанных" russianType="Булево"/>
           <Property name="SurfaceColor" russianName="ЦветПоверхности" russianType="Цвет"/><Property name="BorderColor" russianName="ЦветРамки" russianType="Цвет"/><Property name="TextColor" russianName="ЦветТекста" russianType="Цвет"/><Property name="BackColor" russianName="ЦветФона" russianType="Цвет"/><Property name="ScaleColor" russianName="ЦветШкал" russianType="Цвет"/>
+          <Property name="Border" russianName="Рамка" russianType="Рамка"/><Property name="Font" russianName="Шрифт" russianType="Шрифт"/>
         </Properties></NamedConcept>
         <NamedConcept name="ChartLegendArea" russianName="ОбластьЛегендыДиаграммы" evidenceRefs="ev_8716e61c09c841db91cbb280c8ef420e"><Properties>
           <Property name="Placement" russianName="Расположение" russianType="РасположениеЛегендыДиаграммы"/><Property name="Left" russianName="Лево" russianType="Число"/><Property name="Top" russianName="Верх" russianType="Число"/><Property name="Right" russianName="Право" russianType="Число"/><Property name="Bottom" russianName="Низ" russianType="Число"/>
           <Property name="Transparent" russianName="ПрозрачныйФон" russianType="Булево"/><Property name="Scrolling" russianName="Прокрутка" russianType="Булево"/>
           <Property name="BackColor" russianName="ЦветФона" russianType="Цвет"/><Property name="BorderColor" russianName="ЦветРамки" russianType="Цвет"/><Property name="TextColor" russianName="ЦветТекста" russianType="Цвет"/>
+          <Property name="Border" russianName="Рамка" russianType="Рамка"/><Property name="Font" russianName="Шрифт" russianType="Шрифт"/>
         </Properties></NamedConcept>
         <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>

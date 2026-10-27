@@ -850,6 +850,16 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
                 PropertyValue{value.value_or(metamodel::chart_area_color_default(descriptor->default_kind))}};
         }
+        if (const auto* descriptor = metamodel::find_chart_area_style(owner.chart_area, property)) {
+            if (descriptor->border) {
+                const auto& value = area.*(descriptor->border);
+                return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                    PropertyValue{value.value_or(BorderValue{})}};
+            }
+            const auto& value = area.*(descriptor->font);
+            return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                PropertyValue{value.value_or(FontValue{})}};
+        }
         return {PropertyReadStatus::unknown_property, std::nullopt};
     }
     const metamodel::PropertyDescriptor* descriptor = nullptr;
@@ -968,6 +978,18 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             const auto* color = std::get_if<ColorValue>(&value);
             if (color == nullptr) return PropertyMutationStatus::invalid_value;
             updated.*(descriptor->member) = *color;
+        } else if (const auto* descriptor = metamodel::find_chart_area_style(owner.chart_area, property)) {
+            if (descriptor->border) {
+                const auto* border = std::get_if<BorderValue>(&value);
+                if (border == nullptr || !valid_border_value(*border) ||
+                    (border->kind == BorderKind::absolute && border->border_type == ControlBorderType::rounded))
+                    return PropertyMutationStatus::invalid_value;
+                updated.*(descriptor->border) = *border;
+            } else {
+                const auto* font = std::get_if<FontValue>(&value);
+                if (font == nullptr) return PropertyMutationStatus::invalid_value;
+                updated.*(descriptor->font) = *font;
+            }
         } else if (chart_area_coordinate(updated, property) != nullptr) {
             std::string canonical;
             if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
@@ -1112,6 +1134,14 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             auto& chart = std::get<ChartPayload>(collections_.controls[location->index].payload);
             auto& area = owner.chart_area == ChartAreaKind::plot ? chart.plot_area : chart.legend_area;
             if (area) ((*area).*(descriptor->member)).reset();
+            return PropertyMutationStatus::reset_unclassified_storage;
+        }
+        if (const auto* descriptor = metamodel::find_chart_area_style(owner.chart_area, property)) {
+            const auto location = find_location(ObjectCategory::control, owner.id);
+            auto& chart = std::get<ChartPayload>(collections_.controls[location->index].payload);
+            auto& area = owner.chart_area == ChartAreaKind::plot ? chart.plot_area : chart.legend_area;
+            if (area && descriptor->border) ((*area).*(descriptor->border)).reset();
+            if (area && descriptor->font) ((*area).*(descriptor->font)).reset();
             return PropertyMutationStatus::reset_unclassified_storage;
         }
         const auto defaults = default_chart_area(owner.chart_area, true);

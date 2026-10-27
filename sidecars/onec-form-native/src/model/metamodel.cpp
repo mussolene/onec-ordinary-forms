@@ -2013,6 +2013,24 @@ const ControlDescriptor* find_by_russian_name(std::u8string_view name) noexcept 
     return Metamodel::instance().control_by_russian_name(name);
 }
 
+std::span<const ChartAreaStyleDescriptor> chart_area_style_descriptors() noexcept {
+    static constexpr std::array descriptors{
+        ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::legend, &ChartArea::border, nullptr, 16},
+        ChartAreaStyleDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ChartAreaKind::legend, nullptr, &ChartArea::font, 32},
+        ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::plot, &ChartArea::border, nullptr, 18},
+        ChartAreaStyleDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ChartAreaKind::plot, nullptr, &ChartArea::font, 33},
+    };
+    return descriptors;
+}
+
+const ChartAreaStyleDescriptor* find_chart_area_style(ChartAreaKind kind, PropertyId id) noexcept {
+    const auto descriptors = chart_area_style_descriptors();
+    const auto found = std::ranges::find_if(descriptors, [&](const auto& descriptor) {
+        return descriptor.kind == kind && descriptor.id == id;
+    });
+    return found == descriptors.end() ? nullptr : &*found;
+}
+
 std::span<const ChartAreaColorDescriptor> chart_area_color_descriptors() noexcept {
     static constexpr std::array descriptors{
         ChartAreaColorDescriptor{PropertyId::from_name("BackColor"), "BackColor", u8"ЦветФона", ChartAreaKind::legend, &ChartArea::back_color, 25, 5, ChartAreaColorDefault::form_back},

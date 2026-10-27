@@ -942,7 +942,9 @@ void test_control_surfaces_and_property_order(
                     [&](const auto& descriptor) { return descriptor.kind == kind; });
                 const auto color_count = std::ranges::count_if(oof::model::metamodel::chart_area_color_descriptors(),
                     [&](const auto& descriptor) { return descriptor.kind == kind; });
-                expect(fields.size() == 5 + static_cast<std::size_t>(bool_count + color_count) && attribute(fields[0], "name") == "Placement" &&
+                const auto style_count = std::ranges::count_if(oof::model::metamodel::chart_area_style_descriptors(),
+                    [&](const auto& descriptor) { return descriptor.kind == kind; });
+                expect(fields.size() == 5 + static_cast<std::size_t>(bool_count + color_count + style_count) && attribute(fields[0], "name") == "Placement" &&
                     attribute(fields[1], "name") == "Left" && attribute(fields[2], "name") == "Top" &&
                     attribute(fields[3], "name") == "Right" && attribute(fields[4], "name") == "Bottom" &&
                     attribute(fields[1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
@@ -954,6 +956,10 @@ void test_control_surfaces_and_property_order(
                 for (const auto& descriptor : oof::model::metamodel::chart_area_color_descriptors()) {
                     if (descriptor.kind == kind)
                         expect_element_shape(fields[boolean_index++], descriptor.name, "ColorValueType", "0", "1");
+                }
+                for (const auto& descriptor : oof::model::metamodel::chart_area_style_descriptors()) {
+                    if (descriptor.kind == kind)
+                        expect_element_shape(fields[boolean_index++], descriptor.name, descriptor.border ? "BorderValueType" : "FontValueType", "0", "1");
                 }
             }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");

@@ -16428,8 +16428,8 @@ void test_chart_area_modes_round_trip() {
             payload.series.push_back(series); payload.points.push_back(point);
             payload.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
         }
-        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
-        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
+        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
+        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
         model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
         control.position.width.set(160); control.position.height.set(120);
         control.properties().set_explicit(model::PropertyId::from_name("ShowLegend"), i % 7 != 6);
@@ -16754,6 +16754,147 @@ void test_chart_area_color_properties_round_trip() {
     const auto rebuilt = form_stream::encode_document(loaded.value());
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
         "Chart area color Form.bin round-trip must preserve storage");
+}
+
+void test_chart_area_border_font_round_trip() {
+    model::BorderValue absolute_border;
+    absolute_border.border_type = model::ControlBorderType::double_line;
+    absolute_border.width = 2;
+    model::BorderValue style_border;
+    style_border.kind = model::BorderKind::style_reference;
+    style_border.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+    const std::array borders{model::BorderValue{}, absolute_border, style_border};
+    constexpr std::array<std::string_view, 3> border_records{
+        "{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e}",
+        "{3,0,{0},200,2,3,48312c09-257f-4b29-b280-284dd89efc1e}",
+        "{3,1,{-18},0,0,0}"};
+    model::FontValue absolute_font;
+    absolute_font.kind = model::FontKind::absolute;
+    absolute_font.face_name = "Arial";
+    absolute_font.height = 11;
+    absolute_font.bold = true;
+    model::FontValue style_font;
+    style_font.kind = model::FontKind::style_reference;
+    style_font.style = model::QualifiedName{"StyleFonts.TextFont"};
+    const std::array fonts{model::FontValue{}, absolute_font, style_font};
+
+    model::Form form; form.id = model::ObjectId{1}; form.name = "ChartAreaStyle";
+    for (std::uint64_t i = 0; i < 12; ++i)
+        form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::ChartPayload payload;
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        for (std::size_t n = 0; n < series_count; ++n) {
+            model::ChartSeries series; series.id = model::ObjectId{1000 + i * 10 + n};
+            series.text = "Series" + std::to_string(n); series.color.kind = model::ColorKind::absolute;
+            series.marker = {"ChartMarkerType", "Auto"}; payload.series.push_back(std::move(series));
+        }
+        for (std::size_t n = 0; n < point_count; ++n) {
+            model::ChartPoint point; point.id = model::ObjectId{2000 + i * 10 + n};
+            point.text = "Point" + std::to_string(n); point.color.kind = model::ColorKind::absolute;
+            payload.points.push_back(std::move(point));
+        }
+        for (const auto& series : payload.series) for (const auto& point : payload.points)
+            payload.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
+        control.position.width.set(160); control.position.height.set(120);
+        if (i == 11) {
+            control.events.push_back(model::EventRef{model::ObjectId{3000}});
+            document.add_event(model::Event{model::ObjectId{3000}, "Selection", "OnSelection", model::ControlRef{control.id}});
+        }
+        document.add_control(std::move(control));
+    }
+    model::ColorValue rgb; rgb.kind = model::ColorKind::absolute;
+    rgb.red = 23; rgb.green = 67; rgb.blue = 101;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot}) {
+            const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};
+            const auto border_id = model::PropertyId::from_name("Border");
+            const auto font_id = model::PropertyId::from_name("Font");
+            const auto initial_border = document.get_prop_val(owner, border_id);
+            const auto initial_font = document.get_prop_val(owner, font_id);
+            expect(initial_border.value && std::holds_alternative<model::BorderValue>(*initial_border.value) &&
+                std::get<model::BorderValue>(*initial_border.value) == model::BorderValue{}, "Chart area border default must match platform");
+            expect(initial_font.value && std::holds_alternative<model::FontValue>(*initial_font.value) &&
+                std::get<model::FontValue>(*initial_font.value) == model::FontValue{}, "Chart area font default must match platform");
+            const auto k = static_cast<std::size_t>((i + (kind == model::ChartAreaKind::plot ? 1 : 0)) % 3);
+            expect(document.set_prop_val(owner, border_id, borders[k]) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "Chart area border must be editable through the object API");
+            expect(document.set_prop_val(owner, font_id, fonts[k]) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "Chart area font must be editable through the object API");
+            const auto border = document.get_prop_val(owner, border_id);
+            const auto font = document.get_prop_val(owner, font_id);
+            expect(border.value && std::get<model::BorderValue>(*border.value) == borders[k] &&
+                font.value && std::get<model::FontValue>(*font.value) == fonts[k], "Chart area style must read back through the API");
+            expect(document.set_prop_val(owner, model::PropertyId::from_name("BackColor"), rgb) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "area border and font must coexist with color");
+            expect(document.set_prop_val(owner, model::PropertyId::from_name("Transparent"), true) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "area border and font must coexist with boolean properties");
+        }
+    }
+    const auto invalid_area = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100}, model::ChartAreaKind::legend};
+    expect(document.set_prop_val(invalid_area, model::PropertyId::from_name("Border"), true) == model::PropertyMutationStatus::invalid_value &&
+        document.set_prop_val(invalid_area, model::PropertyId::from_name("Font"), std::string("Arial")) == model::PropertyMutationStatus::invalid_value,
+        "Chart area styles must reject incorrect value types");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& records = encoded.value().items.at(1).items.at(2).items.at(2).items;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto record = std::ranges::find(records, std::to_string(100 + i), [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        expect(record != records.end(), "each Chart style record must exist");
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        const auto middle = std::size_t{18} + 11 * (series_count + point_count);
+        for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot}) {
+            const auto k = static_cast<std::size_t>((i + (kind == model::ChartAreaKind::plot ? 1 : 0)) % 3);
+            const auto border_offset = kind == model::ChartAreaKind::legend ? 16U : 18U;
+            const auto font_offset = kind == model::ChartAreaKind::legend ? 32U : 33U;
+            expect(list_stream::dump_compact(record->items.at(3).items.at(middle + border_offset)) == border_records[k],
+                "area border must use the platform-confirmed record");
+            expect(list_stream::dump_compact(record->items.at(3).items.at(middle + font_offset)) == value_codec::encode_font(fonts[k]),
+                "area font must use the platform-confirmed record");
+        }
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChartAreaStyle");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart area styles must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "Chart area styles must serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "Chart area style XML must parse");
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), "Chart area style XML must rebuild Form.bin");
+    const auto loaded = oof::load_form_bin(binary.value(), "ChartAreaStyle");
+    expect(loaded.ok() && loaded.value().reconstruction_complete(), "rebuilt Chart area style Form.bin must load completely");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot}) {
+            const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};
+            const auto k = static_cast<std::size_t>((i + (kind == model::ChartAreaKind::plot ? 1 : 0)) % 3);
+            const auto border = loaded.value().get_prop_val(owner, model::PropertyId::from_name("Border"));
+            const auto font = loaded.value().get_prop_val(owner, model::PropertyId::from_name("Font"));
+            const auto color = loaded.value().get_prop_val(owner, model::PropertyId::from_name("BackColor"));
+            const auto transparent = loaded.value().get_prop_val(owner, model::PropertyId::from_name("Transparent"));
+            expect(border.value && std::get<model::BorderValue>(*border.value) == borders[k] &&
+                font.value && std::get<model::FontValue>(*font.value) == fonts[k], "area styles must survive XML and Form.bin");
+            expect(color.value && std::get<model::ColorValue>(*color.value) == rgb &&
+                transparent.value && std::get<bool>(*transparent.value), "area styles must preserve adjacent color and boolean");
+        }
+    }
+    const auto rebuilt = form_stream::encode_document(loaded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Chart area style Form.bin round-trip must preserve storage");
+    auto malformed = encoded.value();
+    auto* malformed_chart = find_chart_record(malformed);
+    expect(malformed_chart != nullptr, "Chart record must exist for malformed style check");
+    malformed_chart->items.at(3).items.at(18 + 32) = list_stream::parse("{8,2,0,{-20},1,99}");
+    expect(!form_stream::decode_document(malformed), "malformed Chart area font must fail typed validation");
+    auto unsupported = document;
+    model::FontValue invalid_font; invalid_font.kind = model::FontKind::windows_font;
+    expect(unsupported.set_prop_val(invalid_area, model::PropertyId::from_name("Font"), invalid_font) == model::PropertyMutationStatus::applied_unclassified_storage &&
+        !form_stream::encode_document(unsupported), "unsupported Chart area font must fail encoding");
 }
 
 void test_chart_named_integer_and_delimiter_properties() {
@@ -17575,8 +17716,16 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
             std::get<model::ChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload).summary_series.color,
         "valid unrepresented Chart Font variants must warn while retaining named Color");
     const auto fonts_rebuilt = form_stream::encode_document(partial_fonts.value());
-    expect(fonts_rebuilt.ok() && list_stream::dump_compact(fonts_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
-        "unrepresented Chart Fonts must not be preserved in fresh named reconstruction");
+    expect(fonts_rebuilt.ok(), "partially represented Chart Fonts must rebuild");
+    auto rebuilt_font_stream = fonts_rebuilt.value();
+    auto original_font_stream = encoded.value();
+    const auto* rebuilt_font_record = find_chart_record(rebuilt_font_stream);
+    const auto* original_font_record = find_chart_record(original_font_stream);
+    expect(list_stream::dump_compact(rebuilt_font_record->items[3].items[49]) ==
+            list_stream::dump_compact(original_font_record->items[3].items[49]) &&
+        list_stream::dump_compact(rebuilt_font_record->items[3].items[50]) == "{8,2,0,{-20},1,100}" &&
+        list_stream::dump_compact(rebuilt_font_record->items[3].items[51]) == "{8,2,0,{-20},1,100}",
+        "area fonts must survive while the unrepresented Chart font remains omitted");
     const auto fonts_xml = source::serialize_form_xml(partial_fonts.value());
     expect(fonts_xml.ok(), "Chart with valid unrepresented Fonts must serialize named XML");
     const auto fonts_xml_document = source::parse_form_xml(fonts_xml.value());
@@ -18787,6 +18936,7 @@ int main() {
         test_chart_area_modes_round_trip();
         test_chart_area_boolean_properties_round_trip();
         test_chart_area_color_properties_round_trip();
+        test_chart_area_border_font_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

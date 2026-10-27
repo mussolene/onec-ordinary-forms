@@ -739,6 +739,8 @@ struct ChartArea {
     std::optional<ColorValue> text_color;
     std::optional<ColorValue> surface_color;
     std::optional<ColorValue> scale_color;
+    std::optional<BorderValue> border;
+    std::optional<FontValue> font;
 
     friend bool operator==(const ChartArea&, const ChartArea&) = default;
 };
