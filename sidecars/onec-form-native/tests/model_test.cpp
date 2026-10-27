@@ -1223,6 +1223,10 @@ void test_help_metamodel() {
     expect(choice_list && choice_list->persistence == PersistenceClass::runtime_only &&
             choice_list->storage_codec == StorageCodec::none,
         "ChoiceField ChoiceList must remain runtime-only rather than a persisted XML value");
+    const auto* input_choice_list = find_property(ControlKind::input_field, "ChoiceList");
+    expect(input_choice_list && input_choice_list->persistence == PersistenceClass::runtime_only &&
+        input_choice_list->storage_codec == StorageCodec::none,
+        "InputField ChoiceList must be classified as runtime state, without claiming a collection implementation");
     expect(
         event_descriptors(ControlKind::input_field).size() == 9,
         "InputField must retain the exact 9-event TextBox surface");

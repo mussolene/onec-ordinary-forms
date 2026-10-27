@@ -987,6 +987,12 @@ void test_choice_field_static_xml_profile_and_runtime_list_rejection() {
     const auto runtime_list = source::parse_form_xml(runtime_list_xml);
     expect_code(runtime_list, "OOF2002",
         "runtime-only ChoiceList must be rejected from the persisted XML object model");
+    constexpr std::string_view input_runtime_list_xml = R"XML(<Form id="1" name="InputField" ordinaryFormVersion="2.1">
+      <Attributes><Attribute id="3" name="Choice"><TypeDomain><Entry term="string" length="20" variable="false"/></TypeDomain></Attribute></Attributes>
+      <ChildItems><InputField id="2" name="Input"><DataPath attributeId="3"/><Position/><ChoiceList/></InputField></ChildItems>
+    </Form>)XML";
+    expect_code(source::parse_form_xml(input_runtime_list_xml), "OOF2002",
+        "runtime-only InputField ChoiceList must not be accepted as stored XML state");
 }
 
 void test_check_box_font_xml_round_trip() {
