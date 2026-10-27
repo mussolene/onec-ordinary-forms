@@ -986,7 +986,7 @@ void apply_proven_storage_overrides(
         "");
 
     auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
-    for (const auto name : {"Picture", "ChoiceButtonPicture"}) {
+    for (const auto name : {"Picture", "ChoiceButtonPicture", "SelButtonPicture"}) {
         classify_property(choice_field, name, StorageCodec::picture_record, DefaultKind::none, "");
     }
     for (const auto name : {"ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly"})
@@ -1142,7 +1142,7 @@ void apply_proven_storage_overrides(
     std::ranges::find(track_bar, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
-    for (const auto name : {"Picture", "ChoiceButtonPicture"}) {
+    for (const auto name : {"Picture", "ChoiceButtonPicture", "SelButtonPicture"}) {
         classify_property(input_field, name, StorageCodec::picture_record, DefaultKind::none, "");
     }
     classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");
@@ -1714,6 +1714,16 @@ struct Metamodel::Impl {
                 index_property(properties_by_name[index], properties_by_id[index], descriptor);
                 if (!excluded) account_property(descriptor);
                 unique_property_names.insert(descriptor.api_name);
+            }
+            if (controls[index].kind == ControlKind::choice_field ||
+                controls[index].kind == ControlKind::input_field) {
+                const auto canonical = properties_by_name[index].find("ChoiceButtonPicture");
+                if (canonical == properties_by_name[index].end() ||
+                    properties_by_name[index].find("SelButtonPicture") == properties_by_name[index].end()) {
+                    throw std::logic_error("missing ChoiceButtonPicture alias descriptors");
+                }
+                properties_by_name[index].at("SelButtonPicture") = canonical->second;
+                properties_by_id[index].at(PropertyId::from_name("SelButtonPicture")) = canonical->second;
             }
             for (const auto& descriptor : events[index]) {
                 index_event(events_by_name[index], descriptor);

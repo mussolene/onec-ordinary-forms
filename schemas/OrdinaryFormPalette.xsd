@@ -210,7 +210,7 @@
               <Property name="ChoiceListHeight" apiName="ChoiceListHeight" russianName="ВысотаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
-              <Property name="SelButtonPicture" apiName="SelButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
+              <Property name="SelButtonPicture" apiName="SelButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" aliasOf="ChoiceButtonPicture" valueCodec="picture"/>
               <Property name="ChoiceButtonPicture" apiName="ChoiceButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
               <Property name="ChoiceButton" apiName="ChoiceButton" russianName="КнопкаВыбора" russianType="Булево" valueCodec="boolean"/>
               <Property name="OpenButton" apiName="OpenButton" russianName="КнопкаОткрытия" russianType="Булево" valueCodec="boolean"/>
@@ -275,7 +275,7 @@
               <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
-              <Property name="SelButtonPicture" apiName="SelButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
+              <Property name="SelButtonPicture" apiName="SelButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" aliasOf="ChoiceButtonPicture" valueCodec="picture"/>
               <Property name="ChoiceButtonPicture" apiName="ChoiceButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
               <Property name="ChoiceButton" apiName="ChoiceButton" russianName="КнопкаВыбора" russianType="Булево" valueCodec="boolean"/>
               <Property name="OpenButton" apiName="OpenButton" russianName="КнопкаОткрытия" russianType="Булево" valueCodec="boolean"/>

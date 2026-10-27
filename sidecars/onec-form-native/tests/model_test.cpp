@@ -1263,10 +1263,8 @@ void test_help_metamodel() {
         "inherited RadioButton FirstInGroup must have one shared extension owner");
     const auto* sel_button_picture = find_property(ControlKind::input_field, "SelButtonPicture");
     const auto* choice_button_picture = find_property(ControlKind::input_field, "ChoiceButtonPicture");
-    expect(sel_button_picture &&
-            sel_button_picture->persistence == PersistenceClass::unclassified &&
-            sel_button_picture->storage_codec == StorageCodec::unclassified,
-        "SelButtonPicture must remain unclassified without direct storage evidence");
+    expect(sel_button_picture && sel_button_picture == choice_button_picture,
+        "SelButtonPicture must resolve to the proven ChoiceButtonPicture alias");
     expect(choice_button_picture &&
             choice_button_picture->persistence == PersistenceClass::persisted_editable &&
             choice_button_picture->storage_codec == StorageCodec::picture_record &&
@@ -2476,6 +2474,41 @@ void test_picture_property_model_api() {
             document.get_prop_val(input, reset_property).status == PropertyReadStatus::no_default,
         "resetting an explicit field picture must restore its no-default state");
     expect(document.validate().ok(), "valid standard and transparent GIF references must validate");
+
+    const auto canonical = PropertyId::from_name("ChoiceButtonPicture");
+    const auto alias = PropertyId::from_name("SelButtonPicture");
+    for (const auto owner : {choice, input}) {
+        const auto* control = document.find_control(owner.id);
+        expect(control != nullptr, "picture alias owner must exist");
+        for (const auto write_id : {canonical, alias}) {
+            const auto read_id = write_id == canonical ? alias : canonical;
+            const PictureRef first{PictureAssetRef{}, QualifiedName{"PictureLib.Calendar"}};
+            const PictureRef second{PictureAssetRef{}, QualifiedName{"PictureLib.ChooseValue"}};
+            expect(document.set_prop_val(owner, write_id, first) == PropertyMutationStatus::applied,
+                "either picture alias must set the same canonical value");
+            const auto read = document.get_prop_val(owner, read_id);
+            expect(read.status == PropertyReadStatus::explicit_value && read.value &&
+                    *read.value == PropertyValue{first},
+                "the other picture alias must read the assigned value");
+            expect(document.set_prop_val(owner, read_id, second) == PropertyMutationStatus::applied,
+                "writing through the other alias must replace the same value");
+            const auto replaced = document.get_prop_val(owner, write_id);
+            expect(replaced.status == PropertyReadStatus::explicit_value && replaced.value &&
+                    *replaced.value == PropertyValue{second},
+                "replacement must be visible through the original alias");
+            expect(control->properties().find(canonical) != nullptr && control->properties().find(alias) == nullptr,
+                "the PropertySet must contain one canonical entry and no alias entry");
+            expect(document.reset_prop_val(owner, write_id) == PropertyMutationStatus::reset &&
+                    document.get_prop_val(owner, read_id).status == PropertyReadStatus::no_default &&
+                    control->properties().find(canonical) == nullptr,
+                "reset through either alias must clear the shared value");
+        }
+        auto invalid = document;
+        auto* direct = const_cast<ControlNode*>(invalid.find_control(owner.id));
+        direct->properties().set_explicit(alias, PictureRef{PictureAssetRef{}, QualifiedName{"PictureLib.Calendar"}});
+        expect(!invalid.validate().ok(),
+            "a raw alias entry bypassing the property API must fail validation");
+    }
 }
 
 void test_gantt_interval_date_validation() {

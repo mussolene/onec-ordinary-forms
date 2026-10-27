@@ -857,7 +857,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             }
         }, *position_property);
     }
-    if (const PropertyEntry* entry = properties->find(property)) {
+    if (const PropertyEntry* entry = properties->find(descriptor->id)) {
         return {PropertyReadStatus::explicit_value, entry->value};
     }
     if (descriptor->default_value.kind == metamodel::DefaultKind::none) {
@@ -957,7 +957,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
     }
 
-    properties->set_explicit(property, std::move(value));
+    properties->set_explicit(descriptor->id, std::move(value));
     if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
         return PropertyMutationStatus::applied_runtime_only;
     }
@@ -1021,7 +1021,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         return PropertyMutationStatus::reset;
     }
 
-    properties->unset(property);
+    properties->unset(descriptor->id);
     if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
         return PropertyMutationStatus::reset_runtime_only;
     }
@@ -1238,6 +1238,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     source,
                     {},
                     "property is not declared for this ordinary-form object surface");
+            } else if (property.id != descriptor->id) {
+                add_violation(report, InvariantCode::invalid_property, source, {},
+                    "stored property must use its canonical metamodel ID");
             } else if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform) {
                 add_violation(report, InvariantCode::invalid_property, source, {},
                     "property is unavailable on the ordinary-form platform owner");

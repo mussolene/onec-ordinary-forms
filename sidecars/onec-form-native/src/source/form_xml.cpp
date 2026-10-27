@@ -2002,6 +2002,11 @@ private:
                     }
                 }
             } else {
+                if ((descriptor->kind == model::ControlKind::input_field ||
+                     descriptor->kind == model::ControlKind::choice_field) && name == "SelButtonPicture") {
+                    fail("OOF2003", child, id_text, name, "ChoiceButtonPicture", name,
+                        "Use the canonical XML property for the picture alias");
+                }
                 const mm::PropertyDescriptor* property =
                     metamodel_.property(descriptor->kind, name);
                 if (property == nullptr) {
@@ -3148,6 +3153,16 @@ private:
         std::optional<model::ControlKind> control_kind = std::nullopt
     ) {
         for (const auto& descriptor : descriptors) {
+            if ((descriptor.control_kind == model::ControlKind::input_field ||
+                 descriptor.control_kind == model::ControlKind::choice_field) &&
+                descriptor.api_name == "SelButtonPicture") {
+                if (properties.find(descriptor.id) != nullptr) {
+                    serialization_fail(std::string(object_id), std::string(descriptor.xml_name),
+                        "canonical ChoiceButtonPicture property", "noncanonical alias",
+                        "Picture aliases cannot be stored as separate XML properties");
+                }
+                continue;
+            }
             if (control_kind && descriptor.control_kind != model::ControlKind::panel &&
                 descriptor.control_kind != *control_kind) {
                 continue;

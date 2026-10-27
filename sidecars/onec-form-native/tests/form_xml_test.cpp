@@ -1967,6 +1967,38 @@ void test_choice_and_input_field_picture_references_xml() {
     expect(reparsed.ok() && source::serialize_form_xml(reparsed.value()).value() == serialized.value(),
         "field picture references must survive a deterministic XML-only roundtrip");
 
+    auto alias_document = parsed.value();
+    const auto alias = model::PropertyId::from_name("SelButtonPicture");
+    for (const auto id : {model::ObjectId{2}, model::ObjectId{4}}) {
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, id};
+        const model::PictureRef picture{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}};
+        expect(alias_document.set_prop_val(owner, alias, picture) == model::PropertyMutationStatus::applied,
+            "picture API alias must set the canonical property before XML serialization");
+    }
+    const auto alias_serialized = source::serialize_form_xml(alias_document);
+    expect(alias_serialized.ok() && alias_serialized.value().find("SelButtonPicture") == std::string::npos,
+        "XML must not emit the API alias as a separate property");
+    const auto first_canonical = alias_serialized.value().find("<ChoiceButtonPicture");
+    const auto second_canonical = alias_serialized.value().find("<ChoiceButtonPicture", first_canonical + 1);
+    expect(first_canonical != std::string::npos && second_canonical != std::string::npos &&
+            alias_serialized.value().find("<ChoiceButtonPicture", second_canonical + 1) == std::string::npos,
+        "each field must serialize one canonical picture property");
+    for (const std::string value : {"10", "11"}) {
+        std::string alias_xml(xml);
+        const auto open = alias_xml.find("<ChoiceButtonPicture>" + value + "</ChoiceButtonPicture>");
+        expect(open != std::string::npos, "canonical picture fixture must contain the target property");
+        const auto original = "<ChoiceButtonPicture>" + value + "</ChoiceButtonPicture>";
+        const auto replacement = "<SelButtonPicture>" + value + "</SelButtonPicture>";
+        alias_xml.replace(open, original.size(), replacement);
+        expect(!source::parse_form_xml(alias_xml).ok(),
+            "XML must reject the API alias instead of introducing a second public property");
+    }
+    std::string duplicate_alias(xml);
+    const auto choice_at = duplicate_alias.find("<ChoiceButtonPicture>10</ChoiceButtonPicture>");
+    duplicate_alias.insert(choice_at, "<SelButtonPicture>11</SelButtonPicture>");
+    expect(!source::parse_form_xml(duplicate_alias).ok(),
+        "XML must reject simultaneous canonical and alias properties");
+
     constexpr std::string_view empty_xml = R"XML(<Form id="1" name="EmptyPictures" ordinaryFormVersion="2.1">
   <Attributes><Attribute id="3" name="Value"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
   <ChildItems>

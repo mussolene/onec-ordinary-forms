@@ -796,6 +796,11 @@ void append_property_elements(
     bool include_runtime_only = true
 ) {
     for (const auto& property : properties) {
+        if ((property.control_kind == model::ControlKind::input_field ||
+             property.control_kind == model::ControlKind::choice_field) &&
+            property.api_name == "SelButtonPicture") {
+            continue;
+        }
         if (!include_runtime_only &&
             property.persistence == model::metamodel::PersistenceClass::runtime_only) {
             continue;
@@ -1129,6 +1134,10 @@ void append_palette_properties(
         append_attribute(output, "apiName", property.api_name);
         append_attribute(output, "russianName", as_utf8(property.russian_name));
         append_attribute(output, "russianType", as_utf8(property.platform_type));
+        if ((property.control_kind == model::ControlKind::input_field ||
+             property.control_kind == model::ControlKind::choice_field) &&
+            property.api_name == "SelButtonPicture")
+            append_attribute(output, "aliasOf", "ChoiceButtonPicture");
         if (property.surface == PropertySurface::panel_placement)
             append_attribute(output, "surface", "panelPlacement");
         if (property.persistence == model::metamodel::PersistenceClass::unsupported_by_platform)
