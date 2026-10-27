@@ -860,6 +860,13 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
     if (const PropertyEntry* entry = properties->find(descriptor->id)) {
         return {PropertyReadStatus::explicit_value, entry->value};
     }
+    if (descriptor->owner == metamodel::DescriptorOwner::control &&
+        descriptor->control_kind == ControlKind::panel && descriptor->api_name == "ShowTabs") {
+        const auto* scroll = properties->find(PropertyId::from_name("ScrollPageMode"));
+        if (scroll && std::get_if<bool>(&scroll->value) && std::get<bool>(scroll->value)) {
+            return {PropertyReadStatus::computed_value, PropertyValue{UndefinedValue{}}};
+        }
+    }
     if (descriptor->default_value.kind == metamodel::DefaultKind::none) {
         return {PropertyReadStatus::no_default, std::nullopt};
     }

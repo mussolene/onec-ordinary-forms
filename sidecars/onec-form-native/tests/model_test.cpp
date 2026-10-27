@@ -762,6 +762,39 @@ void test_chart_integer_and_delimiter_descriptors() {
     }
 }
 
+void test_panel_scrolling_tab_read() {
+    Form form;
+    form.id = ObjectId{1};
+    OrdinaryFormDocument document(std::move(form));
+    const auto tabs = PropertyId::from_name("ShowTabs");
+    const auto scroll = PropertyId::from_name("ScrollPageMode");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId id{2 + index};
+        document.add_control(ControlNode{id, "Panel" + std::to_string(index), PanelPayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        const auto initial = document.get_prop_val(owner, tabs);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value &&
+            *initial.value == PropertyValue{EnumerationValue{"ShowTabs", "Top"}},
+            "a panel without scrolling must expose its tab default");
+        expect(document.set_prop_val(owner, scroll, true) == PropertyMutationStatus::applied,
+            "scroll mode must accept true");
+        const auto scrolling = document.get_prop_val(owner, tabs);
+        expect(scrolling.status == PropertyReadStatus::computed_value && scrolling.value &&
+            *scrolling.value == PropertyValue{UndefinedValue{}},
+            "scrolling must expose undefined when no tab value is explicitly assigned");
+        expect(document.set_prop_val(owner, tabs, EnumerationValue{"ShowTabs", "Bottom"}) == PropertyMutationStatus::applied,
+            "an explicitly assigned tab mode must remain readable");
+        const auto assigned = document.get_prop_val(owner, tabs);
+        expect(assigned.status == PropertyReadStatus::explicit_value && assigned.value &&
+            *assigned.value == PropertyValue{EnumerationValue{"ShowTabs", "Bottom"}},
+            "an assigned tab mode must be read while scrolling remains enabled");
+        expect(document.reset_prop_val(owner, tabs) == PropertyMutationStatus::reset,
+            "tab mode can be reset");
+        expect(document.get_prop_val(owner, tabs).status == PropertyReadStatus::computed_value,
+            "resetting the explicit tab mode must reveal the computed value");
+    }
+}
+
 void test_chart_base_value_property() {
     using namespace oof::model::metamodel;
     const auto* descriptor = find_property(ControlKind::chart, "BaseValue");
@@ -2962,6 +2995,7 @@ void test_control_border_and_calendar_selection_descriptors() {
 int main() {
     try {
         test_descriptors();
+        test_panel_scrolling_tab_read();
         test_unavailable_ordinary_geometry_properties();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();

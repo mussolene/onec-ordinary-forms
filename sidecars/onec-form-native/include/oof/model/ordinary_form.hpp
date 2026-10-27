@@ -507,6 +507,7 @@ enum class PropertyReadStatus : std::uint8_t {
     unknown_owner,
     unknown_property,
     unsupported_surface,
+    computed_value,
 };
 
 struct PropertyReadResult {
