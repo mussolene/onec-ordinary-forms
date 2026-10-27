@@ -942,6 +942,7 @@ void test_unavailable_ordinary_geometry_properties() {
         Case{ControlKind::geographical_schema_field, "HorizontalStretch", GeographicalSchemaFieldPayload{}},
         Case{ControlKind::graphical_schema_field, "VerticalStretch", GraphicalSchemaFieldPayload{}},
         Case{ControlKind::graphical_schema_field, "HorizontalStretch", GraphicalSchemaFieldPayload{}},
+        Case{ControlKind::graphical_schema_field, "Edit", GraphicalSchemaFieldPayload{}},
         Case{ControlKind::gantt_chart, "AutoMaxWidth", GanttChartPayload{}},
         Case{ControlKind::gantt_chart, "MaxWidth", GanttChartPayload{}},
     };

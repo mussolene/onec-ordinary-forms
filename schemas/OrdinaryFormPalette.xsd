@@ -605,7 +605,7 @@
             <Properties>
               <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
-              <Property name="Edit" apiName="Edit" russianName="Редактирование" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Edit" apiName="Edit" russianName="Редактирование" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" available="false" valueCodec="boolean"/>
               <Property name="CurrentItem" apiName="CurrentItem" russianName="ТекущийЭлемент" russianType="ЭлементГрафическойСхемы" valueCodec="unclassified"/>
