@@ -169,7 +169,7 @@ using EventRef = Reference<Event>;
 using PictureAssetRef = Reference<PictureAsset>;
 using ChildItemRef = std::variant<ControlRef, PageRef>;
 
-enum class ChartAreaKind : std::uint8_t { none, plot, legend };
+enum class ChartAreaKind : std::uint8_t { none, plot, legend, title };
 
 struct ChartAreaRef {
     ObjectId owner{};
@@ -751,6 +751,7 @@ struct ChartArea {
 struct ChartPayload final : TypedControlPayload<ControlKind::chart> {
     std::optional<ChartArea> plot_area;
     std::optional<ChartArea> legend_area;
+    std::optional<ChartArea> title_area;
     ChartSummarySeries summary_series;
     std::vector<ChartSeries> series;
     std::vector<ChartPoint> points;

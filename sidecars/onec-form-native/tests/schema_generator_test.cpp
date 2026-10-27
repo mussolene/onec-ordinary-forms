@@ -939,14 +939,15 @@ void test_control_surfaces_and_property_order(
             std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
             properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
                 return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries" ||
-                    property.api_name == "PlotArea" || property.api_name == "LegendArea";
+                    property.api_name == "PlotArea" || property.api_name == "LegendArea" || property.api_name == "TitleArea";
             }), properties.end());
             cursor = expect_property_sequence(properties, elements, cursor, true);
             expect_element_shape(elements[cursor++], "PlotArea", "ChartPlotAreaType", "0", "1");
             expect_element_shape(elements[cursor++], "LegendArea", "ChartLegendAreaType", "0", "1");
-            for (const auto* area_type : {"ChartPlotAreaType", "ChartLegendAreaType"}) {
+            expect_element_shape(elements[cursor++], "TitleArea", "ChartTitleAreaType", "0", "1");
+            for (const auto* area_type : {"ChartPlotAreaType", "ChartLegendAreaType", "ChartTitleAreaType"}) {
                 const auto fields = direct_children(sequence_for_type(schema, area_type), "element");
-                const auto kind = std::string_view(area_type) == "ChartPlotAreaType" ? oof::model::ChartAreaKind::plot : oof::model::ChartAreaKind::legend;
+                const auto kind = std::string_view(area_type) == "ChartPlotAreaType" ? oof::model::ChartAreaKind::plot : std::string_view(area_type) == "ChartTitleAreaType" ? oof::model::ChartAreaKind::title : oof::model::ChartAreaKind::legend;
                 const auto bool_count = std::ranges::count_if(oof::model::metamodel::chart_area_boolean_descriptors(),
                     [&](const auto& descriptor) { return descriptor.kind == kind; });
                 const auto color_count = std::ranges::count_if(oof::model::metamodel::chart_area_color_descriptors(),

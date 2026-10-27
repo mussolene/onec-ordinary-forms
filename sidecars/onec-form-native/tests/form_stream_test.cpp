@@ -16916,6 +16916,48 @@ void test_chart_area_border_font_round_trip() {
     rounded.width = 2;
     expect(rounded_document.set_prop_val(invalid_area, model::PropertyId::from_name("Border"), rounded) == model::PropertyMutationStatus::invalid_value,
         "rounded area borders must reject an unsupported width");
+    auto title_document = document;
+    const std::array<std::string_view, 9> title_placements{"Auto", "UseCoordinates", "LeftTop", "Top", "RightTop", "LeftBottom", "Bottom", "RightBottom", "None"};
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::title};
+        const auto mode = model::EnumerationValue{"ChartTitleAreaPlacement", std::string(title_placements[i % title_placements.size()])};
+        expect(title_document.set_prop_val(owner, model::PropertyId::from_name("Placement"), mode) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "title area placement must accept platform values");
+        expect(title_document.set_prop_val(owner, model::PropertyId::from_name("Transparent"), false) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "title area transparency must be editable");
+        for (const auto name : {"BackColor", "BorderColor", "TextColor"})
+            expect(title_document.set_prop_val(owner, model::PropertyId::from_name(name), rgb) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "title area colors must coexist");
+        expect(title_document.set_prop_val(owner, model::PropertyId::from_name("Border"), borders[1]) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "title area border must be editable");
+        expect(title_document.set_prop_val(owner, model::PropertyId::from_name("Font"), absolute_font) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "title area font must be editable");
+        for (const auto [name, value] : {std::pair{"Left", "0.25"}, std::pair{"Top", "0.25"}, std::pair{"Right", "0.75"}, std::pair{"Bottom", "0.75"}})
+            expect(title_document.set_prop_val(owner, model::PropertyId::from_name(name), model::DecimalValue{value}) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "title area bounds must be editable");
+    }
+    const auto title_encoded = form_stream::encode_document(title_document);
+    expect(title_encoded.ok(), "title areas must encode");
+    auto title_cache = title_encoded.value();
+    auto& title_records = title_cache.items.at(1).items.at(2).items.at(2).items;
+    const auto title_manual = std::ranges::find(title_records, std::string{"101"}, [](const auto& item) {
+        return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+    });
+    expect(title_manual != title_records.end(), "manual title area chart must exist");
+    title_manual->items.at(3).items.at(18 + 91) = list_stream::ListValue::raw_atom("0.25");
+    title_manual->items.at(3).items.at(165 + 9) = list_stream::ListValue::raw_atom("0.25");
+    const auto title_cache_decoded = form_stream::decode_document(title_cache, "ChartAreaStyle");
+    expect(title_cache_decoded.ok() && title_cache_decoded.value().reconstruction_complete(),
+        "platform-derived geometry for a manual title area must not be treated as a missing property");
+    const auto title_decoded = form_stream::decode_document(title_encoded.value(), "ChartAreaStyle");
+    expect(title_decoded.ok() && title_decoded.value().reconstruction_complete(), "title areas must decode completely");
+    const auto title_xml = source::serialize_form_xml(title_decoded.value());
+    expect(title_xml.ok(), "title areas must serialize to XML");
+    const auto title_parsed = source::parse_form_xml(title_xml.value());
+    expect(title_parsed.ok(), "title areas must parse from XML");
+    const auto title_rebuilt = form_stream::encode_document(title_parsed.value());
+    expect(title_rebuilt.ok() && list_stream::dump_compact(title_rebuilt.value()) == list_stream::dump_compact(title_encoded.value()),
+        "title areas must round-trip with neighboring values");
     auto unsupported = document;
     model::FontValue invalid_font; invalid_font.kind = model::FontKind::windows_font;
     expect(unsupported.set_prop_val(invalid_area, model::PropertyId::from_name("Font"), invalid_font) == model::PropertyMutationStatus::applied_unclassified_storage &&
@@ -17818,8 +17860,8 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
 
     auto optional_profile = encoded.value();
     record = find_chart_record(optional_profile);
-    // This field is still outside the named Chart profile; slot 68 is Outline.
-    record->items[3].items[40] = list_stream::ListValue::raw_atom("0");
+    // This adjacent field is still unclassified without a manually placed title.
+    record->items[3].items[109] = list_stream::ListValue::raw_atom("1");
     const auto partial = form_stream::decode_document(optional_profile, "Main");
     expect(partial.ok() && !partial.value().reconstruction_complete() &&
         std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
@@ -17843,29 +17885,23 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
     for (const auto index : {std::size_t{49}, std::size_t{50}, std::size_t{51}}) {
         record->items[3].items[index] = list_stream::parse("{8,2,0,{-20},1,100}");
     }
-    const auto partial_fonts = form_stream::decode_document(style_fonts, "Main");
-    expect(partial_fonts.ok() && !partial_fonts.value().reconstruction_complete() &&
-        std::any_of(partial_fonts.diagnostics().begin(), partial_fonts.diagnostics().end(), [](const auto& diagnostic) {
-            return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
-        }) && std::get<model::ChartPayload>(partial_fonts.value().find_control(model::ObjectId{2})->payload).summary_series.color ==
+    const auto area_fonts = form_stream::decode_document(style_fonts, "Main");
+    expect(area_fonts.ok() && area_fonts.value().reconstruction_complete() &&
+        std::get<model::ChartPayload>(area_fonts.value().find_control(model::ObjectId{2})->payload).summary_series.color ==
             std::get<model::ChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload).summary_series.color,
-        "valid unrepresented Chart Font variants must warn while retaining named Color");
-    const auto fonts_rebuilt = form_stream::encode_document(partial_fonts.value());
-    expect(fonts_rebuilt.ok(), "partially represented Chart Fonts must rebuild");
+        "all Chart area fonts must decode without losing named Color");
+    const auto fonts_rebuilt = form_stream::encode_document(area_fonts.value());
+    expect(fonts_rebuilt.ok(), "represented Chart area Fonts must rebuild");
     auto rebuilt_font_stream = fonts_rebuilt.value();
-    auto original_font_stream = encoded.value();
     const auto* rebuilt_font_record = find_chart_record(rebuilt_font_stream);
-    const auto* original_font_record = find_chart_record(original_font_stream);
-    expect(list_stream::dump_compact(rebuilt_font_record->items[3].items[49]) ==
-            list_stream::dump_compact(original_font_record->items[3].items[49]) &&
-        list_stream::dump_compact(rebuilt_font_record->items[3].items[50]) == "{8,2,0,{-20},1,100}" &&
-        list_stream::dump_compact(rebuilt_font_record->items[3].items[51]) == "{8,2,0,{-20},1,100}",
-        "area fonts must survive while the unrepresented Chart font remains omitted");
-    const auto fonts_xml = source::serialize_form_xml(partial_fonts.value());
-    expect(fonts_xml.ok(), "Chart with valid unrepresented Fonts must serialize named XML");
+    for (const auto index : {std::size_t{49}, std::size_t{50}, std::size_t{51}})
+        expect(list_stream::dump_compact(rebuilt_font_record->items[3].items[index]) == "{8,2,0,{-20},1,100}",
+            "all Chart area fonts must survive reconstruction");
+    const auto fonts_xml = source::serialize_form_xml(area_fonts.value());
+    expect(fonts_xml.ok(), "Chart area Fonts must serialize named XML");
     const auto fonts_xml_document = source::parse_form_xml(fonts_xml.value());
-    expect(fonts_xml_document.ok() && !fonts_xml_document.value().reconstruction_complete() &&
-        form_stream::encode_document(fonts_xml_document.value()).ok(), "Chart Font warning state must survive native XML reconstruction");
+    expect(fonts_xml_document.ok() && fonts_xml_document.value().reconstruction_complete() &&
+        form_stream::encode_document(fonts_xml_document.value()).ok(), "Chart area fonts must survive XML reconstruction");
     for (const auto index : {std::size_t{49}, std::size_t{50}, std::size_t{51}}) {
         auto malformed_font = encoded.value();
         find_chart_record(malformed_font)->items[3].items[index] = list_stream::parse("{8,2,0,{-20},1,99}");

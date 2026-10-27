@@ -227,6 +227,7 @@ struct ChartAreaPropertyDescriptor {
     std::size_t coordinate_offset = 0;
     std::string_view plot_default;
     std::string_view legend_default;
+    std::string_view title_default;
 };
 
 struct ChartAreaBooleanDescriptor {

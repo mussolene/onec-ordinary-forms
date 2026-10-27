@@ -631,7 +631,8 @@ void append_value_types(std::string& output) {
 
     for (const auto& [type_name, kind] : {
             std::pair{"ChartPlotAreaPlacementType", model::ChartAreaKind::plot},
-            std::pair{"ChartLegendAreaPlacementType", model::ChartAreaKind::legend}}) {
+            std::pair{"ChartLegendAreaPlacementType", model::ChartAreaKind::legend},
+            std::pair{"ChartTitleAreaPlacementType", model::ChartAreaKind::title}}) {
         output += "  <xs:simpleType";
         append_attribute(output, "name", type_name);
         output += "><xs:restriction base=\"xs:string\">";
@@ -659,7 +660,8 @@ void append_value_types(std::string& output) {
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
     for (const auto& [type_name, placement_type, kind] : {
             std::tuple{"ChartPlotAreaType", "ChartPlotAreaPlacementType", model::ChartAreaKind::plot},
-            std::tuple{"ChartLegendAreaType", "ChartLegendAreaPlacementType", model::ChartAreaKind::legend}}) {
+            std::tuple{"ChartLegendAreaType", "ChartLegendAreaPlacementType", model::ChartAreaKind::legend},
+            std::tuple{"ChartTitleAreaType", "ChartTitleAreaPlacementType", model::ChartAreaKind::title}}) {
         output += "  <xs:complexType";
         append_attribute(output, "name", type_name);
         output += "><xs:sequence>";
@@ -1157,11 +1159,12 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             std::vector<model::metamodel::PropertyDescriptor> chart_properties;
             for (const auto& property : metamodel.properties_for(control.kind)) {
                 if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries" &&
-                    property.api_name != "PlotArea" && property.api_name != "LegendArea") chart_properties.push_back(property);
+                    property.api_name != "PlotArea" && property.api_name != "LegendArea" && property.api_name != "TitleArea") chart_properties.push_back(property);
             }
             append_property_elements(output, chart_properties, "      ", false);
             output += "      <xs:element name=\"PlotArea\" type=\"ChartPlotAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"LegendArea\" type=\"ChartLegendAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+            output += "      <xs:element name=\"TitleArea\" type=\"ChartTitleAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"SummarySeries\" type=\"ChartSummarySeriesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"Series\" type=\"ChartSeriesCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"Points\" type=\"ChartPointCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
@@ -1356,6 +1359,12 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеЛегендыДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
         "          <Property name=\"Transparent\" russianName=\"ПрозрачныйФон\" russianType=\"Булево\"/><Property name=\"Scrolling\" russianName=\"Прокрутка\" russianType=\"Булево\"/>\n"
         "          <Property name=\"BackColor\" russianName=\"ЦветФона\" russianType=\"Цвет\"/><Property name=\"BorderColor\" russianName=\"ЦветРамки\" russianType=\"Цвет\"/><Property name=\"TextColor\" russianName=\"ЦветТекста\" russianType=\"Цвет\"/>\n"
+        "          <Property name=\"Border\" russianName=\"Рамка\" russianType=\"Рамка\"/><Property name=\"Font\" russianName=\"Шрифт\" russianType=\"Шрифт\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"ChartTitleArea\" russianName=\"ОбластьЗаголовкаДиаграммы\" evidenceRefs=\"ev_83977a2d0a9b4e51bb247f90a92dda94 ev_4808a25ecd9247c29b1be36957beade8\"><Properties>\n"
+        "          <Property name=\"Text\" russianName=\"Текст\" russianType=\"Строка\"/><Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеОбластиЗаголовкаДиаграммы\"/>\n"
+        "          <Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
+        "          <Property name=\"Transparent\" russianName=\"ПрозрачныйФон\" russianType=\"Булево\"/><Property name=\"BackColor\" russianName=\"ЦветФона\" russianType=\"Цвет\"/><Property name=\"BorderColor\" russianName=\"ЦветРамки\" russianType=\"Цвет\"/><Property name=\"TextColor\" russianName=\"ЦветТекста\" russianType=\"Цвет\"/>\n"
         "          <Property name=\"Border\" russianName=\"Рамка\" russianType=\"Рамка\"/><Property name=\"Font\" russianName=\"Шрифт\" russianType=\"Шрифт\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPoint\" russianName=\"ТочкаДиаграммы\"><Properties>\n"

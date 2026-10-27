@@ -2032,6 +2032,8 @@ const ChartPlotFormatDescriptor* find_chart_plot_format(PropertyId id) noexcept 
 
 std::span<const ChartAreaStyleDescriptor> chart_area_style_descriptors() noexcept {
     static constexpr std::array descriptors{
+        ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::title, &ChartArea::border, nullptr, 14},
+        ChartAreaStyleDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ChartAreaKind::title, nullptr, &ChartArea::font, 31},
         ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::legend, &ChartArea::border, nullptr, 16},
         ChartAreaStyleDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ChartAreaKind::legend, nullptr, &ChartArea::font, 32},
         ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::plot, &ChartArea::border, nullptr, 18},
@@ -2050,6 +2052,9 @@ const ChartAreaStyleDescriptor* find_chart_area_style(ChartAreaKind kind, Proper
 
 std::span<const ChartAreaColorDescriptor> chart_area_color_descriptors() noexcept {
     static constexpr std::array descriptors{
+        ChartAreaColorDescriptor{PropertyId::from_name("BackColor"), "BackColor", u8"ЦветФона", ChartAreaKind::title, &ChartArea::back_color, 23, 6, ChartAreaColorDefault::form_back},
+        ChartAreaColorDescriptor{PropertyId::from_name("BorderColor"), "BorderColor", u8"ЦветРамки", ChartAreaKind::title, &ChartArea::border_color, 15, 0, ChartAreaColorDefault::border},
+        ChartAreaColorDescriptor{PropertyId::from_name("TextColor"), "TextColor", u8"ЦветТекста", ChartAreaKind::title, &ChartArea::text_color, 28, 4, ChartAreaColorDefault::form_text},
         ChartAreaColorDescriptor{PropertyId::from_name("BackColor"), "BackColor", u8"ЦветФона", ChartAreaKind::legend, &ChartArea::back_color, 25, 5, ChartAreaColorDefault::form_back},
         ChartAreaColorDescriptor{PropertyId::from_name("BorderColor"), "BorderColor", u8"ЦветРамки", ChartAreaKind::legend, &ChartArea::border_color, 17, 0, ChartAreaColorDefault::border},
         ChartAreaColorDescriptor{PropertyId::from_name("TextColor"), "TextColor", u8"ЦветТекста", ChartAreaKind::legend, &ChartArea::text_color, 29, 3, ChartAreaColorDefault::form_text},
@@ -2085,6 +2090,7 @@ ColorValue chart_area_color_default(ChartAreaColorDefault kind) {
 
 std::span<const ChartAreaBooleanDescriptor> chart_area_boolean_descriptors() noexcept {
     static constexpr std::array descriptors{
+        ChartAreaBooleanDescriptor{PropertyId::from_name("Transparent"), "Transparent", u8"ПрозрачныйФон", ChartAreaKind::title, &ChartArea::transparent, 22, true},
         ChartAreaBooleanDescriptor{PropertyId::from_name("Transparent"), "Transparent", u8"ПрозрачныйФон", ChartAreaKind::legend, &ChartArea::transparent, 24, true},
         ChartAreaBooleanDescriptor{PropertyId::from_name("Scrolling"), "Scrolling", u8"Прокрутка", ChartAreaKind::legend, &ChartArea::scrolling, 65, false},
         ChartAreaBooleanDescriptor{PropertyId::from_name("Transparent"), "Transparent", u8"ПрозрачныйФон", ChartAreaKind::plot, &ChartArea::transparent, 26, false},
@@ -2107,11 +2113,11 @@ const ChartAreaBooleanDescriptor* find_chart_area_boolean(ChartAreaKind kind, Pr
 
 std::span<const ChartAreaPropertyDescriptor> chart_area_property_descriptors() noexcept {
     static constexpr std::array descriptors{
-        ChartAreaPropertyDescriptor{PropertyId::from_name("Placement"), "Placement", u8"Расположение", ValueCodec::enumeration, nullptr, 0, "Auto", "Auto"},
-        ChartAreaPropertyDescriptor{PropertyId::from_name("Left"), "Left", u8"Лево", ValueCodec::decimal, &ChartArea::left, 0, "0", "0.83"},
-        ChartAreaPropertyDescriptor{PropertyId::from_name("Top"), "Top", u8"Верх", ValueCodec::decimal, &ChartArea::top, 1, "0", "0.08"},
-        ChartAreaPropertyDescriptor{PropertyId::from_name("Right"), "Right", u8"Право", ValueCodec::decimal, &ChartArea::right, 2, "0.83", "1"},
-        ChartAreaPropertyDescriptor{PropertyId::from_name("Bottom"), "Bottom", u8"Низ", ValueCodec::decimal, &ChartArea::bottom, 3, "1", "1"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Placement"), "Placement", u8"Расположение", ValueCodec::enumeration, nullptr, 0, "Auto", "Auto", "Auto"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Left"), "Left", u8"Лево", ValueCodec::decimal, &ChartArea::left, 0, "0", "0.83", "0.83"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Top"), "Top", u8"Верх", ValueCodec::decimal, &ChartArea::top, 1, "0", "0.08", "0"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Right"), "Right", u8"Право", ValueCodec::decimal, &ChartArea::right, 2, "0.83", "1", "1"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Bottom"), "Bottom", u8"Низ", ValueCodec::decimal, &ChartArea::bottom, 3, "1", "1", "0.08"},
     };
     return descriptors;
 }
@@ -2119,6 +2125,8 @@ std::span<const ChartAreaPropertyDescriptor> chart_area_property_descriptors() n
 std::span<const std::string_view> chart_area_placements(ChartAreaKind kind) noexcept {
     static constexpr std::array<std::string_view, 3> plot{"Auto", "UseCoordinates", "EmptySpace"};
     static constexpr std::array<std::string_view, 7> legend{"Auto", "Left", "Right", "Top", "Bottom", "UseCoordinates", "None"};
+    static constexpr std::array<std::string_view, 9> title{"Auto", "UseCoordinates", "LeftTop", "Top", "RightTop", "LeftBottom", "Bottom", "RightBottom", "None"};
+    if (kind == ChartAreaKind::title) return title;
     if (kind == ChartAreaKind::plot) return plot;
     if (kind == ChartAreaKind::legend) return legend;
     return {};

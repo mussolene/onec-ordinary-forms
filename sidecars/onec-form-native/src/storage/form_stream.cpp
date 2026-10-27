@@ -6304,7 +6304,7 @@ std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_co
 
 void apply_chart_render_cache(const LV& actual, LV& expected,
     std::size_t middle_start, std::size_t render_start,
-    std::string_view path) {
+    std::string_view path, bool title_coordinates) {
     constexpr std::array<std::size_t, 11> middle_cache_offsets{82, 83, 84, 85, 86, 87, 88, 89, 90, 92, 93};
     constexpr std::array<std::size_t, 11> render_cache_offsets{0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11};
     const auto normalize = [&](std::size_t index) {
@@ -6326,6 +6326,10 @@ void apply_chart_render_cache(const LV& actual, LV& expected,
     };
     for (const auto offset : middle_cache_offsets) normalize(middle_start + offset);
     for (const auto offset : render_cache_offsets) normalize(render_start + offset);
+    if (title_coordinates) {
+        normalize(middle_start + 91);
+        normalize(render_start + 9);
+    }
 }
 
 std::int32_t explicit_integer(const model::PropertySet& properties, std::string_view name,
@@ -6550,6 +6554,8 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
         const auto found = std::ranges::find(placements, area.placement);
         if (found == placements.end()) fail("OOF1120", std::string(name), "supported Chart area placement", area.placement, "Unknown Chart area placement");
         const auto mode = static_cast<std::size_t>(std::distance(placements.begin(), found));
+        if (mode_offset == 14 && ((mode == 8) == explicit_bool(properties, "ShowTitle", true)))
+            fail("OOF1120", std::string(name), "placement consistent with ShowTitle", area.placement, "Chart title placement and visibility disagree");
         if (mode_offset == 13 && ((mode == 6) == show_legend))
             fail("OOF1120", std::string(name), "placement consistent with ShowLegend", area.placement, "Chart legend placement and visibility disagree");
         info.at(render_start + mode_offset) = raw(std::to_string(mode));
@@ -6559,7 +6565,7 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
             info.at(render_start + bounds_offset + descriptor.coordinate_offset) = raw(
                 descriptor.coordinate_offset < 2 ? chart_area_fraction(value, name) : chart_area_complement(value, name));
         }
-        const auto kind = mode_offset == 12 ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
+        const auto kind = mode_offset == 12 ? model::ChartAreaKind::plot : mode_offset == 14 ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
         for (const auto& descriptor : model::metamodel::chart_area_boolean_descriptors()) {
             const auto& value = area.*(descriptor.member);
             if (descriptor.kind == kind) {
@@ -6620,7 +6626,8 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     if (chart.plot_area) write_area(*chart.plot_area, 12, 15, model::metamodel::chart_area_placements(model::ChartAreaKind::plot), "$/Chart/PlotArea");
     if (chart.legend_area) write_area(*chart.legend_area, 13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend), "$/Chart/LegendArea");
     else info.at(render_start + 13) = raw(show_legend ? "0" : "6");
-    info.at(render_start + 14) = raw(explicit_bool(properties, "ShowTitle", true) ? "0" : "8");
+    if (chart.title_area) write_area(*chart.title_area, 14, 23, model::metamodel::chart_area_placements(model::ChartAreaKind::title), "$/Chart/TitleArea");
+    else info.at(render_start + 14) = raw(explicit_bool(properties, "ShowTitle", true) ? "0" : "8");
     model::FontValue label_font;
     if (const auto* entry = properties.find(model::PropertyId::from_name("LabelFont"))) {
         const auto* value = std::get_if<model::FontValue>(&entry->value);
@@ -7004,7 +7011,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             area.*(descriptor.coordinate) = model::DecimalValue{descriptor.coordinate_offset < 2
                 ? value : chart_area_complement(value, name)};
         }
-        const auto kind = mode_offset == 12 ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
+        const auto kind = mode_offset == 12 ? model::ChartAreaKind::plot : mode_offset == 14 ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
         for (const auto& descriptor : model::metamodel::chart_area_boolean_descriptors()) {
             if (descriptor.kind != kind) continue;
             const auto index = middle_start + descriptor.storage_offset;
@@ -7056,10 +7063,11 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     };
     const auto area_defaults = [&](model::ChartAreaKind kind) {
         model::ChartArea area;
-        if (kind == model::ChartAreaKind::legend && !explicit_bool(properties, "ShowLegend", true)) area.placement = "None";
+        if ((kind == model::ChartAreaKind::legend && !explicit_bool(properties, "ShowLegend", true)) ||
+            (kind == model::ChartAreaKind::title && !explicit_bool(properties, "ShowTitle", true))) area.placement = "None";
         for (const auto& descriptor : model::metamodel::chart_area_property_descriptors()) {
             if (descriptor.coordinate != nullptr) area.*(descriptor.coordinate) = model::DecimalValue{std::string(
-                kind == model::ChartAreaKind::plot ? descriptor.plot_default : descriptor.legend_default)};
+                kind == model::ChartAreaKind::plot ? descriptor.plot_default : kind == model::ChartAreaKind::title ? descriptor.title_default : descriptor.legend_default)};
         }
         return area;
     };
@@ -7067,6 +7075,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         area_defaults(model::ChartAreaKind::plot), "$/Chart/PlotArea");
     payload.legend_area = read_area(13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend),
         area_defaults(model::ChartAreaKind::legend), "$/Chart/LegendArea");
+    payload.title_area = read_area(14, 23, model::metamodel::chart_area_placements(model::ChartAreaKind::title),
+        area_defaults(model::ChartAreaKind::title), "$/Chart/TitleArea");
     const auto expected_info = encode_chart_info(payload, title, properties);
     auto normalized_expected_info = expected_info;
     for (std::size_t series = 0; series < series_count; ++series) {
@@ -7075,7 +7085,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             normalized_expected_info.items[row_offset + 2] = raw(std::to_string(*derived_marker_caches[series]));
         }
     }
-    apply_chart_render_cache(info, normalized_expected_info, middle_start, render_start, info_path);
+    apply_chart_render_cache(info, normalized_expected_info, middle_start, render_start, info_path,
+        payload.title_area && payload.title_area->placement == "UseCoordinates");
     const auto tooltip_companions_start = render_start + canonical_chart_render_defaults().size();
     for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
         const auto index = tooltip_companions_start + cell;

@@ -276,7 +276,7 @@ std::string canonical_decimal(
 
 bool valid_chart_area_placement(std::string_view area, std::string_view placement) {
     const auto kind = area == "PlotArea" ? model::ChartAreaKind::plot :
-        area == "LegendArea" ? model::ChartAreaKind::legend : model::ChartAreaKind::none;
+        area == "LegendArea" ? model::ChartAreaKind::legend : area == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::none;
     const auto placements = mm::chart_area_placements(kind);
     return std::ranges::find(placements, placement) != placements.end();
 }
@@ -1699,10 +1699,10 @@ private:
         bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
-            if (descriptor->kind == model::ControlKind::chart && (name == "PlotArea" || name == "LegendArea")) {
+            if (descriptor->kind == model::ControlKind::chart && (name == "PlotArea" || name == "LegendArea" || name == "TitleArea")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
-                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
-                auto& area = name == "PlotArea" ? chart.plot_area : chart.legend_area;
+                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
+                auto& area = name == "PlotArea" ? chart.plot_area : name == "TitleArea" ? chart.title_area : chart.legend_area;
                 if (area) fail("OOF2003", child, id_text, name, "one chart area", name, "Duplicate Chart area");
                 model::ChartArea parsed;
                 std::set<std::string> seen;
@@ -3722,7 +3722,7 @@ private:
                     if (descriptor.coordinate != nullptr)
                         writer_.text(descriptor.name, canonical_decimal(((*area).*(descriptor.coordinate)).canonical, nullptr, descriptor.name, id));
                 }
-                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
+                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
                 for (const auto& descriptor : mm::chart_area_boolean_descriptors()) {
                     const auto& value = (*area).*(descriptor.member);
                     if (descriptor.kind == kind && value) writer_.text(descriptor.name, *value ? "true" : "false");
@@ -3765,6 +3765,7 @@ private:
             };
             write_area("PlotArea", chart->plot_area);
             write_area("LegendArea", chart->legend_area);
+            write_area("TitleArea", chart->title_area);
             if (chart->summary_series.color != model::ColorValue{} ||
                 chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
                 writer_.open("SummarySeries");
