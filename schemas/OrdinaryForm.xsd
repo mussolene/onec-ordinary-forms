@@ -1789,6 +1789,7 @@
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeparateByPage" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ScrollPageMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

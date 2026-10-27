@@ -160,6 +160,12 @@ void test_descriptors() {
         expect(property && property->storage_codec == StorageCodec::control_base,
             std::string("Panel common property must have a base codec: ") + name);
     }
+    const auto* scroll_page_mode = find_property(ControlKind::panel, "ScrollPageMode");
+    expect(scroll_page_mode && scroll_page_mode->storage_codec == StorageCodec::control_info &&
+        scroll_page_mode->value_codec == ValueCodec::boolean &&
+        scroll_page_mode->default_value.kind == DefaultKind::boolean &&
+        scroll_page_mode->default_value.canonical == "false",
+        "Panel ScrollPageMode must use the observed boolean default and control-info storage");
     const auto* separate_by_page = find_property(ControlKind::panel, "SeparateByPage");
     expect(separate_by_page && separate_by_page->storage_codec == StorageCodec::control_info &&
         separate_by_page->value_codec == ValueCodec::boolean &&

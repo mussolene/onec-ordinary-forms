@@ -2507,11 +2507,20 @@ DecodedOwnerPages decode_owner_pages(
             expected.items[1].items[0].items[slot] = normalized.items[0].items[slot];
         const auto tabs_path = child_path(child_path(path, 1), 3 + incoming_end - 2);
         const auto tabs = integer_atom<std::size_t>(normalized.items[3], tabs_path);
-        if (tabs >= panel_show_tabs_members.size())
-            fail("OOF1114", tabs_path, "ShowTabs value from 0 to 12", std::to_string(tabs),
-                "Panel ShowTabs value is unsupported");
-        if (tabs != 1) decoded_panel.properties.set_explicit(model::PropertyId::from_name("ShowTabs"),
-            model::EnumerationValue{"ShowTabs", std::string(panel_show_tabs_members[tabs])});
+        const auto scroll = bool_atom(normalized.items[8], child_path(child_path(path, 1), 8 + incoming_end - 2));
+        if (tabs == 13) {
+            if (!scroll || !separate_by_page)
+                fail("OOF1114", tabs_path, "scroll mode with separate pages", std::to_string(tabs),
+                    "Panel scrolling mode disagrees with its page settings");
+            decoded_panel.properties.set_explicit(model::PropertyId::from_name("ScrollPageMode"), true);
+            expected.items[1].items[8] = raw("1");
+        } else {
+            if (tabs >= panel_show_tabs_members.size() || scroll)
+                fail("OOF1114", tabs_path, "ShowTabs value from 0 to 12 without scrolling", std::to_string(tabs),
+                    "Panel ShowTabs value or scrolling flag is unsupported");
+            if (tabs != 1) decoded_panel.properties.set_explicit(model::PropertyId::from_name("ShowTabs"),
+                model::EnumerationValue{"ShowTabs", std::string(panel_show_tabs_members[tabs])});
+        }
         expected.items[1].items[3] = normalized.items[3];
     }
     for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
@@ -2548,10 +2557,15 @@ LV encode_owner_pages(
     std::int32_t width = 8,
     std::int32_t height = 8,
     const model::PropertySet& properties = {}) {
-    auto envelope = panel ? canonical_panel_payload(pages, *owner, explicit_bool(properties, "SeparateByPage", true)) :
+    const bool scroll = panel && explicit_bool(properties, "ScrollPageMode", false);
+    const bool separate = panel && explicit_bool(properties, "SeparateByPage", true);
+    if (scroll && (!separate || properties.contains(model::PropertyId::from_name("ShowTabs"))))
+        fail("OOF1122", "$/Panel/ScrollPageMode", "separate pages without explicit ShowTabs", "conflicting settings",
+            "Scrolling pages cannot use shared page geometry or an explicit tab display mode");
+    auto envelope = panel ? canonical_panel_payload(pages, *owner, separate) :
         canonical_root_panel_payload(width, height, pages, owner);
     if (panel) require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage"}, "$/Panel");
+        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode"}, "$/Panel");
     else require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
     envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
     if (panel) {
@@ -2564,6 +2578,10 @@ LV encode_owner_pages(
         common.named_transparent_control = model::ControlKind::panel;
         common.transparent = explicit_bool(properties, "Transparent", false);
         encode_common_control_base(envelope.items[1].items[0], common, "$/Panel");
+        if (scroll) {
+            envelope.items[1].items[9] = raw("13");
+            envelope.items[1].items[14] = raw("1");
+        }
         if (const auto* entry = properties.find(model::PropertyId::from_name("ShowTabs"))) {
             const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
             if (!value || value->type_name != "ShowTabs")
@@ -11941,7 +11959,7 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
                     require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage"}, child_path(path, ordinal) + "/Panel");
+                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode"}, child_path(path, ordinal) + "/Panel");
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");

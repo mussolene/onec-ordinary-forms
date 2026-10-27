@@ -14903,7 +14903,7 @@ void test_owned_panel_common_properties_and_page_event() {
             }
             auto invalid_tabs = encoded.value();
             record = find_record_with_guid(invalid_tabs, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
-            record->items.at(2).items.at(1).items.at(9) = list_stream::ListValue::raw_atom("13");
+            record->items.at(2).items.at(1).items.at(9) = list_stream::ListValue::raw_atom("14");
             expect(!form_stream::decode_document(invalid_tabs, "UnknownPanelTabs"), "Unknown ShowTabs code must fail");
         }
     }
@@ -14977,6 +14977,76 @@ void test_panel_shared_page_position_round_trip() {
             second->position.set(std::move(position));
             expect(!form_stream::encode_document(inconsistent).ok(),
                 "different page rectangles cannot represent one shared panel position");
+        }
+    }
+}
+
+void test_panel_scroll_page_mode_round_trip() {
+    for (const std::size_t count : {2U, 3U}) for (const bool scroll : {false, true}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "PanelScrollPageMode";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode panel{model::ObjectId{2}, "Tabs", model::PanelPayload{}};
+        if (scroll) panel.properties().set_explicit(model::PropertyId::from_name("ScrollPageMode"), true);
+        for (std::size_t index = 0; index < count; ++index) {
+            model::Page page;
+            page.id = model::ObjectId{3 + index};
+            page.name = "Page" + std::to_string(index);
+            model::Position position;
+            position.left.set(6);
+            position.top.set(7);
+            position.width.set(200);
+            position.height.set(100);
+            for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+                model::AnchorBinding binding;
+                binding.coordinate = edge;
+                binding.target_coordinate = edge;
+                binding.target = model::ControlRef{model::ObjectId{2}};
+                binding.offset.set(-6);
+                position.bindings.anchors.push_back(std::move(binding));
+            }
+            page.position.set(std::move(position));
+            if (index == 0) page.children = {model::ControlRef{model::ObjectId{20}}};
+            panel.children.push_back(model::PageRef{page.id});
+            document.add_page(std::move(page));
+        }
+        document.add_control(std::move(panel));
+        document.add_control(model::ControlNode{model::ObjectId{20}, "Inner", model::ButtonPayload{}});
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        const auto decoded = form_stream::decode_document(encoded.value(), "PanelScrollPageMode");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            decoded ? "Panel scroll mode must decode completely" : decoded.diagnostics().front().message);
+        const auto* restored = decoded.value().find_control(model::ObjectId{2});
+        expect(restored && restored->children.size() == count, "Panel scroll mode must retain every page");
+        const auto* property = restored->properties().find(model::PropertyId::from_name("ScrollPageMode"));
+        expect(scroll ? property && std::get<bool>(property->value) : property == nullptr,
+            "Panel scroll mode must retain the observed boolean value or default");
+        expect(decoded.value().find_control(model::ObjectId{20}) != nullptr,
+            "Panel scroll mode must retain nested controls");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "Panel scroll mode must serialize to named XML");
+        expect(!scroll || xml.value().find("<ScrollPageMode>true</ScrollPageMode>") != std::string::npos,
+            "Enabled scroll mode must be named in XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "Panel scroll mode XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "Panel scroll mode must rebuild without storage drift");
+        if (scroll) {
+            auto with_tabs = document;
+            auto& control = const_cast<model::ControlNode&>(*with_tabs.find_control(model::ObjectId{2}));
+            control.properties().set_explicit(model::PropertyId::from_name("ShowTabs"),
+                model::EnumerationValue{"ShowTabs", "Bottom"});
+            expect(!form_stream::encode_document(with_tabs).ok(),
+                "Enabled scrolling cannot encode an explicitly selected tab display mode");
+            auto shared_pages = document;
+            auto& shared_control = const_cast<model::ControlNode&>(*shared_pages.find_control(model::ObjectId{2}));
+            shared_control.properties().set_explicit(model::PropertyId::from_name("SeparateByPage"), false);
+            expect(!form_stream::encode_document(shared_pages).ok(),
+                "Enabled scrolling cannot encode shared page distribution");
         }
     }
 }
@@ -18105,6 +18175,7 @@ int main() {
         test_owned_panel_auto_tab_order_round_trip();
         test_owned_panel_common_properties_and_page_event();
         test_panel_shared_page_position_round_trip();
+        test_panel_scroll_page_mode_round_trip();
         test_recursive_panel_pages_keep_owner_geometry_separate();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
