@@ -517,6 +517,64 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_window_permission_mutations() {
+    Form form; form.id = ObjectId{1}; form.name = "WindowMutation";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto normal = PropertyId::from_name("AllowNormalState");
+    const auto docked = PropertyId::from_name("AllowDockedState");
+    const auto join = PropertyId::from_name("AllowJoinWindow");
+    const auto connect = PropertyId::from_name("ConnectableWindow");
+    const auto state = PropertyId::from_name("WindowState");
+    const auto before = oof::save_form_bin(document);
+    expect(document.set_prop_val(owner, normal, false) == PropertyMutationStatus::window_state_disallowed_after_assignment &&
+        document.get_prop_val(owner, normal).value == PropertyValue{false}, "disallowed current state must report an error after mutation");
+    expect(document.set_prop_val(owner, docked, true) == PropertyMutationStatus::window_state_disallowed_after_assignment &&
+        document.get_prop_val(owner, docked).value == PropertyValue{true}, "other state permission must be retained after error");
+    expect(document.set_prop_val(owner, normal, true) == PropertyMutationStatus::applied_runtime_only, "restoring current state permission must succeed");
+    expect(document.set_prop_val(owner, connect, true) == PropertyMutationStatus::window_join_disallowed_after_assignment &&
+        document.get_prop_val(owner, connect).value == PropertyValue{true}, "join error must retain connectability");
+    expect(document.set_prop_val(owner, join, true) == PropertyMutationStatus::applied_runtime_only, "enabling join must repair the constraint");
+    expect(document.set_prop_val(owner, state, EnumerationValue{"WindowStateVariant", "Docked"}) == PropertyMutationStatus::applied,
+        "permitted docked state with connectability must succeed");
+    expect(document.set_prop_val(owner, connect, false) == PropertyMutationStatus::window_requires_connectable_after_assignment &&
+        document.get_prop_val(owner, connect).value == PropertyValue{false}, "docked connectability error must retain assigned value");
+    expect(document.set_prop_val(owner, state, EnumerationValue{"WindowStateVariant", "Normal"}) == PropertyMutationStatus::applied,
+        "returning to an allowed state must succeed");
+    const auto after = oof::save_form_bin(document);
+    expect(before.ok() && after.ok(), "window mutation form must remain serializable");
+    const auto restored = oof::load_form_bin(after.value());
+    expect(restored.ok() && restored.value().get_prop_val(owner, docked).value == PropertyValue{false} &&
+        restored.value().get_prop_val(owner, join).value == PropertyValue{false},
+        "runtime permission mutations must not persist");
+}
+
+void test_window_permission_platform_matrix() {
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const std::array names{"AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow", "ConnectableWindow"};
+    const std::array states{"Normal", "Docked", "Autohide", "Float"};
+    for (std::size_t state_index = 0; state_index < states.size(); ++state_index) {
+        for (const bool connectable : {false, true}) {
+            for (std::size_t property_index = 0; property_index < names.size(); ++property_index) {
+                for (const bool value : {false, true}) {
+                    Form form; form.id = ObjectId{1}; form.name = "WindowMatrix";
+                    form.properties.set_explicit(PropertyId::from_name("WindowState"), EnumerationValue{"WindowStateVariant", states[state_index]});
+                    form.properties.set_explicit(PropertyId::from_name("ConnectableWindow"), connectable);
+                    OrdinaryFormDocument document(std::move(form));
+                    const auto property = PropertyId::from_name(names[property_index]);
+                    auto expected = property_index < 5 ? PropertyMutationStatus::applied_runtime_only : PropertyMutationStatus::applied;
+                    if (property_index == state_index && !value) expected = PropertyMutationStatus::window_state_disallowed_after_assignment;
+                    else if (property_index == 4 && connectable && !value) expected = PropertyMutationStatus::window_join_disallowed_after_assignment;
+                    else if (property_index == 5 && value && state_index == 0 && !connectable) expected = PropertyMutationStatus::window_join_disallowed_after_assignment;
+                    else if (property_index == 5 && !value && (state_index == 1 || state_index == 2)) expected = PropertyMutationStatus::window_requires_connectable_after_assignment;
+                    expect(document.set_prop_val(owner, property, value) == expected && document.get_prop_val(owner, property).value == PropertyValue{value},
+                        "window permission matrix must match platform results and retain assigned values");
+                }
+            }
+        }
+    }
+}
+
 void test_window_permission_initial_values() {
     using namespace oof::model::metamodel;
     const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
@@ -572,9 +630,9 @@ void test_opening_boundary_for_window_properties() {
     const auto before_location = document.get_prop_val(owner, location);
     for (const auto name : {"AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow"}) {
         const auto property = PropertyId::from_name(name);
-        expect(document.set_prop_val(owner, property, true) == PropertyMutationStatus::unsupported_surface &&
+        expect(document.set_prop_val(owner, property, true) == PropertyMutationStatus::applied_runtime_only &&
                document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface,
-            "unmodeled window permission mutations must not report success");
+            "window permission assignment must be runtime-only and reset must not invent semantics");
     }
     const auto xml = oof::source::serialize_form_xml(document);
     const auto binary = oof::save_form_bin(document);
@@ -3736,6 +3794,8 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
+        test_window_permission_mutations();
+        test_window_permission_platform_matrix();
         test_window_permission_initial_values();
         test_opening_boundary_for_window_properties();
         test_label_picture_api_access();

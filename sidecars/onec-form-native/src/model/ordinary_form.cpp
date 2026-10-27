@@ -740,6 +740,7 @@ OrdinaryFormDocument::OrdinaryFormDocument(Form form) : form_(std::move(form)) {
 
 void OrdinaryFormDocument::set_form(Form form) {
     form_ = std::move(form);
+    window_permissions_.clear();
     rebuild_index();
 }
 
@@ -996,6 +997,10 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const bool is_permission = property == PropertyId::from_name("AllowNormalState") ||
             property == PropertyId::from_name("AllowDockedState") || property == PropertyId::from_name("AllowAutohideState") ||
             property == PropertyId::from_name("AllowFloatState") || property == PropertyId::from_name("AllowJoinWindow");
+        if (is_permission) {
+            if (const auto* entry = window_permissions_.find(property))
+                return {PropertyReadStatus::computed_value, entry->value};
+        }
         if (is_permission || (opening_started_ && property == PropertyId::from_name("ConnectableWindow"))) {
             std::string_view state = "Normal";
             if (const auto* entry = form_.properties.find(PropertyId::from_name("WindowState"))) {
@@ -1223,10 +1228,48 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                                   property == PropertyId::from_name("AllowFloatState") ||
                                   property == PropertyId::from_name("AllowJoinWindow")))
             return PropertyMutationStatus::forbidden_after_opening_started;
-        if (property == PropertyId::from_name("WindowState") || property == PropertyId::from_name("ConnectableWindow") ||
-            property == PropertyId::from_name("AllowNormalState") || property == PropertyId::from_name("AllowDockedState") ||
-            property == PropertyId::from_name("AllowAutohideState") || property == PropertyId::from_name("AllowFloatState") ||
-            property == PropertyId::from_name("AllowJoinWindow")) return PropertyMutationStatus::unsupported_surface;
+        const bool is_permission = property == PropertyId::from_name("AllowNormalState") ||
+            property == PropertyId::from_name("AllowDockedState") || property == PropertyId::from_name("AllowAutohideState") ||
+            property == PropertyId::from_name("AllowFloatState") || property == PropertyId::from_name("AllowJoinWindow");
+        const bool is_state = property == PropertyId::from_name("WindowState");
+        const bool is_connectable = property == PropertyId::from_name("ConnectableWindow");
+        if (is_permission || is_state || is_connectable) {
+            if (is_state) {
+                const auto* v = std::get_if<EnumerationValue>(&value);
+                if (!v || v->type_name != "WindowStateVariant" || (v->member != "Normal" && v->member != "Docked" &&
+                    v->member != "Autohide" && v->member != "Float")) return PropertyMutationStatus::invalid_value;
+            } else if (!std::holds_alternative<bool>(value)) return PropertyMutationStatus::invalid_value;
+            if (window_permissions_.empty()) {
+                for (const auto name : {"AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow"}) {
+                    const auto id = PropertyId::from_name(name);
+                    const auto initial = get_prop_val(owner, id);
+                    if (!initial.value || !std::holds_alternative<bool>(*initial.value)) {
+                        window_permissions_.clear();
+                        return PropertyMutationStatus::unsupported_surface;
+                    }
+                    window_permissions_.set_explicit(id, *initial.value);
+                }
+            }
+            if (is_permission) window_permissions_.set_explicit(property, value);
+            else form_.properties.set_explicit(property, value);
+            const auto state_result = get_prop_val(owner, PropertyId::from_name("WindowState"));
+            const auto connect_result = get_prop_val(owner, PropertyId::from_name("ConnectableWindow"));
+            if (!state_result.value || !connect_result.value) return PropertyMutationStatus::unsupported_surface;
+            const auto* state = std::get_if<EnumerationValue>(&*state_result.value);
+            const auto* connect = std::get_if<bool>(&*connect_result.value);
+            if (!state || !connect) return PropertyMutationStatus::unsupported_surface;
+            const auto state_permission = state->member == "Normal" ? "AllowNormalState" : state->member == "Docked" ? "AllowDockedState" :
+                state->member == "Autohide" ? "AllowAutohideState" : "AllowFloatState";
+            const bool permitted = std::get<bool>(window_permissions_.find(PropertyId::from_name(state_permission))->value);
+            const bool join = std::get<bool>(window_permissions_.find(PropertyId::from_name("AllowJoinWindow"))->value);
+            if ((is_state || (is_permission && property != PropertyId::from_name("AllowJoinWindow"))) && !permitted)
+                return PropertyMutationStatus::window_state_disallowed_after_assignment;
+            if ((is_connectable || property == PropertyId::from_name("AllowJoinWindow")) && *connect && !join)
+                return PropertyMutationStatus::window_join_disallowed_after_assignment;
+            if ((is_state || is_connectable) && (state->member == "Docked" || state->member == "Autohide") && !*connect)
+                return PropertyMutationStatus::window_requires_connectable_after_assignment;
+            return is_permission ? PropertyMutationStatus::applied_runtime_only : PropertyMutationStatus::applied;
+        }
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {

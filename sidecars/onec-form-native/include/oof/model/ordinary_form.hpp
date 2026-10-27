@@ -550,6 +550,9 @@ enum class PropertyMutationStatus : std::uint8_t {
     invalid_value,
     invalid_reference,
     forbidden_after_opening_started,
+    window_state_disallowed_after_assignment,
+    window_join_disallowed_after_assignment,
+    window_requires_connectable_after_assignment,
 };
 
 enum class BindingCoordinate : std::uint8_t {
@@ -1122,6 +1125,7 @@ public:
 private:
     bool reconstruction_complete_ = true;
     bool opening_started_ = false;
+    PropertySet window_permissions_;
     struct ObjectKeyHash {
         [[nodiscard]] std::size_t operator()(const ObjectKey& key) const noexcept {
             const std::size_t category_hash = std::hash<std::uint8_t>{}(

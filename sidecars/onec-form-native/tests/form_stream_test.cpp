@@ -8666,7 +8666,7 @@ void test_form_connectable_window_codec() {
         expect(xml.ok(), "ConnectableWindow XML must serialize");
         const auto parsed = source::parse_form_xml(xml.value());
         expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value == model::PropertyValue{value}, "ConnectableWindow XML must roundtrip");
-        expect(document.set_prop_val(owner, property, value) == model::PropertyMutationStatus::unsupported_surface, "unmodeled dependencies must not report success");
+        expect(document.set_prop_val(owner, property, value) == model::PropertyMutationStatus::applied, "compatible connectable assignment must succeed");
         expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::unsupported_surface, "reset must not bypass dependencies");
         document.mark_opening_started();
         expect(document.set_prop_val(owner, property, value) == model::PropertyMutationStatus::forbidden_after_opening_started, "assignment after opening must fail");
@@ -8697,7 +8697,8 @@ void test_form_window_state_codec() {
         expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value ==
             model::PropertyValue{model::EnumerationValue{"WindowStateVariant", member}}, "WindowState XML must roundtrip");
         expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowStateVariant", "Float"}) ==
-            model::PropertyMutationStatus::unsupported_surface, "WindowState API must not pretend to enforce unmodeled dependencies");
+            (std::string_view{member} == "Normal" ? model::PropertyMutationStatus::window_state_disallowed_after_assignment : model::PropertyMutationStatus::applied),
+            "WindowState API must enforce the current permission after assignment");
         expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::unsupported_surface,
             "WindowState reset must not bypass unmodeled dependencies");
         document.mark_opening_started();
