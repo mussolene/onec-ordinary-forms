@@ -8165,8 +8165,8 @@ void test_radio_button_basic_observed_record_and_rejections() {
         member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
         numeric_group.add_control(std::move(member));
     }
-    const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{103}))->position.tab_order.set(std::optional<std::int32_t>{5});
-    const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{104}))->position.tab_order.set(std::optional<std::int32_t>{4});
+    const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{104}))->position.tab_order.set(std::optional<std::int32_t>{6});
+    const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{105}))->position.tab_order.set(std::optional<std::int32_t>{5});
     const auto numeric_encoded = form_stream::encode_document(numeric_group);
     expect(numeric_encoded.ok(), "named integer and fractional RadioButton groups must encode with independent numeric qualifiers");
     const auto numeric_decoded = form_stream::decode_document(numeric_encoded.value(), "RadioButtonNumericGroup");
@@ -8180,9 +8180,9 @@ void test_radio_button_basic_observed_record_and_rejections() {
                    model::PropertyId::from_name("SelectionValue"))->value).canonical == "0",
         "RadioButton group head binding and contextual zero remain named model properties");
     expect(numeric_decoded.value().form().children == numeric_group.form().children &&
-        decoded_head->position.tab_order.value() == std::optional<std::int32_t>{5} &&
-        decoded_member->position.tab_order.value() == std::optional<std::int32_t>{4},
-        "TabOrder swap must preserve numeric RadioButton grouping, FirstInGroup and logical ChildItems");
+        decoded_member->position.tab_order.value() == std::optional<std::int32_t>{6} &&
+        numeric_decoded.value().find_control(model::ObjectId{105})->position.tab_order.value() == std::optional<std::int32_t>{5},
+        "TabOrder swap within the group must preserve numeric RadioButton grouping and ChildItems");
     const auto numeric_reencoded = form_stream::encode_document(numeric_decoded.value());
     expect(numeric_reencoded.ok() && list_stream::dump_compact(numeric_reencoded.value()) ==
                list_stream::dump_compact(numeric_encoded.value()),
@@ -8730,7 +8730,20 @@ void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() 
     std::swap(reordered_form.children[0], reordered_form.children[1]);
     reordered.set_form(std::move(reordered_form));
     expect_failure(form_stream::encode_document(reordered), "OOF1122", "$/Form/ChildItems/0",
-        "moving the selected member before its head must change its group assignment and reject its unbound nonzero value");
+        "moving the selected member before its head in the effective tab order must reject its unbound nonzero value");
+
+    const_cast<model::ControlNode*>(reordered.find_control(model::ObjectId{901}))->position.tab_order.set(
+        std::optional<std::int32_t>{1});
+    const_cast<model::ControlNode*>(reordered.find_control(model::ObjectId{17}))->position.tab_order.set(
+        std::optional<std::int32_t>{2});
+    const auto z_reordered = form_stream::encode_document(reordered);
+    expect(z_reordered.ok(), "Z-order before the group head must be accepted when TabOrder retains the group");
+    const auto z_reordered_decoded = form_stream::decode_document(z_reordered.value(), "RadioGroupZOrder");
+    expect(z_reordered_decoded.ok() && z_reordered_decoded.value().form().children == reordered.form().children,
+        "reordered radio group must decode in its display order");
+    const auto z_reencoded = form_stream::encode_document(z_reordered_decoded.value());
+    expect(z_reencoded.ok() && list_stream::dump_compact(z_reencoded.value()) == list_stream::dump_compact(z_reordered.value()),
+        "reordered radio group must rebuild without changing its stored group properties");
 
     auto out_of_range = ordered;
     auto* too_precise = const_cast<model::ControlNode*>(out_of_range.find_control(model::ObjectId{17}));

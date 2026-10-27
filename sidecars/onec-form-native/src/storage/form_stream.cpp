@@ -5880,9 +5880,27 @@ void validate_radio_groups(const model::OrdinaryFormDocument& document) {
     };
     std::function<void(const std::vector<model::ChildItemRef>&, std::string_view)> visit;
     visit = [&](const std::vector<model::ChildItemRef>& children, std::string_view path) {
-        std::size_t ordinal = 0;
-        for (const auto& child : children) {
-            const auto child_path_text = std::string(path) + "/" + std::to_string(ordinal++);
+        std::vector<std::pair<std::size_t, std::int64_t>> ordered_children;
+        ordered_children.reserve(children.size());
+        for (std::size_t index = 0; index < children.size(); ++index) {
+            auto order = static_cast<std::int64_t>(index + 1);
+            if (const auto* control_ref = std::get_if<model::ControlRef>(&children[index])) {
+                const auto* control = document.find_control(control_ref->id());
+                if (control != nullptr && control->position.tab_order.is_explicit() &&
+                    control->position.tab_order.value())
+                    order = *control->position.tab_order.value();
+            }
+            ordered_children.emplace_back(index, order);
+        }
+        if (std::ranges::all_of(children, [](const model::ChildItemRef& item) {
+                return std::holds_alternative<model::ControlRef>(item);
+            })) {
+            std::ranges::stable_sort(ordered_children, {}, &std::pair<std::size_t, std::int64_t>::second);
+        }
+        for (const auto& [index, order] : ordered_children) {
+            static_cast<void>(order);
+            const auto& child = children[index];
+            const auto child_path_text = std::string(path) + "/" + std::to_string(index);
             if (const auto* control_ref = std::get_if<model::ControlRef>(&child)) {
                 const auto* control = document.find_control(control_ref->id());
                 if (control == nullptr) continue;
