@@ -2650,7 +2650,6 @@
       <xs:element name="VerticalScrollBar" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="VerticalLines" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="SelectedRows" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FooterHeight" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HeaderHeight" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalScrollBar" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
@@ -2671,8 +2670,6 @@
       <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="RowSelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentColumn" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CurrentRow" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CurrentData" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentParent" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FixedLeft" type="xs:int" minOccurs="0" maxOccurs="1"/>

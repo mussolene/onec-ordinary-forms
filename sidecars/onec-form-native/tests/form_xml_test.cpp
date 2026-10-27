@@ -1388,6 +1388,12 @@ void test_table_choice_mode_runtime_only() {
         source::serialize_form_xml(document.value()).ok(), "Table must serialize after runtime reset");
     std::string bad(xml); const auto end = bad.find("</Table>"); bad.insert(end, "<ChoiceMode>true</ChoiceMode>");
     expect(!source::parse_form_xml(bad).ok(), "runtime ChoiceMode must not be accepted in XML");
+    for (const auto name : {"CurrentRow", "CurrentData", "SelectedRows"}) {
+        std::string runtime_xml(xml);
+        runtime_xml.insert(runtime_xml.find("</Table>"), "<" + std::string(name) + "/>" );
+        expect(!source::parse_form_xml(runtime_xml).ok(),
+            std::string(name) + " must not be accepted as stored XML state");
+    }
 }
 
 void test_table_row_selection_mode_xml() {

@@ -1323,6 +1323,12 @@ void test_help_metamodel() {
             event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c",
             std::string(name) + " must have its observed Table event descriptor");
     }
+    for (const auto name : {"CurrentRow", "CurrentData", "SelectedRows"}) {
+        const auto* property = find_property(ControlKind::table, name);
+        expect(property && property->persistence == PersistenceClass::runtime_only &&
+                   property->storage_codec == StorageCodec::none,
+            std::string(name) + " must be classified as runtime state without a storage codec");
+    }
     const auto* current_parent = find_event(ControlKind::table, "OnCurrentParentChange");
     expect(current_parent && current_parent->persistence == PersistenceClass::persisted_editable &&
         current_parent->storage_event_id == 46, "Table OnCurrentParentChange must use the observed storage ID");

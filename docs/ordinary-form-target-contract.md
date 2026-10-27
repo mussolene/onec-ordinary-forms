@@ -1355,3 +1355,9 @@ Table поддерживает FixedLeft и FixedRight как сохраненн
 RowSelectionMode использует TableBoxRowSelectionMode.Cell или Row. Это
 отдельное свойство от SelectionMode, которое задаёт одиночное или множественное
 выделение строк. На целевой платформе оба свойства доступны для записи.
+
+## Состояние строк таблицы
+
+CurrentRow, CurrentData и SelectedRows относятся к работающей форме и не
+записываются в Form.xml. Модель объектов строк и коллекции выделения пока
+не реализована. CurrentColumn и CurrentParent требуют дополнительной проверки.
