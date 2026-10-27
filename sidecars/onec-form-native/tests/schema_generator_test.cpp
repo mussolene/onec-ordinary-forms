@@ -937,10 +937,18 @@ void test_control_surfaces_and_property_order(
             expect_element_shape(elements[cursor++], "LegendArea", "ChartLegendAreaType", "0", "1");
             for (const auto* area_type : {"ChartPlotAreaType", "ChartLegendAreaType"}) {
                 const auto fields = direct_children(sequence_for_type(schema, area_type), "element");
-                expect(fields.size() == 5 && attribute(fields[0], "name") == "Placement" &&
+                const auto kind = std::string_view(area_type) == "ChartPlotAreaType" ? oof::model::ChartAreaKind::plot : oof::model::ChartAreaKind::legend;
+                const auto bool_count = std::ranges::count_if(oof::model::metamodel::chart_area_boolean_descriptors(),
+                    [&](const auto& descriptor) { return descriptor.kind == kind; });
+                expect(fields.size() == 5 + static_cast<std::size_t>(bool_count) && attribute(fields[0], "name") == "Placement" &&
                     attribute(fields[1], "name") == "Left" && attribute(fields[2], "name") == "Top" &&
                     attribute(fields[3], "name") == "Right" && attribute(fields[4], "name") == "Bottom" &&
                     attribute(fields[1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
+                std::size_t boolean_index = 5;
+                for (const auto& descriptor : oof::model::metamodel::chart_area_boolean_descriptors()) {
+                    if (descriptor.kind == kind)
+                        expect_element_shape(fields[boolean_index++], descriptor.name, "xs:boolean", "0", "1");
+                }
             }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");
             const auto summary_fields = direct_children(sequence_for_type(schema, "ChartSummarySeriesType"), "element");

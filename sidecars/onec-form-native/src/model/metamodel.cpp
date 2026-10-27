@@ -2013,6 +2013,28 @@ const ControlDescriptor* find_by_russian_name(std::u8string_view name) noexcept 
     return Metamodel::instance().control_by_russian_name(name);
 }
 
+std::span<const ChartAreaBooleanDescriptor> chart_area_boolean_descriptors() noexcept {
+    static constexpr std::array descriptors{
+        ChartAreaBooleanDescriptor{PropertyId::from_name("Transparent"), "Transparent", u8"ПрозрачныйФон", ChartAreaKind::legend, &ChartArea::transparent, 24, true},
+        ChartAreaBooleanDescriptor{PropertyId::from_name("Scrolling"), "Scrolling", u8"Прокрутка", ChartAreaKind::legend, &ChartArea::scrolling, 65, false},
+        ChartAreaBooleanDescriptor{PropertyId::from_name("Transparent"), "Transparent", u8"ПрозрачныйФон", ChartAreaKind::plot, &ChartArea::transparent, 26, false},
+        ChartAreaBooleanDescriptor{PropertyId::from_name("ShowDataTable"), "ShowDataTable", u8"ОтображатьТаблицуДанных", ChartAreaKind::plot, &ChartArea::show_data_table, 57, false},
+        ChartAreaBooleanDescriptor{PropertyId::from_name("ShowScales"), "ShowScales", u8"ОтображатьШкалы", ChartAreaKind::plot, &ChartArea::show_scales, 34, true},
+        ChartAreaBooleanDescriptor{PropertyId::from_name("VerticalLinesDataTable"), "VerticalLinesDataTable", u8"ВертикальныеЛинииВТаблицеДанных", ChartAreaKind::plot, &ChartArea::vertical_lines_data_table, 58, true},
+        ChartAreaBooleanDescriptor{PropertyId::from_name("HorizontalLinesInDataTable"), "HorizontalLinesInDataTable", u8"ГоризонтальныеЛинииВТаблицеДанных", ChartAreaKind::plot, &ChartArea::horizontal_lines_in_data_table, 59, true},
+        ChartAreaBooleanDescriptor{PropertyId::from_name("KeysInDataTable"), "KeysInDataTable", u8"КлючиВТаблицеДанных", ChartAreaKind::plot, &ChartArea::keys_in_data_table, 62, true},
+    };
+    return descriptors;
+}
+
+const ChartAreaBooleanDescriptor* find_chart_area_boolean(ChartAreaKind kind, PropertyId id) noexcept {
+    const auto descriptors = chart_area_boolean_descriptors();
+    const auto found = std::ranges::find_if(descriptors, [&](const auto& descriptor) {
+        return descriptor.kind == kind && descriptor.id == id;
+    });
+    return found == descriptors.end() ? nullptr : &*found;
+}
+
 std::span<const ChartAreaPropertyDescriptor> chart_area_property_descriptors() noexcept {
     static constexpr std::array descriptors{
         ChartAreaPropertyDescriptor{PropertyId::from_name("Placement"), "Placement", u8"Расположение", ValueCodec::enumeration, nullptr, 0, "Auto", "Auto"},

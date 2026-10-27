@@ -16428,8 +16428,8 @@ void test_chart_area_modes_round_trip() {
             payload.series.push_back(series); payload.points.push_back(point);
             payload.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
         }
-        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}};
-        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}};
+        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}};
+        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}};
         model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
         control.position.width.set(160); control.position.height.set(120);
         control.properties().set_explicit(model::PropertyId::from_name("ShowLegend"), i % 7 != 6);
@@ -16509,6 +16509,118 @@ void test_chart_area_modes_round_trip() {
     const auto& reset_area = std::get<model::ChartPayload>(toggled.find_control(model::ObjectId{105})->payload).legend_area;
     expect(reset_area && reset_area->placement == "Auto", "resetting ShowLegend must restore Auto placement");
     expect(form_stream::encode_document(toggled).ok(), "reset values must stay internally consistent");
+}
+
+void test_chart_area_boolean_properties_round_trip() {
+    struct AreaBooleanCase {
+        model::ChartAreaKind kind;
+        std::string_view name;
+        bool default_value;
+        std::size_t middle_offset;
+    };
+    constexpr std::array specs{
+        AreaBooleanCase{model::ChartAreaKind::legend, "Transparent", true, 24},
+        AreaBooleanCase{model::ChartAreaKind::legend, "Scrolling", false, 65},
+        AreaBooleanCase{model::ChartAreaKind::plot, "Transparent", false, 26},
+        AreaBooleanCase{model::ChartAreaKind::plot, "ShowDataTable", false, 57},
+        AreaBooleanCase{model::ChartAreaKind::plot, "ShowScales", true, 34},
+        AreaBooleanCase{model::ChartAreaKind::plot, "VerticalLinesDataTable", true, 58},
+        AreaBooleanCase{model::ChartAreaKind::plot, "HorizontalLinesInDataTable", true, 59},
+        AreaBooleanCase{model::ChartAreaKind::plot, "KeysInDataTable", true, 62},
+    };
+    model::Form form; form.id = model::ObjectId{1}; form.name = "ChartAreaBooleans";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::ChartPayload payload;
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        for (std::size_t n = 0; n < series_count; ++n) {
+            model::ChartSeries series; series.id = model::ObjectId{1000 + i * 10 + n};
+            series.text = "Series" + std::to_string(n); series.color.kind = model::ColorKind::absolute;
+            series.marker = {"ChartMarkerType", "Auto"}; payload.series.push_back(std::move(series));
+        }
+        for (std::size_t n = 0; n < point_count; ++n) {
+            model::ChartPoint point; point.id = model::ObjectId{2000 + i * 10 + n};
+            point.text = "Point" + std::to_string(n); point.color.kind = model::ColorKind::absolute;
+            payload.points.push_back(std::move(point));
+        }
+        for (const auto& series : payload.series) for (const auto& point : payload.points)
+            payload.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
+        control.position.width.set(160); control.position.height.set(120);
+        control.properties().set_explicit(model::PropertyId::from_name("Light"), false);
+        if (i == 11) {
+            control.events.push_back(model::EventRef{model::ObjectId{3000}});
+            document.add_event(model::Event{model::ObjectId{3000}, "Selection", "OnSelection", model::ControlRef{control.id}});
+        }
+        document.add_control(std::move(control));
+    }
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (std::size_t n = 0; n < specs.size(); ++n) {
+            const auto& spec = specs[n];
+            const auto area = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, spec.kind};
+            const auto property = model::PropertyId::from_name(spec.name);
+            const auto initial = document.get_prop_val(area, property);
+            expect(initial.value && std::holds_alternative<bool>(*initial.value) &&
+                std::get<bool>(*initial.value) == spec.default_value, "Chart area Boolean must have its platform default");
+            const bool value = ((i + n) % 2) == 0;
+            expect(document.set_prop_val(area, property, value) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "Chart area Boolean must be editable through the object API");
+            const auto changed = document.get_prop_val(area, property);
+            expect(changed.value && std::holds_alternative<bool>(*changed.value) && std::get<bool>(*changed.value) == value,
+                "Chart area Boolean must read back through the object API");
+        }
+    }
+    const auto invalid_area = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100}, model::ChartAreaKind::legend};
+    expect(document.set_prop_val(invalid_area, model::PropertyId::from_name("Scrolling"), std::string("true")) == model::PropertyMutationStatus::invalid_value,
+        "Chart area Boolean must reject non-boolean input");
+    expect(document.get_prop_val(invalid_area, model::PropertyId::from_name("ShowScales")).status == model::PropertyReadStatus::unknown_property,
+        "PlotArea properties must not be exposed on LegendArea");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& records = encoded.value().items.at(1).items.at(2).items.at(2).items;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto record = std::ranges::find(records, std::to_string(100 + i), [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        expect(record != records.end(), "each Chart storage record must exist");
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        const auto middle = std::size_t{18} + 11 * (series_count + point_count);
+        for (std::size_t n = 0; n < specs.size(); ++n) {
+            const bool value = ((i + n) % 2) == 0;
+            expect(record->items.at(3).items.at(middle + specs[n].middle_offset).atom == (value ? "1" : "0"),
+                "Chart area Boolean must use its platform-confirmed storage position");
+        }
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChartAreaBooleans");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart area Booleans must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "Chart area Booleans must serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "Chart area Boolean XML must parse");
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), "Chart area Boolean XML must rebuild Form.bin");
+    const auto loaded = oof::load_form_bin(binary.value(), "ChartAreaBooleans");
+    expect(loaded.ok() && loaded.value().reconstruction_complete(), "rebuilt Chart area Boolean Form.bin must load completely");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto* control = loaded.value().find_control(model::ObjectId{100 + i});
+        expect(control != nullptr, "each Chart must survive XML and Form.bin");
+        const auto* light = control->properties().find(model::PropertyId::from_name("Light"));
+        expect(light && !std::get<bool>(light->value), "area values must preserve neighboring Chart properties");
+        expect(control->position.width.value() == 160 && control->position.height.value() == 120,
+            "area values must preserve Chart dimensions");
+        for (std::size_t n = 0; n < specs.size(); ++n) {
+            const auto area = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, control->id, specs[n].kind};
+            const auto value = loaded.value().get_prop_val(area, model::PropertyId::from_name(specs[n].name));
+            expect(value.value && std::holds_alternative<bool>(*value.value) && std::get<bool>(*value.value) == (((i + n) % 2) == 0),
+                "Chart area Boolean must survive XML and Form.bin");
+        }
+    }
+    const auto rebuilt = form_stream::encode_document(loaded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Chart area Boolean Form.bin round-trip must preserve storage");
 }
 
 void test_chart_named_integer_and_delimiter_properties() {
@@ -18540,6 +18652,7 @@ int main() {
         test_chart_named_boolean_properties();
         test_chart_title_and_legend_visibility_round_trip();
         test_chart_area_modes_round_trip();
+        test_chart_area_boolean_properties_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

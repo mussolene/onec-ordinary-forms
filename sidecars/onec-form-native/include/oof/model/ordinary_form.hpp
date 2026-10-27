@@ -727,6 +727,13 @@ struct ChartArea {
     DecimalValue top{"0"};
     DecimalValue right{"1"};
     DecimalValue bottom{"1"};
+    std::optional<bool> transparent;
+    std::optional<bool> scrolling;
+    std::optional<bool> show_data_table;
+    std::optional<bool> show_scales;
+    std::optional<bool> vertical_lines_data_table;
+    std::optional<bool> horizontal_lines_in_data_table;
+    std::optional<bool> keys_in_data_table;
 
     friend bool operator==(const ChartArea&, const ChartArea&) = default;
 };

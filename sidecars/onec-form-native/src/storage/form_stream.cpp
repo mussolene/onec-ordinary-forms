@@ -6558,6 +6558,15 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
             info.at(render_start + bounds_offset + descriptor.coordinate_offset) = raw(
                 descriptor.coordinate_offset < 2 ? chart_area_fraction(value, name) : chart_area_complement(value, name));
         }
+        const auto kind = mode_offset == 12 ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
+        for (const auto& descriptor : model::metamodel::chart_area_boolean_descriptors()) {
+            const auto& value = area.*(descriptor.member);
+            if (descriptor.kind == kind) {
+                info.at(middle_start + descriptor.storage_offset) = raw(value.value_or(descriptor.default_value) ? "1" : "0");
+            } else if (value && model::metamodel::find_chart_area_boolean(kind, descriptor.id) == nullptr) {
+                fail("OOF1120", std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
+            }
+        }
     };
     if (chart.plot_area) write_area(*chart.plot_area, 12, 15, model::metamodel::chart_area_placements(model::ChartAreaKind::plot), "$/Chart/PlotArea");
     if (chart.legend_area) write_area(*chart.legend_area, 13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend), "$/Chart/LegendArea");
@@ -6945,6 +6954,13 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             const auto value = bound(descriptor.coordinate_offset);
             area.*(descriptor.coordinate) = model::DecimalValue{descriptor.coordinate_offset < 2
                 ? value : chart_area_complement(value, name)};
+        }
+        const auto kind = mode_offset == 12 ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
+        for (const auto& descriptor : model::metamodel::chart_area_boolean_descriptors()) {
+            if (descriptor.kind != kind) continue;
+            const auto index = middle_start + descriptor.storage_offset;
+            const bool value = bool_atom(at(info, index, info_path), child_path(info_path, index));
+            if (value != descriptor.default_value) area.*(descriptor.member) = value;
         }
         if (area == defaults) return std::nullopt;
         return area;

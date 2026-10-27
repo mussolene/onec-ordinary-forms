@@ -643,9 +643,9 @@ void append_value_types(std::string& output) {
         output += "</xs:restriction></xs:simpleType>\n";
     }
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
-    for (const auto& [type_name, placement_type] : {
-            std::pair{"ChartPlotAreaType", "ChartPlotAreaPlacementType"},
-            std::pair{"ChartLegendAreaType", "ChartLegendAreaPlacementType"}}) {
+    for (const auto& [type_name, placement_type, kind] : {
+            std::tuple{"ChartPlotAreaType", "ChartPlotAreaPlacementType", model::ChartAreaKind::plot},
+            std::tuple{"ChartLegendAreaType", "ChartLegendAreaPlacementType", model::ChartAreaKind::legend}}) {
         output += "  <xs:complexType";
         append_attribute(output, "name", type_name);
         output += "><xs:sequence>";
@@ -653,6 +653,15 @@ void append_value_types(std::string& output) {
             output += "<xs:element";
             append_attribute(output, "name", descriptor.name);
             append_attribute(output, "type", descriptor.coordinate == nullptr ? placement_type : "ChartAreaCoordinateType");
+            output += "/>";
+        }
+        for (const auto& descriptor : model::metamodel::chart_area_boolean_descriptors()) {
+            if (descriptor.kind != kind) continue;
+            output += "<xs:element";
+            append_attribute(output, "name", descriptor.name);
+            append_attribute(output, "type", "xs:boolean");
+            append_attribute(output, "minOccurs", "0");
+            append_attribute(output, "maxOccurs", "1");
             output += "/>";
         }
         output += "</xs:sequence></xs:complexType>\n";
@@ -1292,9 +1301,12 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPlotArea\" russianName=\"ОбластьПостроенияДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"
         "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеОбластиПостроенияДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
+        "          <Property name=\"Transparent\" russianName=\"ПрозрачныйФон\" russianType=\"Булево\"/><Property name=\"ShowDataTable\" russianName=\"ОтображатьТаблицуДанных\" russianType=\"Булево\"/><Property name=\"ShowScales\" russianName=\"ОтображатьШкалы\" russianType=\"Булево\"/>\n"
+        "          <Property name=\"VerticalLinesDataTable\" russianName=\"ВертикальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"HorizontalLinesInDataTable\" russianName=\"ГоризонтальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"KeysInDataTable\" russianName=\"КлючиВТаблицеДанных\" russianType=\"Булево\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartLegendArea\" russianName=\"ОбластьЛегендыДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"
         "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеЛегендыДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
+        "          <Property name=\"Transparent\" russianName=\"ПрозрачныйФон\" russianType=\"Булево\"/><Property name=\"Scrolling\" russianName=\"Прокрутка\" russianType=\"Булево\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPoint\" russianName=\"ТочкаДиаграммы\"><Properties>\n"
         "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/>\n"

@@ -1052,9 +1052,12 @@
         </Properties></NamedConcept>
         <NamedConcept name="ChartPlotArea" russianName="ОбластьПостроенияДиаграммы" evidenceRefs="ev_8716e61c09c841db91cbb280c8ef420e"><Properties>
           <Property name="Placement" russianName="Расположение" russianType="РасположениеОбластиПостроенияДиаграммы"/><Property name="Left" russianName="Лево" russianType="Число"/><Property name="Top" russianName="Верх" russianType="Число"/><Property name="Right" russianName="Право" russianType="Число"/><Property name="Bottom" russianName="Низ" russianType="Число"/>
+          <Property name="Transparent" russianName="ПрозрачныйФон" russianType="Булево"/><Property name="ShowDataTable" russianName="ОтображатьТаблицуДанных" russianType="Булево"/><Property name="ShowScales" russianName="ОтображатьШкалы" russianType="Булево"/>
+          <Property name="VerticalLinesDataTable" russianName="ВертикальныеЛинииВТаблицеДанных" russianType="Булево"/><Property name="HorizontalLinesInDataTable" russianName="ГоризонтальныеЛинииВТаблицеДанных" russianType="Булево"/><Property name="KeysInDataTable" russianName="КлючиВТаблицеДанных" russianType="Булево"/>
         </Properties></NamedConcept>
         <NamedConcept name="ChartLegendArea" russianName="ОбластьЛегендыДиаграммы" evidenceRefs="ev_8716e61c09c841db91cbb280c8ef420e"><Properties>
           <Property name="Placement" russianName="Расположение" russianType="РасположениеЛегендыДиаграммы"/><Property name="Left" russianName="Лево" russianType="Число"/><Property name="Top" russianName="Верх" russianType="Число"/><Property name="Right" russianName="Право" russianType="Число"/><Property name="Bottom" russianName="Низ" russianType="Число"/>
+          <Property name="Transparent" russianName="ПрозрачныйФон" russianType="Булево"/><Property name="Scrolling" russianName="Прокрутка" russianType="Булево"/>
         </Properties></NamedConcept>
         <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>

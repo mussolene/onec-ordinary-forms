@@ -840,6 +840,11 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
                 ? "ChartPlotAreaPlacement" : "ChartLegendPlacement", area.placement}}};
         if (const auto* coordinate = chart_area_coordinate(area, property))
             return {status, PropertyValue{*coordinate}};
+        if (const auto* descriptor = metamodel::find_chart_area_boolean(owner.chart_area, property)) {
+            const auto& value = area.*(descriptor->member);
+            return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                PropertyValue{value.value_or(descriptor->default_value)}};
+        }
         return {PropertyReadStatus::unknown_property, std::nullopt};
     }
     const metamodel::PropertyDescriptor* descriptor = nullptr;
@@ -950,6 +955,10 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             if (mode->type_name != expected_type || std::ranges::find(placements, mode->member) == placements.end())
                 return PropertyMutationStatus::invalid_value;
             updated.placement = mode->member;
+        } else if (const auto* descriptor = metamodel::find_chart_area_boolean(owner.chart_area, property)) {
+            const auto* boolean = std::get_if<bool>(&value);
+            if (boolean == nullptr) return PropertyMutationStatus::invalid_value;
+            updated.*(descriptor->member) = *boolean;
         } else if (chart_area_coordinate(updated, property) != nullptr) {
             std::string canonical;
             if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
@@ -1082,6 +1091,13 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             return PropertyMutationStatus::unknown_owner;
         const auto* control = find_control(owner.id);
         if (control == nullptr || control->kind() != ControlKind::chart) return PropertyMutationStatus::unknown_owner;
+        if (const auto* descriptor = metamodel::find_chart_area_boolean(owner.chart_area, property)) {
+            const auto location = find_location(ObjectCategory::control, owner.id);
+            auto& chart = std::get<ChartPayload>(collections_.controls[location->index].payload);
+            auto& area = owner.chart_area == ChartAreaKind::plot ? chart.plot_area : chart.legend_area;
+            if (area) ((*area).*(descriptor->member)).reset();
+            return PropertyMutationStatus::reset_unclassified_storage;
+        }
         const auto defaults = default_chart_area(owner.chart_area, true);
         PropertyValue value;
         if (property == PropertyId::from_name("Placement"))

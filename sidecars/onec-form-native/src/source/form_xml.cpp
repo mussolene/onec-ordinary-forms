@@ -1701,6 +1701,7 @@ private:
             const std::string name = node_name(child);
             if (descriptor->kind == model::ControlKind::chart && (name == "PlotArea" || name == "LegendArea")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
+                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
                 auto& area = name == "PlotArea" ? chart.plot_area : chart.legend_area;
                 if (area) fail("OOF2003", child, id_text, name, "one chart area", name, "Duplicate Chart area");
                 model::ChartArea parsed;
@@ -1714,13 +1715,17 @@ private:
                         if (!valid_chart_area_placement(name, parsed.placement))
                             fail("OOF2003", field, id_text, field_name, "valid area placement", parsed.placement, "Invalid Chart area placement");
                     } else {
-                        const auto* descriptor = mm::find_chart_area_property(model::PropertyId::from_name(field_name));
-                        if (descriptor == nullptr || descriptor->coordinate == nullptr)
-                            fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
-                        (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
+                        const auto id = model::PropertyId::from_name(field_name);
+                        if (const auto* boolean = mm::find_chart_area_boolean(kind, id)) {
+                            parsed.*(boolean->member) = parse_boolean(node_text(field), field, field_name, id_text);
+                        } else if (const auto* descriptor = mm::find_chart_area_property(id); descriptor && descriptor->coordinate) {
+                            (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
+                        } else fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
                     }
                 }
-                if (seen.size() != 5) fail("OOF2003", child, id_text, name, "Placement and four bounds", "missing", "Chart area requires all properties");
+                for (const auto& descriptor : mm::chart_area_property_descriptors())
+                    if (!seen.contains(std::string(descriptor.name)))
+                        fail("OOF2003", child, id_text, name, "Placement and four bounds", "missing", "Chart area requires all properties");
                 for (const auto* value : {&parsed.left, &parsed.top, &parsed.right, &parsed.bottom}) {
                     if (value->canonical != "0" && value->canonical != "1" && !value->canonical.starts_with("0."))
                         fail("OOF2003", child, id_text, name, "bounds between 0 and 1", value->canonical, "Chart area bound is out of range");
@@ -3701,6 +3706,13 @@ private:
                 for (const auto& descriptor : mm::chart_area_property_descriptors()) {
                     if (descriptor.coordinate != nullptr)
                         writer_.text(descriptor.name, canonical_decimal(((*area).*(descriptor.coordinate)).canonical, nullptr, descriptor.name, id));
+                }
+                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : model::ChartAreaKind::legend;
+                for (const auto& descriptor : mm::chart_area_boolean_descriptors()) {
+                    const auto& value = (*area).*(descriptor.member);
+                    if (descriptor.kind == kind && value) writer_.text(descriptor.name, *value ? "true" : "false");
+                    else if (descriptor.kind != kind && value && mm::find_chart_area_boolean(kind, descriptor.id) == nullptr)
+                        serialization_fail(id, std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
                 }
                 writer_.close(name);
             };

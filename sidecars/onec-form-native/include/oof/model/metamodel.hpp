@@ -229,6 +229,18 @@ struct ChartAreaPropertyDescriptor {
     std::string_view legend_default;
 };
 
+struct ChartAreaBooleanDescriptor {
+    PropertyId id{};
+    std::string_view name;
+    std::u8string_view russian_name;
+    ChartAreaKind kind = ChartAreaKind::none;
+    std::optional<bool> ChartArea::*member = nullptr;
+    std::size_t storage_offset = 0;
+    bool default_value = false;
+};
+
+[[nodiscard]] std::span<const ChartAreaBooleanDescriptor> chart_area_boolean_descriptors() noexcept;
+[[nodiscard]] const ChartAreaBooleanDescriptor* find_chart_area_boolean(ChartAreaKind kind, PropertyId id) noexcept;
 [[nodiscard]] std::span<const ChartAreaPropertyDescriptor> chart_area_property_descriptors() noexcept;
 [[nodiscard]] std::span<const std::string_view> chart_area_placements(ChartAreaKind kind) noexcept;
 [[nodiscard]] const ChartAreaPropertyDescriptor* find_chart_area_property(PropertyId id) noexcept;
