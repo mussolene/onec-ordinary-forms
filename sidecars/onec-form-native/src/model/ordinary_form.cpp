@@ -545,6 +545,43 @@ bool canonical_chart_decimal(std::string_view value) {
     return !(value == "-0");
 }
 
+struct TabOrderGroup {
+    std::vector<ObjectId> ids;
+    std::vector<std::int32_t> orders;
+    std::size_t target_index = 0;
+};
+
+std::optional<TabOrderGroup> tab_order_group(const OrdinaryFormDocument& document, ObjectId target) {
+    std::optional<TabOrderGroup> result;
+    bool ambiguous = false;
+    const auto consider = [&](const std::vector<ChildItemRef>& children) {
+        std::vector<ObjectId> ids;
+        for (const auto& child : children)
+            if (const auto* control = std::get_if<ControlRef>(&child)) ids.push_back(control->id());
+        const auto found = std::ranges::find(ids, target);
+        if (found == ids.end()) return;
+        if (result || std::count(ids.begin(), ids.end(), target) != 1) { ambiguous = true; return; }
+        TabOrderGroup group;
+        group.target_index = static_cast<std::size_t>(found - ids.begin());
+        group.ids = std::move(ids);
+        if (group.ids.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) { ambiguous = true; return; }
+        std::set<std::int32_t> seen;
+        for (std::size_t index = 0; index < group.ids.size(); ++index) {
+            const auto* control = document.find_control(group.ids[index]);
+            if (control == nullptr) { ambiguous = true; return; }
+            const auto& property = control->position.tab_order;
+            const auto value = property.is_explicit() ? property.value() : std::optional<std::int32_t>{static_cast<std::int32_t>(index + 1)};
+            if (!value || *value <= 0 || static_cast<std::size_t>(*value) > group.ids.size() || !seen.insert(*value).second) { ambiguous = true; return; }
+            group.orders.push_back(*value);
+        }
+        result = std::move(group);
+    };
+    consider(document.form().children);
+    for (const auto& page : document.collections().pages) consider(page.children);
+    for (const auto& control : document.collections().controls) consider(control.children);
+    return ambiguous ? std::nullopt : result;
+}
+
 using PositionPropertyRef = std::variant<Property<std::int32_t>*, Property<bool>*>;
 using ConstPositionPropertyRef = std::variant<const Property<std::int32_t>*, const Property<bool>*>;
 
@@ -935,6 +972,11 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (descriptor->api_name == "TabOrder") {
+            const auto group = tab_order_group(*this, control.id);
+            if (!group) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            return {PropertyReadStatus::computed_value, PropertyValue{static_cast<std::int64_t>(group->orders[group->target_index])}};
+        }
         if (descriptor->api_name == "Data") return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return {PropertyReadStatus::unsupported_surface, std::nullopt};
@@ -1102,6 +1144,38 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         property_control = &control;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (descriptor->api_name == "TabOrder") {
+            const auto group = tab_order_group(*this, control.id);
+            if (!group) return PropertyMutationStatus::unsupported_surface;
+            std::int64_t requested = 0;
+            if (const auto* integer = std::get_if<std::int64_t>(&value)) requested = *integer;
+            else if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
+                if (!canonical_chart_decimal(decimal->canonical)) return PropertyMutationStatus::invalid_value;
+                const auto dot = decimal->canonical.find('.');
+                const auto whole = std::string_view(decimal->canonical).substr(0, dot);
+                if (whole.empty() || whole == "-") requested = 0;
+                else {
+                    const auto parsed = std::from_chars(whole.data(), whole.data() + whole.size(), requested);
+                    if (parsed.ec == std::errc::result_out_of_range) return PropertyMutationStatus::applied;
+                    if (parsed.ec != std::errc{} || parsed.ptr != whole.data() + whole.size()) return PropertyMutationStatus::invalid_value;
+                }
+            } else return PropertyMutationStatus::invalid_value;
+            if (requested < 1 || requested > static_cast<std::int64_t>(group->ids.size())) return PropertyMutationStatus::applied;
+            const auto old_order = group->orders[group->target_index];
+            const auto new_order = static_cast<std::int32_t>(requested);
+            for (std::size_t index = 0; index < group->ids.size(); ++index) {
+                auto order = group->orders[index];
+                if (index == group->target_index) order = new_order;
+                else if (old_order < new_order && order > old_order && order <= new_order) --order;
+                else if (old_order > new_order && order >= new_order && order < old_order) ++order;
+                if (order == group->orders[index]) continue;
+                const auto sibling = find_location(ObjectCategory::control, group->ids[index]);
+                auto& position = collections_.controls[sibling->index].position.tab_order;
+                if (order == static_cast<std::int32_t>(index + 1)) position.reset();
+                else position.set(std::optional<std::int32_t>{order});
+            }
+            return PropertyMutationStatus::applied;
+        }
         if (descriptor->api_name == "Data") return PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
@@ -1306,6 +1380,12 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         property_control = &control;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (descriptor->api_name == "TabOrder") {
+            const auto group = tab_order_group(*this, control.id);
+            if (!group) return PropertyMutationStatus::unsupported_surface;
+            const auto status = set_prop_val(owner, property, static_cast<std::int64_t>(group->target_index + 1));
+            return status == PropertyMutationStatus::applied ? PropertyMutationStatus::reset : status;
+        }
         if (descriptor->api_name == "Data") return PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;

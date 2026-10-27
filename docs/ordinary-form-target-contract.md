@@ -81,6 +81,9 @@ Form сохраняет 13 именованных событий с незави
 SpreadsheetDocumentField сохраняет полосы прокрутки, Enabled, ShowSelection,
 EnableStartDrag, EnableDrag, Border и BorderColor, а также семь подтвержденных
 событий. Парные поля полос прокрутки проверяются на согласованность.
+Порядок обхода элемента хранится в Position/TabOrder. Изменение через API
+сдвигает соседние элементы на той же странице; порядок ChildItems сохраняется.
+
 Вложенная Panel сохраняет Enabled, ToolTip, Font, Transparent, ShowTabs,
 Picture, PictureSize, PanelPictureLocation и OnCurrentPageChange. Для ShowTabs
 проверены все 13 значений. Картинки поддерживают ссылки на библиотеку и файлы

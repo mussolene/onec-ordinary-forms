@@ -1943,7 +1943,6 @@
       <xs:element name="ShowTabs" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PanelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="TabOrder" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>

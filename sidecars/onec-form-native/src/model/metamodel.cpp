@@ -1021,6 +1021,9 @@ void apply_proven_storage_overrides(
     classify_property(splitter, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
 
     auto& panel = properties[static_cast<std::size_t>(ControlKind::panel)];
+    classify_property(panel, "TabOrder", StorageCodec::position_record, DefaultKind::none, "");
+    std::ranges::find(panel, "TabOrder", &PropertyDescriptor::api_name)->surface = PropertySurface::panel_placement;
+    classify_property(panel_placement_properties, "TabOrder", StorageCodec::position_record, DefaultKind::none, "");
     for (const auto name : {"Picture", "PanelPictureLocation", "PictureSize"}) {
         auto property = std::ranges::find(panel, name, &PropertyDescriptor::api_name);
         if (property == panel.end()) throw std::logic_error("missing Panel picture property");

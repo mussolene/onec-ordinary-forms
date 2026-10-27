@@ -374,6 +374,66 @@ void test_descriptors() {
         "PictureDecoration Shortcut must use the shared typed Shortcut codec and None default");
 }
 
+void test_tab_order_reorders_siblings() {
+    const std::array<ControlPayload, 12> payloads{
+        CalendarFieldPayload{}, ChoiceFieldPayload{}, CommandBarPayload{}, CheckBoxPayload{},
+        RadioButtonPayload{}, InputFieldPayload{}, ListBoxPayload{}, UsualGroupPayload{},
+        ProgressBarPayload{}, TrackBarPayload{}, LabelDecorationPayload{}, PanelPayload{}};
+    Form form; form.id = ObjectId{1}; form.name = "TabOrder";
+    for (std::uint64_t id = 10; id < 22; ++id) form.children.push_back(ControlRef{ObjectId{id}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < payloads.size(); ++index)
+        document.add_control(ControlNode{ObjectId{10 + index}, "Control" + std::to_string(index), payloads[index]});
+    const auto property = PropertyId::from_name("TabOrder");
+    const auto owner = [](std::uint64_t id) { return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}}; };
+    for (std::uint64_t id = 10; id < 22; ++id)
+        expect(document.get_prop_val(owner(id), property).value == PropertyValue{static_cast<std::int64_t>(id - 9)},
+            "implicit order must follow sibling order");
+    expect(document.set_prop_val(owner(14), property, DecimalValue{"1.5"}) == PropertyMutationStatus::applied &&
+            document.get_prop_val(owner(14), property).value == PropertyValue{std::int64_t{1}} &&
+            document.get_prop_val(owner(10), property).value == PropertyValue{std::int64_t{2}},
+        "fractional TabOrder must truncate and shift siblings");
+    expect(document.set_prop_val(owner(14), property, std::int64_t{12}) == PropertyMutationStatus::applied &&
+            document.get_prop_val(owner(14), property).value == PropertyValue{std::int64_t{12}} &&
+            document.get_prop_val(owner(10), property).value == PropertyValue{std::int64_t{1}},
+        "moving TabOrder later must shift the intervening siblings");
+    for (const auto invalid : {std::int64_t{-1}, std::int64_t{0}, std::int64_t{13}})
+        expect(document.set_prop_val(owner(14), property, invalid) == PropertyMutationStatus::applied &&
+                document.get_prop_val(owner(14), property).value == PropertyValue{std::int64_t{12}},
+            "out-of-range TabOrder must leave order unchanged");
+    expect(document.set_prop_val(owner(14), property, std::string{"1"}) == PropertyMutationStatus::invalid_value,
+        "TabOrder must reject a nonnumeric value");
+    expect(document.reset_prop_val(owner(14), property) == PropertyMutationStatus::reset &&
+            document.get_prop_val(owner(14), property).value == PropertyValue{std::int64_t{5}},
+        "reset must restore the child ordinal and keep sibling order valid");
+    for (std::uint64_t id = 10; id < 22; ++id)
+        expect(document.get_prop_val(owner(id), property).value == PropertyValue{static_cast<std::int64_t>(id - 9)},
+            "reset must restore the sibling permutation");
+
+    auto invalid_graph = document;
+    auto* invalid_control = const_cast<ControlNode*>(invalid_graph.find_control(ObjectId{11}));
+    invalid_control->position.tab_order.set(std::optional<std::int32_t>{1});
+    expect(invalid_graph.set_prop_val(owner(12), property, std::int64_t{1}) == PropertyMutationStatus::unsupported_surface &&
+            invalid_control->position.tab_order.value() == std::optional<std::int32_t>{1},
+        "an ambiguous sibling permutation must be rejected without mutation");
+
+    Form nested_form; nested_form.id = ObjectId{1}; nested_form.name = "NestedTabOrder";
+    nested_form.children = {ControlRef{ObjectId{2}}, ControlRef{ObjectId{3}}};
+    OrdinaryFormDocument nested(std::move(nested_form));
+    ControlNode panel{ObjectId{2}, "Panel", PanelPayload{}};
+    panel.children = {PageRef{ObjectId{4}}, PageRef{ObjectId{5}}};
+    nested.add_control(std::move(panel)); nested.add_control(ControlNode{ObjectId{3}, "Outside", ButtonPayload{}});
+    Page first; first.id = ObjectId{4}; first.name = "First"; first.children = {ControlRef{ObjectId{6}}, ControlRef{ObjectId{7}}};
+    Page second; second.id = ObjectId{5}; second.name = "Second"; second.children = {ControlRef{ObjectId{8}}, ControlRef{ObjectId{9}}};
+    nested.add_page(std::move(first)); nested.add_page(std::move(second));
+    for (std::uint64_t id = 6; id <= 9; ++id) nested.add_control(ControlNode{ObjectId{id}, "Child" + std::to_string(id), ButtonPayload{}});
+    expect(nested.set_prop_val(owner(7), property, std::int64_t{1}) == PropertyMutationStatus::applied &&
+            nested.get_prop_val(owner(6), property).value == PropertyValue{std::int64_t{2}} &&
+            nested.get_prop_val(owner(8), property).value == PropertyValue{std::int64_t{1}} &&
+            nested.get_prop_val(owner(3), property).value == PropertyValue{std::int64_t{2}},
+        "tab order changes must remain inside the owning page");
+}
+
 void test_label_picture_api_access() {
     using namespace oof::model::metamodel;
     const auto* descriptor = find_property(ControlKind::label_decoration, "Picture");
@@ -3402,6 +3462,7 @@ int main() {
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
         test_label_picture_api_access();
+        test_tab_order_reorders_siblings();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
         test_default_button_model();
