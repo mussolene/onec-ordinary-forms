@@ -15432,6 +15432,44 @@ void test_panel_shared_page_position_round_trip() {
         const auto rebuilt = form_stream::encode_document(parsed.value());
         expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
             "shared and separate page positions must rebuild without storage drift");
+        if (separate) {
+            auto reordered = encoded.value();
+            auto* record = find_record_with_guid(reordered, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            expect(record != nullptr, "Panel boundary record must exist");
+            auto& payload = record->items.at(2).items.at(1);
+            for (std::size_t edge = 0; edge < 4; ++edge)
+                std::swap(payload.items.at(16 + edge), payload.items.at(20 + edge));
+            const auto reordered_decoded = form_stream::decode_document(reordered, "ReorderedPanelPositions");
+            expect(reordered_decoded.ok() && reordered_decoded.value().reconstruction_complete(),
+                "physical boundary block order must not change named Page positions");
+            const auto* reordered_panel = reordered_decoded.value().find_control(model::ObjectId{2});
+            for (std::size_t index = 0; index < count; ++index) {
+                const auto ref = std::get<model::PageRef>(reordered_panel->children[index]);
+                const auto* page = reordered_decoded.value().find_page(ref.id());
+                expect(page && page->position.value().width.value() == 200 + static_cast<std::int32_t>(index) &&
+                    page->position.value().bindings.anchors.size() == 2,
+                    "page index must determine its rectangle and constraints");
+            }
+            const auto canonical = form_stream::encode_document(reordered_decoded.value());
+            expect(canonical.ok() && list_stream::dump_compact(canonical.value()) == list_stream::dump_compact(encoded.value()),
+                "reordered boundary blocks must rebuild canonically");
+            auto inconsistent = reordered;
+            record = find_record_with_guid(inconsistent, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            record->items.at(2).items.at(1).items.at(17).items.at(5) = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(inconsistent, "InconsistentPageBoundaryIndex"),
+                "all four edges of a boundary block must identify the same page");
+            auto duplicate = encoded.value();
+            record = find_record_with_guid(duplicate, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            for (std::size_t edge = 0; edge < 4; ++edge)
+                record->items.at(2).items.at(1).items.at(20 + edge).items.at(5) = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(duplicate, "DuplicatePageBoundaryIndex"),
+                "duplicate page boundary indices must be rejected");
+            auto out_of_range = encoded.value();
+            record = find_record_with_guid(out_of_range, model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            record->items.at(2).items.at(1).items.at(16).items.at(5) = list_stream::ListValue::raw_atom(std::to_string(count));
+            expect(!form_stream::decode_document(out_of_range, "OutOfRangePageBoundaryIndex"),
+                "page boundary indices outside the owner must be rejected");
+        }
         if (!separate) {
             auto inconsistent = document;
             auto* second = const_cast<model::Page*>(inconsistent.find_page(model::ObjectId{4}));

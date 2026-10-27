@@ -2517,14 +2517,32 @@ DecodedOwnerPages decode_owner_pages(
         fail("OOF1102", std::string(path), "four boundary rows per stored Page area", describe(normalized),
             "Owner Page boundary table is truncated");
     }
+    std::vector<LV> boundaries_by_page(boundary_page_count);
+    std::vector<bool> seen_boundary_page(boundary_page_count, false);
+    for (std::size_t block = 0; block < boundary_page_count; ++block) {
+        const auto offset = 10 + block * 4;
+        LV boundaries = list(std::vector<LV>(
+            normalized.items.begin() + static_cast<std::ptrdiff_t>(offset),
+            normalized.items.begin() + static_cast<std::ptrdiff_t>(offset + 4)));
+        const auto first_row_path = child_path(path, offset);
+        require_arity(boundaries.items[0], 9, first_row_path);
+        const auto index = integer_atom<std::uint32_t>(boundaries.items[0].items[5], child_path(first_row_path, 5));
+        if (index >= boundary_page_count || seen_boundary_page[index]) {
+            fail("OOF1114", child_path(first_row_path, 5), "unique Page boundary index within the owner",
+                std::to_string(index), "Owner Page boundary index is duplicate or out of range");
+        }
+        seen_boundary_page[index] = true;
+        boundaries_by_page[index] = std::move(boundaries);
+    }
     for (std::size_t page_index = 0; page_index < count; ++page_index) {
         const auto boundary_index = separate_by_page ? page_index : 0;
-        LV boundaries = list(std::vector<LV>(
-            normalized.items.begin() + static_cast<std::ptrdiff_t>(10 + boundary_index * 4),
-            normalized.items.begin() + static_cast<std::ptrdiff_t>(14 + boundary_index * 4)));
-        auto position = decode_page_position(boundaries, static_cast<std::uint32_t>(boundary_index), owner);
+        auto position = decode_page_position(boundaries_by_page[boundary_index], static_cast<std::uint32_t>(boundary_index), owner);
         if (!position) throw DecodeFailure(position.diagnostics().front());
         pages[page_index].position.set(std::move(position.value()));
+    }
+    for (std::size_t index = 0; index < boundary_page_count; ++index) {
+        for (std::size_t edge = 0; edge < 4; ++edge)
+            normalized.items[10 + index * 4 + edge] = boundaries_by_page[index].items[edge];
     }
     auto expected = panel ? canonical_panel_payload(pages, *owner, separate_by_page) :
         canonical_root_panel_payload(8, 8, pages, owner);
