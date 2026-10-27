@@ -17443,6 +17443,43 @@ void test_schema_field_output() {
         const auto output_slot = [kind](list_stream::ListValue& record) -> list_stream::ListValue& {
             return kind == model::ControlKind::geographical_schema_field ? record.items[3].items[4] : record.items[2].items[5];
         };
+        constexpr std::array names{"ModifiesData", "SkipOnInput", "FirstInGroup"};
+        for (unsigned mask = 0; mask < 8; ++mask) {
+            const auto xml = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><" + tag +
+                " id=\"2\" name=\"Item\"><Position/></" + tag + "></ChildItems></Form>";
+            auto parsed = source::parse_form_xml(xml);
+            expect(parsed.ok(), "schema field fixture must parse");
+            auto* control = const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{2}));
+            for (std::size_t i = 0; i < names.size(); ++i)
+                control->extension_properties.set_explicit(model::PropertyId::from_name(names[i]), bool(mask & (1U << i)));
+            auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), "schema field metadata must encode");
+            auto* record = &encoded.value().items[1].items[2].items[2].items[1];
+            expect(record->items[0].atom == model::metamodel::descriptor_for(kind).guid, "schema field metadata record must exist");
+            const auto slot = kind == model::ControlKind::geographical_schema_field ? 5U : 4U;
+            for (std::size_t i = 0; i < names.size(); ++i)
+                expect(record->items[slot].items[i + 3].atom == ((mask & (1U << i)) ? "1" : "0"), "schema field property must use observed slot");
+            auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "schema field metadata must decode completely");
+            auto public_xml = source::serialize_form_xml(decoded.value());
+            expect(public_xml.ok(), "schema field metadata XML must serialize");
+            auto reparsed = source::parse_form_xml(public_xml.value());
+            expect(reparsed.ok(), "schema field metadata XML must parse");
+            auto rebuilt = form_stream::encode_document(reparsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "schema field metadata must roundtrip");
+            for (std::size_t i = 0; i < names.size(); ++i) {
+                for (const auto& invalid : {list_stream::ListValue::raw_atom("2"), list_stream::ListValue::string_atom("1"), list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")})}) {
+                    auto bad = encoded.value();
+                    bad.items[1].items[2].items[2].items[1].items[slot].items[i + 3] = invalid;
+                    expect(!form_stream::decode_document(bad), "malformed metadata Boolean must fail");
+                }
+            }
+            control->extension_properties.set_explicit(model::PropertyId::from_name("ModifiesData"), std::string("true"));
+            expect(!form_stream::encode_document(parsed.value()), "metadata property must reject wrong type");
+            control->extension_properties.set_explicit(model::PropertyId::from_name("ModifiesData"), false);
+            control->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), true);
+            expect(!form_stream::encode_document(parsed.value()), "schema field must reject other extensions");
+        }
         for (const auto member : {"Auto", "Enable", "Disable"}) {
             const auto xml = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><" + tag +
                 " id=\"2\" name=\"Item\"><Position/><Output type=\"Output\" member=\"" + member +

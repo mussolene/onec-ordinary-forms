@@ -4424,8 +4424,15 @@ DecodedControl decode_default_complex_control(
     require_arity(metadata, 6, metadata_path);
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Default complex control name is required");
-    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "Default complex control contains unsupported metadata");
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    require_raw_constant(metadata.items[2], "4294967295", child_path(metadata_path, 2));
+    constexpr std::array<std::string_view, 3> metadata_properties{"ModifiesData", "SkipOnInput", "FirstInGroup"};
+    std::array<bool, 3> metadata_values{};
+    for (std::size_t index = 0; index < metadata_values.size(); ++index) {
+        metadata_values[index] = bool_atom(metadata.items[index + 3], child_path(metadata_path, index + 3));
+        if (kind == model::ControlKind::pivot_chart && metadata_values[index])
+            fail("OOF1114", child_path(metadata_path, index + 3), "0", "1", "PivotChart metadata is unsupported");
+    }
     require_exact(record.items[geometry_slot + 2], list({raw("0")}), child_path(path, geometry_slot + 2),
         "Default complex control cannot contain form controls");
     model::ControlPayload payload = kind == model::ControlKind::graphical_schema_field
@@ -4434,6 +4441,8 @@ DecodedControl decode_default_complex_control(
         ? model::ControlPayload{model::PivotChartPayload{}}
         : model::ControlPayload{model::GeographicalSchemaFieldPayload{}};
     model::ControlNode control{model::ObjectId{id}, name, std::move(payload)};
+    for (std::size_t index = 0; index < metadata_values.size(); ++index)
+        if (metadata_values[index]) control.extension_properties.set_explicit(model::PropertyId::from_name(metadata_properties[index]), true);
     if (output != 0) {
         constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
         control.properties().set_explicit(model::PropertyId::from_name("Output"),
@@ -10287,12 +10296,17 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
     const std::string path = "$/" + std::string(descriptor.public_name);
     if (control.id.value() == 0 || control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", path, "positive int64 control ID", std::to_string(control.id.value()), "Default complex control ID is invalid");
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path ||
         !control.children.empty() || (control.kind() == model::ControlKind::pivot_chart && !control.events.empty()))
         fail("OOF1122", path, "named default complex control without DataPath, events, extensions, or children", control.name,
             "Default complex control uses an unsupported storage concept");
-    if (control.kind() == model::ControlKind::pivot_chart) require_allowed_properties(control.properties(), {"BackColor"}, path);
-    else require_allowed_properties(control.properties(), {"BorderColor", "Output"}, path);
+    if (control.kind() == model::ControlKind::pivot_chart) {
+        require_allowed_properties(control.properties(), {"BackColor"}, path);
+        require_allowed_properties(control.extension_properties, {}, path);
+    } else {
+        require_allowed_properties(control.properties(), {"BorderColor", "Output"}, path);
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup"}, path);
+    }
     std::vector<LV> fields{raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value()))};
     if (control.kind() == model::ControlKind::graphical_schema_field) {
         fields.push_back(canonical_graphical_schema_field_info());
@@ -10312,7 +10326,10 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
             "GeographicalSchemaField", "Output", "Output", 0, {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}})));
     }
     fields.push_back(encode_geometry(control.position, context, IncomingAnchorLists{}));
-    fields.push_back(list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}));
+    fields.push_back(list({raw("14"), string_value(control.name), raw("4294967295"),
+        raw(explicit_bool(control.extension_properties, "ModifiesData", false) ? "1" : "0"),
+        raw(explicit_bool(control.extension_properties, "SkipOnInput", false) ? "1" : "0"),
+        raw(explicit_bool(control.extension_properties, "FirstInGroup", false) ? "1" : "0")}));
     fields.push_back(list({raw("0")}));
     return list(std::move(fields));
 }
