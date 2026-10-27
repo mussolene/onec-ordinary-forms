@@ -374,6 +374,34 @@ void test_descriptors() {
         "PictureDecoration Shortcut must use the shared typed Shortcut codec and None default");
 }
 
+void test_form_runtime_state_properties() {
+    using namespace oof::model::metamodel;
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "RuntimeState";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    for (const auto name : {"ModalMode", "Modified"}) {
+        const auto* descriptor = find_form_property(name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::runtime_only &&
+                descriptor->storage_codec == StorageCodec::none && descriptor->default_value.kind == DefaultKind::none,
+            "form runtime state must not claim persisted storage or a static default");
+        expect(document.get_prop_val(owner, PropertyId::from_name(name)).status == PropertyReadStatus::no_default,
+            "form runtime state must not fabricate an initial value");
+    }
+    const auto modal = PropertyId::from_name("ModalMode");
+    const auto modified = PropertyId::from_name("Modified");
+    expect(document.set_prop_val(owner, modal, true) == PropertyMutationStatus::read_only,
+        "ModalMode must reject assignment");
+    expect(document.set_prop_val(owner, modified, true) == PropertyMutationStatus::applied_runtime_only,
+        "Modified must accept a runtime Boolean value");
+    expect(!oof::source::serialize_form_xml(document),
+        "runtime Modified state must not be serialized into public Form.xml");
+    expect(document.reset_prop_val(owner, modified) == PropertyMutationStatus::reset_runtime_only &&
+            oof::source::serialize_form_xml(document).ok(),
+        "resetting Modified must remove runtime state before serialization");
+}
+
 void test_data_api_preserves_binding_until_supported() {
     const std::array<ControlPayload, 10> payloads{
         CalendarFieldPayload{}, ChoiceFieldPayload{}, CheckBoxPayload{}, RadioButtonPayload{},
@@ -3328,6 +3356,7 @@ int main() {
         test_panel_scrolling_tab_read();
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
+        test_form_runtime_state_properties();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
         test_default_button_model();

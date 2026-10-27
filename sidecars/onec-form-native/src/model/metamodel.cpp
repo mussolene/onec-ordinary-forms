@@ -1347,6 +1347,14 @@ void apply_proven_storage_overrides(
         DefaultKind::boolean,
         "true");
 
+    for (const auto name : {"ModalMode", "Modified"}) {
+        auto property = std::ranges::find(form_properties, name, &PropertyDescriptor::api_name);
+        if (property == form_properties.end()) throw std::logic_error("missing runtime Form property");
+        property->persistence = PersistenceClass::runtime_only;
+        property->storage_codec = StorageCodec::none;
+        property->default_value = {DefaultKind::none, {}};
+    }
+
     classify_property(
         form_properties,
         "Caption",
