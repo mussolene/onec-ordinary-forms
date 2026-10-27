@@ -741,6 +741,7 @@ OrdinaryFormDocument::OrdinaryFormDocument(Form form) : form_(std::move(form)) {
 void OrdinaryFormDocument::set_form(Form form) {
     form_ = std::move(form);
     window_permissions_.clear();
+    runtime_form_values_.clear();
     rebuild_index();
 }
 
@@ -994,6 +995,10 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
         if (property == PropertyId::from_name("ThisForm"))
             return {PropertyReadStatus::computed_value, PropertyValue{FormRef{form_.id}}};
+        if (property == PropertyId::from_name("ReadOnly") || property == PropertyId::from_name("MultipleChoice")) {
+            if (const auto* entry = runtime_form_values_.find(property))
+                return {PropertyReadStatus::computed_value, entry->value};
+        }
         const bool is_permission = property == PropertyId::from_name("AllowNormalState") ||
             property == PropertyId::from_name("AllowDockedState") || property == PropertyId::from_name("AllowAutohideState") ||
             property == PropertyId::from_name("AllowFloatState") || property == PropertyId::from_name("AllowJoinWindow");
@@ -1217,6 +1222,11 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("ReadOnly") || property == PropertyId::from_name("MultipleChoice")) {
+            if (!std::holds_alternative<bool>(value)) return PropertyMutationStatus::invalid_value;
+            runtime_form_values_.set_explicit(property, std::move(value));
+            return PropertyMutationStatus::applied_runtime_only;
+        }
         if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
@@ -1580,6 +1590,10 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("ReadOnly") || property == PropertyId::from_name("MultipleChoice")) {
+            runtime_form_values_.unset(property);
+            return PropertyMutationStatus::reset_runtime_only;
+        }
         if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||

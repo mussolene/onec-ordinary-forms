@@ -517,6 +517,39 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_form_runtime_boolean_values() {
+    Form form; form.id = ObjectId{1}; form.name = "RuntimeFlags";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto xml = oof::source::serialize_form_xml(document);
+    const auto binary = oof::save_form_bin(document);
+    expect(xml.ok() && binary.ok(), "form must serialize before runtime flags change");
+    for (const auto name : {"ReadOnly", "MultipleChoice"}) {
+        const auto property = PropertyId::from_name(name);
+        const auto initial = document.get_prop_val(owner, property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value == PropertyValue{false}, "runtime flag must initially be false");
+        expect(document.set_prop_val(owner, property, true) == PropertyMutationStatus::applied_runtime_only &&
+            document.get_prop_val(owner, property).value == PropertyValue{true}, "runtime flag must be writable");
+        expect(document.set_prop_val(owner, property, std::string{"invalid"}) == PropertyMutationStatus::invalid_value &&
+            document.get_prop_val(owner, property).value == PropertyValue{true}, "invalid runtime flag must not change the value");
+    }
+    const auto changed_xml = oof::source::serialize_form_xml(document);
+    const auto changed_binary = oof::save_form_bin(document);
+    expect(changed_xml.ok() && changed_xml.value() == xml.value() && changed_binary.ok() && changed_binary.value() == binary.value(),
+        "runtime flags must not change XML or binary serialization");
+    const auto restored = oof::load_form_bin(changed_binary.value());
+    expect(restored.ok() && restored.value().get_prop_val(owner, PropertyId::from_name("ReadOnly")).value == PropertyValue{false} &&
+        restored.value().get_prop_val(owner, PropertyId::from_name("MultipleChoice")).value == PropertyValue{false}, "runtime flags must reset on load");
+    document.mark_opening_started();
+    for (const auto name : {"ReadOnly", "MultipleChoice"}) {
+        const auto property = PropertyId::from_name(name);
+        expect(document.set_prop_val(owner, property, false) == PropertyMutationStatus::applied_runtime_only &&
+            document.get_prop_val(owner, property).value == PropertyValue{false}, "runtime flag must remain writable after opening");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset_runtime_only &&
+            document.get_prop_val(owner, property).value == PropertyValue{false}, "runtime flag reset must restore default");
+    }
+}
+
 void test_window_permission_mutations() {
     Form form; form.id = ObjectId{1}; form.name = "WindowMutation";
     OrdinaryFormDocument document(std::move(form));
@@ -3794,6 +3827,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
+        test_form_runtime_boolean_values();
         test_window_permission_mutations();
         test_window_permission_platform_matrix();
         test_window_permission_initial_values();

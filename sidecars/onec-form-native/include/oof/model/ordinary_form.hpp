@@ -1126,6 +1126,7 @@ private:
     bool reconstruction_complete_ = true;
     bool opening_started_ = false;
     PropertySet window_permissions_;
+    PropertySet runtime_form_values_;
     struct ObjectKeyHash {
         [[nodiscard]] std::size_t operator()(const ObjectKey& key) const noexcept {
             const std::size_t category_hash = std::hash<std::uint8_t>{}(
