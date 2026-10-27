@@ -479,6 +479,7 @@ using PropertyValue = std::variant<
     PictureRef,
     ShortcutValue,
     ControlRef,
+    PageRef,
     FormRef,
     AttributeRef,
     CommandRef,

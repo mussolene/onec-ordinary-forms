@@ -247,7 +247,7 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
                 return expected == metamodel::ValueCodec::context_menu_reference;
             } else if constexpr (std::is_same_v<Value, FormRef>) {
-                return expected == metamodel::ValueCodec::action_source_reference;
+                return expected == metamodel::ValueCodec::action_source_reference || expected == metamodel::ValueCodec::form_reference;
             } else if constexpr (std::is_same_v<Value, AttributeRef>) {
                 return expected == metamodel::ValueCodec::attribute_reference;
             } else if constexpr (std::is_same_v<Value, CommandRef>) {
@@ -350,6 +350,8 @@ bool property_value_references_resolve(
             using Value = std::remove_cvref_t<decltype(typed_value)>;
             if constexpr (std::is_same_v<Value, ControlRef>) {
                 return document.find_control(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, PageRef>) {
+                return document.find_page(typed_value.id()) != nullptr;
             } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
                 return context_menu_button_resolves(document, typed_value);
             } else if constexpr (std::is_same_v<Value, FormRef>) {
@@ -959,6 +961,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
     const ControlNode* position_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        if (property == PropertyId::from_name("ThisForm"))
+            return {PropertyReadStatus::computed_value, PropertyValue{FormRef{form_.id}}};
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {
@@ -972,6 +976,15 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
+            for (const auto& child : control.children) {
+                const auto* page = std::get_if<PageRef>(&child);
+                if (page == nullptr) continue;
+                if (find_page(page->id()) == nullptr) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                return {PropertyReadStatus::computed_value, PropertyValue{*page}};
+            }
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
         if (descriptor->api_name == "TabOrder") {
             const auto group = tab_order_group(*this, control.id);
             if (!group) return {PropertyReadStatus::unsupported_surface, std::nullopt};
@@ -1144,6 +1157,8 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         property_control = &control;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage")
+            return PropertyMutationStatus::unsupported_surface;
         if (descriptor->api_name == "TabOrder") {
             const auto group = tab_order_group(*this, control.id);
             if (!group) return PropertyMutationStatus::unsupported_surface;
@@ -1386,6 +1401,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         property_control = &control;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage")
+            return PropertyMutationStatus::unsupported_surface;
         if (descriptor->api_name == "TabOrder") {
             const auto group = tab_order_group(*this, control.id);
             if (!group) return PropertyMutationStatus::unsupported_surface;
@@ -1625,6 +1642,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 using Value = std::remove_cvref_t<decltype(typed_value)>;
                 if constexpr (std::is_same_v<Value, ControlRef>) {
                     require_control(source, typed_value);
+                } else if constexpr (std::is_same_v<Value, PageRef>) {
+                    require_page(source, typed_value);
                 } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
                     if (!context_menu_button_resolves(*this, typed_value)) {
                         add_violation(report, InvariantCode::dangling_reference, source,

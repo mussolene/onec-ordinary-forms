@@ -1114,6 +1114,8 @@ model::PropertyValue parse_property_value(
             fail("OOF2003", node, std::string(object_id), property, "owned Links collection", "scalar", "Dendrogram Links is not a scalar property");
         case mm::ValueCodec::control_reference:
             return model::ControlRef{parse_object_id(node_text(node), node, property, object_id)};
+        case mm::ValueCodec::form_reference:
+            fail("OOF2003", node, std::string(object_id), property, "runtime-only form reference", "XML", "Runtime form reference cannot be parsed from XML");
         case mm::ValueCodec::attribute_reference:
             return model::AttributeRef{parse_object_id(node_text(node), node, property, object_id)};
         case mm::ValueCodec::command_reference:
@@ -3275,6 +3277,8 @@ private:
             case mm::ValueCodec::control_reference:
                 writer_.text(name, object_id_text(require_value<model::ControlRef>(value, object_id, name, "control reference").id()));
                 return;
+            case mm::ValueCodec::form_reference:
+                serialization_fail(std::string(object_id), std::string(name), "runtime-only form reference", "XML", "Runtime form reference cannot be serialized");
             case mm::ValueCodec::attribute_reference:
                 writer_.text(name, object_id_text(require_value<model::AttributeRef>(value, object_id, name, "attribute reference").id()));
                 return;

@@ -42,7 +42,7 @@
             <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
             <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
             <Property name="Controls" apiName="Controls" russianName="ЭлементыФормы" russianType="ЭлементыФормы" valueCodec="unclassified"/>
-            <Property name="ThisForm" apiName="ThisForm" russianName="ЭтаФорма" russianType="Форма" valueCodec="unclassified"/>
+            <Property name="ThisForm" apiName="ThisForm" russianName="ЭтаФорма" russianType="Форма" valueCodec="form-reference"/>
             <Property name="AutoContextMenu" apiName="AutoContextMenu" russianName="АвтоКонтекстноеМеню" russianType="Булево" valueCodec="boolean"/>
             <Property name="ContextMenu" apiName="ContextMenu" russianName="КонтекстноеМеню" russianType="Неопределено ; КоманднаяПанель ; КнопкаКоманднойПанели" valueCodec="context-menu-reference"/>
           </Properties>

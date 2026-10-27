@@ -123,6 +123,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "ActionSourceReferenceValueType";
         case ValueCodec::control_reference:
             return "ControlReferenceValueType";
+        case ValueCodec::form_reference:
+            return "xs:unsignedLong";
         case ValueCodec::attribute_reference:
             return "AttributeReferenceValueType";
         case ValueCodec::command_reference:
@@ -132,6 +134,10 @@ std::string_view xsd_type(ValueCodec codec) {
 }
 
 std::string_view xsd_type(const PropertyDescriptor& property) {
+    if (property.value_codec == ValueCodec::form_reference &&
+        property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+        return "UnclassifiedValueType";
+    }
     if (property.control_kind == model::ControlKind::calendar_field &&
         (property.api_name == "BeginOfDisplayPeriod" || property.api_name == "EndOfDisplayPeriod")) {
         return "CalendarBeginDateValueType";

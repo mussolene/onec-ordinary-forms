@@ -97,6 +97,7 @@ enum class ValueCodec : std::uint8_t {
     action_source_reference,
     context_menu_reference,
     control_reference,
+    form_reference,
     attribute_reference,
     command_reference,
     localized_text,

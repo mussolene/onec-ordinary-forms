@@ -592,7 +592,9 @@ void expect_property_element(
     const std::string type = attribute(element, "type");
     expect(!type.empty(), "property must have an explicit XSD type");
     expect(type != "xs:anyType", "property must not use xs:anyType");
-    if (descriptor.value_codec == ValueCodec::unclassified) {
+    if (descriptor.value_codec == ValueCodec::unclassified ||
+        (descriptor.value_codec == ValueCodec::form_reference &&
+         descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only)) {
         expect(
             type == "UnclassifiedValueType",
             "unclassified property must use the rejecting type");

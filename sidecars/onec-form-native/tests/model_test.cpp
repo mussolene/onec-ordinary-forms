@@ -464,6 +464,14 @@ void test_form_runtime_state_properties() {
     form.name = "RuntimeState";
     OrdinaryFormDocument document(std::move(form));
     const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto* this_form = find_form_property("ThisForm");
+    const auto this_form_id = PropertyId::from_name("ThisForm");
+    expect(this_form && this_form->persistence == PersistenceClass::runtime_only &&
+            this_form->storage_codec == StorageCodec::none && this_form->value_codec == ValueCodec::form_reference,
+        "ThisForm must be a runtime-only form reference");
+    expect(document.get_prop_val(owner, this_form_id).value == PropertyValue{FormRef{ObjectId{1}}} &&
+            document.set_prop_val(owner, this_form_id, FormRef{ObjectId{1}}) == PropertyMutationStatus::read_only,
+        "ThisForm must return the owning form and reject assignment");
     for (const auto name : {"ModalMode", "Modified"}) {
         const auto* descriptor = find_form_property(name);
         expect(descriptor && descriptor->persistence == PersistenceClass::runtime_only &&
@@ -3452,6 +3460,40 @@ void test_control_border_and_calendar_selection_descriptors() {
         "CalendarField SelectedDates must remain a runtime-only unclassified collection without a default");
 }
 
+void test_panel_initial_current_page() {
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "Panels";
+    OrdinaryFormDocument document(std::move(form));
+    const auto current_page = PropertyId::from_name("CurrentPage");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId panel_id{100 + index};
+        const ObjectId first_id{200 + index * 2};
+        const ObjectId second_id{201 + index * 2};
+        ControlNode panel{panel_id, "Panel" + std::to_string(index), PanelPayload{}};
+        panel.children = {PageRef{first_id}, PageRef{second_id}};
+        Page first;
+        first.id = first_id;
+        first.visible.set(false);
+        Page second;
+        second.id = second_id;
+        document.add_page(std::move(first));
+        document.add_page(std::move(second));
+        document.add_control(std::move(panel));
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, panel_id};
+        const auto initial = document.get_prop_val(owner, current_page);
+        expect(initial.status == PropertyReadStatus::computed_value && initial.value == PropertyValue{PageRef{first_id}},
+            "initial current page must be the first page even if hidden");
+        expect(document.set_prop_val(owner, current_page, PageRef{second_id}) == PropertyMutationStatus::unsupported_surface &&
+                document.reset_prop_val(owner, current_page) == PropertyMutationStatus::unsupported_surface &&
+                document.get_prop_val(owner, current_page).value == initial.value,
+            "unimplemented current page mutations must not change the initial page");
+    }
+    document.add_control(ControlNode{ObjectId{400}, "Empty", PanelPayload{}});
+    expect(document.get_prop_val({ObjectCategory::control, ObjectId{400}}, current_page).status == PropertyReadStatus::unsupported_surface,
+        "an incomplete panel must not invent a current page");
+}
+
 }  // namespace
 
 int main() {
@@ -3461,6 +3503,7 @@ int main() {
         test_input_list_choice_mode_api();
         test_input_incomplete_choice_mode_api();
         test_panel_scrolling_tab_read();
+        test_panel_initial_current_page();
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();

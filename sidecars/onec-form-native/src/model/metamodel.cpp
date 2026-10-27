@@ -1372,7 +1372,7 @@ void apply_proven_storage_overrides(
         DefaultKind::boolean,
         "true");
 
-    for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode"}) {
+    for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode", "ThisForm"}) {
         auto property = std::ranges::find(form_properties, name, &PropertyDescriptor::api_name);
         if (property == form_properties.end()) throw std::logic_error("missing runtime Form property");
         property->persistence = PersistenceClass::runtime_only;
@@ -1380,6 +1380,7 @@ void apply_proven_storage_overrides(
         property->default_value = name == std::string_view{"CloseOnChoice"}
             ? DefaultValue{DefaultKind::boolean, "true"} : DefaultValue{DefaultKind::none, {}};
     }
+    std::ranges::find(form_properties, "ThisForm", &PropertyDescriptor::api_name)->value_codec = ValueCodec::form_reference;
 
     classify_property(
         form_properties,
@@ -2414,6 +2415,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "context-menu-reference";
         case ValueCodec::control_reference:
             return "control-reference";
+        case ValueCodec::form_reference:
+            return "form-reference";
         case ValueCodec::attribute_reference:
             return "attribute-reference";
         case ValueCodec::command_reference:
