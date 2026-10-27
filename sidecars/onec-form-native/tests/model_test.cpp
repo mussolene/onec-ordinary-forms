@@ -928,6 +928,60 @@ void test_table_enum_properties() {
     }
 }
 
+void test_output_enum_properties() {
+    using namespace oof::model::metamodel;
+    struct Case {
+        ControlKind kind;
+        ControlPayload payload;
+    };
+    const std::array cases{
+        Case{ControlKind::html_document_field, HtmlDocumentFieldPayload{}},
+        Case{ControlKind::geographical_schema_field, GeographicalSchemaFieldPayload{}},
+        Case{ControlKind::graphical_schema_field, GraphicalSchemaFieldPayload{}},
+        Case{ControlKind::table, TablePayload{}},
+    };
+    constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
+    const auto property = PropertyId::from_name("Output");
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        Form form;
+        form.id = ObjectId{1};
+        const ObjectId control_id{static_cast<std::uint64_t>(index + 2)};
+        form.children = {ControlRef{control_id}};
+        OrdinaryFormDocument document(std::move(form));
+        document.add_control(ControlNode{control_id, "OutputControl", cases[index].payload});
+        const auto control = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, control_id};
+        const auto* descriptor = find_property(cases[index].kind, "Output");
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::control_info &&
+                   descriptor->value_codec == ValueCodec::enumeration &&
+                   descriptor->default_value.kind == DefaultKind::enumeration && descriptor->default_value.canonical == (cases[index].kind == ControlKind::table ? "Output.Auto" : "Auto"),
+            "Output descriptors must use editable control-info enumeration with Auto default");
+        const EnumerationValue default_value{"Output", "Auto"};
+        const auto initial = document.get_prop_val(control, property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value &&
+                   *initial.value == PropertyValue{default_value},
+            "Output API default must materialize as Output.Auto");
+        for (const auto member : members) {
+            const EnumerationValue value{"Output", std::string(member)};
+            expect(document.set_prop_val(control, property, value) == PropertyMutationStatus::applied,
+                "Output enum member must be accepted");
+            const auto read = document.get_prop_val(control, property);
+            expect(read.value && *read.value == PropertyValue{value}, "Output enum member must round-trip through the API");
+        }
+        for (const auto& invalid : {EnumerationValue{"Output", "Unknown"}, EnumerationValue{"OtherType", "Auto"}})
+            expect(document.set_prop_val(control, property, invalid) == PropertyMutationStatus::invalid_value,
+                "Output API must reject unknown members and wrong enum types");
+        expect(document.set_prop_val(control, property, true) == PropertyMutationStatus::invalid_value,
+            "Output API must reject non-enumeration values");
+        expect(document.reset_prop_val(control, property) == PropertyMutationStatus::reset,
+            "Output API reset must remove explicit value");
+        const auto reset = document.get_prop_val(control, property);
+        expect(reset.status == PropertyReadStatus::proven_default && reset.value &&
+                   *reset.value == PropertyValue{default_value},
+            "Output API reset must restore Output.Auto");
+    }
+}
+
 void test_chart_appearance_defaults() {
     using namespace oof::model::metamodel;
     Form form;
@@ -2787,6 +2841,7 @@ int main() {
         test_chart_type_property();
         test_chart_enum_properties();
         test_table_enum_properties();
+        test_output_enum_properties();
         test_chart_appearance_defaults();
         test_help_metamodel();
         test_shared_control_default_classifications();

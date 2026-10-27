@@ -1320,7 +1320,7 @@ void test_value_tree_type_domain_xml_roundtrip() {
 
 void test_table_enum_properties_xml() {
     const auto xml = [](std::string_view property_name, std::string_view property) {
-        const bool before_columns = property_name == "HorizontalScrollBar" || property_name == "VerticalScrollBar";
+        const bool before_columns = property_name == "HorizontalScrollBar" || property_name == "VerticalScrollBar" || property_name == "Output";
         const auto prefix = std::string("<Form id=\"1\" name=\"RowsForm\" ordinaryFormVersion=\"2.1\">") +
             "<Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\"/>" +
             "</TypeDomain></Attribute></Attributes><ChildItems><Table id=\"3\" name=\"Rows\">" +

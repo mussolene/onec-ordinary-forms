@@ -923,6 +923,13 @@ void apply_proven_storage_overrides(
         DefaultKind::enumeration,
         "Auto");
 
+    for (const auto kind : {ControlKind::geographical_schema_field, ControlKind::graphical_schema_field}) {
+        auto& control_properties = properties[static_cast<std::size_t>(kind)];
+        classify_property(control_properties, "Output", StorageCodec::control_info,
+            DefaultKind::enumeration, "Auto");
+        std::ranges::find(control_properties, "Output", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    }
+
     auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
     classify_property(
         picture_decoration,

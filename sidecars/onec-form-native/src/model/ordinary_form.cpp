@@ -287,7 +287,9 @@ bool property_api_enumeration_matches(
             return value.type_name == "MenuMode" &&
                 (value.member == "DontUse" || value.member == "Use" || value.member == "UseExtra");
     }
-    if (descriptor.control_kind == ControlKind::html_document_field && descriptor.api_name == "Output")
+    if ((descriptor.control_kind == ControlKind::html_document_field ||
+         descriptor.control_kind == ControlKind::geographical_schema_field ||
+         descriptor.control_kind == ControlKind::graphical_schema_field) && descriptor.api_name == "Output")
         return value.type_name == "Output" &&
             (value.member == "Auto" || value.member == "Enable" || value.member == "Disable");
     if (descriptor.control_kind == ControlKind::splitter && descriptor.api_name == "Orientation")

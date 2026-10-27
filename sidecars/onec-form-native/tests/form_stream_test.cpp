@@ -15759,6 +15759,43 @@ void test_chart_named_integer_and_delimiter_properties() {
     }
 }
 
+void test_schema_field_output() {
+    for (const auto kind : {model::ControlKind::geographical_schema_field, model::ControlKind::graphical_schema_field}) {
+        const auto tag = std::string(model::metamodel::descriptor_for(kind).public_name);
+        const auto output_slot = [kind](list_stream::ListValue& record) -> list_stream::ListValue& {
+            return kind == model::ControlKind::geographical_schema_field ? record.items[3].items[4] : record.items[2].items[5];
+        };
+        for (const auto member : {"Auto", "Enable", "Disable"}) {
+            const auto xml = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><" + tag +
+                " id=\"2\" name=\"Item\"><Position/><Output type=\"Output\" member=\"" + member +
+                "\"/><Events><Selection id=\"100\">Handler</Selection></Events></" + tag + "></ChildItems></Form>";
+            auto parsed = source::parse_form_xml(xml);
+            expect(parsed.ok(), "schema field Output XML must parse");
+            const auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), "schema field Output with event must encode");
+            auto native = encoded.value();
+            auto* record = &native.items[1].items[2].items[2].items[1];
+            expect(record->items[0].atom == model::metamodel::descriptor_for(kind).guid, "schema field record must exist");
+            const auto ordinal = std::string_view(member) == "Auto" ? "0" : std::string_view(member) == "Enable" ? "1" : "2";
+            expect(output_slot(*record).atom == ordinal, "Output must occupy observed platform slot");
+            auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "Output must decode completely with events");
+            const auto read = decoded.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}}, model::PropertyId::from_name("Output"));
+            expect(read.value && *read.value == model::PropertyValue{model::EnumerationValue{"Output", member}}, "Output must read back named member");
+            auto public_xml = source::serialize_form_xml(decoded.value());
+            expect(public_xml.ok(), "Output must serialize as public XML");
+            auto reparsed = source::parse_form_xml(public_xml.value());
+            expect(reparsed.ok(), "Output public XML must parse");
+            auto rebuilt = form_stream::encode_document(reparsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "Output public XML must rebuild exact stream");
+            for (const auto invalid : {"-1", "3"}) {
+                output_slot(*record) = list_stream::ListValue::raw_atom(invalid);
+                expect(!form_stream::decode_document(native), "invalid Output ordinal must fail");
+            }
+        }
+    }
+}
+
 void test_complex_control_named_events() {
     struct Case { model::ControlKind kind; const char* tag; const char* first; const char* second; };
     constexpr std::array cases{
@@ -17151,7 +17188,7 @@ void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
     for (const auto record_index : {1u, 2u}) {
         auto nondefault = encoded.value();
         auto& record = nondefault.items[1].items[2].items[2].items[record_index];
-        if (record_index == 1) record.items[3].items[4] = list_stream::ListValue::raw_atom("1");
+        if (record_index == 1) record.items[2].items[1] = list_stream::ListValue::raw_atom("2");
         else record.items[2].items[2].items[0].items[2] = list_stream::ListValue::raw_atom("1");
         const auto partial_schema = form_stream::decode_document(nondefault, "DefaultSchemas");
         const auto expected_id = record_index == 1 ? model::ObjectId{2} : model::ObjectId{19};
@@ -17552,6 +17589,7 @@ int main() {
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();
+        test_schema_field_output();
         test_complex_control_named_events();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();

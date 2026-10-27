@@ -4265,6 +4265,7 @@ DecodedControl decode_default_complex_control(
         fail("OOF1122", child_path(path, 1), "positive int64 control ID", std::to_string(id), "Default complex control ID is invalid");
     std::vector<DecodedControlEvent> named_events;
     model::ColorValue border_color;
+    std::int32_t output = 0;
     auto back_color = chart_back_color_default();
     if (kind == model::ControlKind::graphical_schema_field) {
         require_arity(record.items[2], 6, child_path(path, 2));
@@ -4275,6 +4276,8 @@ DecodedControl decode_default_complex_control(
         normalized_info.items[0].items[6] = canonical_graphical_schema_field_info().items[0].items[6];
         named_events = decode_control_event_collection(normalized_info.items[3], child_path(child_path(path, 2), 3), kind);
         normalized_info.items[3] = list({raw("0")});
+        output = integer_atom<std::int32_t>(normalized_info.items[5], child_path(child_path(path, 2), 5));
+        normalized_info.items[5] = raw("0");
         if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_graphical_schema_field_info()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GraphicalSchemaField");
     } else if (kind == model::ControlKind::pivot_chart) {
@@ -4304,9 +4307,16 @@ DecodedControl decode_default_complex_control(
         require_arity(normalized_schema, 5, child_path(path, 3));
         named_events = decode_control_event_collection(normalized_schema.items[3], child_path(child_path(path, 3), 3), kind);
         normalized_schema.items[3] = list({raw("0")});
+        output = integer_atom<std::int32_t>(normalized_schema.items[4], child_path(child_path(path, 3), 4));
+        normalized_schema.items[4] = raw("0");
         if (list_stream::dump_compact(normalized_schema) != list_stream::dump_compact(canonical_geographical_schema()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 3), "GeographicalSchemaField");
     }
+    if (output < 0 || output > 2)
+        fail("OOF1114", kind == model::ControlKind::graphical_schema_field ?
+            child_path(child_path(path, 2), 5) : child_path(child_path(path, 3), 4),
+            "Output storage value 0, 1, or 2", std::to_string(output),
+            "Schema field Output storage value is unsupported");
     auto geometry = decode_geometry(record.items[geometry_slot], child_path(path, geometry_slot), context);
     const auto metadata_slot = geometry_slot + 1;
     const auto& metadata = record.items[metadata_slot];
@@ -4324,6 +4334,11 @@ DecodedControl decode_default_complex_control(
         ? model::ControlPayload{model::PivotChartPayload{}}
         : model::ControlPayload{model::GeographicalSchemaFieldPayload{}};
     model::ControlNode control{model::ObjectId{id}, name, std::move(payload)};
+    if (output != 0) {
+        constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
+        control.properties().set_explicit(model::PropertyId::from_name("Output"),
+            model::EnumerationValue{"Output", std::string(members[static_cast<std::size_t>(output)])});
+    }
     if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     if (kind == model::ControlKind::pivot_chart && back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     control.position = std::move(geometry.position);
@@ -9903,12 +9918,14 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
         fail("OOF1122", path, "named default complex control without DataPath, events, extensions, or children", control.name,
             "Default complex control uses an unsupported storage concept");
     if (control.kind() == model::ControlKind::pivot_chart) require_allowed_properties(control.properties(), {"BackColor"}, path);
-    else require_allowed_properties(control.properties(), {"BorderColor"}, path);
+    else require_allowed_properties(control.properties(), {"BorderColor", "Output"}, path);
     std::vector<LV> fields{raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value()))};
     if (control.kind() == model::ControlKind::graphical_schema_field) {
         fields.push_back(canonical_graphical_schema_field_info());
         fields.back().items[0].items[6] = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "GraphicalSchemaField"), path + "/BorderColor");
         fields.back().items[3] = encode_control_event_collection(document, control, path + "/Events");
+        fields.back().items[5] = raw(std::to_string(explicit_enum_storage_value(control.properties(),
+            "GraphicalSchemaField", "Output", "Output", 0, {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}})));
     } else if (control.kind() == model::ControlKind::pivot_chart) {
         fields.push_back(canonical_default_pivot_chart_info());
         encode_chart_back_color(fields.back().items[1].items[2], 127, 378, control.properties(), path + "/BackColor");
@@ -9917,6 +9934,8 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
         fields.back().items[6] = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "GeographicalSchemaField"), path + "/BorderColor");
         fields.push_back(canonical_geographical_schema());
         fields.back().items[3] = encode_control_event_collection(document, control, path + "/Events");
+        fields.back().items[4] = raw(std::to_string(explicit_enum_storage_value(control.properties(),
+            "GeographicalSchemaField", "Output", "Output", 0, {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}})));
     }
     fields.push_back(encode_geometry(control.position, context, IncomingAnchorLists{}));
     fields.push_back(list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}));
@@ -10154,7 +10173,7 @@ LV encode_table(
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView",
-        "HeaderHeight", "FooterHeight"}, "$/Table");
+        "HeaderHeight", "FooterHeight", "Output"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
