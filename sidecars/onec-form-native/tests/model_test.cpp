@@ -373,6 +373,13 @@ void test_descriptors() {
                picture_shortcut->default_value.kind == DefaultKind::shortcut &&
                picture_shortcut->default_value.canonical == "None",
         "PictureDecoration Shortcut must use the shared typed Shortcut codec and None default");
+    const auto* input_shortcut = find_property(ControlKind::input_field, "Shortcut");
+    expect(input_shortcut && input_shortcut->persistence == PersistenceClass::persisted_editable &&
+               input_shortcut->storage_codec == StorageCodec::control_info &&
+               input_shortcut->value_codec == ValueCodec::shortcut &&
+               input_shortcut->default_value.kind == DefaultKind::shortcut &&
+               input_shortcut->default_value.canonical == "None",
+        "InputField Shortcut must use the shared typed Shortcut codec and None default");
 }
 
 void test_z_order_reorders_siblings() {

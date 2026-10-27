@@ -13249,6 +13249,95 @@ void test_input_field_date_only_type_domain_round_trip() {
         "$/1/2/2/1/2/1", "Date-only InputField TypeDomain must still match its linked Attribute");
 }
 
+void test_input_field_shortcut_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "InputShortcut";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainPatternValue type;
+    model::TypeDomainEntry entry;
+    entry.term = model::TypeDomainTerm::string;
+    entry.string = model::LengthQualifiers{64, false};
+    type.entries.push_back(entry);
+    document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+    model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    const model::ShortcutValue shortcut{"F2", true, true, false};
+    document.add_control(std::move(input));
+    const auto default_encoded = form_stream::encode_document(document);
+    expect(default_encoded.ok(), "InputField with default Shortcut must encode");
+    const auto* default_record = find_record_with_guid(default_encoded.value(), model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+    const auto* default_slot = default_record ? bounded_list_item(*default_record, {2, 2, 0, 33}) : nullptr;
+    expect(default_slot && list_stream::dump_compact(*default_slot) == "{0,0,0}", "InputField Shortcut must default to None");
+    const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}};
+    expect(document.get_prop_val(owner, model::PropertyId::from_name("Shortcut")).value == model::PropertyValue{model::ShortcutValue{}},
+        "InputField Shortcut API must expose the None default");
+    expect(document.set_prop_val(owner, model::PropertyId::from_name("Shortcut"), model::ShortcutValue{"F13", false, false, false}) ==
+        model::PropertyMutationStatus::invalid_value, "InputField Shortcut must reject an unsupported key");
+    expect(document.set_prop_val(owner, model::PropertyId::from_name("Shortcut"), shortcut) ==
+        model::PropertyMutationStatus::applied, "InputField Shortcut must accept a supported value");
+    auto reset = document;
+    expect(reset.reset_prop_val(owner, model::PropertyId::from_name("Shortcut")) == model::PropertyMutationStatus::reset &&
+        reset.get_prop_val(owner, model::PropertyId::from_name("Shortcut")).value == model::PropertyValue{model::ShortcutValue{}},
+        "resetting InputField Shortcut must restore the None default");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "String InputField Shortcut must encode");
+    const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+    const auto* slot = record ? bounded_list_item(*record, {2, 2, 0, 33}) : nullptr;
+    expect(slot && list_stream::dump_compact(*slot) == "{0,113,24}", "InputField Shortcut must occupy the platform payload slot");
+    const auto decoded = form_stream::decode_document(encoded.value(), "InputShortcut");
+    expect(decoded.ok(), "String InputField Shortcut must decode");
+    const auto* restored = decoded.value().find_control(model::ObjectId{2});
+    const auto* property = restored ? restored->properties().find(model::PropertyId::from_name("Shortcut")) : nullptr;
+    expect(property && std::get<model::ShortcutValue>(property->value) == shortcut, "InputField Shortcut must survive round-trip");
+    const auto xml = oof::source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<Shortcut") != std::string::npos && xml.value().find("F2") != std::string::npos,
+        "InputField Shortcut must use the named XML property");
+    const auto parsed = oof::source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "InputField Shortcut XML must parse");
+    const auto from_xml = form_stream::encode_document(parsed.value());
+    expect(from_xml.ok() && list_stream::dump_compact(from_xml.value()) == list_stream::dump_compact(encoded.value()),
+        "InputField Shortcut XML must rebuild the same stream");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "InputField Shortcut stream must rebuild without drift");
+    auto invalid = encoded.value();
+    auto* invalid_record = find_record_with_guid(invalid, model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+    auto* invalid_key = invalid_record ? bounded_list_item(*invalid_record, {2, 2, 0, 33, 1}) : nullptr;
+    expect(invalid_key != nullptr, "InputField Shortcut key must be accessible");
+    if (invalid_key) {
+        *invalid_key = list_stream::ListValue::raw_atom("999");
+        expect(!form_stream::decode_document(invalid, "InvalidInputShortcut"), "unknown InputField Shortcut key must be rejected");
+    }
+    model::Form date_form;
+    date_form.id = model::ObjectId{1};
+    date_form.name = "DateInputShortcut";
+    date_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument date_document(std::move(date_form));
+    model::TypeDomainPatternValue date_type;
+    model::TypeDomainEntry date_entry;
+    date_entry.term = model::TypeDomainTerm::date;
+    date_entry.date = model::DateQualifiers{true, false};
+    date_type.entries.push_back(date_entry);
+    date_document.add_attribute(model::Attribute{model::ObjectId{1}, "DateValue", date_type});
+    model::ControlNode date_input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+    date_input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    date_input.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
+    date_document.add_control(std::move(date_input));
+    const auto date_encoded = form_stream::encode_document(date_document);
+    expect(date_encoded.ok(), "Date-only InputField Shortcut must encode");
+    const auto* date_record = find_record_with_guid(date_encoded.value(), model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+    const auto* date_slot = date_record ? bounded_list_item(*date_record, {2, 2, 0, 33}) : nullptr;
+    expect(date_slot && list_stream::dump_compact(*date_slot) == "{0,113,24}", "Date-only InputField uses the same Shortcut record");
+    const auto date_decoded = form_stream::decode_document(date_encoded.value(), "DateInputShortcut");
+    expect(date_decoded.ok(), "Date-only InputField Shortcut must decode");
+    const auto* date_restored = date_decoded.value().find_control(model::ObjectId{2});
+    const auto* date_property = date_restored ? date_restored->properties().find(model::PropertyId::from_name("Shortcut")) : nullptr;
+    expect(date_property && std::get<model::ShortcutValue>(date_property->value) == shortcut,
+        "Date-only InputField Shortcut must survive round-trip");
+}
+
 void test_input_field_tooltip_and_format_round_trip() {
     struct TextProperties {
         std::optional<std::string> tool_tip;
@@ -19929,6 +20018,7 @@ int main() {
         test_calendar_track_bar_optional_data_path_links();
         test_button_label_input_field_round_trip();
         test_input_field_date_only_type_domain_round_trip();
+        test_input_field_shortcut_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_input_incomplete_choice_mode_round_trip();

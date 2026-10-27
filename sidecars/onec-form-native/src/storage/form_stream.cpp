@@ -1946,7 +1946,8 @@ LV canonical_input_field_info(
     const InputFieldTextValues& text_values,
     const InputFieldLayoutValues& layout_values,
     const model::FontValue* font = nullptr,
-    const model::ColorValue* border_color = nullptr) {
+    const model::ColorValue* border_color = nullptr,
+    const model::ShortcutValue& shortcut = {}) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
 )OOF");
@@ -1962,6 +1963,7 @@ LV canonical_input_field_info(
             border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
         "$/InputField");
     value.items[2].items[0].items[13] = raw(read_only ? "1" : "0");
+    value.items[2].items[0].items[33] = encode_named_shortcut(shortcut, "$/InputField/Shortcut");
     value.items[2].items[0].items[34] = encoded_localized(text_values.format);
     value.items[2].items[0].items[17] = raw(std::to_string(layout_values.horizontal_align));
     value.items[2].items[0].items[18] = raw(std::to_string(layout_values.vertical_align));
@@ -8957,6 +8959,7 @@ DecodedControl decode_input_field(
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
     const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
+    const auto shortcut = decode_named_shortcut(payload.items[33], child_path(payload_path, 33));
     const std::string format = decoded_single_language_text(
         payload.items[34], child_path(payload_path, 34));
     const auto horizontal_align = integer_atom<std::int32_t>(
@@ -9003,7 +9006,7 @@ DecodedControl decode_input_field(
         child_path(child_path(child_path(info_path, 2), 0), 0));
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values,
-            &*common.font, &*common.border_color)))
+            &*common.font, &*common.border_color, shortcut)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
 
     const auto geometry_path = child_path(path, 3);
@@ -9023,6 +9026,7 @@ DecodedControl decode_input_field(
     decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    if (shortcut != model::ShortcutValue{}) control.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
     if (!format.empty()) control.properties().set_explicit(model::PropertyId::from_name("Format"), format);
     if (horizontal_align != 4) {
         constexpr std::array<std::string_view, 5> members{"Left", "Center", "Right", "Justify", "Auto"};
@@ -10605,7 +10609,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -10633,6 +10637,7 @@ LV encode_input_field(
     };
     const auto font = explicit_control_font(control.properties(), "$/InputField/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "InputField");
+    const auto shortcut = explicit_named_shortcut(control.properties(), "$/InputField/Shortcut");
     InputFieldFlagValues input_field_flags{};
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -10640,7 +10645,7 @@ LV encode_input_field(
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     auto input_info = canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags,
-        text_values, layout_values, &font, &border_color);
+        text_values, layout_values, &font, &border_color, shortcut);
     input_info.items.at(4) = encode_control_event_collection(document, control, "$/InputField/Events");
     encode_named_control_colors(input_info.items[2].items[0].items[0], model::ControlKind::input_field,
         control.properties(), "$/InputField");

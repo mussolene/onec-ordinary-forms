@@ -1259,6 +1259,7 @@ void apply_proven_storage_overrides(
         DefaultKind::enumeration, "IncompleteChoiceMode.OnEnterPressed");
     std::ranges::find(input_field, "IncompleteChoiceMode", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     classify_property(input_field, "ListChoiceMode", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "Shortcut", StorageCodec::control_info, DefaultKind::shortcut, "None");
     classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(input_field, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(input_field, "HorizontalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Auto");
