@@ -5789,6 +5789,102 @@ void test_all_standard_button_pictures_round_trip_without_assets() {
         "unknown named standard pictures must be rejected");
 }
 
+void test_label_decoration_shared_attribute_links_round_trip() {
+    std::string xml = R"OOF(<Form id="1" name="Labels" ordinaryFormVersion="2.1"><Attributes><Attribute id="10" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="11" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute><Attribute id="12" name="List"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute><Attribute id="13" name="Table"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems>)OOF";
+    for (int i = 0; i < 12; ++i) {
+        xml += "<LabelDecoration id=\"" + std::to_string(100 + i) + "\" name=\"Label" +
+            std::to_string(i) + "\"><DataPath attributeId=\"" + std::to_string(10 + i % 4) +
+            "\"/><Position/><Caption>Caption" + std::to_string(i) + "</Caption></LabelDecoration>";
+    }
+    xml += R"OOF(<LabelDecoration id="112" name="Unbound"><Position/><Caption>Independent</Caption></LabelDecoration></ChildItems></Form>)OOF";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    auto* event_label = const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{100}));
+    expect(event_label != nullptr, "bound event label must exist");
+    event_label->events = {model::EventRef{model::ObjectId{200}}};
+    parsed.value().add_event(model::Event{model::ObjectId{200}, "Click", "LabelHandler",
+        model::EventOwner{model::ControlRef{model::ObjectId{100}}}});
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& links = encoded.value().items[2].items[3];
+    expect(links.items.size() == 13 && links.items[0].atom == "12",
+        "twelve bound labels must share the form attribute-link table");
+    for (int i = 0; i < 12; ++i) {
+        const auto& link = links.items[static_cast<std::size_t>(i + 1)];
+        expect(list_stream::dump_compact(link) == "{" + std::to_string(100 + i) + ",{1,{" +
+                   std::to_string(10 + i % 4) + "}}}",
+            "each label link must preserve its control and shared attribute ids");
+    }
+    const auto check = [&](const model::OrdinaryFormDocument& document) {
+        for (int i = 0; i < 13; ++i) {
+            const auto* control = document.find_control(model::ObjectId{static_cast<std::uint64_t>(100 + i)});
+            expect(control && control->kind() == model::ControlKind::label_decoration,
+                "label must survive round trip");
+            if (i == 0) {
+                expect(control->events.size() == 1, "bound label must retain its event");
+                const auto* event = document.find_event(control->events.front().id());
+                const auto* owner = event ? std::get_if<model::ControlRef>(&event->owner) : nullptr;
+                expect(event && event->name == "Click" && event->handler == "LabelHandler" &&
+                           owner && owner->id() == control->id,
+                    "bound label Click must retain its handler and owner");
+            } else {
+                expect(control->events.empty(), "other labels must not acquire an event");
+            }
+            const auto* caption = control->properties().find(model::PropertyId::from_name("Caption"));
+            expect(caption && std::get<std::string>(caption->value) ==
+                       (i == 12 ? "Independent" : "Caption" + std::to_string(i)),
+                "label Caption must remain independent of its DataPath");
+            if (i == 12) {
+                expect(!control->data_path, "unbound label must remain unbound");
+            } else {
+                expect(control->data_path && control->data_path->members.empty() &&
+                           control->data_path->attribute.id() == model::ObjectId{static_cast<std::uint64_t>(10 + i % 4)},
+                    "label DataPath must preserve its shared attribute reference");
+            }
+        }
+    };
+    auto duplicate_link = encoded.value();
+    duplicate_link.items[2].items[3].items[2] = duplicate_link.items[2].items[3].items[1];
+    expect_failure(form_stream::decode_document(duplicate_link, "Labels"), "OOF1122", "$/2/3",
+        "duplicate link for a bound label with an event must be rejected");
+    auto damaged_link = encoded.value();
+    damaged_link.items[2].items[3].items[1].items[1].items[1].items[0] =
+        list_stream::ListValue::raw_atom("999");
+    expect(!form_stream::decode_document(damaged_link, "Labels"),
+        "dangling link for a bound label with an event must be rejected");
+    const auto decoded = form_stream::decode_document(encoded.value(), "Labels");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    check(decoded.value());
+    const auto serialized = source::serialize_form_xml(decoded.value());
+    expect(serialized.ok(), "linked labels must serialize to XML");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "serialized linked labels must parse");
+    check(reparsed.value());
+    const auto reencoded = form_stream::encode_document(reparsed.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "linked labels must round trip through XML without changing their native stream");
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), "linked labels must save to Form.bin");
+    const auto loaded = oof::load_form_bin(binary.value(), "Labels");
+    expect(loaded.ok(), "linked labels must load from Form.bin");
+    check(loaded.value());
+    const auto rejects = [](std::string_view candidate_xml) {
+        const auto candidate = source::parse_form_xml(candidate_xml);
+        return !candidate || !form_stream::encode_document(candidate.value());
+    };
+    auto dangling = xml;
+    dangling.replace(dangling.find("attributeId=\"10\""), std::string("attributeId=\"10\"").size(), "attributeId=\"999\"");
+    expect(rejects(dangling), "label DataPath must reject dangling attribute references");
+    auto nested = xml;
+    const auto path = nested.find("<DataPath attributeId=\"10\"/>");
+    nested.replace(path, std::string("<DataPath attributeId=\"10\"/>").size(),
+        "<DataPath attributeId=\"10\"><Member>Nested</Member></DataPath>");
+    const auto nested_parsed = source::parse_form_xml(nested);
+    expect(nested_parsed.ok(), "label DataPath with a member must parse before encoding is checked");
+    expect(!form_stream::encode_document(nested_parsed.value()),
+        "label DataPath encoding must reject unsupported members");
+}
+
 void test_button_then_label_decoration_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -19699,6 +19795,7 @@ int main() {
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_choice_and_input_field_picture_properties_round_trip();
+        test_label_decoration_shared_attribute_links_round_trip();
         test_button_then_label_decoration_round_trip();
         test_label_decoration_click_event_round_trip_and_guards();
         test_label_border_color_round_trip();

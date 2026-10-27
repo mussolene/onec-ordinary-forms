@@ -9746,7 +9746,15 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$/Form/ChildItems", "LabelDecoration with positive int64 ID", control.name, "LabelDecoration is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path  ||
+    if (control.data_path && !control.data_path->members.empty()) {
+        fail("OOF1122", "$/LabelDecoration/DataPath", "direct Attribute reference", control.name,
+            "LabelDecoration DataPath members are unsupported");
+    }
+    if (control.data_path && document.find_attribute(control.data_path->attribute.id()) == nullptr) {
+        fail("OOF1123", "$/LabelDecoration/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "LabelDecoration DataPath does not resolve");
+    }
+    if (control.name.empty() ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -11513,8 +11521,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::splitter).guid)
                         child = decode_splitter(record, record_path, context, warnings, reconstruction_complete);
-                    else if (guid == label_descriptor.guid)
-                        child = decode_label(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == dendrogram_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path),
                             child_path(record_path, 1));
@@ -11540,7 +11546,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::table).guid ||
-                             guid == calendar_descriptor.guid || guid == track_bar_descriptor.guid) {
+                             guid == calendar_descriptor.guid || guid == track_bar_descriptor.guid ||
+                             guid == label_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -11555,7 +11562,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         const bool calendar_field_guid = guid == calendar_descriptor.guid;
                         const bool track_bar_guid = guid == track_bar_descriptor.guid;
                         const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid &&
-                            !radio_button_guid && !calendar_field_guid && !track_bar_guid;
+                            !radio_button_guid && !calendar_field_guid && !track_bar_guid && guid != label_descriptor.guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
                             "DataPath link for each required linked control", std::to_string(candidate_id),
                             "Linked control has no attribute link");
@@ -11575,7 +11582,13 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 "DataPath target is unresolved");
                             linked_attribute = attribute_it->second;
                         }
-                        if (calendar_field_guid) {
+                        if (guid == label_descriptor.guid) {
+                            child = decode_label(record, record_path, context, warnings, reconstruction_complete);
+                            if (linked_attribute != nullptr) {
+                                child.control.data_path = model::DataPath{model::AttributeRef{
+                                    model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                            }
+                        } else if (calendar_field_guid) {
                             child = decode_calendar_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                         } else if (track_bar_guid) {
                             child = decode_track_bar(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
