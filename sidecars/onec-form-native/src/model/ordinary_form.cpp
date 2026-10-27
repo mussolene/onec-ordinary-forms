@@ -1178,6 +1178,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (opening_started_ && (property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
+                                  property == PropertyId::from_name("WindowLocation")))
+            return PropertyMutationStatus::forbidden_after_opening_started;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {
@@ -1488,6 +1491,9 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (opening_started_ && (property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
+                                  property == PropertyId::from_name("WindowLocation")))
+            return PropertyMutationStatus::forbidden_after_opening_started;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {

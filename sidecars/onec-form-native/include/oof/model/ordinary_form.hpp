@@ -549,6 +549,7 @@ enum class PropertyMutationStatus : std::uint8_t {
     unknown_access,
     invalid_value,
     invalid_reference,
+    forbidden_after_opening_started,
 };
 
 enum class BindingCoordinate : std::uint8_t {
@@ -1064,6 +1065,15 @@ public:
         return reconstruction_complete_;
     }
 
+    // Runtime transition: call before dispatching the platform's BeforeOpen event.
+    void mark_opening_started() noexcept {
+        opening_started_ = true;
+    }
+
+    [[nodiscard]] bool opening_started() const noexcept {
+        return opening_started_;
+    }
+
     void set_reconstruction_complete(bool value) noexcept {
         reconstruction_complete_ = value;
     }
@@ -1111,6 +1121,7 @@ public:
 
 private:
     bool reconstruction_complete_ = true;
+    bool opening_started_ = false;
     struct ObjectKeyHash {
         [[nodiscard]] std::size_t operator()(const ObjectKey& key) const noexcept {
             const std::size_t category_hash = std::hash<std::uint8_t>{}(

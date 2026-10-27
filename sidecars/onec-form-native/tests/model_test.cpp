@@ -517,6 +517,59 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_opening_boundary_for_window_properties() {
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "WindowOpening";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto appearance = PropertyId::from_name("ChangeWindowAppearanceMode");
+    const auto location = PropertyId::from_name("WindowLocation");
+    for (const auto member : {"Auto", "Enable", "Disable"})
+        expect(document.set_prop_val(owner, appearance, EnumerationValue{"WindowAppearanceModeChange", member}) == PropertyMutationStatus::applied,
+            "window appearance mode must be writable before opening");
+    for (const auto member : {"Auto", "Center", "DontOverlapOwner"})
+        expect(document.set_prop_val(owner, location, EnumerationValue{"WindowLocationVariant", member}) == PropertyMutationStatus::applied,
+            "window location must be writable before opening");
+    const auto before_appearance = document.get_prop_val(owner, appearance);
+    const auto before_location = document.get_prop_val(owner, location);
+    const auto xml = oof::source::serialize_form_xml(document);
+    const auto binary = oof::save_form_bin(document);
+    expect(xml.ok() && binary.ok(), "window properties must serialize before opening");
+    expect(!document.opening_started(), "new document must be editable before opening");
+    document.mark_opening_started();
+    document.mark_opening_started();
+    expect(document.opening_started(), "opening transition must be idempotent");
+    for (const auto member : {"Auto", "Enable", "Disable"})
+        expect(document.set_prop_val(owner, appearance, EnumerationValue{"WindowAppearanceModeChange", member}) ==
+                   PropertyMutationStatus::forbidden_after_opening_started,
+            "appearance assignments, including the current value, must be forbidden after opening starts");
+    for (const auto member : {"Auto", "Center", "DontOverlapOwner"})
+        expect(document.set_prop_val(owner, location, EnumerationValue{"WindowLocationVariant", member}) ==
+                   PropertyMutationStatus::forbidden_after_opening_started,
+            "location assignments, including the current value, must be forbidden after opening starts");
+    expect(document.reset_prop_val(owner, appearance) == PropertyMutationStatus::forbidden_after_opening_started &&
+            document.reset_prop_val(owner, location) == PropertyMutationStatus::forbidden_after_opening_started,
+        "reset must not bypass the window property restriction");
+    expect(document.get_prop_val(owner, appearance).value == before_appearance.value &&
+            document.get_prop_val(owner, location).value == before_location.value,
+        "forbidden changes must preserve both property values");
+    const auto after_xml = oof::source::serialize_form_xml(document);
+    const auto after_binary = oof::save_form_bin(document);
+    expect(after_xml.ok() && after_xml.value() == xml.value() &&
+            after_binary.ok() && after_binary.value() == binary.value(),
+        "runtime opening state must not alter XML or Form.bin");
+    const auto loaded = oof::load_form_bin(after_binary.value());
+    expect(loaded.ok() && !loaded.value().opening_started(),
+        "loading a saved form must not start its runtime opening");
+    expect(document.set_prop_val(owner, PropertyId::from_name("SizeChange"),
+               EnumerationValue{"WindowSizeChange", "DontChange"}) == PropertyMutationStatus::applied,
+        "opening restriction must not affect other properties");
+    expect(document.set_prop_val({ObjectCategory::form, ObjectId{2}}, appearance,
+               EnumerationValue{"WindowAppearanceModeChange", "Auto"}) == PropertyMutationStatus::unknown_owner,
+        "opening restriction must not mask an unknown owner");
+}
+
 void test_form_runtime_state_properties() {
     using namespace oof::model::metamodel;
     Form form;
@@ -3632,6 +3685,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
+        test_opening_boundary_for_window_properties();
         test_label_picture_api_access();
         test_tab_order_reorders_siblings();
         test_z_order_reorders_siblings();
