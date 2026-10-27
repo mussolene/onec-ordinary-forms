@@ -1660,8 +1660,6 @@
 
   <xs:complexType name="PivotChartEventsType">
     <xs:sequence>
-      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="DetailProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
   </xs:complexType>
 
@@ -1768,7 +1766,6 @@
       <xs:element name="DetailProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DragEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Drag" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="OnActivateArea" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="OnChangeAreaContent" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DragCheck" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>

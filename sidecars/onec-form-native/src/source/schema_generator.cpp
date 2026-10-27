@@ -841,6 +841,7 @@ void append_event_type(
     append_attribute(output, "name", type_name);
     output += ">\n    <xs:sequence>\n";
     for (const auto& event : events) {
+        if (event.persistence == model::metamodel::PersistenceClass::unsupported_by_platform) continue;
         output += "      <xs:element";
         append_attribute(output, "name", event.xml_name);
         output +=
@@ -1141,6 +1142,8 @@ void append_palette_events(
         append_attribute(output, "name", event.xml_name);
         append_attribute(output, "apiName", event.api_name);
         append_attribute(output, "russianName", as_utf8(event.russian_name));
+        if (event.persistence == model::metamodel::PersistenceClass::unsupported_by_platform)
+            append_attribute(output, "available", "false");
         output += "/>\n";
     }
 }

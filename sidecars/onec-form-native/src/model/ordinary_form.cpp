@@ -1140,7 +1140,12 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 event->id,
                 "event is listed by an owner different from Event.owner");
         }
-        if (descriptor_lookup(event->name) == nullptr) {
+        const auto* descriptor = descriptor_lookup(event->name);
+        if (descriptor != nullptr && descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform) {
+            add_violation(report, InvariantCode::invalid_property, source, event->id,
+                "event is unavailable as an action on the target ordinary-form owner");
+        }
+        if (descriptor == nullptr) {
             add_violation(
                 report,
                 InvariantCode::invalid_property,

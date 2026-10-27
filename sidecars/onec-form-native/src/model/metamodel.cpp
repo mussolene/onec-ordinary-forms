@@ -1340,6 +1340,19 @@ void apply_proven_storage_overrides(
             event->storage_event_id = id;
         }
     };
+    // Недоступны как назначаемые действия обычной формы в 8.5.1.1343 Linux.
+    for (const auto& [kind, name] : std::array{
+            std::pair{ControlKind::pivot_chart, std::string_view{"Selection"}},
+            std::pair{ControlKind::pivot_chart, std::string_view{"DetailProcessing"}},
+            std::pair{ControlKind::spreadsheet_document_field, std::string_view{"OnActivateArea"}}}) {
+        auto& descriptors = events[static_cast<std::size_t>(kind)];
+        const auto event = std::ranges::find(descriptors, name, &EventDescriptor::api_name);
+        if (event == descriptors.end()) throw std::logic_error("unavailable event is missing from the help catalog");
+        event->persistence = PersistenceClass::unsupported_by_platform;
+        event->storage_codec = StorageCodec::none;
+        event->storage_tag = {};
+        event->storage_event_id.reset();
+    }
     constexpr std::array spreadsheet_events{
         std::pair{"Selection", 0U}, std::pair{"DetailProcessing", 1U}, std::pair{"DragStart", 3U},
         std::pair{"DragCheck", 4U}, std::pair{"DragEnd", 5U}, std::pair{"Drag", 6U},

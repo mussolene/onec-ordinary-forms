@@ -2112,6 +2112,42 @@ void test_event_owner_invariant() {
         "event listed by a different owner must not be silently projected");
 }
 
+void test_unsupported_control_events_rejected() {
+    for (const auto& [control, event] : std::array{
+             std::pair{"PivotChart", "Selection"},
+             std::pair{"PivotChart", "DetailProcessing"},
+             std::pair{"SpreadsheetDocumentField", "OnActivateArea"}}) {
+        const auto xml = std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
+            control + " id=\"2\" name=\"Target\"><Position/><Events><" + event +
+            " id=\"3\">Handler</" + event + "></Events></" + control + "></ChildItems></Form>";
+        expect(!source::parse_form_xml(xml),
+            std::string("explicit unsupported event ") + control + "." + event + " must fail XML parsing");
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "Main";
+        form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument invalid(std::move(form));
+        model::ControlPayload payload = std::string_view(control) == "PivotChart"
+            ? model::ControlPayload{model::PivotChartPayload{}}
+            : model::ControlPayload{model::SpreadsheetDocumentFieldPayload{}};
+        model::ControlNode target{model::ObjectId{2}, "Target", std::move(payload)};
+        target.events.push_back(model::EventRef{model::ObjectId{3}});
+        invalid.add_control(std::move(target));
+        invalid.add_event(model::Event{model::ObjectId{3}, event, "Handler", model::ControlRef{model::ObjectId{2}}});
+        expect(!invalid.validate().ok(), "unsupported event with a matching owner must invalidate the model");
+        expect(!source::serialize_form_xml(invalid), "public XML writer must reject unavailable event references");
+        expect(!oof::storage::form_stream::encode_document(invalid), "native writer must reject unavailable event references");
+    }
+
+    const auto supported = source::parse_form_xml(
+        R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Events><Selection id="3">Handler</Selection></Events></SpreadsheetDocumentField></ChildItems></Form>)XML");
+    expect(supported.ok(), "supported SpreadsheetDocumentField Selection event must remain valid");
+    const auto supported_xml = source::serialize_form_xml(supported.value());
+    expect(supported_xml.ok() && supported_xml.value().find("<Selection id=\"3\">Handler</Selection>") != std::string::npos,
+        "supported SpreadsheetDocumentField Selection event must serialize");
+
+}
+
 void test_progress_bar_xml_only_contract() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><ChildItems>
       <ProgressBar id="4" name="ProgressResearch"><Position><Top>12</Top><Visible>false</Visible><Height>20</Height><Left>8</Left><Width>180</Width></Position><Enabled>false</Enabled><ToolTip>Прогресс Ω &amp; &lt;тег&gt;</ToolTip></ProgressBar>
@@ -2894,6 +2930,7 @@ int main() {
         test_strict_rejections();
         test_event_action_metadata_xml();
         test_event_owner_invariant();
+        test_unsupported_control_events_rejected();
         test_button_foreign_enum_default_is_retained();
         test_standard_picture_xml_reference_roundtrip();
         test_choice_and_input_field_picture_references_xml();

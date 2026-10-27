@@ -1411,6 +1411,22 @@ void test_help_metamodel() {
             descriptor->storage_codec == StorageCodec::event_record && descriptor->storage_event_id == id &&
             descriptor->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c", "spreadsheet event descriptor must match the platform");
     }
+    for (const auto name : {"Selection", "DetailProcessing"}) {
+        const auto* descriptor = find_event(ControlKind::pivot_chart, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::unsupported_by_platform &&
+            descriptor->storage_codec == StorageCodec::none && descriptor->storage_tag.empty() &&
+            !descriptor->storage_event_id,
+            std::string("PivotChart ") + name + " must remain classified as unsupported without storage metadata");
+    }
+    const auto* spreadsheet_activate_area = find_event(ControlKind::spreadsheet_document_field, "OnActivateArea");
+    expect(spreadsheet_activate_area &&
+        spreadsheet_activate_area->persistence == PersistenceClass::unsupported_by_platform &&
+        spreadsheet_activate_area->storage_codec == StorageCodec::none &&
+        spreadsheet_activate_area->storage_tag.empty() && !spreadsheet_activate_area->storage_event_id,
+        "SpreadsheetDocumentField OnActivateArea must be unsupported without storage metadata");
+    const auto* table_parent_change = find_event(ControlKind::table, "OnCurrentParentChange");
+    expect(table_parent_change && table_parent_change->persistence == PersistenceClass::unclassified,
+        "Table OnCurrentParentChange must remain unclassified without evidence");
     for (const auto& [kind, name, id] : std::array{
              std::tuple{ControlKind::gantt_chart, "OnIntervalEditEnd", 2U},
              std::tuple{ControlKind::html_document_field, "DocumentComplete", 0U},
@@ -2608,6 +2624,17 @@ void test_event_sequence_invariants() {
     expect(
         duplicate.validate().has(InvariantCode::invalid_property),
         "one event name may occur only once for an owner");
+
+    Form unsupported_form;
+    unsupported_form.id = ObjectId{1};
+    unsupported_form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument unsupported(std::move(unsupported_form));
+    ControlNode pivot_chart{ObjectId{10}, "PivotChart", PivotChartPayload{}};
+    pivot_chart.events.push_back(EventRef{ObjectId{40}});
+    unsupported.add_control(std::move(pivot_chart));
+    unsupported.add_event(Event{ObjectId{40}, "Selection", "Selection", ControlRef{ObjectId{10}}});
+    expect(unsupported.validate().has(InvariantCode::invalid_property),
+        "unsupported PivotChart event must fail model validation even with a matching owner reference");
 }
 
 void test_duplicate_bindings_rejected() {

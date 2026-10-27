@@ -424,8 +424,8 @@
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
             </Properties>
             <Events>
-              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
-              <Event name="DetailProcessing" apiName="DetailProcessing" russianName="ОбработкаРасшифровки"/>
+              <Event name="Selection" apiName="Selection" russianName="Выбор" available="false"/>
+              <Event name="DetailProcessing" apiName="DetailProcessing" russianName="ОбработкаРасшифровки" available="false"/>
             </Events>
           </Control>
           <Control name="GanttChart" apiName="GanttChart" russianName="ДиаграммаГанта" children="none">
@@ -706,7 +706,7 @@
               <Event name="DetailProcessing" apiName="DetailProcessing" russianName="ОбработкаРасшифровки"/>
               <Event name="DragEnd" apiName="DragEnd" russianName="ОкончаниеПеретаскивания"/>
               <Event name="Drag" apiName="Drag" russianName="Перетаскивание"/>
-              <Event name="OnActivateArea" apiName="OnActivateArea" russianName="ПриАктивизацииОбласти"/>
+              <Event name="OnActivateArea" apiName="OnActivateArea" russianName="ПриАктивизацииОбласти" available="false"/>
               <Event name="OnChangeAreaContent" apiName="OnChangeAreaContent" russianName="ПриИзмененииСодержимогоОбласти"/>
               <Event name="DragCheck" apiName="DragCheck" russianName="ПроверкаПеретаскивания"/>
             </Events>

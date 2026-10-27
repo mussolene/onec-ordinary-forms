@@ -1083,11 +1083,14 @@ void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
     const auto expect_events = [&](std::string_view type_name, auto events) {
         const auto elements =
             direct_children(sequence_for_type(schema, type_name), "element");
-        expect(elements.size() == events.size(), "event descriptor count drift");
-        for (std::size_t index = 0; index < events.size(); ++index) {
+        std::vector<EventDescriptor> available;
+        for (const auto& event : events)
+            if (event.persistence != PersistenceClass::unsupported_by_platform) available.push_back(event);
+        expect(elements.size() == available.size(), "available event descriptor count drift");
+        for (std::size_t index = 0; index < available.size(); ++index) {
             expect_element_shape(
                 elements[index],
-                events[index].xml_name,
+                available[index].xml_name,
                 "EventHandlerType",
                 "0",
                 "1");
@@ -1200,6 +1203,9 @@ void expect_palette_events(
         expect(
             attribute(nodes[index], "russianName") == as_utf8(descriptor.russian_name),
             "palette event Russian annotation drift");
+        expect(attribute(nodes[index], "available") ==
+                   (descriptor.persistence == PersistenceClass::unsupported_by_platform ? "false" : ""),
+            "palette must identify events unavailable on target ordinary-form owners");
     }
 }
 
