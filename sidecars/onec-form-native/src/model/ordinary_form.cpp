@@ -1191,9 +1191,10 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
-                                  property == PropertyId::from_name("WindowDockLocation")))
+                                  property == PropertyId::from_name("WindowDockLocation") ||
+                                  property == PropertyId::from_name("ConnectableWindow")))
             return PropertyMutationStatus::forbidden_after_opening_started;
-        if (property == PropertyId::from_name("WindowState")) return PropertyMutationStatus::unsupported_surface;
+        if (property == PropertyId::from_name("WindowState") || property == PropertyId::from_name("ConnectableWindow")) return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {
@@ -1507,9 +1508,10 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
-                                  property == PropertyId::from_name("WindowDockLocation")))
+                                  property == PropertyId::from_name("WindowDockLocation") ||
+                                  property == PropertyId::from_name("ConnectableWindow")))
             return PropertyMutationStatus::forbidden_after_opening_started;
-        if (property == PropertyId::from_name("WindowState")) return PropertyMutationStatus::unsupported_surface;
+        if (property == PropertyId::from_name("WindowState") || property == PropertyId::from_name("ConnectableWindow")) return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {

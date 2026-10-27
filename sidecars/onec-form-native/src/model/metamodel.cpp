@@ -1395,6 +1395,8 @@ void apply_proven_storage_overrides(
     std::ranges::find(form_properties, "WindowLocation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     classify_property(form_properties, "WindowState", StorageCodec::root_record,
         DefaultKind::enumeration, "WindowStateVariant.Normal");
+    classify_property(form_properties, "ConnectableWindow", StorageCodec::root_record,
+        DefaultKind::boolean, "false");
     std::ranges::find(form_properties, "WindowState", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     classify_property(form_properties, "WindowDockLocation", StorageCodec::root_record,
         DefaultKind::enumeration, "WindowDockVariant.Left");

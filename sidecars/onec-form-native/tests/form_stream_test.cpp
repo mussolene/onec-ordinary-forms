@@ -8651,6 +8651,32 @@ void test_form_window_location() {
         document.get_prop_val(owner, property).value == initial.value, "reset must restore Auto");
 }
 
+void test_form_connectable_window_codec() {
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("ConnectableWindow");
+    for (const bool value : {false, true}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "ConnectableWindow";
+        form.properties.set_explicit(property, value);
+        model::OrdinaryFormDocument document(std::move(form));
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok() && encoded.value().items[8].atom == (value ? "1" : "0"), "ConnectableWindow must encode in the observed slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "ConnectableWindow");
+        expect(decoded.ok() && decoded.value().get_prop_val(owner, property).value == model::PropertyValue{value}, "ConnectableWindow must decode");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "ConnectableWindow XML must serialize");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value == model::PropertyValue{value}, "ConnectableWindow XML must roundtrip");
+        expect(document.set_prop_val(owner, property, value) == model::PropertyMutationStatus::unsupported_surface, "unmodeled dependencies must not report success");
+        expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::unsupported_surface, "reset must not bypass dependencies");
+        document.mark_opening_started();
+        expect(document.set_prop_val(owner, property, value) == model::PropertyMutationStatus::forbidden_after_opening_started, "assignment after opening must fail");
+        expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::forbidden_after_opening_started, "reset after opening must fail");
+        auto invalid = encoded.value();
+        invalid.items[8] = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(invalid, "ConnectableWindow").ok(), "invalid boolean must fail");
+    }
+}
+
 void test_form_window_state_codec() {
     const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
     const auto property = model::PropertyId::from_name("WindowState");
@@ -20185,6 +20211,7 @@ int main() {
         test_form_auto_title_boolean_round_trip_and_validation();
         test_form_enter_key_behavior();
         test_form_size_change();
+        test_form_connectable_window_codec();
         test_form_window_state_codec();
         test_form_window_appearance_change();
         test_form_window_location();

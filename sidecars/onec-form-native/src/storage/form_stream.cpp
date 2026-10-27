@@ -11385,7 +11385,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto dock_location = integer_atom<std::int32_t>(payload.items[7], "$/7");
         if (dock_location != 1 && dock_location != 4 && dock_location != 2 && dock_location != 8)
             fail("OOF1114", "$/7", "WindowDockVariant ordinal 1, 4, 2, or 8", std::to_string(dock_location), "Unsupported window dock location");
-        require_raw_constant(payload.items[8], "0", "$/8");
+        const bool connectable_window = bool_atom(payload.items[8], "$/8");
         const bool center_window = bool_atom(payload.items[9], "$/9");
         const bool dont_change_size = bool_atom(payload.items[10], "$/10");
         require_list(payload.items[11], "$/11");
@@ -11486,6 +11486,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (connectable_window) form.properties.set_explicit(model::PropertyId::from_name("ConnectableWindow"), true);
         if (window_state != 4) form.properties.set_explicit(model::PropertyId::from_name("WindowState"),
             model::EnumerationValue{"WindowStateVariant", window_state == 1 ? "Docked" : window_state == 16 ? "Autohide" : "Float"});
         if (dock_location != 1) form.properties.set_explicit(model::PropertyId::from_name("WindowDockLocation"),
@@ -12198,7 +12199,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12206,6 +12207,7 @@ Result<list_stream::ListValue> encode_document(
         const bool auto_title = explicit_bool(document.form().properties, "AutoTitle", true);
         const bool allow_close = explicit_bool(document.form().properties, "AllowClose", true);
         const bool desktop_mode = explicit_bool(document.form().properties, "DesktopMode", false);
+        const bool connectable_window = explicit_bool(document.form().properties, "ConnectableWindow", false);
         const auto enter_behavior = explicit_enum_storage_value(document.form().properties, "Form", "EnterKeyBehavior",
             "EnterKeyBehaviorType", 1, {{"DefaultButton", 0}, {"ControlNavigation", 1}});
         const auto size_change = explicit_enum_storage_value(document.form().properties, "Form", "SizeChange",
@@ -12675,7 +12677,7 @@ Result<list_stream::ListValue> encode_document(
             raw(auto_title ? "1" : "0"),
             raw(std::to_string(window_state)),
             raw(std::to_string(dock_location)),
-            raw("0"),
+            raw(connectable_window ? "1" : "0"),
             raw(window_location == 1 ? "1" : "0"),
             raw(std::to_string(size_change)),
             list(std::move(context_rows)),
