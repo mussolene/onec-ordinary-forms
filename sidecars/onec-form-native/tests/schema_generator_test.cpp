@@ -530,6 +530,11 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
         R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/><SelectedDates/></CalendarField></ChildItems></Form>)XML") != 0,
         "runtime-only selected dates must not enter persisted public XML");
 
+    constexpr std::string_view chart_without_refresh = R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    constexpr std::string_view chart_with_refresh = R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><RefreshEnabled>false</RefreshEnabled><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    expect(validate_document(compiled_schema, chart_without_refresh) == 0 && validate_document(compiled_schema, chart_with_refresh) != 0,
+        "Chart XSD must accept the ordinary fixture and reject runtime refresh state");
+
     const auto instance = [](std::string_view alignment_type, std::string_view alignment_member,
                              std::string_view orientation_type, std::string_view orientation_member) {
         return "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -916,7 +921,7 @@ void test_control_surfaces_and_property_order(
             properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
                 return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries";
             }), properties.end());
-            cursor = expect_property_sequence(properties, elements, cursor);
+            cursor = expect_property_sequence(properties, elements, cursor, true);
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");
             const auto summary_fields = direct_children(sequence_for_type(schema, "ChartSummarySeriesType"), "element");
             expect(summary_fields.size() == 2 && attribute(summary_fields[0], "name") == "Color" &&

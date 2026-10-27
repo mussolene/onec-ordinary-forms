@@ -2961,11 +2961,14 @@ void test_runtime_properties_are_not_public_xml() {
              R"XML(<CalendarField id="2" name="C"><Position/><CurrentDate>2026-12-25T00:00:00</CurrentDate></CalendarField>)XML",
              R"XML(<CalendarField id="2" name="C"><Position/><SelectedDates/></CalendarField>)XML",
              R"XML(<InputField id="2" name="I"><Position/><ChoiceIncomplete>false</ChoiceIncomplete></InputField>)XML",
-             R"XML(<InputField id="2" name="I"><Position/><MarkIncomplete>false</MarkIncomplete></InputField>)XML"}) {
+             R"XML(<InputField id="2" name="I"><Position/><MarkIncomplete>false</MarkIncomplete></InputField>)XML",
+             R"XML(<Chart id="2" name="C"><Position/><RefreshEnabled>false</RefreshEnabled><Series/><Points/><Values/></Chart>)XML"}) {
         const std::string xml = std::string(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems>)XML") +
             fragment + "</ChildItems></Form>";
         expect(!source::parse_form_xml(xml), "runtime-only properties must fail at the public XML boundary");
     }
+    expect(source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML").ok(),
+        "runtime Chart rejection fixture must otherwise parse");
     auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/></CalendarField></ChildItems></Form>)XML");
     expect(parsed.ok(), "runtime boundary fixture must parse");
     if (!parsed) return;

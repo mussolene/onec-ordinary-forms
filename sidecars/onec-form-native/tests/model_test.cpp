@@ -820,6 +820,31 @@ void test_input_incomplete_choice_mode_api() {
     }
 }
 
+void test_chart_refresh_runtime_property() {
+    using namespace oof::model::metamodel;
+    const auto* descriptor = find_property(ControlKind::chart, "RefreshEnabled");
+    expect(descriptor && descriptor->persistence == PersistenceClass::runtime_only &&
+        descriptor->storage_codec == StorageCodec::none && descriptor->default_value.kind == DefaultKind::boolean &&
+        descriptor->default_value.canonical == "true", "Chart RefreshEnabled must have the observed runtime default");
+    for (const auto name : {"ShowTitle", "ShowLegend"}) {
+        const auto* property = find_property(ControlKind::chart, name);
+        expect(property && property->version_mask == VersionMask::platform_8_2_and_8_5,
+            "Chart display properties must include the observed 8.5 platform");
+    }
+    Form form; form.id = ObjectId{1}; OrdinaryFormDocument document(std::move(form));
+    const auto id = PropertyId::from_name("RefreshEnabled");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId object_id{2 + index};
+        document.add_control(ControlNode{object_id, "Chart" + std::to_string(index), ChartPayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, object_id};
+        expect(document.get_prop_val(owner, id).value == std::optional<PropertyValue>{PropertyValue{true}},
+            "new Chart refresh must default to true");
+        expect(document.set_prop_val(owner, id, false) == PropertyMutationStatus::applied_runtime_only &&
+            document.get_prop_val(owner, id).value == std::optional<PropertyValue>{PropertyValue{false}},
+            "Chart refresh must be mutable runtime state");
+    }
+}
+
 void test_panel_scrolling_tab_read() {
     Form form;
     form.id = ObjectId{1};
@@ -3057,6 +3082,7 @@ void test_control_border_and_calendar_selection_descriptors() {
 int main() {
     try {
         test_descriptors();
+        test_chart_refresh_runtime_property();
         test_input_list_choice_mode_api();
         test_input_incomplete_choice_mode_api();
         test_panel_scrolling_tab_read();

@@ -2301,7 +2301,6 @@
       <xs:element name="TitleArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LegendArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PlotArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="RefreshEnabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Outline" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

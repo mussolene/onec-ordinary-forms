@@ -675,6 +675,17 @@ void apply_proven_storage_overrides(
         "SpreadsheetDocumentSelectionShowModeType.WhenActive");
 
     auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+    if (const auto refresh = std::ranges::find(chart_properties, "RefreshEnabled", &PropertyDescriptor::api_name);
+        refresh != chart_properties.end()) {
+        refresh->persistence = PersistenceClass::runtime_only;
+        refresh->storage_codec = StorageCodec::none;
+        refresh->default_value = {DefaultKind::boolean, "true"};
+    }
+    for (const auto name : {"ShowTitle", "ShowLegend"}) {
+        const auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
+        if (property == chart_properties.end()) throw std::logic_error("missing Chart display descriptor");
+        property->version_mask = VersionMask::platform_8_2_and_8_5;
+    }
     classify_property(chart_properties, "BaseValue", StorageCodec::control_info, DefaultKind::decimal, "0");
     classify_property(chart_properties, "ChartType", StorageCodec::control_info, DefaultKind::enumeration, "ChartType.Column");
     std::ranges::find(chart_properties, "ChartType", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;

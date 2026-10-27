@@ -1074,7 +1074,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             for (const auto& property : metamodel.properties_for(control.kind)) {
                 if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries") chart_properties.push_back(property);
             }
-            append_property_elements(output, chart_properties);
+            append_property_elements(output, chart_properties, "      ", false);
             output += "      <xs:element name=\"SummarySeries\" type=\"ChartSummarySeriesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"Series\" type=\"ChartSeriesCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"Points\" type=\"ChartPointCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
