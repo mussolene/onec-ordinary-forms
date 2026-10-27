@@ -1375,7 +1375,7 @@ void apply_proven_storage_overrides(
 
     for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode", "ThisForm",
                             "AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow",
-                            "ReadOnly", "MultipleChoice"}) {
+                            "ReadOnly", "MultipleChoice", "WindowOptionsName", "WindowOptionsKey"}) {
         auto property = std::ranges::find(form_properties, name, &PropertyDescriptor::api_name);
         if (property == form_properties.end()) throw std::logic_error("missing runtime Form property");
         property->persistence = PersistenceClass::runtime_only;
@@ -1383,7 +1383,9 @@ void apply_proven_storage_overrides(
         property->default_value = name == std::string_view{"CloseOnChoice"}
             ? DefaultValue{DefaultKind::boolean, "true"} :
             (name == std::string_view{"ReadOnly"} || name == std::string_view{"MultipleChoice"})
-                ? DefaultValue{DefaultKind::boolean, "false"} : DefaultValue{DefaultKind::none, {}};
+                ? DefaultValue{DefaultKind::boolean, "false"} :
+            (name == std::string_view{"WindowOptionsName"} || name == std::string_view{"WindowOptionsKey"})
+                ? DefaultValue{DefaultKind::string, ""} : DefaultValue{DefaultKind::none, {}};
     }
     classify_property(form_properties, "EnterKeyBehavior", StorageCodec::root_record,
         DefaultKind::enumeration, "EnterKeyBehaviorType.ControlNavigation");

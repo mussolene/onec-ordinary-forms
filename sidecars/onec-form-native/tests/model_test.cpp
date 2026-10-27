@@ -517,6 +517,36 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_window_options_aliases() {
+    Form form; form.id = ObjectId{1}; form.name = "WindowOptions";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto name = PropertyId::from_name("WindowOptionsName");
+    const auto key = PropertyId::from_name("WindowOptionsKey");
+    const auto xml = oof::source::serialize_form_xml(document);
+    const auto bin = oof::save_form_bin(document);
+    expect(xml.ok() && bin.ok(), "window options form must serialize");
+    for (const auto property : {name, key})
+        expect(document.get_prop_val(owner, property).value == PropertyValue{std::string{}}, "both window option aliases must initially be empty");
+    expect(document.set_prop_val(owner, name, std::string{"имя Ω"}) == PropertyMutationStatus::applied_runtime_only &&
+        document.get_prop_val(owner, key).value == PropertyValue{std::string{"имя Ω"}}, "name must update key alias");
+    expect(document.set_prop_val(owner, key, std::string{"ключ Ω"}) == PropertyMutationStatus::applied_runtime_only &&
+        document.get_prop_val(owner, name).value == PropertyValue{std::string{"ключ Ω"}}, "key must update name alias");
+    expect(document.set_prop_val(owner, name, std::int64_t{123}) == PropertyMutationStatus::unsupported_surface &&
+        document.get_prop_val(owner, key).value == PropertyValue{std::string{"ключ Ω"}}, "unimplemented locale conversion must not change value");
+    const auto changed_xml = oof::source::serialize_form_xml(document);
+    const auto changed_bin = oof::save_form_bin(document);
+    expect(changed_xml.ok() && changed_xml.value() == xml.value() && changed_bin.ok() && changed_bin.value() == bin.value(),
+        "window option aliases must not persist");
+    document.mark_opening_started();
+    expect(document.set_prop_val(owner, key, std::string{"after"}) == PropertyMutationStatus::applied_runtime_only &&
+        document.get_prop_val(owner, name).value == PropertyValue{std::string{"after"}}, "window option aliases remain writable after opening");
+    expect(document.set_prop_val(owner, key, UndefinedValue{}) == PropertyMutationStatus::applied_runtime_only &&
+        document.get_prop_val(owner, name).value == PropertyValue{std::string{}}, "undefined must convert to the empty string");
+    expect(document.reset_prop_val(owner, name) == PropertyMutationStatus::reset_runtime_only &&
+        document.get_prop_val(owner, key).value == PropertyValue{std::string{}}, "reset must clear the shared alias value");
+}
+
 void test_form_runtime_boolean_values() {
     Form form; form.id = ObjectId{1}; form.name = "RuntimeFlags";
     OrdinaryFormDocument document(std::move(form));
@@ -3827,6 +3857,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
+        test_window_options_aliases();
         test_form_runtime_boolean_values();
         test_window_permission_mutations();
         test_window_permission_platform_matrix();
