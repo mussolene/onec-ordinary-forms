@@ -1,3 +1,4 @@
+#include <array>
 #include <exception>
 #include <cstdint>
 #include <iostream>
@@ -530,6 +531,40 @@ void test_platform_date_codec() {
     }
 }
 
+void test_compact_platform_decimal() {
+    const std::string tiny_37 = "0." + std::string(36, '0') + "1";
+    const std::string tiny_320 = "0." + std::string(319, '0') + "1";
+    const std::string normalized = "0." + std::string(21, '0') + "9999999999999998";
+    const std::string boundary = "0." + std::string(4095, '0') + "1";
+    const std::array cases{
+        std::pair{std::string("0"), std::string("0")},
+        std::pair{std::string("140.5"), std::string("140.5")},
+        std::pair{tiny_37, std::string("1e-37")},
+        std::pair{normalized, std::string("9.999999999999998e-22")},
+        std::pair{tiny_320, std::string("1e-320")},
+        std::pair{boundary, std::string("1e-4096")},
+    };
+    for (const auto& [decimal, expected] : cases) {
+        const auto atom = codec::compact_platform_decimal(decimal);
+        expect(atom == expected, "compact platform decimal must preserve the expected shorter representation");
+        expect(codec::canonical_platform_decimal(atom) == decimal,
+            "platform atom must expand to the exact input decimal without binary conversion");
+    }
+    expect(codec::compact_platform_decimal("  -0.0000000000000000000000000000000000001  ") == "-1e-37",
+        "compact conversion must normalize whitespace and preserve a negative sign");
+    expect(codec::compact_platform_decimal("+000140.5000") == "140.5",
+        "shorter ordinary decimals must remain ordinary after normalization");
+    for (const std::string_view invalid : {"", ".", "1e3", "1.2.3", "--1", "NaN"}) {
+        bool rejected = false;
+        try { (void)codec::compact_platform_decimal(invalid); } catch (const std::invalid_argument&) { rejected = true; }
+        expect(rejected, "compact conversion must reject invalid xs:decimal input");
+    }
+    bool rejected = false;
+    try { (void)codec::compact_platform_decimal("0." + std::string(4096, '0') + "1"); }
+    catch (const std::invalid_argument&) { rejected = true; }
+    expect(rejected, "compact conversion must reject exponents outside the reader limit");
+}
+
 void test_canonical_decimal() {
     for (const auto& [input, expected] : std::array{
              std::pair{"2.1e2", "210"}, std::pair{"-1.25E+3", "-1250"},
@@ -576,6 +611,7 @@ int main() {
         test_shortcut();
         test_platform_date_codec();
         test_canonical_decimal();
+        test_compact_platform_decimal();
     } catch (const std::exception& error) {
         std::cerr << "value codec tests: FAIL: " << error.what() << '\n';
         return 1;

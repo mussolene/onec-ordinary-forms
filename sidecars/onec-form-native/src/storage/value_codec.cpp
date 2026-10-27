@@ -87,6 +87,38 @@ std::string canonical_platform_decimal(std::string_view text) {
     return canonical_decimal(expanded);
 }
 
+std::string compact_platform_decimal(std::string_view text) {
+    const auto decimal = canonical_decimal(text);
+    if (decimal == "0") return decimal;
+
+    const bool negative = decimal.front() == '-';
+    const std::string_view magnitude(decimal.data() + (negative ? 1 : 0), decimal.size() - (negative ? 1 : 0));
+    const auto point = magnitude.find('.');
+    const auto integer_size = point == std::string_view::npos ? magnitude.size() : point;
+    std::string digits;
+    digits.reserve(magnitude.size());
+    for (const char ch : magnitude) if (ch != '.') digits.push_back(ch);
+
+    const auto first = digits.find_first_not_of('0');
+    const auto last = digits.find_last_not_of('0');
+    const bool nonnegative_exponent = integer_size > first;
+    const auto exponent_magnitude = nonnegative_exponent ? integer_size - first - 1 : first - integer_size + 1;
+    if (exponent_magnitude > 4096)
+        throw std::invalid_argument("excessive platform decimal exponent");
+    const auto exponent = nonnegative_exponent ? static_cast<int>(exponent_magnitude)
+                                               : -static_cast<int>(exponent_magnitude);
+    std::string scientific;
+    if (negative) scientific.push_back('-');
+    scientific.push_back(digits[first]);
+    if (last > first) {
+        scientific.push_back('.');
+        scientific.append(digits, first + 1, last - first);
+    }
+    scientific.push_back('e');
+    scientific += std::to_string(exponent);
+    return scientific.size() < decimal.size() ? scientific : decimal;
+}
+
 namespace {
 
 constexpr std::uint32_t localized_string_version = 1;

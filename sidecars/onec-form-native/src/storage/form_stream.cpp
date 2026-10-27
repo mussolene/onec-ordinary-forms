@@ -3485,7 +3485,11 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         if (width != column.layout_width->canonical || width.starts_with('-'))
             fail("OOF1122", std::string(path) + "/Width", "canonical nonnegative layout width", column.layout_width->canonical,
                 "Table Column layout width is invalid");
-        properties.items[4] = raw(width == "210" ? "2.1e2" : width);
+        try {
+            properties.items[4] = raw(width == "210" ? "2.1e2" : value_codec::compact_platform_decimal(width));
+        } catch (const std::exception& error) {
+            fail("OOF1122", std::string(path) + "/Width", "representable platform decimal", width, error.what());
+        }
         properties.items[45] = properties.items[4];
     }
     properties.items[22] = encode_control_font(column.text_font, std::string(path) + "/TextFont");

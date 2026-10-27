@@ -12,6 +12,8 @@ namespace oof::storage::value_codec {
 [[nodiscard]] std::string canonical_decimal(std::string_view text);
 // Число платформенного потока с допустимой экспонентой, без потери десятичной точности.
 [[nodiscard]] std::string canonical_platform_decimal(std::string_view text);
+// Точная компактная запись xs:decimal для числового атома платформы.
+[[nodiscard]] std::string compact_platform_decimal(std::string_view text);
 
 // Calendar dates use 1C's local, second-precision YYYYMMDDHHMMSS atoms.
 [[nodiscard]] std::string date_to_platform(std::string_view canonical);

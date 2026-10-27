@@ -520,6 +520,62 @@ void test_table_column_layout_codec() {
     }
 }
 
+void test_table_column_compact_decimal_codec() {
+    auto seed = form_stream::decode_document(captured_table_payload(), "CompactColumnWidth");
+    expect(seed.ok(), "captured Table fixture must decode for compact decimal cases");
+    const auto table_it = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table_it != seed.value().collections().controls.end(), "compact fixture must contain Table");
+    const auto table_id = table_it->id;
+    const std::array cases{
+        std::pair{std::string("140.5"), std::string("140.5")},
+        std::pair{"0." + std::string(36, '0') + "1", std::string("1e-37")},
+        std::pair{"0." + std::string(21, '0') + "9999999999999998", std::string("9.999999999999998e-22")},
+        std::pair{"0." + std::string(319, '0') + "1", std::string("1e-320")},
+    };
+    for (const auto& [decimal, expected_atom] : cases) {
+        auto document = seed.value();
+        auto* table = const_cast<model::ControlNode*>(document.find_control(table_id));
+        expect(table != nullptr, "Table fixture must remain addressable");
+        auto& column = std::get<model::TablePayload>(table->payload).columns.front();
+        column.layout_width = model::DecimalValue{decimal};
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "Table Column compact width must encode");
+        auto native = encoded.value();
+        const auto* record = find_record_with_guid(native,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr, "encoded compact width must contain Table");
+        const auto& properties = record->items[2].items[2].items[1].items[23].items[1]
+            .items[1].items[1].items[1].items;
+        expect(properties[4].atom == expected_atom && properties[45].atom == expected_atom,
+            "both width fields must use the exact compact numeric atom");
+        const auto decoded = form_stream::decode_document(native, "CompactColumnWidth");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "compact column width must decode completely");
+        const auto* decoded_table = decoded.value().find_control(table_id);
+        expect(decoded_table != nullptr, "decoded compact width must retain Table");
+        const auto& restored = std::get<model::TablePayload>(decoded_table->payload).columns.front();
+        expect(restored.layout_width && restored.layout_width->canonical == decimal,
+            "native roundtrip must preserve the exact decimal width");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<Width unit=\"form\">" + decimal + "</Width>") != std::string::npos,
+            "public XML must contain the ordinary canonical decimal, not a platform exponent");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "public XML with the exact decimal width must parse");
+        const auto* parsed_table = parsed.value().find_control(table_id);
+        expect(parsed_table && std::get<model::TablePayload>(parsed_table->payload).columns.front().layout_width ==
+                std::optional<model::DecimalValue>{model::DecimalValue{decimal}},
+            "XML roundtrip must preserve the exact decimal width");
+    }
+    auto excessive = seed.value();
+    auto* table = const_cast<model::ControlNode*>(excessive.find_control(table_id));
+    expect(table != nullptr, "excessive exponent fixture must contain Table");
+    std::get<model::TablePayload>(table->payload).columns.front().layout_width =
+        model::DecimalValue{"0." + std::string(4096, '0') + "1"};
+    expect(!form_stream::encode_document(excessive),
+        "unsupported decimal exponent must fail rather than emit an unreadable stream");
+}
+
 void test_table_column_visible_codec() {
     auto seed = form_stream::decode_document(captured_table_payload(), "TableColumnVisible");
     expect(seed.ok(), "captured Table fixture must decode for visibility cases");
@@ -17813,6 +17869,7 @@ int main() {
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
         test_table_column_layout_codec();
+        test_table_column_compact_decimal_codec();
         test_table_column_visible_codec();
         test_table_fixed_column_positions();
         test_table_read_only_runtime_flags();
