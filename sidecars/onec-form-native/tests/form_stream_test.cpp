@@ -17437,6 +17437,50 @@ void test_chart_named_integer_and_delimiter_properties() {
     }
 }
 
+void test_gantt_and_dendrogram_extension_metadata() {
+    constexpr std::array names{"ModifiesData", "SkipOnInput", "FirstInGroup"};
+    for (const auto kind : {model::ControlKind::gantt_chart, model::ControlKind::dendrogram}) {
+        const auto& descriptor = model::metamodel::descriptor_for(kind);
+        const auto tag = std::string(descriptor.public_name);
+        for (unsigned mask = 0; mask < 8; ++mask) {
+            const auto xml = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><" + tag +
+                " id=\"2\" name=\"Item\"><Position/></" + tag + "></ChildItems></Form>";
+            auto parsed = source::parse_form_xml(xml);
+            expect(parsed.ok(), "chart extension fixture must parse");
+            auto* control = const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{2}));
+            expect(control != nullptr, "chart extension control must exist");
+            for (std::size_t i = 0; i < names.size(); ++i)
+                control->extension_properties.set_explicit(model::PropertyId::from_name(names[i]), bool(mask & (1U << i)));
+            auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), "chart extension metadata must encode");
+            auto* record = &encoded.value().items[1].items[2].items[2].items[1];
+            expect(record->items[0].atom == descriptor.guid, "chart extension record must exist");
+            for (std::size_t i = 0; i < names.size(); ++i)
+                expect(record->items[4].items[i + 3].atom == ((mask & (1U << i)) ? "1" : "0"), "chart extension metadata must match platform");
+            auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "chart extension metadata must decode completely");
+            auto public_xml = source::serialize_form_xml(decoded.value());
+            expect(public_xml.ok(), "chart extension XML must serialize");
+            auto reparsed = source::parse_form_xml(public_xml.value());
+            expect(reparsed.ok(), "chart extension XML must parse");
+            auto rebuilt = form_stream::encode_document(reparsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "chart extension metadata must roundtrip");
+            for (std::size_t i = 0; i < names.size(); ++i) {
+                for (const auto& invalid : {list_stream::ListValue::raw_atom("2"), list_stream::ListValue::string_atom("1"), list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")})}) {
+                    auto bad = encoded.value();
+                    bad.items[1].items[2].items[2].items[1].items[4].items[i + 3] = invalid;
+                    expect(!form_stream::decode_document(bad), "malformed chart metadata Boolean must fail");
+                }
+            }
+            control->extension_properties.set_explicit(model::PropertyId::from_name("ModifiesData"), std::string("true"));
+            expect(!form_stream::encode_document(parsed.value()), "chart extension must reject wrong type");
+            control->extension_properties.set_explicit(model::PropertyId::from_name("ModifiesData"), false);
+            control->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), true);
+            expect(!form_stream::encode_document(parsed.value()), "chart extension must reject other extensions");
+        }
+    }
+}
+
 void test_schema_field_output() {
     for (const auto kind : {model::ControlKind::geographical_schema_field, model::ControlKind::graphical_schema_field}) {
         const auto tag = std::string(model::metamodel::descriptor_for(kind).public_name);
@@ -19324,6 +19368,7 @@ int main() {
         test_chart_named_events();
         test_dendrogram_named_events();
         test_schema_field_output();
+        test_gantt_and_dendrogram_extension_metadata();
         test_complex_control_named_events();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();

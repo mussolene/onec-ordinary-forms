@@ -4862,6 +4862,25 @@ void normalize_gantt_runtime_layout_values(const LV& actual, LV& normalized, std
 }
 
 
+void decode_chart_control_metadata(const LV& metadata, std::string_view path, model::ControlNode& control) {
+    require_arity(metadata, 6, path);
+    require_raw_constant(metadata.items[0], "14", child_path(path, 0));
+    require_raw_constant(metadata.items[2], "4294967295", child_path(path, 2));
+    constexpr std::array<std::string_view, 3> properties{"ModifiesData", "SkipOnInput", "FirstInGroup"};
+    for (std::size_t index = 0; index < properties.size(); ++index) {
+        if (bool_atom(metadata.items[index + 3], child_path(path, index + 3)))
+            control.extension_properties.set_explicit(model::PropertyId::from_name(properties[index]), true);
+    }
+}
+
+LV encode_chart_control_metadata(const model::ControlNode& control, std::string_view path) {
+    require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup"}, path);
+    return list({raw("14"), string_value(control.name), raw("4294967295"),
+        raw(explicit_bool(control.extension_properties, "ModifiesData", false) ? "1" : "0"),
+        raw(explicit_bool(control.extension_properties, "SkipOnInput", false) ? "1" : "0"),
+        raw(explicit_bool(control.extension_properties, "FirstInGroup", false) ? "1" : "0")});
+}
+
 DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
                                   const GeometryContext& context, Diagnostics& warnings,
                                   bool& reconstruction_complete) {
@@ -4981,7 +5000,7 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty Gantt name", "empty", "Control name is required");
-    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")} ), metadata_path, "Gantt metadata differs from the supported profile");
+    decode_chart_control_metadata(metadata, metadata_path, control);
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "Gantt storage children are unsupported");
     control.name = name;
     const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -8411,11 +8430,10 @@ DecodedControl decode_dendrogram(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty Dendrogram name", "empty",
             "Dendrogram name is required");
     }
-    require_exact(record.items[4], list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "Dendrogram metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Dendrogram cannot contain storage children");
     model::ControlNode control{model::ObjectId{raw_id}, name, std::move(graph)};
+    decode_chart_control_metadata(record.items[4], metadata_path, control);
     if (back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     if (orientation != 0) {
         control.properties().set_explicit(model::PropertyId::from_name("Orientation"), model::EnumerationValue{
@@ -10424,7 +10442,7 @@ LV encode_dendrogram(const model::OrdinaryFormDocument& document, const model::C
         fail("OOF1122", "$/Form/ChildItems", "Dendrogram with positive int64 ID", control.name,
             "Dendrogram is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || control.data_path ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
@@ -10466,7 +10484,7 @@ LV encode_dendrogram(const model::OrdinaryFormDocument& document, const model::C
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         std::move(data), encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        encode_chart_control_metadata(control, "$/Dendrogram"),
         list({raw("0")})});
 }
 
@@ -12103,7 +12121,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::gantt_chart) {
                     if (control->id.value() == 0 || control->id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
                         control->name.empty() || control->data_path || !control->children.empty() ||
-                        !control->extension_properties.empty() || control->position.default_control.is_explicit() ||
+                        control->position.default_control.is_explicit() ||
                         control->position.z_order.is_explicit() ||
                         control->position.collapse.is_explicit() || !control->position.bindings.dimensions.empty())
                         fail("OOF1122", child_path(path, ordinal), "childless GanttChart with basic Position", control->name,
@@ -12123,7 +12141,7 @@ Result<list_stream::ListValue> encode_document(
                     record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
                         std::move(gantt_info),
                         encode_geometry(control->position, context, IncomingAnchorLists{}),
-                        list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+                        encode_chart_control_metadata(*control, "$/GanttChart"),
                         list({raw("0")})});
                 } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
