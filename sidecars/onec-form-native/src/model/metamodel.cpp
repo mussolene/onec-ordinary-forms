@@ -580,6 +580,15 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
     context->value_codec = ValueCodec::context_menu_reference;
     context->persistence = PersistenceClass::persisted_editable;
     context->storage_codec = StorageCodec::root_record;
+    const auto default_button = std::ranges::find(
+        descriptors, std::string_view{"DefaultButton"}, &PropertyDescriptor::api_name);
+    if (default_button == descriptors.end()) {
+        throw std::logic_error("missing DefaultButton control extension descriptor");
+    }
+    default_button->control_kind = ControlKind::button;
+    default_button->default_value = {DefaultKind::boolean, "false"};
+    default_button->persistence = PersistenceClass::persisted_editable;
+    default_button->storage_codec = StorageCodec::control_info;
     const auto action_source = std::ranges::find(
         descriptors, std::string_view{"ActionSource"}, &PropertyDescriptor::api_name);
     if (action_source == descriptors.end()) {

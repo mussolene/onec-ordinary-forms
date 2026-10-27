@@ -1442,13 +1442,19 @@ std::uint64_t default_menu_item_id(const std::vector<model::CommandBarButton>& e
     return selected;
 }
 
-std::uint64_t default_command_bar_id(const model::OrdinaryFormDocument& document) {
+std::uint64_t default_selected_owner_id(const model::OrdinaryFormDocument& document) {
     std::uint64_t selected = 4294967295;
     for (const auto& control : document.collections().controls) {
         const auto* bar = std::get_if<model::CommandBarPayload>(&control.payload);
-        if (bar != nullptr && default_menu_item_id(bar->buttons) != 0) {
+        const auto* button_default = control.kind() == model::ControlKind::button
+            ? control.extension_properties.find(model::PropertyId::from_name("DefaultButton")) : nullptr;
+        const auto* button_value = button_default == nullptr ? nullptr : std::get_if<bool>(&button_default->value);
+        if (button_default != nullptr && button_value == nullptr)
+            fail("OOF1122", "$/Button/DefaultButton", "Boolean", "different value type", "DefaultButton must be Boolean");
+        if ((bar != nullptr && default_menu_item_id(bar->buttons) != 0) ||
+            (button_value != nullptr && *button_value)) {
             if (selected != 4294967295 || control.id.value() >= 4294967295)
-                fail("OOF1122", "$/CommandBar/Buttons/DefaultButton", "one owner with ID below uint32 sentinel", control.name, "Default action owner is invalid");
+                fail("OOF1122", "$/DefaultButton", "one owner with ID below uint32 sentinel", control.name, "Default button owner is invalid");
             selected = control.id.value();
         }
     }
@@ -2433,6 +2439,8 @@ LV encode_control_metadata(const model::ControlNode& control, std::string_view p
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "ActionSource"}, path);
     else if (control.kind() == model::ControlKind::radio_button)
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "ValueType"}, path);
+    else if (control.kind() == model::ControlKind::button)
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "DefaultButton"}, path);
     else
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu"}, path);
     return list({raw("14"), string_value(control.name), raw(std::to_string(action_source)),
@@ -5016,6 +5024,7 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
 }
 
 DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context, model::ObjectId form_id,
+    std::uint32_t selected_owner_id,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
@@ -5074,6 +5083,11 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         fail("OOF1122", properties_path, "consistent default Action reference on primary CommandBar", "inconsistent reference", "Unsupported DefaultButton context");
     auto menu = decode_button_menu(properties.items[7], child_path(properties_path, 7), name, warnings, reconstruction_complete,
         command_bar_root_marker, root_group_id, default_id);
+    // Платформа может оставить выбор действия панели после назначения другой кнопки.
+    // Активный владелец определяется заголовком формы, а не сохраненной ссылкой панели.
+    if (raw_id != selected_owner_id) {
+        for (auto& item : menu.entries) item.default_button = false;
+    }
 
     model::Form empty_form;
     empty_form.id = model::ObjectId{1};
@@ -5277,6 +5291,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         fail("OOF1114", child_path(properties_path, 4), "VerticalAlign storage value 0, 1, or 2",
             std::to_string(vertical_align), "Button.VerticalAlign storage value is unsupported");
     }
+    const bool default_button = bool_atom(properties.items[5], child_path(properties_path, 5));
     const auto picture_location = integer_atom<std::int32_t>(
         properties.items[6], child_path(properties_path, 6));
     if (picture_location < 0 || picture_location > 1) {
@@ -5303,6 +5318,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const auto picture = decode_button_picture(properties.items[8], child_path(properties_path, 8));
     auto normalized_properties = properties;
     normalized_properties.items[0] = std::move(normalized_base);
+    normalized_properties.items[5] = raw("0");
     normalized_properties.items[8] = canonical_button_picture();
     if (menu_mode != 0) normalized_properties.items[12] = parse_constant(
         "{5,53232d71-06b1-4ec1-a94d-77fafadef407,0,1,0,1,"
@@ -5348,6 +5364,8 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         model::ButtonPayload{},
     };
     decode_control_metadata(metadata, metadata_path, control);
+    if (default_button)
+        control.extension_properties.set_explicit(model::PropertyId::from_name("DefaultButton"), true);
     if (caption != model::PropertyValue{std::string{}}) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
@@ -9516,6 +9534,7 @@ LV encode_button(
     auto button_properties = canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
         picture_location, picture_size, menu_mode, multi_line, tool_tip,
         border_color, button_text_color, button_back_color, font, shortcut);
+    button_properties.items[5] = raw(explicit_bool(control.extension_properties, "DefaultButton", false) ? "1" : "0");
     if (picture_asset != nullptr) button_properties.items[8] = encode_button_picture(*picture_asset, "$/Button/Picture");
     const auto& menu_entries = std::get<model::ButtonPayload>(control.payload).buttons;
     if (!menu_entries.empty()) {
@@ -11485,7 +11504,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     DecodedControl child;
                     if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context, warnings, reconstruction_complete);
-                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id, warnings, reconstruction_complete);
+                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id, default_owner_id, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
                         child = decode_usual_group(record, record_path, context, warnings, reconstruction_complete);
 
@@ -11928,7 +11947,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 "Decoded storage does not satisfy the product object model");
         }
         validate_form_extension_context(document, "$/2/0");
-        if (default_command_bar_id(document) != default_owner_id)
+        if (default_selected_owner_id(document) != default_owner_id)
             fail("OOF1114", "$/1/1/2", "owner of the unique named DefaultButton", std::to_string(default_owner_id), "Default action owner is dangling or inconsistent");
         document.set_reconstruction_complete(reconstruction_complete);
         return document;
@@ -12387,7 +12406,7 @@ Result<list_stream::ListValue> encode_document(
             list({
                 encoded_localized_text(caption, "$/Form/Caption"),
                 raw(std::to_string(max_id)),
-                raw(std::to_string(default_command_bar_id(document))),
+                raw(std::to_string(default_selected_owner_id(document))),
             }),
             root_panel,
             raw(std::to_string(width)),

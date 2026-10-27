@@ -500,6 +500,73 @@ void test_command_bar_property_descriptors() {
         "CommandBar Orientation must reject an unknown enumeration member");
 }
 
+void test_default_button_model() {
+    using namespace oof::model::metamodel;
+    const auto property = PropertyId::from_name("DefaultButton");
+    const auto* descriptor = find_property(ControlKind::button, property);
+    expect(descriptor && descriptor->surface == PropertySurface::control_extension &&
+               descriptor->value_codec == ValueCodec::boolean &&
+               descriptor->persistence == PersistenceClass::persisted_editable &&
+               descriptor->storage_codec == StorageCodec::control_info &&
+               descriptor->default_value.kind == DefaultKind::boolean &&
+               descriptor->default_value.canonical == "false",
+        "Button DefaultButton must expose its persisted Boolean false default");
+    for (const auto& control : control_descriptors()) {
+        if (control.kind != ControlKind::button)
+            expect(find_property(control.kind, property) == nullptr,
+                "DefaultButton extension must only be available on Button");
+    }
+
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "DefaultButton";
+    for (std::uint64_t id = 2; id < 14; ++id) form.children.emplace_back(ControlRef{ObjectId{id}});
+    form.children.emplace_back(ControlRef{ObjectId{14}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t id = 2; id < 14; ++id)
+        document.add_control(ControlNode{ObjectId{id}, "Button" + std::to_string(id), ButtonPayload{}});
+    ControlNode bar{ObjectId{14}, "Tools", CommandBarPayload{}};
+    bar.properties().set_explicit(PropertyId::from_name("Secondary"), false);
+    CommandBarButton action;
+    action.name = "Run";
+    action.action = CommandBarAction{"RunHandler", "", {}, {}, {}};
+    std::get<CommandBarPayload>(bar.payload).buttons.push_back(action);
+    document.add_control(std::move(bar));
+    const auto key = [](std::uint64_t id) { return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}}; };
+    for (std::uint64_t id = 2; id < 14; ++id) {
+        const auto initial = document.get_prop_val(key(id), property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value == PropertyValue{false},
+            "each Button must initially expose false");
+        expect(document.set_prop_val(key(id), property, true) == PropertyMutationStatus::applied,
+            "Button default selection must apply");
+        for (std::uint64_t other = 2; other < 14; ++other)
+            expect(document.get_prop_val(key(other), property).value == PropertyValue{other == id},
+                "selecting a Button must clear all other Button selections");
+    }
+    expect(document.validate().ok(), "a single selected Button must validate");
+    expect(document.set_prop_val(key(2), property, std::string("true")) == PropertyMutationStatus::invalid_value &&
+               document.get_prop_val(key(13), property).value == PropertyValue{true},
+        "invalid input must not alter the active selection");
+
+    auto* command_bar = const_cast<ControlNode*>(document.find_control(ObjectId{14}));
+    auto& menu_action = std::get<CommandBarPayload>(command_bar->payload).buttons.front();
+    menu_action.default_button = true;
+    expect(document.validate().has(InvariantCode::invalid_property),
+        "a Button and an Action cannot both be active");
+    expect(document.set_prop_val(key(2), property, true) == PropertyMutationStatus::applied &&
+               !menu_action.default_button && document.get_prop_val(key(13), property).value == PropertyValue{false},
+        "selecting a Button must clear an active command bar Action and other Buttons");
+    expect(document.set_prop_val(key(2), property, false) == PropertyMutationStatus::applied &&
+               !menu_action.default_button && document.get_prop_val(key(2), property).value == PropertyValue{false},
+        "clearing a Button must not select a different default");
+    auto* first = const_cast<ControlNode*>(document.find_control(ObjectId{2}));
+    auto* second = const_cast<ControlNode*>(document.find_control(ObjectId{3}));
+    first->extension_properties.set_explicit(property, true);
+    second->extension_properties.set_explicit(property, true);
+    expect(document.validate().has(InvariantCode::invalid_property),
+        "directly constructed documents cannot contain two selected Buttons");
+}
+
 void test_context_menu_reference_model() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
@@ -3233,6 +3300,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
+        test_default_button_model();
         test_context_menu_reference_model();
         test_standard_picture_descriptor_catalog();
         test_button_alignment_xml_defaults();

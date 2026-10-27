@@ -1187,6 +1187,29 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             chart.title_area->explicit_geometry[0] = false;
         }
     }
+    if (property_control != nullptr && property_control->kind() == ControlKind::button &&
+        descriptor->api_name == "DefaultButton") {
+        const bool selected = std::get<bool>(value);
+        // Assign first: allocation failure must not clear the existing selection.
+        properties->set_explicit(descriptor->id, selected);
+        if (selected) {
+            for (auto& control : collections_.controls) {
+                if (control.kind() == ControlKind::button && control.id != owner.id) {
+                    control.extension_properties.unset(descriptor->id);
+                }
+                if (auto* bar = std::get_if<CommandBarPayload>(&control.payload)) {
+                    const auto clear_default = [&](const auto& self, auto& buttons) -> void {
+                        for (auto& button : buttons) {
+                            button.default_button = false;
+                            self(self, button.buttons);
+                        }
+                    };
+                    clear_default(clear_default, bar->buttons);
+                }
+            }
+        }
+        return PropertyMutationStatus::applied;
+    }
     properties->set_explicit(descriptor->id, std::move(value));
     if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
         return PropertyMutationStatus::applied_runtime_only;
@@ -1780,6 +1803,14 @@ ValidationReport OrdinaryFormDocument::validate() const {
 
     std::size_t default_button_count = 0;
     for (const auto& control : collections_.controls) {
+        if (control.kind() == ControlKind::button) {
+            const auto* selected = control.extension_properties.find(PropertyId::from_name("DefaultButton"));
+            if (selected != nullptr && std::holds_alternative<bool>(selected->value) &&
+                std::get<bool>(selected->value) && ++default_button_count > 1) {
+                add_violation(report, InvariantCode::invalid_property, control.id, {},
+                    "the form may have only one DefaultButton");
+            }
+        }
         const std::vector<CommandBarButton>* owned_buttons = nullptr;
         if (const auto* button = std::get_if<ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
         if (const auto* command_bar = std::get_if<CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;

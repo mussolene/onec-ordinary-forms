@@ -3042,7 +3042,7 @@ void test_button_multiline_round_trip_and_validation() {
         "Button.MultiLine storage values outside Boolean 0 or 1 must be rejected");
 
     auto invalid_unknown_slot = encoded.value();
-    invalid_unknown_slot.items[1].items[2].items[2].items[1].items[2].items[1].items[5] =
+    invalid_unknown_slot.items[1].items[2].items[2].items[1].items[2].items[1].items[13] =
         list_stream::ListValue::raw_atom("1");
     const auto partial_unknown_slot = form_stream::decode_document(invalid_unknown_slot, "Main");
     expect(partial_unknown_slot.ok() && !partial_unknown_slot.value().reconstruction_complete() &&
@@ -5192,6 +5192,124 @@ void test_command_bar_colors_named_round_trip_and_guards() {
     expect(!form_stream::encode_document(make_document(wrong_type)), "color property with Boolean value must be rejected");
 }
 
+void test_regular_button_default_selection_round_trip() {
+    const auto make_document = [](std::optional<std::uint64_t> selected, bool menu_selected) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "DefaultButtons";
+        for (std::uint64_t i = 0; i < 12; ++i)
+            form.children.emplace_back(model::ControlRef{model::ObjectId{20 + i}});
+        form.children.emplace_back(model::ControlRef{model::ObjectId{100}});
+        model::OrdinaryFormDocument document(std::move(form));
+        for (std::uint64_t i = 0; i < 12; ++i) {
+            const auto id = 20 + i;
+            model::ControlNode button{model::ObjectId{id}, "Button" + std::to_string(i), model::ButtonPayload{}};
+            if (selected && *selected == id)
+                button.extension_properties.set_explicit(model::PropertyId::from_name("DefaultButton"), true);
+            document.add_control(std::move(button));
+        }
+        model::ControlNode bar{model::ObjectId{100}, "Tools", model::CommandBarPayload{}};
+        bar.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
+        model::CommandBarButton action;
+        action.name = "Run";
+        action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}};
+        action.default_button = menu_selected;
+        std::get<model::CommandBarPayload>(bar.payload).buttons.push_back(std::move(action));
+        document.add_control(std::move(bar));
+        return document;
+    };
+    const auto selected_property = model::PropertyId::from_name("DefaultButton");
+    for (std::uint64_t selected = 20; selected < 32; ++selected) {
+        const auto document = make_document(selected, false);
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        const auto& root = encoded.value();
+        expect(root.items[1].items[1].items[2].atom == std::to_string(selected),
+            "regular default Button must own the form selection");
+        const auto& records = root.items[1].items[2].items[2].items;
+        for (std::uint64_t i = 0; i < 12; ++i) {
+            expect(records[1 + i].items[1].atom == std::to_string(20 + i), "expected Button record");
+            expect(records[1 + i].items[2].items[1].items[5].atom == (20 + i == selected ? "1" : "0"),
+                "Button default flag must agree with the selected owner");
+        }
+        const auto decoded = form_stream::decode_document(root, "DefaultButtons");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            decoded ? "default Button decode must be complete" : decoded.diagnostics().front().message);
+        for (std::uint64_t i = 0; i < 12; ++i) {
+            const auto* button = decoded.value().find_control(model::ObjectId{20 + i});
+            expect(button != nullptr, "decoded Button must exist");
+            const auto* entry = button->extension_properties.find(selected_property);
+            expect((20 + i == selected) ? entry && std::get_if<bool>(&entry->value) && std::get<bool>(entry->value)
+                                        : entry == nullptr || (std::get_if<bool>(&entry->value) && !std::get<bool>(entry->value)),
+                "only the selected Button may be marked default");
+        }
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<DefaultButton>true</DefaultButton>") != std::string::npos,
+            "selected Button must have named XML");
+        const auto reparsed = source::parse_form_xml(xml.value());
+        expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+        const auto rebuilt = form_stream::encode_document(reparsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(root),
+            "default Button must survive XML and stream roundtrip");
+    }
+
+    const auto one = form_stream::encode_document(make_document(20, false));
+    expect(one.ok(), "default Button malformed input fixture must encode");
+    for (const auto& invalid : {list_stream::ListValue::raw_atom("2"), list_stream::ListValue::string_atom("1"),
+                                list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")})}) {
+        auto malformed = one.value();
+        malformed.items[1].items[2].items[2].items[1].items[2].items[1].items[5] = invalid;
+        expect(!form_stream::decode_document(malformed, "MalformedDefault"), "invalid Button default Boolean must fail");
+    }
+    for (const auto header : {"0", "9999", "4294967295"}) {
+        auto malformed = one.value();
+        malformed.items[1].items[1].items[2] = list_stream::ListValue::raw_atom(header);
+        expect(!form_stream::decode_document(malformed, "InvalidDefaultOwner"), "wrong default owner must fail");
+    }
+    auto multiple = one.value();
+    multiple.items[1].items[2].items[2].items[2].items[2].items[1].items[5] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(multiple, "TwoDefaultButtons"), "multiple active default Buttons must fail");
+    expect(!form_stream::encode_document(make_document(20, true)), "Button and CommandBar Action cannot both be active defaults");
+
+    // The platform leaves the CommandBar's previous selected Action in its local
+    // record when a regular Button becomes the active owner (ev_c2e4061d38d147ee9bae6780c0703792).
+    const auto menu_document = make_document(std::nullopt, true);
+    const auto menu_encoded = form_stream::encode_document(menu_document);
+    expect(menu_encoded.ok(), "stale CommandBar selection fixture must encode");
+    auto stale = menu_encoded.value();
+    stale.items[1].items[1].items[2] = list_stream::ListValue::raw_atom("20");
+    stale.items[1].items[2].items[2].items[1].items[2].items[1].items[5] = list_stream::ListValue::raw_atom("1");
+    const auto stale_decoded = form_stream::decode_document(stale, "InactiveBarDefault");
+    expect(stale_decoded.ok() && stale_decoded.value().reconstruction_complete(),
+        stale_decoded ? "inactive CommandBar selection must be semantically complete" : stale_decoded.diagnostics().front().message);
+    const auto* restored_bar = stale_decoded.value().find_control(model::ObjectId{100});
+    expect(restored_bar != nullptr && !std::get<model::CommandBarPayload>(restored_bar->payload).buttons.front().default_button,
+        "inactive stored CommandBar selection must not become an active Action");
+    const auto* restored_button = stale_decoded.value().find_control(model::ObjectId{20});
+    const auto* flag = restored_button == nullptr ? nullptr : restored_button->extension_properties.find(selected_property);
+    expect(flag != nullptr && std::get_if<bool>(&flag->value) && std::get<bool>(flag->value),
+        "the form's active Button selection must be retained");
+    const auto normalized = form_stream::encode_document(stale_decoded.value());
+    expect(normalized.ok() && list_stream::dump_compact(normalized.value()) == list_stream::dump_compact(one.value()),
+        "inactive CommandBar state must normalize to the named active Button without raw data");
+
+    // Clearing that regular Button leaves no active owner, while the same
+    // CommandBar Action selection remains in its local storage on the platform.
+    auto cleared = menu_encoded.value();
+    cleared.items[1].items[1].items[2] = list_stream::ListValue::raw_atom("4294967295");
+    const auto cleared_decoded = form_stream::decode_document(cleared, "ClearedDefault");
+    expect(cleared_decoded.ok() && cleared_decoded.value().reconstruction_complete(),
+        cleared_decoded ? "inactive stored selection with no owner must be complete" : cleared_decoded.diagnostics().front().message);
+    const auto* cleared_bar = cleared_decoded.value().find_control(model::ObjectId{100});
+    expect(cleared_bar != nullptr && !std::get<model::CommandBarPayload>(cleared_bar->payload).buttons.front().default_button,
+        "cleared owner must not activate a locally retained CommandBar Action");
+    const auto empty = form_stream::encode_document(make_document(std::nullopt, false));
+    const auto cleared_normalized = form_stream::encode_document(cleared_decoded.value());
+    expect(empty.ok() && cleared_normalized.ok() &&
+               list_stream::dump_compact(cleared_normalized.value()) == list_stream::dump_compact(empty.value()),
+        "cleared default must normalize to the named model with no active owner");
+}
+
 void test_command_bar_default_button_round_trip_and_guards() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "DefaultAction";
     form.children = {model::ControlRef{model::ObjectId{4}}};
@@ -5230,7 +5348,7 @@ void test_command_bar_default_button_round_trip_and_guards() {
     reject_property(10, "9d0a2e40-b978-11d4-84b6-008048da06df");
     reject_property(10, "00000000-0000-0000-0000-000000000000");
     reject_property(5, "1");
-    for (const auto value : {"0", "3", "4294967295"}) {
+    for (const auto value : {"0", "3"}) {
         auto invalid = encoded.value(); invalid.items[1].items[1].items[2] = list_stream::ListValue::raw_atom(value);
         expect(!form_stream::decode_document(invalid, "DanglingOwner"), "missing or mismatched default owner must be rejected");
     }
@@ -19525,6 +19643,7 @@ int main() {
         test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();
+        test_regular_button_default_selection_round_trip();
         test_command_bar_default_button_round_trip_and_guards();
         test_captured_command_bar_control_record_literal();
         test_outer_format_probe();
