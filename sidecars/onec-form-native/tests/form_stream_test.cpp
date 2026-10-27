@@ -8313,17 +8313,27 @@ void test_form_allow_close_round_trip() {
         "AllowClose must default to true");
     expect(document.set_prop_val(owner, property, false) == model::PropertyMutationStatus::applied,
         "AllowClose false must be editable");
+    const auto desktop = model::PropertyId::from_name("DesktopMode");
+    const auto desktop_default = document.get_prop_val(owner, desktop);
+    expect(desktop_default.status == model::PropertyReadStatus::proven_default && desktop_default.value == std::optional<model::PropertyValue>{false},
+        "DesktopMode must default to false");
+    expect(document.set_prop_val(owner, desktop, true) == model::PropertyMutationStatus::applied,
+        "DesktopMode true must be editable");
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), "AllowClose false must encode");
     const auto* slot = bounded_list_item(encoded.value(), {18});
     expect(slot && !slot->is_list && slot->atom == "0", "AllowClose false must match the observed platform field");
+    const auto* desktop_slot = bounded_list_item(encoded.value(), {17});
+    expect(desktop_slot && !desktop_slot->is_list && desktop_slot->atom == "1", "DesktopMode true must match the observed platform field");
     const auto decoded = form_stream::decode_document(encoded.value(), "AllowClose");
     expect(decoded.ok() && decoded.value().reconstruction_complete() && decoded.value().collections().controls.size() == 12,
         "AllowClose must preserve the twelve controls");
     const auto value = decoded.value().get_prop_val(owner, property);
     expect(value.value == std::optional<model::PropertyValue>{false}, "AllowClose must decode as false");
+    expect(decoded.value().get_prop_val(owner, desktop).value == std::optional<model::PropertyValue>{true}, "DesktopMode must decode as true");
     const auto xml = source::serialize_form_xml(decoded.value());
-    expect(xml.ok() && xml.value().find("<AllowClose>false</AllowClose>") != std::string::npos,
+    expect(xml.ok() && xml.value().find("<AllowClose>false</AllowClose>") != std::string::npos &&
+        xml.value().find("<DesktopMode>true</DesktopMode>") != std::string::npos,
         "AllowClose must be named in XML");
     const auto parsed = source::parse_form_xml(xml.value());
     expect(parsed.ok(), "AllowClose XML must parse");
@@ -8335,6 +8345,15 @@ void test_form_allow_close_round_trip() {
     expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset &&
         document.get_prop_val(owner, property).status == model::PropertyReadStatus::proven_default,
         "AllowClose reset must restore the default");
+    expect(document.set_prop_val(owner, desktop, std::string("true")) == model::PropertyMutationStatus::invalid_value &&
+        document.reset_prop_val(owner, desktop) == model::PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, desktop).status == model::PropertyReadStatus::proven_default,
+        "DesktopMode must reject wrong types and reset to default");
+    auto malformed_desktop = encoded.value();
+    auto* malformed_desktop_slot = bounded_list_item(malformed_desktop, {17});
+    expect(malformed_desktop_slot != nullptr, "DesktopMode slot must exist");
+    *malformed_desktop_slot = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(malformed_desktop), "DesktopMode must reject invalid stored values");
     auto malformed = encoded.value();
     auto* malformed_slot = bounded_list_item(malformed, {18});
     expect(malformed_slot != nullptr, "AllowClose slot must exist");

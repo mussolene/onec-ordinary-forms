@@ -11254,7 +11254,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(payload.items[14], "1", "$/14");
         require_raw_constant(payload.items[15], "2", "$/15");
         require_raw_constant(payload.items[16], "0", "$/16");
-        require_raw_constant(payload.items[17], "0", "$/17");
+        const bool desktop_mode = bool_atom(payload.items[17], "$/17");
         const bool allow_close = bool_atom(payload.items[18], "$/18");
         require_raw_constant(payload.items[19], "1", "$/19");
 
@@ -11350,6 +11350,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
         if (!allow_close) {
             form.properties.set_explicit(model::PropertyId::from_name("AllowClose"), false);
+        }
+        if (desktop_mode) {
+            form.properties.set_explicit(model::PropertyId::from_name("DesktopMode"), true);
         }
         if (width != default_form_width) {
             form.properties.set_explicit(
@@ -11993,13 +11996,14 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "Width", "Height"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
             document.form().properties, "Caption", "$/Form");
         const bool auto_title = explicit_bool(document.form().properties, "AutoTitle", true);
         const bool allow_close = explicit_bool(document.form().properties, "AllowClose", true);
+        const bool desktop_mode = explicit_bool(document.form().properties, "DesktopMode", false);
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -12402,7 +12406,7 @@ Result<list_stream::ListValue> encode_document(
             raw("1"),
             raw("2"),
             raw("0"),
-            raw("0"),
+            raw(desktop_mode ? "1" : "0"),
             raw(allow_close ? "1" : "0"),
             raw("1"),
         });

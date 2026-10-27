@@ -1327,6 +1327,12 @@ void apply_proven_storage_overrides(
         "true");
     classify_property(
         form_properties,
+        "DesktopMode",
+        StorageCodec::root_record,
+        DefaultKind::boolean,
+        "false");
+    classify_property(
+        form_properties,
         "Width",
         StorageCodec::root_record,
         DefaultKind::integer,
