@@ -4163,7 +4163,8 @@ EmbeddedChartEvents extract_embedded_chart_events(
     const auto expected_count = chart_info_item_count(series_size, static_cast<std::size_t>(point_count), info_path);
     const auto flag = points_offset + 1 + 11 * static_cast<std::size_t>(point_count) + 94;
     const bool has_events = bool_atom(at(info, flag, info_path), child_path(info_path, flag));
-    if (info.items.size() != expected_count + (has_events ? 1U : 0U))
+    if ((has_events && expected_count == std::numeric_limits<std::size_t>::max()) ||
+        info.items.size() != expected_count + (has_events ? 1U : 0U))
         fail("OOF1102", info_path, "supported embedded Chart cardinality", std::to_string(info.items.size()), "Embedded Chart Info dimensions are unsupported");
     std::vector<DecodedControlEvent> events;
     if (has_events) {
@@ -6328,6 +6329,13 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
         const bool value = explicit_bool(properties, spec.name, spec.default_value);
         info.at(middle_start + spec.offset) = raw(value != spec.inverted ? "1" : "0");
     }
+    model::FontValue label_font;
+    if (const auto* entry = properties.find(model::PropertyId::from_name("LabelFont"))) {
+        const auto* value = std::get_if<model::FontValue>(&entry->value);
+        if (!value) fail("OOF1122", "$/Chart/LabelFont", "FontValue", "different value type", "Chart LabelFont has the wrong type");
+        label_font = *value;
+    }
+    info.at(middle_start + 102 + 3 * expected_cell_count) = encode_control_font(label_font, "$/Chart/LabelFont");
     info.at(middle_start + 103 + 3 * expected_cell_count) =
         raw(explicit_bool(properties, "TransparentLabel", true) ? "1" : "0");
     auto& limits = info.at(middle_start + 126 + 3 * expected_cell_count + series_count);
@@ -6397,7 +6405,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
-        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor"}, "$/Chart");
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6437,7 +6445,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     const auto expected = chart_info_item_count(static_cast<std::size_t>(series_count), static_cast<std::size_t>(point_count), info_path);
     const auto event_flag_index = points_count_offset + 1 + static_cast<std::size_t>(point_count) * 11 + 94;
     const bool has_events = bool_atom(at(info, event_flag_index, info_path), child_path(info_path, event_flag_index));
-    if (info.items.size() != expected + (has_events ? 1U : 0U))
+    if ((has_events && expected == std::numeric_limits<std::size_t>::max()) ||
+        info.items.size() != expected + (has_events ? 1U : 0U))
         fail("OOF1102", info_path, "supported dense Chart collection cardinality", std::to_string(info.items.size()), "Chart Info dimensions are unsupported");
     std::vector<DecodedControlEvent> chart_events;
     if (has_events) {
@@ -6620,7 +6629,10 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         }
         if (value != spec.default_value) properties.set_explicit(model::PropertyId::from_name(spec.name), static_cast<std::int64_t>(value));
     }
-    const auto transparent_label_index = middle_start + 103 + 3 * series_size * static_cast<std::size_t>(point_count);
+    const auto label_font_index = middle_start + 102 + 3 * series_size * static_cast<std::size_t>(point_count);
+    const auto label_font = decode_control_font(at(info, label_font_index, info_path), child_path(info_path, label_font_index));
+    if (label_font != model::FontValue{}) properties.set_explicit(model::PropertyId::from_name("LabelFont"), label_font);
+    const auto transparent_label_index = label_font_index + 1;
     const bool transparent_label = bool_atom(at(info, transparent_label_index, info_path), child_path(info_path, transparent_label_index));
     if (!transparent_label) properties.set_explicit(model::PropertyId::from_name("TransparentLabel"), false);
     const auto limit_index = middle_start + 126 + 3 * series_size * static_cast<std::size_t>(point_count) + series_size;

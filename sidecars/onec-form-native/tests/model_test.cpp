@@ -686,6 +686,31 @@ void test_chart_appearance_defaults() {
     OrdinaryFormDocument document(std::move(form));
     document.add_control(ControlNode{ObjectId{2}, "Chart", ChartPayload{}});
     const auto chart = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{2}};
+    const auto* label_font = find_property(ControlKind::chart, "LabelFont");
+    expect(label_font && label_font->persistence == PersistenceClass::persisted_editable &&
+               label_font->storage_codec == StorageCodec::control_info &&
+               label_font->value_codec == ValueCodec::font &&
+               label_font->default_value.kind == DefaultKind::font &&
+               label_font->default_value.canonical == "automatic",
+        "Chart LabelFont must use persisted font storage and the automatic default");
+    const auto font_id = PropertyId::from_name("LabelFont");
+    const auto default_font = document.get_prop_val(chart, font_id);
+    expect(default_font.status == PropertyReadStatus::proven_default && default_font.value &&
+               *default_font.value == PropertyValue{FontValue{}},
+        "Chart LabelFont must expose its automatic FontValue default");
+    FontValue explicit_font;
+    explicit_font.kind = FontKind::absolute;
+    explicit_font.face_name = "Arial";
+    explicit_font.height = 12;
+    expect(document.set_prop_val(chart, font_id, explicit_font) == PropertyMutationStatus::applied,
+        "Chart LabelFont must accept a typed font");
+    const auto read_font = document.get_prop_val(chart, font_id);
+    expect(read_font.status == PropertyReadStatus::explicit_value && read_font.value &&
+               *read_font.value == PropertyValue{explicit_font},
+        "Chart LabelFont must preserve and return an explicit font");
+    expect(document.reset_prop_val(chart, font_id) == PropertyMutationStatus::reset &&
+               document.get_prop_val(chart, font_id).status == PropertyReadStatus::proven_default,
+        "resetting Chart LabelFont must restore its automatic default");
     for (const auto& [name, canonical, is_border] : {
              std::tuple{"Border", "WithoutBorder:0", true}, std::tuple{"LabelBorder", "Single:1", true},
              std::tuple{"BorderColor", "StyleColors.BorderColor", false},

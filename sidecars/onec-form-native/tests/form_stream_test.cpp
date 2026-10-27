@@ -15433,6 +15433,43 @@ void test_chart_named_events() {
         return document;
     };
     for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
+        model::FontValue arial12; arial12.kind = model::FontKind::absolute; arial12.face_name = "Arial"; arial12.height = 12;
+        model::FontValue arial14 = arial12; arial14.height = 14; arial14.bold = true;
+        model::FontValue style; style.kind = model::FontKind::style_reference; style.style = model::QualifiedName{"StyleFonts.TextFont"};
+        for (const auto& font : {model::FontValue{}, arial12, arial14, style}) {
+            for (const auto event_count : {0U, 2U}) {
+                auto document = make_document(series_count, point_count, std::span(events).first(event_count));
+                auto* control = const_cast<model::ControlNode*>(document.find_control(model::ObjectId{2}));
+                control->properties().set_explicit(model::PropertyId::from_name("LabelFont"), font);
+                auto encoded = form_stream::encode_document(document);
+                expect(encoded.ok(), "Chart LabelFont fixture must encode");
+                const auto middle = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+                const auto font_index = middle + 102 + 3 * series_count * point_count + (event_count ? 1 : 0);
+                expect(list_stream::dump_compact(find_chart_record(encoded.value())->items[3].items[font_index]) == value_codec::encode_font(font),
+                    "Chart LabelFont must use the dimension-derived Font slot after any event table");
+                const auto decoded = form_stream::decode_document(encoded.value());
+                expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart LabelFont and events must decode completely");
+                const auto* decoded_control = decoded.value().find_control(model::ObjectId{2});
+                const auto* entry = decoded_control->properties().find(model::PropertyId::from_name("LabelFont"));
+                expect(font == model::FontValue{} ? entry == nullptr : entry && std::get<model::FontValue>(entry->value) == font,
+                    "Chart LabelFont must preserve its value and omit the automatic default");
+                expect(decoded_control->events.size() == event_count, "Chart events must survive LabelFont");
+                const auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "Chart LabelFont XML must serialize");
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "Chart LabelFont XML must parse");
+                const auto rebuilt = form_stream::encode_document(parsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                    "Chart LabelFont XML/native roundtrip must preserve the stream");
+                auto malformed = encoded.value();
+                find_chart_record(malformed)->items[3].items[font_index] = list_stream::parse("{8,2,0,{-20},1,99}");
+                expect(!form_stream::decode_document(malformed), "malformed Chart LabelFont must fail typed validation");
+            }
+        }
+        auto unsupported = make_document(series_count, point_count, std::span(events));
+        model::FontValue invalid_font; invalid_font.kind = model::FontKind::windows_font;
+        const_cast<model::ControlNode*>(unsupported.find_control(model::ObjectId{2}))->properties().set_explicit(model::PropertyId::from_name("LabelFont"), invalid_font);
+        expect(!form_stream::encode_document(unsupported), "unsupported Chart LabelFont must fail typed encoding");
         for (std::size_t count = 0; count <= events.size(); ++count) {
             for (std::size_t start = 0; start + count <= events.size(); ++start) {
                 auto encoded = form_stream::encode_document(make_document(series_count, point_count, std::span(events).subspan(start, count)));

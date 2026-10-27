@@ -692,6 +692,7 @@ void apply_proven_storage_overrides(
         classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::color, value);
         std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::color;
     }
+    classify_property(chart_properties, "LabelFont", StorageCodec::control_info, DefaultKind::font, "automatic");
 
     classify_property(chart_properties, "LabelDelimiter", StorageCodec::control_info, DefaultKind::string, ", ");
     for (const auto name : {"ValueLabelFormat", "PercentLabelFormat"}) {
