@@ -8297,6 +8297,51 @@ void test_form_auto_title_boolean_round_trip_and_validation() {
     }
 }
 
+void test_form_allow_close_round_trip() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "AllowClose";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::ControlNode button{model::ObjectId{100 + i}, "Button" + std::to_string(i), model::ButtonPayload{}};
+        button.position.width.set(40); button.position.height.set(20);
+        document.add_control(std::move(button));
+    }
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("AllowClose");
+    const auto initial = document.get_prop_val(owner, property);
+    expect(initial.status == model::PropertyReadStatus::proven_default && initial.value == std::optional<model::PropertyValue>{true},
+        "AllowClose must default to true");
+    expect(document.set_prop_val(owner, property, false) == model::PropertyMutationStatus::applied,
+        "AllowClose false must be editable");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "AllowClose false must encode");
+    const auto* slot = bounded_list_item(encoded.value(), {18});
+    expect(slot && !slot->is_list && slot->atom == "0", "AllowClose false must match the observed platform field");
+    const auto decoded = form_stream::decode_document(encoded.value(), "AllowClose");
+    expect(decoded.ok() && decoded.value().reconstruction_complete() && decoded.value().collections().controls.size() == 12,
+        "AllowClose must preserve the twelve controls");
+    const auto value = decoded.value().get_prop_val(owner, property);
+    expect(value.value == std::optional<model::PropertyValue>{false}, "AllowClose must decode as false");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<AllowClose>false</AllowClose>") != std::string::npos,
+        "AllowClose must be named in XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "AllowClose XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "AllowClose must survive the XML and binary cycle");
+    expect(document.set_prop_val(owner, property, std::string("false")) == model::PropertyMutationStatus::invalid_value,
+        "AllowClose must reject non-Boolean values");
+    expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, property).status == model::PropertyReadStatus::proven_default,
+        "AllowClose reset must restore the default");
+    auto malformed = encoded.value();
+    auto* malformed_slot = bounded_list_item(malformed, {18});
+    expect(malformed_slot != nullptr, "AllowClose slot must exist");
+    *malformed_slot = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(malformed), "AllowClose must reject invalid stored values");
+}
+
 void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() {
     const auto numeric_type = [](std::uint32_t digits, std::uint32_t fraction, bool non_negative) {
         model::TypeDomainEntry entry;
@@ -19148,6 +19193,7 @@ int main() {
         test_multilingual_caption_round_trip_for_supported_controls();
         test_form_caption_localized_text_round_trip_and_rejections();
         test_form_auto_title_boolean_round_trip_and_validation();
+        test_form_allow_close_round_trip();
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();

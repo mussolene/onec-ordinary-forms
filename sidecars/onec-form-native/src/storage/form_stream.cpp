@@ -11255,7 +11255,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(payload.items[15], "2", "$/15");
         require_raw_constant(payload.items[16], "0", "$/16");
         require_raw_constant(payload.items[17], "0", "$/17");
-        require_raw_constant(payload.items[18], "1", "$/18");
+        const bool allow_close = bool_atom(payload.items[18], "$/18");
         require_raw_constant(payload.items[19], "1", "$/19");
 
         const auto& form_section = payload.items[1];
@@ -11347,6 +11347,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
         if (!auto_title) {
             form.properties.set_explicit(model::PropertyId::from_name("AutoTitle"), false);
+        }
+        if (!allow_close) {
+            form.properties.set_explicit(model::PropertyId::from_name("AllowClose"), false);
         }
         if (width != default_form_width) {
             form.properties.set_explicit(
@@ -11990,12 +11993,13 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "Width", "Height"},
+            {"Caption", "AutoTitle", "AllowClose", "Width", "Height"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
             document.form().properties, "Caption", "$/Form");
         const bool auto_title = explicit_bool(document.form().properties, "AutoTitle", true);
+        const bool allow_close = explicit_bool(document.form().properties, "AllowClose", true);
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -12399,7 +12403,7 @@ Result<list_stream::ListValue> encode_document(
             raw("2"),
             raw("0"),
             raw("0"),
-            raw("1"),
+            raw(allow_close ? "1" : "0"),
             raw("1"),
         });
 

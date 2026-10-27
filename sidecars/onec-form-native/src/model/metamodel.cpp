@@ -1321,6 +1321,12 @@ void apply_proven_storage_overrides(
         "true");
     classify_property(
         form_properties,
+        "AllowClose",
+        StorageCodec::root_record,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        form_properties,
         "Width",
         StorageCodec::root_record,
         DefaultKind::integer,
