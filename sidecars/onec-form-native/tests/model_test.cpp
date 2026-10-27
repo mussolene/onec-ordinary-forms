@@ -1191,6 +1191,9 @@ void test_panel_scrolling_tab_read() {
             "a panel without scrolling must expose its tab default");
         expect(document.set_prop_val(owner, scroll, true) == PropertyMutationStatus::applied,
             "scroll mode must accept true");
+        expect(document.set_prop_val(owner, scroll, false) == PropertyMutationStatus::applied &&
+                document.get_prop_val(owner, scroll).value == PropertyValue{true},
+            "the platform ignores attempts to disable an active scrolling mode");
         const auto scrolling = document.get_prop_val(owner, tabs);
         expect(scrolling.status == PropertyReadStatus::computed_value && scrolling.value &&
             *scrolling.value == PropertyValue{UndefinedValue{}},

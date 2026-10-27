@@ -1208,6 +1208,12 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         return PropertyMutationStatus::unsupported_surface;
     }
     if (!property_value_matches(*descriptor, value)) return PropertyMutationStatus::invalid_value;
+    if (property_control != nullptr && property_control->kind() == ControlKind::panel &&
+        descriptor->api_name == "ScrollPageMode" && !std::get<bool>(value)) {
+        const auto* current = property_control->properties().find(descriptor->id);
+        if (current != nullptr && std::get_if<bool>(&current->value) && std::get<bool>(current->value))
+            return PropertyMutationStatus::applied;
+    }
     if (const auto* enumeration = std::get_if<EnumerationValue>(&value);
         enumeration != nullptr && !property_api_enumeration_matches(*descriptor, *enumeration)) {
         return PropertyMutationStatus::invalid_value;
