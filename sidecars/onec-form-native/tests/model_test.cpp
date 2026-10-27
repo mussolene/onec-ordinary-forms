@@ -432,6 +432,38 @@ void test_z_order_reorders_siblings() {
                 nested.get_prop_val({ObjectCategory::control, second_id}, tab).value == PropertyValue{std::int64_t{2}},
             "nested ZOrder must reorder only the page siblings and preserve their TabOrder");
     }
+
+    Form sequence_form; sequence_form.id = ObjectId{2000}; sequence_form.name = "ZOrderSequence";
+    OrdinaryFormDocument sequence(std::move(sequence_form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId panel_id{2100 + index}, page_id{2200 + index};
+        const std::array<ObjectId, 4> ids{ObjectId{2300 + 4 * index}, ObjectId{2301 + 4 * index},
+                                         ObjectId{2302 + 4 * index}, ObjectId{2303 + 4 * index}};
+        Page page; page.id = page_id; page.name = "Page" + std::to_string(index);
+        for (const auto id : ids) page.children.push_back(ControlRef{id});
+        ControlNode panel{panel_id, "Panel" + std::to_string(index), PanelPayload{}};
+        panel.children = {PageRef{page_id}};
+        sequence.add_page(std::move(page));
+        sequence.add_control(std::move(panel));
+        for (const auto id : ids)
+            sequence.add_control(ControlNode{id, "Label" + std::to_string(id.value()), LabelDecorationPayload{}});
+        const auto check_order = [&](const std::array<std::int64_t, 4>& expected) {
+            for (std::size_t item = 0; item < ids.size(); ++item)
+                expect(sequence.get_prop_val({ObjectCategory::control, ids[item]}, z).value == PropertyValue{expected[item]},
+                    "nested ZOrder sequence must match platform sibling positions");
+        };
+        const auto move = [&](std::size_t item, std::int64_t target) {
+            expect(sequence.set_prop_val({ObjectCategory::control, ids[item]}, z, target) ==
+                    PropertyMutationStatus::applied_unclassified_storage,
+                "nested ZOrder assignment must succeed");
+        };
+        check_order({1, 2, 3, 4});
+        move(3, 1); check_order({2, 3, 4, 1});
+        move(1, 4); check_order({2, 4, 3, 1});
+        move(2, 2); check_order({3, 4, 2, 1});
+        move(0, 99); check_order({4, 3, 2, 1});
+        move(1, -1); check_order({4, 1, 3, 2});
+    }
 }
 
 void test_tab_order_reorders_siblings() {
