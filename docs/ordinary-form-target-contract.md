@@ -1360,4 +1360,5 @@ RowSelectionMode использует TableBoxRowSelectionMode.Cell или Row. 
 
 CurrentRow, CurrentData и SelectedRows относятся к работающей форме и не
 записываются в Form.xml. Модель объектов строк и коллекции выделения пока
-не реализована. CurrentColumn и CurrentParent требуют дополнительной проверки.
+не реализована. CurrentColumn также относится к состоянию времени исполнения;
+модель текущей колонки еще не реализована. CurrentParent требует проверки.

@@ -1323,7 +1323,7 @@ void test_help_metamodel() {
             event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c",
             std::string(name) + " must have its observed Table event descriptor");
     }
-    for (const auto name : {"CurrentRow", "CurrentData", "SelectedRows"}) {
+    for (const auto name : {"CurrentRow", "CurrentData", "SelectedRows", "CurrentColumn"}) {
         const auto* property = find_property(ControlKind::table, name);
         expect(property && property->persistence == PersistenceClass::runtime_only &&
                    property->storage_codec == StorageCodec::none,

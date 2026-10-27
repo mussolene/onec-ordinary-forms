@@ -1086,7 +1086,7 @@ void apply_proven_storage_overrides(
     classify_property(list_box, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
 
     auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
-    for (const auto name : {"ChoiceMode", "CurrentRow", "CurrentData", "SelectedRows"}) {
+    for (const auto name : {"ChoiceMode", "CurrentRow", "CurrentData", "SelectedRows", "CurrentColumn"}) {
         if (const auto property = std::ranges::find(table, name, &PropertyDescriptor::api_name);
             property != table.end()) {
             property->persistence = PersistenceClass::runtime_only;
