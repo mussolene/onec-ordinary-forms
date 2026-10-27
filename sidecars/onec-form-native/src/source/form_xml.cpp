@@ -3521,8 +3521,6 @@ private:
             true,
             control.kind());
         write_position(control.position);
-        if (const auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload))
-            write_dendrogram_payload(*dendrogram, id);
         if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
             spreadsheet != nullptr && !spreadsheet->cells.empty()) {
             writer_.open("Document");
@@ -3587,6 +3585,16 @@ private:
                     entry != nullptr && !equals_descriptor_default(property, entry->value))
                     write_property(property, entry->value, id);
             }
+        } else if (const auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload)) {
+            const auto properties = metamodel_.properties_for(control.kind());
+            const auto items = std::ranges::find(properties, "Items", &mm::PropertyDescriptor::api_name);
+            if (items == properties.end() || items + 1 == properties.end() || (items + 1)->api_name != "Links")
+                throw std::logic_error("Dendrogram Items and Links descriptors are not adjacent");
+            const auto offset = static_cast<std::size_t>(items - properties.begin());
+            write_property_set(control.properties(), properties.first(offset), id);
+            write_property_set(control.properties(), properties.subspan(offset, 2), id);
+            write_dendrogram_payload(*dendrogram, id);
+            write_property_set(control.properties(), properties.subspan(offset + 2), id);
         } else {
             write_property_set(control.properties(), metamodel_.properties_for(control.kind()), id);
         }

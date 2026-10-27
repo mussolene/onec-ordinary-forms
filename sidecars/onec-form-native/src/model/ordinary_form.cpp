@@ -352,6 +352,7 @@ std::optional<PropertyValue> materialize_default(
             }
             if (value.canonical == "StyleColors.ButtonTextColor" ||
                 value.canonical == "StyleColors.ButtonBackColor" ||
+                value.canonical == "StyleColors.FormBackColor" ||
                 value.canonical == "StyleColors.ButtonBorderColor" ||
                 value.canonical == "StyleColors.BorderColor" ||
                 value.canonical == "StyleColors.SpecialTextColor" ||

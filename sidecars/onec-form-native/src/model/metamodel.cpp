@@ -732,6 +732,9 @@ void apply_proven_storage_overrides(
         "automatic", {ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
             ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
             ControlKind::track_bar});
+    classify_shared_control_property("BackColor", StorageCodec::control_base, DefaultKind::color,
+        "StyleColors.FormBackColor", {ControlKind::chart, ControlKind::gantt_chart,
+            ControlKind::dendrogram, ControlKind::pivot_chart});
     classify_shared_control_property("FieldBackColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::check_box, ControlKind::choice_field, ControlKind::input_field,
             ControlKind::list_box, ControlKind::radio_button, ControlKind::calendar_field, ControlKind::table});

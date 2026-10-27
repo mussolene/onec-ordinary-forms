@@ -852,7 +852,8 @@ LV encode_control_color(const model::ColorValue& color, std::string_view path) {
             "Control colors support named style references only");
     }
     std::int32_t style_id = 0;
-    if (name->value == "StyleColors.ButtonTextColor") style_id = -21;
+    if (name->value == "StyleColors.FormBackColor") style_id = -1;
+    else if (name->value == "StyleColors.ButtonTextColor") style_id = -21;
     else if (name->value == "StyleColors.ButtonBackColor") style_id = -7;
     else if (name->value == "StyleColors.ButtonBorderColor") style_id = -34;
     else if (name->value == "StyleColors.BorderColor") style_id = -22;
@@ -894,7 +895,8 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
         require_arity(value.items[2], 1, child_path(path, 2));
         const auto style_id = integer_atom<std::int32_t>(value.items[2].items[0], child_path(path, 2) + "/0");
         std::string_view style_name;
-        if (style_id == -21) style_name = "StyleColors.ButtonTextColor";
+        if (style_id == -1) style_name = "StyleColors.FormBackColor";
+        else if (style_id == -21) style_name = "StyleColors.ButtonTextColor";
         else if (style_id == -7) style_name = "StyleColors.ButtonBackColor";
         else if (style_id == -34) style_name = "StyleColors.ButtonBorderColor";
         else if (style_id == -22) style_name = "StyleColors.BorderColor";
@@ -911,6 +913,42 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
     }
     fail("OOF1114", child_path(path, 1), "Control color kind 0, 3, or 4", std::to_string(kind),
         "Control color storage kind is unsupported");
+}
+
+model::ColorValue chart_back_color_default() {
+    model::ColorValue color;
+    color.kind = model::ColorKind::style_reference;
+    color.style = model::QualifiedName{"StyleColors.FormBackColor"};
+    return color;
+}
+
+model::ColorValue decode_chart_back_color(const LV& info, std::size_t first, std::size_t second,
+                                          std::string_view path) {
+    const auto color = decode_control_color(at(info, first, path), child_path(path, first));
+    const auto companion = decode_control_color(at(info, second, path), child_path(path, second));
+    if (color == chart_back_color_default()) {
+        if (companion != model::ColorValue{})
+            fail("OOF1114", child_path(path, second), "automatic companion for default BackColor", "different color", "Chart BackColor pair is inconsistent");
+    } else if (color != companion) {
+        fail("OOF1114", child_path(path, second), "matching BackColor companion", "different color", "Chart BackColor pair is inconsistent");
+    }
+    return color;
+}
+
+void encode_chart_back_color(LV& info, std::size_t first, std::size_t second,
+                             const model::PropertySet& properties, std::string_view path) {
+    auto color = chart_back_color_default();
+    if (const auto* entry = properties.find(model::PropertyId::from_name("BackColor"))) {
+        const auto* value = std::get_if<model::ColorValue>(&entry->value);
+        if (!value) fail("OOF1122", std::string(path), "ColorValue", "different value type", "Chart BackColor has the wrong type");
+        color = *value;
+    }
+    info.items.at(first) = encode_control_color(color, path);
+    info.items.at(second) = encode_control_color(color == chart_back_color_default() ? model::ColorValue{} : color, path);
+}
+
+std::pair<std::size_t, std::size_t> chart_back_color_slots(std::size_t series, std::size_t points) {
+    return {39 + 11 * (series + points), 214 + 13 * series + 12 * points + 4 * series * points};
 }
 
 model::ColorValue explicit_control_color(const model::PropertySet& properties, std::string_view name,
@@ -4102,7 +4140,13 @@ DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
     std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete);
 std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path);
 
-std::vector<DecodedControlEvent> extract_embedded_chart_events(
+struct EmbeddedChartEvents {
+    std::vector<DecodedControlEvent> events;
+    std::size_t back_first;
+    std::size_t back_second;
+};
+
+EmbeddedChartEvents extract_embedded_chart_events(
     LV& chart, const std::string& path, model::ControlKind kind) {
     require_arity(chart, 3, path);
     auto& info = chart.items[2];
@@ -4110,7 +4154,7 @@ std::vector<DecodedControlEvent> extract_embedded_chart_events(
     require_list(info, info_path);
     const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
     const auto series_size = static_cast<std::size_t>(series_count);
-    if (series_size >= std::numeric_limits<std::size_t>::max() / 11)
+    if (series_size > (std::numeric_limits<std::size_t>::max() - 17) / 11)
         fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Embedded Chart Series count overflows its offset");
     const auto points_offset = std::size_t{5} + 11 * (series_size + 1) + 1;
     const auto point_count = integer_atom<std::uint32_t>(at(info, points_offset, info_path), child_path(info_path, points_offset));
@@ -4126,7 +4170,8 @@ std::vector<DecodedControlEvent> extract_embedded_chart_events(
         info.items.erase(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1));
         info.items[flag] = raw("0");
     }
-    return events;
+    const auto [first, second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count));
+    return {std::move(events), first, second};
 }
 
 // Общий блок диаграммы проверяется тем же кодеком у всех его владельцев.
@@ -4181,6 +4226,7 @@ DecodedControl decode_default_complex_control(
         fail("OOF1122", child_path(path, 1), "positive int64 control ID", std::to_string(id), "Default complex control ID is invalid");
     std::vector<DecodedControlEvent> named_events;
     model::ColorValue border_color;
+    auto back_color = chart_back_color_default();
     if (kind == model::ControlKind::graphical_schema_field) {
         require_arity(record.items[2], 6, child_path(path, 2));
         require_arity(record.items[2].items[0], 21, child_path(child_path(path, 2), 0));
@@ -4195,7 +4241,17 @@ DecodedControl decode_default_complex_control(
     } else if (kind == model::ControlKind::pivot_chart) {
         require_arity(record.items[2], 13, child_path(path, 2));
         require_raw_constant(record.items[2].items[0], "3", child_path(child_path(path, 2), 0));
-        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_default_pivot_chart_info()))
+        auto normalized_info = record.items[2];
+        require_arity(normalized_info.items[1], 3, child_path(child_path(path, 2), 1));
+        const auto renderer_path = child_path(child_path(child_path(path, 2), 1), 2);
+        const auto& renderer = normalized_info.items[1].items[2];
+        require_arity(renderer, 386, renderer_path);
+        require_raw_constant(renderer.items[0], "75", child_path(renderer_path, 0));
+        require_raw_constant(renderer.items[4], "4", child_path(renderer_path, 4));
+        require_raw_constant(renderer.items[61], "4", child_path(renderer_path, 61));
+        back_color = decode_chart_back_color(renderer, 127, 378, renderer_path);
+        encode_chart_back_color(normalized_info.items[1].items[2], 127, 378, {}, "$/PivotChart/BackColor");
+        if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_default_pivot_chart_info()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "PivotChart");
     } else {
         require_arity(record.items[2], 21, child_path(path, 2));
@@ -4230,6 +4286,7 @@ DecodedControl decode_default_complex_control(
         : model::ControlPayload{model::GeographicalSchemaFieldPayload{}};
     model::ControlNode control{model::ObjectId{id}, name, std::move(payload)};
     if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    if (kind == model::ControlKind::pivot_chart && back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     control.position = std::move(geometry.position);
     return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
@@ -4408,6 +4465,7 @@ LV encode_gantt_chart_info(const model::ControlNode& control) {
         u > (std::numeric_limits<std::size_t>::max() - 33 - 2 * n) / 2)
         fail("OOF1112", "$/GanttChart/Intervals", "safe dynamic count arithmetic", "overflow", "Gantt data is too large");
     LV base = canonical_empty_gantt_info();
+    encode_chart_back_color(base.items[1].items[2], 39, 214, control.properties(), "$/GanttChart/BackColor");
     require_arity(base, 33, "$/GanttChart/InfoDefaults");
     base.items[2] = gantt_dimension_table(*data, true);
     base.items[3] = gantt_dimension_table(*data, false);
@@ -4709,6 +4767,12 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
         fail("OOF1102", info_path, "33 + 2*N + 2*U fields", std::to_string(info.items.size()), "Gantt dynamic info cursor differs from the supported profile");
     bool auto_full = bool_atom(info.items[11 + shift], child_path(info_path, 11 + shift));
     model::ControlNode control{model::ObjectId{id}, "", std::move(payload)};
+    auto event_normalized = info;
+    auto embedded = extract_embedded_chart_events(event_normalized.items[1], child_path(info_path, 1),
+        model::ControlKind::gantt_chart);
+    auto named_events = std::move(embedded.events);
+    const auto back_color = decode_chart_back_color(event_normalized.items[1].items[2], embedded.back_first, embedded.back_second, child_path(child_path(info_path, 1), 2));
+    if (back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     if (!auto_full) control.properties().set_explicit(model::PropertyId::from_name("AutoFullInterval"), false);
     if (!auto_full) {
         control.properties().set_explicit(model::PropertyId::from_name("FullIntervalBegin"),
@@ -4724,11 +4788,9 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     LV normalized = info;
     normalized.items[2] = expected.items[2];
     normalized.items[3] = expected.items[3];
-    auto event_normalized = info;
-    auto named_events = extract_embedded_chart_events(event_normalized.items[1], child_path(info_path, 1),
-        model::ControlKind::gantt_chart);
     LV expected_with_platform_layout = expected;
-    normalize_gantt_runtime_layout_values(event_normalized, expected_with_platform_layout, info_path);
+    if (embedded.back_first == 39 && embedded.back_second == 214)
+        normalize_gantt_runtime_layout_values(event_normalized, expected_with_platform_layout, info_path);
     validate_embedded_chart_info(event_normalized.items[1], expected_with_platform_layout.items[1],
         child_path(info_path, 1), id, "GanttChart", warnings, reconstruction_complete);
     normalized.items[1] = expected_with_platform_layout.items[1];
@@ -6270,7 +6332,10 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     require_arity(limits, 5, "$/Chart/Info/Limits");
     limits.items.at(3) = raw(explicit_bool(properties, "AutoMaxValue", true) ? "0" : "2");
     limits.items.at(4) = raw(explicit_bool(properties, "AutoMinValue", true) ? "0" : "2");
-    return list(std::move(info));
+    auto result = list(std::move(info));
+    const auto [back_first, back_second] = chart_back_color_slots(series_count, point_count);
+    encode_chart_back_color(result, back_first, back_second, properties, "$/Chart/BackColor");
+    return result;
 }
 
 
@@ -6291,7 +6356,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "Outline", "Light", "Gradient", "SeriesInRows", "HideBaseValue", "AutoTransposition",
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
-        "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat"}, "$/Chart");
+        "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6455,6 +6520,9 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     payload.summary_series.marker = summary_marker;
     payload.summary_series.color = summary_color;
     model::PropertySet properties;
+    const auto [back_first, back_second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count));
+    const auto back_color = decode_chart_back_color(info, back_first, back_second, info_path);
+    if (back_color != chart_back_color_default()) properties.set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     for (const auto& spec : chart_boolean_properties) {
         const auto index = middle_start + spec.offset;
         const bool stored = bool_atom(at(info, index, info_path), child_path(info_path, index));
@@ -7776,7 +7844,12 @@ DecodedControl decode_dendrogram(
     normalized_data.items[3] = expected_data.items[3];
     auto embedded_chart = record.items[2].items[1];
     const auto embedded_path = child_path(data_path, 1);
-    auto named_events = extract_embedded_chart_events(embedded_chart, embedded_path, model::ControlKind::dendrogram);
+    auto embedded = extract_embedded_chart_events(embedded_chart, embedded_path, model::ControlKind::dendrogram);
+    auto named_events = std::move(embedded.events);
+    const auto back_color = decode_chart_back_color(embedded_chart.items[2], embedded.back_first, embedded.back_second, child_path(embedded_path, 2));
+    model::PropertySet chart_properties;
+    if (back_color != chart_back_color_default()) chart_properties.set_explicit(model::PropertyId::from_name("BackColor"), back_color);
+    encode_chart_back_color(expected_data.items[1].items[2], 39, 214, chart_properties, "$/Dendrogram/BackColor");
     validate_embedded_chart_info(embedded_chart, expected_data.items[1],
         child_path(data_path, 1), raw_id, "Dendrogram", warnings, reconstruction_complete);
     normalized_data.items[1] = expected_data.items[1];
@@ -7796,6 +7869,7 @@ DecodedControl decode_dendrogram(
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Dendrogram cannot contain storage children");
     model::ControlNode control{model::ObjectId{raw_id}, name, std::move(graph)};
+    if (back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     if (orientation != 0) {
         control.properties().set_explicit(model::PropertyId::from_name("Orientation"), model::EnumerationValue{
             "DendrogramOrientation", "Down"});
@@ -9568,7 +9642,7 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
         !control.children.empty() || (control.kind() == model::ControlKind::pivot_chart && !control.events.empty()))
         fail("OOF1122", path, "named default complex control without DataPath, events, extensions, or children", control.name,
             "Default complex control uses an unsupported storage concept");
-    if (control.kind() == model::ControlKind::pivot_chart) require_allowed_properties(control.properties(), {}, path);
+    if (control.kind() == model::ControlKind::pivot_chart) require_allowed_properties(control.properties(), {"BackColor"}, path);
     else require_allowed_properties(control.properties(), {"BorderColor"}, path);
     std::vector<LV> fields{raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value()))};
     if (control.kind() == model::ControlKind::graphical_schema_field) {
@@ -9577,6 +9651,7 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
         fields.back().items[3] = encode_control_event_collection(document, control, path + "/Events");
     } else if (control.kind() == model::ControlKind::pivot_chart) {
         fields.push_back(canonical_default_pivot_chart_info());
+        encode_chart_back_color(fields.back().items[1].items[2], 127, 378, control.properties(), path + "/BackColor");
     } else {
         fields.push_back(canonical_geographical_schema_field_info());
         fields.back().items[6] = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "GeographicalSchemaField"), path + "/BorderColor");
@@ -9687,12 +9762,13 @@ LV encode_dendrogram(const model::OrdinaryFormDocument& document, const model::C
         fail("OOF1122", "$/Dendrogram", "named Dendrogram with plain Position", control.name,
             "Dendrogram uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Orientation"}, "$/Dendrogram");
+    require_allowed_properties(control.properties(), {"Orientation", "BackColor"}, "$/Dendrogram");
     const auto orientation = explicit_enum_storage_value(control.properties(), "Dendrogram", "Orientation",
         "DendrogramOrientation", 0, {{"Up", 0}, {"Down", 1}});
     const auto& graph = std::get<model::DendrogramPayload>(control.payload);
     validate_dendrogram_graph(graph, "$/Dendrogram");
     LV data = canonical_dendrogram_data(orientation);
+    encode_chart_back_color(data.items[1].items[2], 39, 214, control.properties(), "$/Dendrogram/BackColor");
     if (!control.events.empty()) {
         auto& info = data.items.at(1).items.at(2);
         constexpr std::size_t flag = 112;
@@ -11288,7 +11364,7 @@ Result<list_stream::ListValue> encode_document(
                         control->position.collapse.is_explicit() || !control->position.bindings.dimensions.empty())
                         fail("OOF1122", child_path(path, ordinal), "childless GanttChart with basic Position", control->name,
                             "GanttChart uses an unsupported storage concept");
-                    require_allowed_properties(control->properties(), {"AutoFullInterval", "FullIntervalBegin", "FullIntervalEnd"},
+                    require_allowed_properties(control->properties(), {"AutoFullInterval", "FullIntervalBegin", "FullIntervalEnd", "BackColor"},
                         child_path(path, ordinal) + "/GanttChart");
                     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
                     auto gantt_info = encode_gantt_chart_info(*control);

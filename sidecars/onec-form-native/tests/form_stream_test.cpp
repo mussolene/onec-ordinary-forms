@@ -10229,6 +10229,19 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
         "ProgressBar ID above int64 must be rejected before encoding");
 }
 
+void test_dendrogram_rejects_scalar_owned_collections() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="2" name="Tree"><Position/></Dendrogram></ChildItems></Form>)XML";
+    for (const auto property : {"Items", "Links"}) {
+        auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "Dendrogram scalar collection fixture must parse");
+        auto* control = const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{2}));
+        expect(control != nullptr, "Dendrogram fixture must contain its control");
+        control->properties().set_explicit(model::PropertyId::from_name(property), std::string("invalid scalar"));
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(!serialized.ok() && !serialized.diagnostics().empty(), "scalar Dendrogram Items or Links must be rejected");
+    }
+}
+
 void test_dendrogram_orientation_named_codec() {
     constexpr std::string_view xml =
         R"OOF(<Form id="1" name="DendrogramForm" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="4" name="Hierarchy"><Position/><Orientation type="DendrogramOrientation" member="Down"/></Dendrogram></ChildItems></Form>)OOF";
@@ -14967,6 +14980,41 @@ void test_chart_named_boolean_properties() {
                     "Chart Boolean properties must round-trip with data");
             }
         }
+        {
+            auto default_document = make_document(series_count, point_count, std::nullopt, true);
+            auto* control = const_cast<model::ControlNode*>(default_document.find_control(model::ObjectId{2}));
+            model::ColorValue default_color;
+            default_color.kind = model::ColorKind::style_reference;
+            default_color.style = model::QualifiedName{"StyleColors.FormBackColor"};
+            control->properties().set_explicit(model::PropertyId::from_name("BackColor"), default_color);
+            auto encoded = form_stream::encode_document(default_document);
+            expect(encoded.ok(), "explicit default Chart BackColor must encode");
+            const auto first = 39 + 11 * (series_count + point_count);
+            const auto second = 214 + 13 * series_count + 12 * point_count + 4 * series_count * point_count;
+            auto& info = find_chart_record(encoded.value())->items[3];
+            expect(list_stream::dump_compact(info.items[first]) == "{4,3,{-1},3}" &&
+                list_stream::dump_compact(info.items[second]) == "{4,4,{0},4}", "default must restore the native pair");
+            info.items[second] = list_stream::parse("{4,3,{-1},3}");
+            expect(!form_stream::decode_document(encoded.value()), "default with a nonautomatic companion must fail");
+        }
+        for (const auto& color_record : {"{4,0,{7029541},0}", "{4,3,{-22},3}", "{4,4,{0},4}"}) {
+            auto document = make_document(series_count, point_count, std::nullopt, true);
+            auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), "Chart color fixture must encode");
+            const auto first = 39 + 11 * (series_count + point_count);
+            const auto second = 214 + 13 * series_count + 12 * point_count + 4 * series_count * point_count;
+            auto& info = find_chart_record(encoded.value())->items[3];
+            info.items[first] = list_stream::parse(color_record);
+            info.items[second] = list_stream::parse(color_record);
+            const auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "matching Chart BackColor pair must decode");
+            const auto rebuilt = form_stream::encode_document(decoded.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                "Chart BackColor must round-trip with dimensions and other properties");
+            auto wrong = encoded.value();
+            find_chart_record(wrong)->items[3].items[second] = list_stream::parse("{4,0,{123},0}");
+            expect(!form_stream::decode_document(wrong), "inconsistent Chart BackColor pair must fail");
+        }
         auto damaged = form_stream::encode_document(make_document(series_count, point_count, std::nullopt, true));
         expect(damaged.ok(), "Chart paired limit fixture must encode");
         auto* record = find_chart_record(damaged.value());
@@ -15136,8 +15184,8 @@ void test_complex_control_named_events() {
                 model::ColorValue border_color;
                 border_color.kind = model::ColorKind::absolute;
                 border_color.red = 17; border_color.green = 39; border_color.blue = 81;
-                if (spec.kind != model::ControlKind::gantt_chart)
-                    const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{2}))->properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+                const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{2}))->properties().set_explicit(
+                    model::PropertyId::from_name(spec.kind == model::ControlKind::gantt_chart ? "BackColor" : "BorderColor"), border_color);
                 const auto encoded = form_stream::encode_document(parsed.value());
                 expect(encoded.ok(), "complex control event fixture must encode");
                 auto native = encoded.value();
@@ -15172,6 +15220,10 @@ void test_complex_control_named_events() {
                     expect(!form_stream::decode_document(invalid), "invalid BorderColor must fail closed");
                     const auto repeated = form_stream::encode_document(decoded.value());
                     expect(repeated.ok() && list_stream::dump_compact(repeated.value()) == list_stream::dump_compact(encoded.value()), "BorderColor and events must preserve native stream");
+                }
+                if (spec.kind == model::ControlKind::gantt_chart) {
+                    const auto* color = control->properties().find(model::PropertyId::from_name("BackColor"));
+                    expect(color && std::get<model::ColorValue>(color->value) == border_color, "Gantt BackColor must survive events");
                 }
                 expect(control && control->events.size() == ((mask & 1U) ? 1U : 0U) + ((mask & 2U) ? 1U : 0U), "event count must round trip");
                 for (const auto& ref : control->events) {
@@ -15230,6 +15282,10 @@ void test_dendrogram_named_events() {
             xml += "</Dendrogram></ChildItems></Form>";
             const auto document = source::parse_form_xml(xml);
             expect(document.ok(), "Dendrogram event fixture must parse");
+            model::ColorValue back_color;
+            back_color.kind = model::ColorKind::absolute;
+            back_color.red = 37; back_color.green = 67; back_color.blue = 107;
+            const_cast<model::ControlNode*>(document.value().find_control(model::ObjectId{2}))->properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
             const auto encoded = form_stream::encode_document(document.value());
             expect(encoded.ok(), "Dendrogram event fixture must encode");
             auto stream = encoded.value();
@@ -15247,6 +15303,8 @@ void test_dendrogram_named_events() {
             expect(decoded.ok() && decoded.value().reconstruction_complete(), "Dendrogram events and graph must decode completely");
             const auto* control = decoded.value().find_control(model::ObjectId{2});
             expect(control && control->events.size() == ((mask & 1U) ? 1U : 0U) + ((mask & 2U) ? 1U : 0U), "Dendrogram events must survive");
+            const auto* color = control->properties().find(model::PropertyId::from_name("BackColor"));
+            expect(color && std::get<model::ColorValue>(color->value) == back_color, "Dendrogram BackColor must survive events");
             for (const auto& reference : control->events) {
                 const auto* event = decoded.value().find_event(reference.id());
                 expect(event && std::holds_alternative<model::ControlRef>(event->owner) &&
@@ -15302,6 +15360,10 @@ void test_chart_named_events() {
         model::ControlNode control{model::ObjectId{2}, "Chart", std::move(chart)};
         control.properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
         control.properties().set_explicit(model::PropertyId::from_name("AutoMaxValue"), false);
+        model::ColorValue back_color;
+        back_color.kind = model::ColorKind::absolute;
+        back_color.red = 37; back_color.green = 67; back_color.blue = 107;
+        control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
         for (std::size_t i = 0; i < selected.size(); ++i) {
             const model::ObjectId id{100 + i}; control.events.push_back(model::EventRef{id});
             document.add_event(model::Event{id, selected[i].first, std::string("Handle") + selected[i].first,
@@ -16544,6 +16606,124 @@ void test_partial_complex_and_spreadsheet_profiles_rebuild_from_xml() {
 }
 
 
+void test_embedded_chart_dynamic_back_color() {
+    for (const auto kind : {model::ControlKind::gantt_chart, model::ControlKind::dendrogram}) {
+        for (const auto [series_count, point_count] : std::array{std::pair{1U, 1U}, std::pair{2U, 3U}}) {
+            for (const bool with_event : {false, true}) {
+                model::Form chart_form;
+                chart_form.id = model::ObjectId{1}; chart_form.name = "Main";
+                chart_form.children = {model::ControlRef{model::ObjectId{2}}};
+                model::OrdinaryFormDocument chart_document(std::move(chart_form));
+                model::ChartPayload chart;
+                for (unsigned i = 0; i < series_count; ++i) {
+                    model::ChartSeries series; series.id = model::ObjectId{10 + i};
+                    series.text = "Series"; series.marker = {"ChartMarkerType", "Auto"};
+                    series.color.kind = model::ColorKind::absolute;
+                    series.color.red = static_cast<std::uint8_t>(i + 1);
+                    chart.series.push_back(std::move(series));
+                }
+                for (unsigned i = 0; i < point_count; ++i) {
+                    model::ChartPoint point; point.id = model::ObjectId{20 + i}; point.text = "Point";
+                    point.color.kind = model::ColorKind::absolute;
+                    point.color.blue = static_cast<std::uint8_t>(i + 1);
+                    chart.points.push_back(std::move(point));
+                }
+                for (const auto& series : chart.series) for (const auto& point : chart.points)
+                    chart.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
+                model::ControlNode chart_control{model::ObjectId{2}, "Chart", std::move(chart)};
+                model::ColorValue color; color.kind = model::ColorKind::absolute;
+                color.red = 37; color.green = 67; color.blue = 107;
+                chart_control.properties().set_explicit(model::PropertyId::from_name("BackColor"), color);
+                chart_document.add_control(std::move(chart_control));
+                auto chart_stream = form_stream::encode_document(chart_document);
+                expect(chart_stream.ok(), chart_stream ? "nonempty Chart fixture must encode" :
+                    chart_stream.diagnostics().front().code + ": " + chart_stream.diagnostics().front().path + ": " + chart_stream.diagnostics().front().message);
+                auto chart_info = find_chart_record(chart_stream.value())->items[3];
+
+                model::Form owner_form;
+                owner_form.id = model::ObjectId{1}; owner_form.name = "Main";
+                owner_form.children = {model::ControlRef{model::ObjectId{2}}};
+                model::OrdinaryFormDocument owner_document(std::move(owner_form));
+                model::ControlPayload payload = kind == model::ControlKind::gantt_chart
+                    ? model::ControlPayload{model::GanttChartPayload{}} : model::ControlPayload{model::DendrogramPayload{}};
+                model::ControlNode owner{model::ObjectId{2}, "Owner", std::move(payload)};
+                if (with_event) {
+                    owner.events.push_back(model::EventRef{model::ObjectId{100}});
+                    owner_document.add_event(model::Event{model::ObjectId{100},
+                        kind == model::ControlKind::gantt_chart ? "OnIntervalEditEnd" : "Selection", "Handler",
+                        model::EventOwner{model::ControlRef{model::ObjectId{2}}}});
+                }
+                owner_document.add_control(std::move(owner));
+                auto encoded = form_stream::encode_document(owner_document);
+                expect(encoded.ok(), "owner fixture must encode");
+                const auto guid = model::metamodel::descriptor_for(kind).guid;
+                auto* record = find_record_with_guid(encoded.value(), guid);
+                auto& embedded = record->items[2].items[1].items[2];
+                const auto flag = 112 + 11 * (series_count + point_count);
+                if (with_event) {
+                    chart_info.items[flag] = list_stream::ListValue::raw_atom("1");
+                    chart_info.items.insert(chart_info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1), embedded.items[113]);
+                }
+                embedded = std::move(chart_info);
+                const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+                expect(decoded.ok() && !decoded.value().reconstruction_complete(), decoded ?
+                    "nonempty embedded Chart must remain a partial projection" :
+                    decoded.diagnostics().front().code + ": " + decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+                const auto* result = decoded.value().find_control(model::ObjectId{2});
+                const auto* back = result->properties().find(model::PropertyId::from_name("BackColor"));
+                expect(back && std::get<model::ColorValue>(back->value) == color && result->events.size() == (with_event ? 1U : 0U),
+                    "dynamic embedded BackColor and owner event must survive");
+                auto broken = encoded.value();
+                const auto second = 214 + 13 * series_count + 12 * point_count + 4 * series_count * point_count + (with_event ? 1 : 0);
+                find_record_with_guid(broken, guid)->items[2].items[1].items[2].items[second] = list_stream::parse("{4,0,{123},0}");
+                expect(!form_stream::decode_document(broken, "Main"), "dynamic embedded mismatched pair must fail");
+            }
+        }
+    }
+}
+
+void test_complex_chart_back_color_pairs() {
+    for (const auto kind : {model::ControlKind::gantt_chart, model::ControlKind::dendrogram,
+                            model::ControlKind::pivot_chart}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "Main";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlPayload payload = kind == model::ControlKind::gantt_chart
+            ? model::ControlPayload{model::GanttChartPayload{}}
+            : kind == model::ControlKind::dendrogram ? model::ControlPayload{model::DendrogramPayload{}}
+            : model::ControlPayload{model::PivotChartPayload{}};
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Control", std::move(payload)});
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "complex chart fixture must encode");
+        const auto guid = model::metamodel::descriptor_for(kind).guid;
+        for (const auto& malformed : {"{}", "{0}", "{0,{11}}", "{0,{11},{}}"}) {
+            auto broken = encoded.value();
+            find_record_with_guid(broken, guid)->items[2].items[1] = list_stream::parse(malformed);
+            expect(!form_stream::decode_document(broken, "Main"), "truncated embedded chart must fail safely");
+        }
+        for (const auto& color_record : {"{4,0,{7029541},0}", "{4,3,{-22},3}", "{4,4,{0},4}"}) {
+            auto changed = encoded.value();
+            auto* record = find_record_with_guid(changed, guid);
+            expect(record != nullptr, "complex chart record must exist");
+            auto& chart = record->items[2].items[1].items[2];
+            const auto first = kind == model::ControlKind::pivot_chart ? 127U : 39U;
+            const auto second = kind == model::ControlKind::pivot_chart ? 378U : 214U;
+            chart.items[first] = list_stream::parse(color_record);
+            chart.items[second] = list_stream::parse(color_record);
+            const auto decoded = form_stream::decode_document(changed, "Main");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "complex chart BackColor pair must decode");
+            const auto rebuilt = form_stream::encode_document(decoded.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(changed),
+                "complex chart BackColor must rebuild from the named property");
+            auto wrong = changed;
+            find_record_with_guid(wrong, guid)->items[2].items[1].items[2].items[second] = list_stream::parse("{4,0,{123},0}");
+            expect(!form_stream::decode_document(wrong, "Main"), "complex chart mismatched BackColor must fail");
+        }
+    }
+}
+
 void test_pivot_chart_default_factory_round_trip_and_rejections() {
     const auto parsed = oof::source::parse_form_xml(R"XML(<Form id="1" name="DefaultPivot" ordinaryFormVersion="2.1"><ChildItems>
       <PivotChart id="77" name="Pivot"><Position><Top>25</Top><Height>140</Height><Left>40</Left><Width>200</Width></Position></PivotChart>
@@ -16580,14 +16760,8 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
     }
     auto changed_renderer = encoded.value();
     changed_renderer.items[1].items[2].items[2].items[1].items[2].items[1].items[2].items[4] = list_stream::ListValue::raw_atom("0");
-    const auto partial_renderer = form_stream::decode_document(changed_renderer, "DefaultPivot");
-    const auto* partial_pivot = partial_renderer ?
-        partial_renderer.value().find_control(model::ObjectId{77}) : nullptr;
-    expect(partial_renderer.ok() && !partial_renderer.value().reconstruction_complete() &&
-               std::any_of(partial_renderer.diagnostics().begin(), partial_renderer.diagnostics().end(),
-                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
-               partial_pivot != nullptr && partial_pivot->name == "Pivot",
-        "changed Pivot renderer must warn and preserve the named Pivot control");
+    expect(!form_stream::decode_document(changed_renderer, "DefaultPivot"),
+        "Pivot renderer with unsupported dimensions must fail before reading BackColor");
 }
 
 }  // namespace
@@ -16595,6 +16769,8 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
 int main() {
     try {
         test_data_processor_form_extension_named_round_trip_and_guards();
+        test_embedded_chart_dynamic_back_color();
+        test_complex_chart_back_color_pairs();
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_partial_complex_and_spreadsheet_profiles_rebuild_from_xml();
@@ -16690,6 +16866,7 @@ int main() {
         test_calendar_field_captured_begin_period_record_decode();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
+        test_dendrogram_rejects_scalar_owned_collections();
         test_dendrogram_orientation_named_codec();
         test_dendrogram_strict_native_fixture();
         test_dendrogram_named_graph_candidate_roundtrip();

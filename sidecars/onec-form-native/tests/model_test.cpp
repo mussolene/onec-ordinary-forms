@@ -1121,6 +1121,10 @@ void test_shared_control_default_classifications() {
                DefaultKind::font, "automatic,bold=true", ValueCodec::font),
         "UsualGroup must expose its observed automatic bold Font default");
     constexpr std::array named_base_colors{
+        std::tuple{ControlKind::chart, std::string_view{"BackColor"}, std::string_view{"StyleColors.FormBackColor"}},
+        std::tuple{ControlKind::gantt_chart, std::string_view{"BackColor"}, std::string_view{"StyleColors.FormBackColor"}},
+        std::tuple{ControlKind::dendrogram, std::string_view{"BackColor"}, std::string_view{"StyleColors.FormBackColor"}},
+        std::tuple{ControlKind::pivot_chart, std::string_view{"BackColor"}, std::string_view{"StyleColors.FormBackColor"}},
         std::tuple{ControlKind::check_box, std::string_view{"TextColor"}, std::string_view{"automatic"}},
         std::tuple{ControlKind::check_box, std::string_view{"FieldTextColor"}, std::string_view{"automatic"}},
         std::tuple{ControlKind::check_box, std::string_view{"BackColor"}, std::string_view{"automatic"}},
@@ -1299,6 +1303,9 @@ void test_document_property_api() {
     document.add_control(ControlNode{ObjectId{17}, "Dendrogram", DendrogramPayload{}});
     document.add_control(ControlNode{ObjectId{19}, "Radio", RadioButtonPayload{}});
     document.add_control(ControlNode{ObjectId{21}, "List", ListBoxPayload{}});
+    document.add_control(ControlNode{ObjectId{22}, "Chart", ChartPayload{}});
+    document.add_control(ControlNode{ObjectId{23}, "GanttChart", GanttChartPayload{}});
+    document.add_control(ControlNode{ObjectId{24}, "PivotChart", PivotChartPayload{}});
     ControlNode active_x_node{ObjectId{18}, "ActiveX", ActiveXControlPayload{}};
     active_x_node.properties().set_explicit(PropertyId::from_name("CLSID"), std::string("existing"));
     document.add_control(std::move(active_x_node));
@@ -1317,6 +1324,18 @@ void test_document_property_api() {
     const auto radio = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{19}};
     const auto list_box = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{21}};
     const auto active_x = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{18}};
+
+    for (const auto id : {17, 22, 23, 24}) {
+        const auto result = document.get_prop_val(
+            OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{static_cast<unsigned>(id)}},
+            PropertyId::from_name("BackColor"));
+        const auto* color = result.value ? std::get_if<ColorValue>(&*result.value) : nullptr;
+        const auto* style = color ? std::get_if<QualifiedName>(&color->style) : nullptr;
+        expect(result.status == PropertyReadStatus::proven_default && color &&
+                   color->kind == ColorKind::style_reference &&
+                   style && *style == QualifiedName{"StyleColors.FormBackColor"},
+            "chart BackColor must expose the form background style reference as its default");
+    }
 
     const auto input_enabled = document.get_prop_val(input, PropertyId::from_name("Enabled"));
     expect(input_enabled.status == PropertyReadStatus::proven_default &&

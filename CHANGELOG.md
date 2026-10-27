@@ -2,6 +2,9 @@
 
 ## 1.0.0 - Не выпущен
 
+- Добавлено сохранение BackColor для Chart, PivotChart, GanttChart и
+  Dendrogram с проверкой связанных записей цвета.
+
 - Добавлено сохранение рамки TextDocumentField и цвета рамки
   HTMLDocumentField, GeographicalSchemaField и GraphicalSchemaField.
 
