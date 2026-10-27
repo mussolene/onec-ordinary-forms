@@ -1141,6 +1141,14 @@ void apply_proven_storage_overrides(
         DefaultKind::enumeration, "Orientation.Auto");
     std::ranges::find(track_bar, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
+    auto& text_document_field = properties[static_cast<std::size_t>(ControlKind::text_document_field)];
+    if (const auto selected_text = std::ranges::find(text_document_field, "SelectedText", &PropertyDescriptor::api_name);
+        selected_text != text_document_field.end()) {
+        selected_text->persistence = PersistenceClass::runtime_only;
+        selected_text->storage_codec = StorageCodec::none;
+        selected_text->default_value = {DefaultKind::none, {}};
+    }
+
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
     for (const auto name : {"Picture", "ChoiceButtonPicture", "SelButtonPicture"}) {
         classify_property(input_field, name, StorageCodec::picture_record, DefaultKind::none, "");

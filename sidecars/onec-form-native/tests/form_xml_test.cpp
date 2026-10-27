@@ -1913,6 +1913,22 @@ void test_standard_picture_xml_reference_roundtrip() {
     expect(!source::parse_form_xml(unknown).ok(), "unknown standard picture names must be rejected");
 }
 
+void test_text_document_selected_text_runtime_only() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="TextSelection" ordinaryFormVersion="2.1"><ChildItems><TextDocumentField id="2" name="Text"><Position/></TextDocumentField></ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "TextDocumentField fixture must parse");
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+    const auto property = model::PropertyId::from_name("SelectedText");
+    expect(parsed.value().set_prop_val(owner, property, std::string("abc")) == model::PropertyMutationStatus::applied_runtime_only,
+        "selected text must be identified as runtime-only");
+    expect(!source::serialize_form_xml(parsed.value()).ok(), "runtime selection must not serialize into Form.xml");
+    expect(parsed.value().reset_prop_val(owner, property) == model::PropertyMutationStatus::reset_runtime_only,
+        "runtime selection must be resettable");
+    expect(source::serialize_form_xml(parsed.value()).ok(), "form must serialize after runtime selection is reset");
+    constexpr std::string_view bad = R"XML(<Form id="1" name="TextSelection" ordinaryFormVersion="2.1"><ChildItems><TextDocumentField id="2" name="Text"><Position/><SelectedText>abc</SelectedText></TextDocumentField></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(bad).ok(), "runtime selection must not be accepted in public XML");
+}
+
 void test_choice_and_input_field_picture_references_xml() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="FieldPictures" ordinaryFormVersion="2.1">
@@ -3060,6 +3076,7 @@ int main() {
         test_unsupported_control_events_rejected();
         test_button_foreign_enum_default_is_retained();
         test_standard_picture_xml_reference_roundtrip();
+        test_text_document_selected_text_runtime_only();
         test_choice_and_input_field_picture_references_xml();
         test_button_menu_model_roundtrip_and_rejections();
         test_client_interface_variant_xml_contract();
