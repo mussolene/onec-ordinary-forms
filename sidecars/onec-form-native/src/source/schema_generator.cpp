@@ -629,6 +629,36 @@ void append_value_types(std::string& output) {
   </xs:complexType>
 )XSD";
 
+    for (const auto& [type_name, kind] : {
+            std::pair{"ChartPlotAreaPlacementType", model::ChartAreaKind::plot},
+            std::pair{"ChartLegendAreaPlacementType", model::ChartAreaKind::legend}}) {
+        output += "  <xs:simpleType";
+        append_attribute(output, "name", type_name);
+        output += "><xs:restriction base=\"xs:string\">";
+        for (const auto placement : model::metamodel::chart_area_placements(kind)) {
+            output += "<xs:enumeration";
+            append_attribute(output, "value", placement);
+            output += "/>";
+        }
+        output += "</xs:restriction></xs:simpleType>\n";
+    }
+    output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
+    for (const auto& [type_name, placement_type] : {
+            std::pair{"ChartPlotAreaType", "ChartPlotAreaPlacementType"},
+            std::pair{"ChartLegendAreaType", "ChartLegendAreaPlacementType"}}) {
+        output += "  <xs:complexType";
+        append_attribute(output, "name", type_name);
+        output += "><xs:sequence>";
+        for (const auto& descriptor : model::metamodel::chart_area_property_descriptors()) {
+            output += "<xs:element";
+            append_attribute(output, "name", descriptor.name);
+            append_attribute(output, "type", descriptor.coordinate == nullptr ? placement_type : "ChartAreaCoordinateType");
+            output += "/>";
+        }
+        output += "</xs:sequence></xs:complexType>\n";
+    }
+    output += "\n";
+
     output += R"XSD(  <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Marker" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
   <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
@@ -1072,9 +1102,12 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         if (control.kind == model::ControlKind::chart) {
             std::vector<model::metamodel::PropertyDescriptor> chart_properties;
             for (const auto& property : metamodel.properties_for(control.kind)) {
-                if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries") chart_properties.push_back(property);
+                if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries" &&
+                    property.api_name != "PlotArea" && property.api_name != "LegendArea") chart_properties.push_back(property);
             }
             append_property_elements(output, chart_properties, "      ", false);
+            output += "      <xs:element name=\"PlotArea\" type=\"ChartPlotAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+            output += "      <xs:element name=\"LegendArea\" type=\"ChartLegendAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"SummarySeries\" type=\"ChartSummarySeriesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"Series\" type=\"ChartSeriesCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"Points\" type=\"ChartPointCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
@@ -1256,6 +1289,12 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        <NamedConcept name=\"ChartSummarySeries\" apiName=\"SummarySeries\" russianName=\"СводнаяСерия\" russianType=\"СерияДиаграммы\" source=\"Chart.SummarySeries; 8.5.1.1343 ValueToFile API\" evidenceRefs=\"ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823 ev_0bf2de977ee74d0e8e69e117b819f78c\"><Properties>\n"
         "          <Property name=\"Color\" apiName=\"Color\" russianName=\"Цвет\" russianType=\"Цвет\" valueCodec=\"color\"/>\n"
         "          <Property name=\"Marker\" apiName=\"Marker\" russianName=\"Маркер\" russianType=\"ТипМаркераДиаграммы\" valueCodec=\"enumeration\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"ChartPlotArea\" russianName=\"ОбластьПостроенияДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"
+        "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеОбластиПостроенияДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"ChartLegendArea\" russianName=\"ОбластьЛегендыДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"
+        "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеЛегендыДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPoint\" russianName=\"ТочкаДиаграммы\"><Properties>\n"
         "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/>\n"

@@ -218,6 +218,21 @@ struct PropertyDescriptor {
     DefaultValue default_value{};
 };
 
+struct ChartAreaPropertyDescriptor {
+    PropertyId id{};
+    std::string_view name;
+    std::u8string_view russian_name;
+    ValueCodec value_codec = ValueCodec::unclassified;
+    DecimalValue ChartArea::*coordinate = nullptr;
+    std::size_t coordinate_offset = 0;
+    std::string_view plot_default;
+    std::string_view legend_default;
+};
+
+[[nodiscard]] std::span<const ChartAreaPropertyDescriptor> chart_area_property_descriptors() noexcept;
+[[nodiscard]] std::span<const std::string_view> chart_area_placements(ChartAreaKind kind) noexcept;
+[[nodiscard]] const ChartAreaPropertyDescriptor* find_chart_area_property(PropertyId id) noexcept;
+
 struct EventDescriptor {
     DescriptorOwner owner = DescriptorOwner::control;
     ControlKind control_kind = ControlKind::panel;

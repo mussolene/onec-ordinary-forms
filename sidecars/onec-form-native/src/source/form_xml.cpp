@@ -274,6 +274,13 @@ std::string canonical_decimal(
     }
 }
 
+bool valid_chart_area_placement(std::string_view area, std::string_view placement) {
+    const auto kind = area == "PlotArea" ? model::ChartAreaKind::plot :
+        area == "LegendArea" ? model::ChartAreaKind::legend : model::ChartAreaKind::none;
+    const auto placements = mm::chart_area_placements(kind);
+    return std::ranges::find(placements, placement) != placements.end();
+}
+
 std::string canonical_uuid(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
         return static_cast<char>(std::tolower(character));
@@ -1692,7 +1699,34 @@ private:
         bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
-            if (descriptor->kind == model::ControlKind::chart && name == "SummarySeries") {
+            if (descriptor->kind == model::ControlKind::chart && (name == "PlotArea" || name == "LegendArea")) {
+                auto& chart = std::get<model::ChartPayload>(control.payload);
+                auto& area = name == "PlotArea" ? chart.plot_area : chart.legend_area;
+                if (area) fail("OOF2003", child, id_text, name, "one chart area", name, "Duplicate Chart area");
+                model::ChartArea parsed;
+                std::set<std::string> seen;
+                for (xmlNodePtr field : element_children(child)) {
+                    const auto field_name = node_name(field);
+                    if (!seen.insert(field_name).second)
+                        fail("OOF2003", field, id_text, field_name, "one area property", field_name, "Duplicate Chart area property");
+                    if (field_name == "Placement") {
+                        parsed.placement = node_text(field);
+                        if (!valid_chart_area_placement(name, parsed.placement))
+                            fail("OOF2003", field, id_text, field_name, "valid area placement", parsed.placement, "Invalid Chart area placement");
+                    } else {
+                        const auto* descriptor = mm::find_chart_area_property(model::PropertyId::from_name(field_name));
+                        if (descriptor == nullptr || descriptor->coordinate == nullptr)
+                            fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
+                        (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
+                    }
+                }
+                if (seen.size() != 5) fail("OOF2003", child, id_text, name, "Placement and four bounds", "missing", "Chart area requires all properties");
+                for (const auto* value : {&parsed.left, &parsed.top, &parsed.right, &parsed.bottom}) {
+                    if (value->canonical != "0" && value->canonical != "1" && !value->canonical.starts_with("0."))
+                        fail("OOF2003", child, id_text, name, "bounds between 0 and 1", value->canonical, "Chart area bound is out of range");
+                }
+                area = std::move(parsed);
+            } else if (descriptor->kind == model::ControlKind::chart && name == "SummarySeries") {
                 if (chart_summary_series_seen) fail("OOF2003", child, id_text, name, "one SummarySeries", name, "Duplicate SummarySeries");
                 chart_summary_series_seen = true;
                 auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
@@ -3653,6 +3687,25 @@ private:
             write_gantt_data(*gantt);
         }
         if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
+            const auto write_area = [&](std::string_view name, const std::optional<model::ChartArea>& area) {
+                if (!area) return;
+                if (!valid_chart_area_placement(name, area->placement))
+                    serialization_fail(id, std::string(name), "valid area placement", area->placement, "Invalid Chart area placement");
+                for (const auto* value : {&area->left, &area->top, &area->right, &area->bottom}) {
+                    const auto bound = canonical_decimal(value->canonical, nullptr, name, id);
+                    if (bound != "0" && bound != "1" && !bound.starts_with("0."))
+                        serialization_fail(id, std::string(name), "bounds between 0 and 1", bound, "Chart area bound is out of range");
+                }
+                writer_.open(name);
+                writer_.text("Placement", area->placement);
+                for (const auto& descriptor : mm::chart_area_property_descriptors()) {
+                    if (descriptor.coordinate != nullptr)
+                        writer_.text(descriptor.name, canonical_decimal(((*area).*(descriptor.coordinate)).canonical, nullptr, descriptor.name, id));
+                }
+                writer_.close(name);
+            };
+            write_area("PlotArea", chart->plot_area);
+            write_area("LegendArea", chart->legend_area);
             if (chart->summary_series.color != model::ColorValue{} ||
                 chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
                 writer_.open("SummarySeries");

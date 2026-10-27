@@ -327,6 +327,12 @@
     </xs:sequence>
     <xs:attribute name="id" type="ObjectIdType" use="required"/>
   </xs:complexType>
+  <xs:simpleType name="ChartPlotAreaPlacementType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="UseCoordinates"/><xs:enumeration value="EmptySpace"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ChartLegendAreaPlacementType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Left"/><xs:enumeration value="Right"/><xs:enumeration value="Top"/><xs:enumeration value="Bottom"/><xs:enumeration value="UseCoordinates"/><xs:enumeration value="None"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ChartAreaCoordinateType"><xs:restriction base="xs:decimal"><xs:minInclusive value="0"/><xs:maxInclusive value="1"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="ChartPlotAreaType"><xs:sequence><xs:element name="Placement" type="ChartPlotAreaPlacementType"/><xs:element name="Left" type="ChartAreaCoordinateType"/><xs:element name="Top" type="ChartAreaCoordinateType"/><xs:element name="Right" type="ChartAreaCoordinateType"/><xs:element name="Bottom" type="ChartAreaCoordinateType"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartLegendAreaType"><xs:sequence><xs:element name="Placement" type="ChartLegendAreaPlacementType"/><xs:element name="Left" type="ChartAreaCoordinateType"/><xs:element name="Top" type="ChartAreaCoordinateType"/><xs:element name="Right" type="ChartAreaCoordinateType"/><xs:element name="Bottom" type="ChartAreaCoordinateType"/></xs:sequence></xs:complexType>
+
   <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Marker" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
   <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
@@ -2299,8 +2305,6 @@
       <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BeginGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LegendArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="PlotArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Outline" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2333,6 +2337,8 @@
       <xs:element name="LabelBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Title" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PlotArea" type="ChartPlotAreaType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LegendArea" type="ChartLegendAreaType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SummarySeries" type="ChartSummarySeriesType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Series" type="ChartSeriesCollectionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Points" type="ChartPointCollectionType" minOccurs="1" maxOccurs="1"/>

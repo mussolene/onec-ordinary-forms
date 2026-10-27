@@ -1050,6 +1050,12 @@
           <Property name="Color" apiName="Color" russianName="Цвет" russianType="Цвет" valueCodec="color"/>
           <Property name="Marker" apiName="Marker" russianName="Маркер" russianType="ТипМаркераДиаграммы" valueCodec="enumeration"/>
         </Properties></NamedConcept>
+        <NamedConcept name="ChartPlotArea" russianName="ОбластьПостроенияДиаграммы" evidenceRefs="ev_8716e61c09c841db91cbb280c8ef420e"><Properties>
+          <Property name="Placement" russianName="Расположение" russianType="РасположениеОбластиПостроенияДиаграммы"/><Property name="Left" russianName="Лево" russianType="Число"/><Property name="Top" russianName="Верх" russianType="Число"/><Property name="Right" russianName="Право" russianType="Число"/><Property name="Bottom" russianName="Низ" russianType="Число"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="ChartLegendArea" russianName="ОбластьЛегендыДиаграммы" evidenceRefs="ev_8716e61c09c841db91cbb280c8ef420e"><Properties>
+          <Property name="Placement" russianName="Расположение" russianType="РасположениеЛегендыДиаграммы"/><Property name="Left" russianName="Лево" russianType="Число"/><Property name="Top" russianName="Верх" russianType="Число"/><Property name="Right" russianName="Право" russianType="Число"/><Property name="Bottom" russianName="Низ" russianType="Число"/>
+        </Properties></NamedConcept>
         <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>
         </Properties></NamedConcept>

@@ -535,6 +535,16 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
     expect(validate_document(compiled_schema, chart_without_refresh) == 0 && validate_document(compiled_schema, chart_with_refresh) != 0,
         "Chart XSD must accept the ordinary fixture and reject runtime refresh state");
 
+    const auto chart_area = [](std::string_view placement, std::string_view left) {
+        return std::string(R"XML(<Form id="1" name="Area" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><LegendArea><Placement>)XML") +
+            std::string(placement) + R"XML(</Placement><Left>)XML" + std::string(left) +
+            R"XML(</Left><Top>0</Top><Right>1</Right><Bottom>1</Bottom></LegendArea><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    };
+    expect(validate_document(compiled_schema, chart_area("UseCoordinates", "0.11")) == 0 &&
+        validate_document(compiled_schema, chart_area("UseCoordinates", "1.01")) != 0 &&
+        validate_document(compiled_schema, chart_area("Unknown", "0.11")) != 0,
+        "Chart area XSD must accept platform names and reject invalid bounds or placement");
+
     const auto instance = [](std::string_view alignment_type, std::string_view alignment_member,
                              std::string_view orientation_type, std::string_view orientation_member) {
         return "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -919,9 +929,19 @@ void test_control_surfaces_and_property_order(
             const auto chart_properties = metamodel.properties_for(control.kind);
             std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
             properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
-                return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries";
+                return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries" ||
+                    property.api_name == "PlotArea" || property.api_name == "LegendArea";
             }), properties.end());
             cursor = expect_property_sequence(properties, elements, cursor, true);
+            expect_element_shape(elements[cursor++], "PlotArea", "ChartPlotAreaType", "0", "1");
+            expect_element_shape(elements[cursor++], "LegendArea", "ChartLegendAreaType", "0", "1");
+            for (const auto* area_type : {"ChartPlotAreaType", "ChartLegendAreaType"}) {
+                const auto fields = direct_children(sequence_for_type(schema, area_type), "element");
+                expect(fields.size() == 5 && attribute(fields[0], "name") == "Placement" &&
+                    attribute(fields[1], "name") == "Left" && attribute(fields[2], "name") == "Top" &&
+                    attribute(fields[3], "name") == "Right" && attribute(fields[4], "name") == "Bottom" &&
+                    attribute(fields[1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
+            }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");
             const auto summary_fields = direct_children(sequence_for_type(schema, "ChartSummarySeriesType"), "element");
             expect(summary_fields.size() == 2 && attribute(summary_fields[0], "name") == "Color" &&

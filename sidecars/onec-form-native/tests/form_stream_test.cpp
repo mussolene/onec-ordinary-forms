@@ -16352,12 +16352,26 @@ void test_chart_title_and_legend_visibility_round_trip() {
     const auto saved_decoded = form_stream::decode_document(designer_saved, "ChartVisibility");
     expect(saved_decoded.ok() && saved_decoded.value().reconstruction_complete(),
         "platform-recomputed legend geometry must decode completely");
-    // Explicit legend placement has separate fields and is not yet modeled.
+    // Platform stores manually specified legend bounds separately from geometry.
+    saved_chart->items[3].items[31] = list_stream::ListValue::raw_atom("1");
     saved_chart->items[3].items[178] = list_stream::ListValue::raw_atom("5");
     saved_chart->items[3].items[184] = list_stream::ListValue::raw_atom("0.11");
     const auto manual_decoded = form_stream::decode_document(designer_saved, "ChartVisibility");
-    expect(!manual_decoded.ok() || !manual_decoded.value().reconstruction_complete(),
-        "explicit legend placement must not be silently discarded");
+    expect(manual_decoded.ok() && manual_decoded.value().reconstruction_complete(),
+        "explicit legend placement must decode completely");
+    const auto* manual_chart = manual_decoded.value().find_control(model::ObjectId{100});
+    const auto& manual_area = std::get<model::ChartPayload>(manual_chart->payload).legend_area;
+    expect(manual_area && manual_area->placement == "UseCoordinates" && manual_area->left.canonical == "0.11",
+        "manual legend placement and bounds must be preserved");
+    saved_chart->items[3].items[178] = list_stream::ListValue::raw_atom("7");
+    const auto unknown_decoded = form_stream::decode_document(designer_saved, "ChartVisibility");
+    expect(!unknown_decoded.ok() || !unknown_decoded.value().reconstruction_complete(),
+        "unknown legend placement must not be silently discarded");
+    auto unsupported_area = encoded.value();
+    find_chart_record(unsupported_area)->items[3].items[196].items[0] = list_stream::ListValue::raw_atom("1");
+    const auto unsupported_decoded = form_stream::decode_document(unsupported_area, "ChartVisibility");
+    expect(!unsupported_decoded.ok() || !unsupported_decoded.value().reconstruction_complete(),
+        "unmodeled Chart area data must not be silently discarded");
     const auto decoded = form_stream::decode_document(encoded.value(), "ChartVisibility");
     expect(decoded.ok() && decoded.value().reconstruction_complete(),
         decoded ? "Chart visibility must decode completely" : decoded.diagnostics().front().message);
@@ -16396,6 +16410,105 @@ void test_chart_title_and_legend_visibility_round_trip() {
     auto* control = const_cast<model::ControlNode*>(invalid.find_control(model::ObjectId{100}));
     control->properties().set_explicit(model::PropertyId::from_name("ShowTitle"), std::string("not a boolean"));
     expect(!form_stream::encode_document(invalid), "non-boolean Chart visibility must be rejected");
+}
+
+void test_chart_area_modes_round_trip() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "ChartAreaModes";
+    for (std::uint64_t i = 0; i < 14; ++i) form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    constexpr std::array legend_modes{"Auto", "Left", "Right", "Top", "Bottom", "UseCoordinates", "None"};
+    constexpr std::array plot_modes{"Auto", "UseCoordinates", "EmptySpace"};
+    for (std::uint64_t i = 0; i < 14; ++i) {
+        model::ChartPayload payload;
+        if (i % 2) {
+            model::ChartSeries series; series.id = model::ObjectId{1000 + i}; series.text = "Series";
+            series.color.kind = model::ColorKind::absolute; series.marker = {"ChartMarkerType", "Auto"};
+            model::ChartPoint point; point.id = model::ObjectId{2000 + i}; point.text = "Point";
+            point.color.kind = model::ColorKind::absolute;
+            payload.series.push_back(series); payload.points.push_back(point);
+            payload.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
+        }
+        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}};
+        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}};
+        model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
+        control.position.width.set(160); control.position.height.set(120);
+        control.properties().set_explicit(model::PropertyId::from_name("ShowLegend"), i % 7 != 6);
+        if (i == 13) {
+            control.events.push_back(model::EventRef{model::ObjectId{3000}});
+            document.add_event(model::Event{model::ObjectId{3000}, "Selection", "OnSelection", model::ControlRef{control.id}});
+        }
+        document.add_control(std::move(control));
+    }
+    auto incompatible = document;
+    auto* incompatible_control = const_cast<model::ControlNode*>(incompatible.find_control(model::ObjectId{100}));
+    std::get<model::ChartPayload>(incompatible_control->payload).legend_area->placement = "None";
+    expect(!form_stream::encode_document(incompatible), "contradictory legend placement and visibility must be rejected");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChartAreaModes");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "all Chart area modes must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "Chart areas must serialize to XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "Chart areas must parse from XML");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Chart area modes and exact bounds must survive XML round-trip");
+    auto toggled = parsed.value();
+    const auto key = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{105}};
+    expect(toggled.set_prop_val(key, model::PropertyId::from_name("ShowLegend"), false) == model::PropertyMutationStatus::applied,
+        "hiding legend must succeed");
+    const auto& hidden = std::get<model::ChartPayload>(toggled.find_control(model::ObjectId{105})->payload).legend_area;
+    expect(hidden && hidden->placement == "None" && hidden->left.canonical == "0.11", "hiding must preserve bounds");
+    expect(toggled.set_prop_val(key, model::PropertyId::from_name("ShowLegend"), true) == model::PropertyMutationStatus::applied,
+        "showing legend must succeed");
+    const auto& restored = std::get<model::ChartPayload>(toggled.find_control(model::ObjectId{105})->payload).legend_area;
+    expect(restored && restored->placement == "Auto" && restored->left.canonical == "0.11", "showing must reset placement and preserve bounds");
+    const auto reference = toggled.get_prop_val(key, model::PropertyId::from_name("LegendArea"));
+    expect(reference.value && std::holds_alternative<model::ChartAreaRef>(*reference.value), "legend area must expose an object reference");
+    const auto ref = std::get<model::ChartAreaRef>(*reference.value);
+    const auto area_key = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, ref.owner, ref.kind};
+    expect(toggled.set_prop_val(area_key, model::PropertyId::from_name("Right"), model::DecimalValue{"0.87654321"}) == model::PropertyMutationStatus::applied_unclassified_storage,
+        "area coordinate must be editable through the object API");
+    const auto right = toggled.get_prop_val(area_key, model::PropertyId::from_name("Right"));
+    expect(right.value && std::get<model::DecimalValue>(*right.value).canonical == "0.87654321", "area coordinate must retain decimal precision");
+    for (const auto* invalid : {"-0.01", "1.01"})
+        expect(toggled.set_prop_val(area_key, model::PropertyId::from_name("Right"), model::DecimalValue{invalid}) == model::PropertyMutationStatus::invalid_value,
+            "out of range area coordinates must be rejected");
+    expect(toggled.set_prop_val(area_key, model::PropertyId::from_name("Placement"), model::EnumerationValue{"ChartLegendPlacement", "Unknown"}) == model::PropertyMutationStatus::invalid_value,
+        "unknown area placement must be rejected");
+    expect(toggled.get_prop_val(model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{999999}, ref.kind}, model::PropertyId::from_name("Right")).status == model::PropertyReadStatus::unknown_owner,
+        "an area reference must resolve to an existing Chart");
+    expect(toggled.set_prop_val(area_key, model::PropertyId::from_name("Placement"), model::EnumerationValue{"ChartLegendPlacement", "None"}) == model::PropertyMutationStatus::applied_unclassified_storage,
+        "setting None must hide legend");
+    const auto shown = toggled.get_prop_val(key, model::PropertyId::from_name("ShowLegend"));
+    expect(shown.value && !std::get<bool>(*shown.value), "legend mode must update visibility");
+    for (const auto* mode : {"Auto", "Left", "Right", "Top", "Bottom", "UseCoordinates"}) {
+        expect(toggled.set_prop_val(area_key, model::PropertyId::from_name("Placement"), model::EnumerationValue{"ChartLegendPlacement", "None"}) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "setting None must hide the legend before each placement");
+        expect(toggled.set_prop_val(area_key, model::PropertyId::from_name("Placement"), model::EnumerationValue{"ChartLegendPlacement", mode}) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "each visible placement must be supported");
+        const auto visibility = toggled.get_prop_val(key, model::PropertyId::from_name("ShowLegend"));
+        expect(visibility.value && std::get<bool>(*visibility.value), "visible placement must show the legend");
+    }
+    expect(toggled.set_prop_val(area_key, model::PropertyId::from_name("Placement"), model::EnumerationValue{"ChartLegendPlacement", "None"}) == model::PropertyMutationStatus::applied_unclassified_storage,
+        "setting None must hide the legend before serialization");
+    const auto changed = form_stream::encode_document(toggled);
+    expect(changed.ok(), "object API changes must serialize");
+    const auto changed_read = form_stream::decode_document(changed.value(), "ChartAreaModes");
+    expect(changed_read.ok() && changed_read.value().reconstruction_complete(), "object API changes must decode");
+    const auto& changed_area = std::get<model::ChartPayload>(changed_read.value().find_control(model::ObjectId{105})->payload).legend_area;
+    expect(changed_area && changed_area->right.canonical == "0.87654321" && changed_area->placement == "None",
+        "changed bounds and hidden mode must survive serialization");
+    expect(toggled.reset_prop_val(area_key, model::PropertyId::from_name("Right")) == model::PropertyMutationStatus::reset_unclassified_storage,
+        "resetting a coordinate must restore its area default");
+    const auto reset_right = toggled.get_prop_val(area_key, model::PropertyId::from_name("Right"));
+    expect(reset_right.value && std::get<model::DecimalValue>(*reset_right.value).canonical == "1", "legend right default must be restored");
+    expect(toggled.reset_prop_val(key, model::PropertyId::from_name("ShowLegend")) == model::PropertyMutationStatus::reset,
+        "resetting ShowLegend must restore its default");
+    const auto& reset_area = std::get<model::ChartPayload>(toggled.find_control(model::ObjectId{105})->payload).legend_area;
+    expect(reset_area && reset_area->placement == "Auto", "resetting ShowLegend must restore Auto placement");
+    expect(form_stream::encode_document(toggled).ok(), "reset values must stay internally consistent");
 }
 
 void test_chart_named_integer_and_delimiter_properties() {
@@ -18426,6 +18539,7 @@ int main() {
         test_chart_enum_properties();
         test_chart_named_boolean_properties();
         test_chart_title_and_legend_visibility_round_trip();
+        test_chart_area_modes_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

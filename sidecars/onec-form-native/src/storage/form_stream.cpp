@@ -6304,8 +6304,8 @@ std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_co
 void apply_chart_render_cache(const LV& actual, LV& expected,
     std::size_t middle_start, std::size_t render_start,
     std::string_view path) {
-    constexpr std::array<std::size_t, 8> middle_cache_offsets{84, 86, 87, 88, 89, 90, 92, 93};
-    constexpr std::array<std::size_t, 8> render_cache_offsets{2, 4, 5, 6, 7, 8, 10, 11};
+    constexpr std::array<std::size_t, 11> middle_cache_offsets{82, 83, 84, 85, 86, 87, 88, 89, 90, 92, 93};
+    constexpr std::array<std::size_t, 11> render_cache_offsets{0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11};
     const auto normalize = [&](std::size_t index) {
         if (index >= actual.items.size() || index >= expected.items.size()) {
             fail("OOF1102", child_path(path, index), "existing Chart render-cache scalar", "out of range", "Chart cache offset exceeds its record");
@@ -6329,6 +6329,32 @@ void apply_chart_render_cache(const LV& actual, LV& expected,
 
 std::int32_t explicit_integer(const model::PropertySet& properties, std::string_view name,
     std::int32_t default_value, std::string_view property_path);
+
+// Area coordinates are decimal fractions. Keep the complement exact when
+// converting the platform's right and bottom insets.
+std::string chart_area_fraction(std::string_view text, std::string_view path) {
+    std::string value;
+    try { value = value_codec::canonical_platform_decimal(text); }
+    catch (const std::exception& error) {
+        fail("OOF1115", std::string(path), "decimal between 0 and 1", std::string(text), error.what());
+    }
+    if (value != "0" && value != "1" && !value.starts_with("0."))
+        fail("OOF1115", std::string(path), "decimal between 0 and 1", value, "Chart area coordinate is out of range");
+    return value;
+}
+
+std::string chart_area_complement(std::string_view text, std::string_view path) {
+    const auto value = chart_area_fraction(text, path);
+    if (value == "0") return "1";
+    if (value == "1") return "0";
+    std::string digits = value.substr(2);
+    for (auto& digit : digits) digit = static_cast<char>('9' - (digit - '0'));
+    for (auto i = digits.size(); i > 0; --i) {
+        if (digits[i - 1] != '9') { ++digits[i - 1]; break; }
+        digits[i - 1] = '0';
+    }
+    return value_codec::canonical_decimal("0." + digits);
+}
 
 struct ChartIntegerProperty {
     std::string_view name;
@@ -6517,7 +6543,25 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
         const bool value = explicit_bool(properties, spec.name, spec.default_value);
         info.at(middle_start + spec.offset) = raw(value != spec.inverted ? "1" : "0");
     }
-    info.at(render_start + 13) = raw(explicit_bool(properties, "ShowLegend", true) ? "0" : "6");
+    const bool show_legend = explicit_bool(properties, "ShowLegend", true);
+    const auto write_area = [&](const model::ChartArea& area, std::size_t mode_offset,
+                                std::size_t bounds_offset, const auto& placements, std::string_view name) {
+        const auto found = std::ranges::find(placements, area.placement);
+        if (found == placements.end()) fail("OOF1120", std::string(name), "supported Chart area placement", area.placement, "Unknown Chart area placement");
+        const auto mode = static_cast<std::size_t>(std::distance(placements.begin(), found));
+        if (mode_offset == 13 && ((mode == 6) == show_legend))
+            fail("OOF1120", std::string(name), "placement consistent with ShowLegend", area.placement, "Chart legend placement and visibility disagree");
+        info.at(render_start + mode_offset) = raw(std::to_string(mode));
+        for (const auto& descriptor : model::metamodel::chart_area_property_descriptors()) {
+            if (descriptor.coordinate == nullptr) continue;
+            const auto& value = (area.*(descriptor.coordinate)).canonical;
+            info.at(render_start + bounds_offset + descriptor.coordinate_offset) = raw(
+                descriptor.coordinate_offset < 2 ? chart_area_fraction(value, name) : chart_area_complement(value, name));
+        }
+    };
+    if (chart.plot_area) write_area(*chart.plot_area, 12, 15, model::metamodel::chart_area_placements(model::ChartAreaKind::plot), "$/Chart/PlotArea");
+    if (chart.legend_area) write_area(*chart.legend_area, 13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend), "$/Chart/LegendArea");
+    else info.at(render_start + 13) = raw(show_legend ? "0" : "6");
     info.at(render_start + 14) = raw(explicit_bool(properties, "ShowTitle", true) ? "0" : "8");
     model::FontValue label_font;
     if (const auto* entry = properties.find(model::PropertyId::from_name("LabelFont"))) {
@@ -6883,9 +6927,42 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const bool enabled = entry == nullptr || std::get<bool>(entry->value);
         require_raw_constant(limits.items[slot], enabled ? "0" : "2", child_path(limit_path, slot));
     }
-    const auto expected_info = encode_chart_info(payload, title, properties);
     const auto render_start = cells_end + data_defaults.size() + series_size + 1 + style_defaults.size() +
         static_cast<std::size_t>(point_count) + series_size + 1;
+    const auto read_area = [&](std::size_t mode_offset, std::size_t bounds_offset, const auto& placements,
+                               const model::ChartArea& defaults, std::string_view name) -> std::optional<model::ChartArea> {
+        const auto mode_path = child_path(info_path, render_start + mode_offset);
+        const auto mode = integer_atom<std::size_t>(at(info, render_start + mode_offset, info_path), mode_path);
+        if (mode >= placements.size()) fail("OOF1115", mode_path, "known Chart area placement", std::to_string(mode), "Unsupported Chart area placement");
+        model::ChartArea area;
+        area.placement = placements[mode];
+        const auto bound = [&](std::size_t offset) {
+            const auto path = child_path(info_path, render_start + bounds_offset + offset);
+            return chart_area_fraction(raw_atom(at(info, render_start + bounds_offset + offset, info_path), path), path);
+        };
+        for (const auto& descriptor : model::metamodel::chart_area_property_descriptors()) {
+            if (descriptor.coordinate == nullptr) continue;
+            const auto value = bound(descriptor.coordinate_offset);
+            area.*(descriptor.coordinate) = model::DecimalValue{descriptor.coordinate_offset < 2
+                ? value : chart_area_complement(value, name)};
+        }
+        if (area == defaults) return std::nullopt;
+        return area;
+    };
+    const auto area_defaults = [&](model::ChartAreaKind kind) {
+        model::ChartArea area;
+        if (kind == model::ChartAreaKind::legend && !explicit_bool(properties, "ShowLegend", true)) area.placement = "None";
+        for (const auto& descriptor : model::metamodel::chart_area_property_descriptors()) {
+            if (descriptor.coordinate != nullptr) area.*(descriptor.coordinate) = model::DecimalValue{std::string(
+                kind == model::ChartAreaKind::plot ? descriptor.plot_default : descriptor.legend_default)};
+        }
+        return area;
+    };
+    payload.plot_area = read_area(12, 15, model::metamodel::chart_area_placements(model::ChartAreaKind::plot),
+        area_defaults(model::ChartAreaKind::plot), "$/Chart/PlotArea");
+    payload.legend_area = read_area(13, 19, model::metamodel::chart_area_placements(model::ChartAreaKind::legend),
+        area_defaults(model::ChartAreaKind::legend), "$/Chart/LegendArea");
+    const auto expected_info = encode_chart_info(payload, title, properties);
     auto normalized_expected_info = expected_info;
     for (std::size_t series = 0; series < series_count; ++series) {
         if (derived_marker_caches[series]) {

@@ -2013,6 +2013,31 @@ const ControlDescriptor* find_by_russian_name(std::u8string_view name) noexcept 
     return Metamodel::instance().control_by_russian_name(name);
 }
 
+std::span<const ChartAreaPropertyDescriptor> chart_area_property_descriptors() noexcept {
+    static constexpr std::array descriptors{
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Placement"), "Placement", u8"Расположение", ValueCodec::enumeration, nullptr, 0, "Auto", "Auto"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Left"), "Left", u8"Лево", ValueCodec::decimal, &ChartArea::left, 0, "0", "0.83"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Top"), "Top", u8"Верх", ValueCodec::decimal, &ChartArea::top, 1, "0", "0.08"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Right"), "Right", u8"Право", ValueCodec::decimal, &ChartArea::right, 2, "0.83", "1"},
+        ChartAreaPropertyDescriptor{PropertyId::from_name("Bottom"), "Bottom", u8"Низ", ValueCodec::decimal, &ChartArea::bottom, 3, "1", "1"},
+    };
+    return descriptors;
+}
+
+std::span<const std::string_view> chart_area_placements(ChartAreaKind kind) noexcept {
+    static constexpr std::array<std::string_view, 3> plot{"Auto", "UseCoordinates", "EmptySpace"};
+    static constexpr std::array<std::string_view, 7> legend{"Auto", "Left", "Right", "Top", "Bottom", "UseCoordinates", "None"};
+    if (kind == ChartAreaKind::plot) return plot;
+    if (kind == ChartAreaKind::legend) return legend;
+    return {};
+}
+
+const ChartAreaPropertyDescriptor* find_chart_area_property(PropertyId id) noexcept {
+    const auto descriptors = chart_area_property_descriptors();
+    const auto found = std::ranges::find(descriptors, id, &ChartAreaPropertyDescriptor::id);
+    return found == descriptors.end() ? nullptr : &*found;
+}
+
 const PropertyDescriptor* find_property(ControlKind kind, std::string_view name) noexcept {
     return Metamodel::instance().property(kind, name);
 }
