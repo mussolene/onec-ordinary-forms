@@ -1020,6 +1020,17 @@ void apply_proven_storage_overrides(
     std::ranges::find(splitter, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     classify_property(splitter, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
 
+    auto& panel = properties[static_cast<std::size_t>(ControlKind::panel)];
+    for (const auto name : {"Picture", "PanelPictureLocation", "PictureSize"}) {
+        auto property = std::ranges::find(panel, name, &PropertyDescriptor::api_name);
+        if (property == panel.end()) throw std::logic_error("missing Panel picture property");
+        property->api_access = ApiAccess::read_write;
+        if (name != std::string_view{"Picture"}) property->value_codec = ValueCodec::enumeration;
+    }
+    classify_property(panel, "Picture", StorageCodec::picture_record, DefaultKind::none, "");
+    classify_property(panel, "PictureSize", StorageCodec::control_info, DefaultKind::enumeration, "PictureSize.Stretch");
+    classify_property(panel, "PanelPictureLocation", StorageCodec::control_info, DefaultKind::enumeration, "PanelPictureLocation.Center");
+
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     std::ranges::find(label_decoration, "Picture", &PropertyDescriptor::api_name)->api_access = ApiAccess::read_write;
     classify_property(label_decoration, "Picture", StorageCodec::picture_record, DefaultKind::none, "");

@@ -15266,6 +15266,27 @@ void test_owned_panel_common_properties_and_page_event() {
             expect(nondefault ? original && restored && original->value == restored->value : restored == nullptr,
                 std::string("Panel property must round-trip: ") + name);
         }
+        if (nondefault) {
+            constexpr std::array sizes{"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "ByFontSize"};
+            constexpr std::array locations{"Left", "Top", "Right", "Bottom", "Center"};
+            for (std::size_t index = 0; index < 12; ++index) {
+                auto variant = document;
+                auto* target = const_cast<model::ControlNode*>(variant.find_control(model::ObjectId{2}));
+                if (index % 2 == 0) target->properties().set_explicit(model::PropertyId::from_name("Picture"),
+                    model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+                target->properties().set_explicit(model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", sizes[index % sizes.size()]});
+                target->properties().set_explicit(model::PropertyId::from_name("PanelPictureLocation"), model::EnumerationValue{"PanelPictureLocation", locations[index % locations.size()]});
+                const auto stream = form_stream::encode_document(variant);
+                expect(stream.ok(), "Panel picture properties must encode");
+                const auto round_trip = form_stream::decode_document(stream.value(), "PanelPicture");
+                expect(round_trip.ok() && round_trip.value().reconstruction_complete(), "Panel picture properties must decode completely");
+                const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+                expect(round_trip.value().get_prop_val(owner, model::PropertyId::from_name("PictureSize")).value == model::PropertyValue{model::EnumerationValue{"PictureSize", sizes[index % sizes.size()]}}, "Panel PictureSize must survive");
+                expect(round_trip.value().get_prop_val(owner, model::PropertyId::from_name("PanelPictureLocation")).value == model::PropertyValue{model::EnumerationValue{"PanelPictureLocation", locations[index % locations.size()]}}, "Panel picture location must survive");
+                const auto* picture = round_trip.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("Picture"));
+                expect((picture != nullptr) == (index % 2 == 0), "Panel picture presence must survive");
+            }
+        }
         expect(found->events.size() == (nondefault ? 1U : 0U), "Panel event count must round-trip");
         if (nondefault) {
             const auto* event = decoded.value().find_event(found->events.front().id());

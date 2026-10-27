@@ -81,8 +81,10 @@ Form сохраняет 13 именованных событий с незави
 SpreadsheetDocumentField сохраняет полосы прокрутки, Enabled, ShowSelection,
 EnableStartDrag, EnableDrag, Border и BorderColor, а также семь подтвержденных
 событий. Парные поля полос прокрутки проверяются на согласованность.
-Вложенная Panel сохраняет Enabled, ToolTip, Font, Transparent, ShowTabs и
-OnCurrentPageChange. Для ShowTabs проверены все 13 значений. Корневая панель
+Вложенная Panel сохраняет Enabled, ToolTip, Font, Transparent, ShowTabs,
+Picture, PictureSize, PanelPictureLocation и OnCurrentPageChange. Для ShowTabs
+проверены все 13 значений. Картинки поддерживают ссылки на библиотеку и файлы
+GIF, PNG, JPEG и BMP; для размера и положения проверены допустимые режимы. Корневая панель
 формы сохраняет только ранее подтвержденный набор свойств.
 Table сохраняет Enabled, ToolTip, Font, BorderColor и FieldBackColor через
 общий механизм свойств; ограничения редакторов колонок остаются прежними.

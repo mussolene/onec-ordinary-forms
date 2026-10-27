@@ -2477,6 +2477,7 @@ struct DecodedOwnerPages {
     std::vector<model::Page> pages;
     IncomingAnchorLists incoming;
     model::PanelPayload panel;
+    std::optional<LV> picture;
 };
 
 DecodedOwnerPages decode_owner_pages(
@@ -2535,6 +2536,7 @@ DecodedOwnerPages decode_owner_pages(
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     model::PanelPayload decoded_panel;
+    std::optional<LV> panel_picture;
     if (!auto_tab_order) decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
     if (panel && !separate_by_page)
         decoded_panel.properties.set_explicit(model::PropertyId::from_name("SeparateByPage"), false);
@@ -2543,6 +2545,28 @@ DecodedOwnerPages decode_owner_pages(
         const auto common = decode_common_control_base(normalized.items[0], base_path,
             CommonControlBaseCapabilities{true, false, {}, model::ControlKind::panel, model::ControlKind::panel});
         apply_common_control_base(decoded_panel.properties, common);
+        const auto picture_path = child_path(child_path(path, 1), incoming_end);
+        const auto& picture_wrapper = normalized.items[2];
+        require_arity(picture_wrapper, 11, picture_path);
+        const auto size = integer_atom<std::int32_t>(picture_wrapper.items[1], child_path(picture_path, 1));
+        if (size < 0 || size > 7 || size == 5 || size == 6)
+            fail("OOF1114", child_path(picture_path, 1), "Panel PictureSize 0 through 4 or 7", std::to_string(size), "Panel picture size is unsupported");
+        if (size != 1) {
+            constexpr std::array members{"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "", "", "ByFontSize"};
+            decoded_panel.properties.set_explicit(model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", members.at(size)});
+        }
+        const auto location_index = normalized.items.size() - 9;
+        const auto location = integer_atom<std::int32_t>(normalized.items[location_index], child_path(path, location_index));
+        if (location < 1 || location > 5)
+            fail("OOF1114", child_path(path, location_index), "PanelPictureLocation 1 through 5", std::to_string(location), "Panel picture location is unsupported");
+        if (location != 5) {
+            constexpr std::array members{"", "Left", "Top", "Right", "Bottom", "Center"};
+            decoded_panel.properties.set_explicit(model::PropertyId::from_name("PanelPictureLocation"), model::EnumerationValue{"PanelPictureLocation", members.at(location)});
+        }
+        expected.items[1].items[2].items[1] = picture_wrapper.items[1];
+        expected.items[1].items[2].items[2] = picture_wrapper.items[2];
+        expected.items[1].items[location_index] = normalized.items[location_index];
+        panel_picture = picture_wrapper.items[2];
         for (const auto slot : {1U, 4U, 5U, 11U, 12U})
             expected.items[1].items[0].items[slot] = normalized.items[0].items[slot];
         const auto tabs_path = child_path(child_path(path, 1), 3 + incoming_end - 2);
@@ -2586,8 +2610,13 @@ DecodedOwnerPages decode_owner_pages(
             "Page ID allocation overflows uint64");
     }
     next_page_id += pages.size();
-    return DecodedOwnerPages{std::move(pages), std::move(incoming), std::move(decoded_panel)};
+    return DecodedOwnerPages{std::move(pages), std::move(incoming), std::move(decoded_panel), std::move(panel_picture)};
 }
+
+std::int32_t explicit_enum_storage_value(
+    const model::PropertySet& values, std::string_view owner, std::string_view name,
+    std::string_view expected_type, std::int32_t default_value,
+    std::initializer_list<std::pair<std::string_view, std::int32_t>> members);
 
 LV encode_owner_pages(
     const std::vector<model::Page>& pages,
@@ -2605,7 +2634,7 @@ LV encode_owner_pages(
     auto envelope = panel ? canonical_panel_payload(pages, *owner, separate) :
         canonical_root_panel_payload(width, height, pages, owner);
     if (panel) require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode"}, "$/Panel");
+        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode", "Picture", "PictureSize", "PanelPictureLocation"}, "$/Panel");
     else require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
     envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
     if (panel) {
@@ -2618,6 +2647,12 @@ LV encode_owner_pages(
         common.named_transparent_control = model::ControlKind::panel;
         common.transparent = explicit_bool(properties, "Transparent", false);
         encode_common_control_base(envelope.items[1].items[0], common, "$/Panel");
+        const auto picture_size = explicit_enum_storage_value(properties, "Panel", "PictureSize", "PictureSize", 1,
+            {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3}, {"AutoSize", 4}, {"ByFontSize", 7}});
+        const auto picture_location = explicit_enum_storage_value(properties, "Panel", "PanelPictureLocation", "PanelPictureLocation", 5,
+            {{"Left", 1}, {"Top", 2}, {"Right", 3}, {"Bottom", 4}, {"Center", 5}});
+        envelope.items[1].items[8].items[1] = raw(std::to_string(picture_size));
+        envelope.items[1].items[envelope.items[1].items.size() - 9] = raw(std::to_string(picture_location));
         if (scroll) {
             envelope.items[1].items[9] = raw("13");
             envelope.items[1].items[14] = raw("1");
@@ -11692,7 +11727,12 @@ Result<model::OrdinaryFormDocument> decode_document(
                         decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
                             panel_owner.incoming, child_path(record_path, 5));
                         for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
+                        const auto picture = decode_button_picture(*panel_owner.picture, child_path(record_path, 2) + "/Picture");
+                        if (picture && picture->standard_name)
+                            panel.properties().set_explicit(model::PropertyId::from_name("Picture"), model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}});
                         child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
+                        if (picture && !picture->standard_name)
+                            child.picture_property_assets.push_back({"Picture", model::PictureAsset{{}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)), picture->format, picture->bytes, picture->transparent}});
                     } else {
                         fail("OOF1122", record_path, "supported leaf controls or Panel", guid, "Control payload is unsupported");
                     }
@@ -12290,12 +12330,15 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
                     require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode"}, child_path(path, ordinal) + "/Panel");
+                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode", "Picture", "PictureSize", "PanelPictureLocation"}, child_path(path, ordinal) + "/Panel");
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");
                     auto panel_properties = encode_owner_pages(panel_owner.pages, panel_owner.incoming, true, panel_ref, 8, 8,
                         control->properties());
+                    std::size_t picture_cursor = 2;
+                    static_cast<void>(decode_incoming_anchor_lists(panel_properties.items[1], picture_cursor, child_path(path, ordinal)));
+                    panel_properties.items[1].items[picture_cursor].items[2] = encode_named_control_picture(document, *control, "Picture", child_path(path, ordinal) + "/Panel/Picture");
                     panel_properties.items[2] = encode_control_event_collection(document, *control, child_path(path, ordinal) + "/Panel/Events");
                     const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
                     const auto info = encode_control_metadata(*control, "$/" + std::string(model::metamodel::descriptor_for(control->kind()).public_name));

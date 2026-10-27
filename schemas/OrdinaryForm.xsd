@@ -1814,9 +1814,12 @@
   <xs:complexType name="FormPanelType"><xs:sequence>
       <xs:element name="AutoTabOrder" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowTabs" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PanelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeparateByPage" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ScrollPageMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
