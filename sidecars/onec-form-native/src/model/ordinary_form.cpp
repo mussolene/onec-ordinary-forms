@@ -151,6 +151,9 @@ bool property_value_matches(
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowState")
                     return typed_value.type_name == "WindowStateVariant" &&
                         (typed_value.member == "Normal" || typed_value.member == "Docked" || typed_value.member == "Autohide" || typed_value.member == "Float");
+                if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowAppearanceMode")
+                    return typed_value.type_name == "WindowAppearanceModeVariant" &&
+                        (typed_value.member == "Normal" || typed_value.member == "Minimized" || typed_value.member == "Maximized");
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowDockLocation")
                     return typed_value.type_name == "WindowDockVariant" &&
                         (typed_value.member == "Left" || typed_value.member == "Right" || typed_value.member == "Top" || typed_value.member == "Bottom");
@@ -290,6 +293,8 @@ bool property_api_enumeration_matches(
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowLocation")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowState")
+        return property_value_matches(descriptor, PropertyValue{value});
+    if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowAppearanceMode")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowDockLocation")
         return property_value_matches(descriptor, PropertyValue{value});
@@ -1238,6 +1243,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             return PropertyMutationStatus::applied_runtime_only;
         }
         if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
+                                  property == PropertyId::from_name("WindowAppearanceMode") ||
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
                                   property == PropertyId::from_name("WindowDockLocation") ||
@@ -1609,6 +1615,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             return PropertyMutationStatus::reset_runtime_only;
         }
         if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
+                                  property == PropertyId::from_name("WindowAppearanceMode") ||
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
                                   property == PropertyId::from_name("WindowDockLocation") ||

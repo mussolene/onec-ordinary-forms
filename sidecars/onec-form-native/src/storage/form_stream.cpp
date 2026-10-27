@@ -11394,7 +11394,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_list(payload.items[11], "$/11");
         require_exact(payload.items[12], list({raw("0")}), "$/12", "Unsupported root table");
         require_exact(payload.items[13], canonical_style_record(10), "$/13", "Unsupported page-style record");
-        require_raw_constant(payload.items[14], "1", "$/14");
+        const auto appearance_mode = integer_atom<std::int32_t>(payload.items[14], "$/14");
+        if (appearance_mode < 0 || appearance_mode > 2)
+            fail("OOF1114", "$/14", "WindowAppearanceModeVariant ordinal 0..2", std::to_string(appearance_mode), "Unsupported window appearance mode");
         const auto window_appearance_change = integer_atom<std::int32_t>(payload.items[15], "$/15");
         if (window_appearance_change < 0 || window_appearance_change > 2)
             fail("OOF1114", "$/15", "WindowAppearanceModeChange ordinal 0..2", std::to_string(window_appearance_change), "Unsupported window appearance change mode");
@@ -11489,6 +11491,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (appearance_mode != 1) form.properties.set_explicit(model::PropertyId::from_name("WindowAppearanceMode"),
+            model::EnumerationValue{"WindowAppearanceModeVariant", appearance_mode == 0 ? "Minimized" : "Maximized"});
         if (connectable_window) form.properties.set_explicit(model::PropertyId::from_name("ConnectableWindow"), true);
         if (window_state != 4) form.properties.set_explicit(model::PropertyId::from_name("WindowState"),
             model::EnumerationValue{"WindowStateVariant", window_state == 1 ? "Docked" : window_state == 16 ? "Autohide" : "Float"});
@@ -12202,7 +12206,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12217,6 +12221,8 @@ Result<list_stream::ListValue> encode_document(
             "WindowSizeChange", 0, {{"Change", 0}, {"DontChange", 1}});
         const auto window_appearance_change = explicit_enum_storage_value(document.form().properties, "Form", "ChangeWindowAppearanceMode",
             "WindowAppearanceModeChange", 2, {{"Enable", 0}, {"Disable", 1}, {"Auto", 2}});
+        const auto appearance_mode = explicit_enum_storage_value(document.form().properties, "Form", "WindowAppearanceMode",
+            "WindowAppearanceModeVariant", 1, {{"Minimized", 0}, {"Normal", 1}, {"Maximized", 2}});
         const auto window_location = explicit_enum_storage_value(document.form().properties, "Form", "WindowLocation",
             "WindowLocationVariant", 0, {{"Auto", 0}, {"Center", 1}, {"DontOverlapOwner", 2}});
         const auto window_state = explicit_enum_storage_value(document.form().properties, "Form", "WindowState",
@@ -12686,7 +12692,7 @@ Result<list_stream::ListValue> encode_document(
             list(std::move(context_rows)),
             list({raw("0")}),
             canonical_style_record(10),
-            raw("1"),
+            raw(std::to_string(appearance_mode)),
             raw(std::to_string(window_appearance_change)),
             raw(window_location == 2 ? "1" : "0"),
             raw(desktop_mode ? "1" : "0"),

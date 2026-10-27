@@ -153,6 +153,12 @@
       <xs:enumeration value="Auto"/><xs:enumeration value="Center"/><xs:enumeration value="DontOverlapOwner"/>
     </xs:restriction></xs:simpleType></xs:attribute>
   </xs:complexType>
+  <xs:complexType name="WindowAppearanceModeVariantValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowAppearanceModeVariant"/>
+    <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="Normal"/><xs:enumeration value="Minimized"/><xs:enumeration value="Maximized"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType>
   <xs:complexType name="WindowStateVariantValueType">
     <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowStateVariant"/>
     <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
@@ -1895,7 +1901,7 @@
       <xs:element name="DesktopMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ConnectableWindow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowState" type="WindowStateVariantValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="WindowAppearanceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowAppearanceMode" type="WindowAppearanceModeVariantValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Style" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentControl" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

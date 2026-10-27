@@ -8677,6 +8677,36 @@ void test_form_connectable_window_codec() {
     }
 }
 
+void test_form_window_appearance_mode() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "WindowAppearance";
+    model::OrdinaryFormDocument document(std::move(form));
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("WindowAppearanceMode");
+    expect(document.get_prop_val(owner, property).value == model::PropertyValue{model::EnumerationValue{"WindowAppearanceModeVariant", "Normal"}},
+        "window appearance must default to Normal");
+    for (const auto& [member, ordinal] : {std::pair{"Minimized", "0"}, std::pair{"Normal", "1"}, std::pair{"Maximized", "2"}}) {
+        expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowAppearanceModeVariant", member}) == model::PropertyMutationStatus::applied,
+            "window appearance assignment must succeed before opening");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok() && encoded.value().items[14].atom == ordinal, "window appearance must encode in the confirmed slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "WindowAppearance");
+        expect(decoded.ok() && decoded.value().get_prop_val(owner, property).value == model::PropertyValue{model::EnumerationValue{"WindowAppearanceModeVariant", member}},
+            "window appearance must decode");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "window appearance XML must serialize");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value == model::PropertyValue{model::EnumerationValue{"WindowAppearanceModeVariant", member}},
+            "window appearance must roundtrip through XML");
+        auto invalid = encoded.value(); invalid.items[14] = list_stream::ListValue::raw_atom("3");
+        expect(!form_stream::decode_document(invalid, "WindowAppearance").ok(), "unknown window appearance must be rejected");
+    }
+    expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, property).value == model::PropertyValue{model::EnumerationValue{"WindowAppearanceModeVariant", "Normal"}}, "reset must restore Normal");
+    document.mark_opening_started();
+    expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowAppearanceModeVariant", "Normal"}) == model::PropertyMutationStatus::forbidden_after_opening_started &&
+        document.reset_prop_val(owner, property) == model::PropertyMutationStatus::forbidden_after_opening_started, "appearance mode must be immutable after opening begins");
+}
+
 void test_form_window_state_codec() {
     const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
     const auto property = model::PropertyId::from_name("WindowState");
@@ -20252,6 +20282,7 @@ int main() {
         test_form_size_change();
         test_form_connectable_window_codec();
         test_form_window_state_codec();
+        test_form_window_appearance_mode();
         test_form_window_appearance_change();
         test_form_window_location();
         test_form_window_dock_location();
