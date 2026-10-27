@@ -1043,6 +1043,9 @@
           <Picture name="PictureLib.ZoomIn" russianName="УвеличитьМасштаб" storageId="-16"/>
           <Picture name="PictureLib.ZoomOut" russianName="УменьшитьМасштаб" storageId="-15"/>
         </StandardPictures>
+        <NamedConcept name="WindowsFonts" russianName="WindowsШрифты" evidenceRefs="ev_9d8015b7a8b246ffb91ce498507abd5f"><Properties>
+          <Property name="DefaultGUIFont" russianName="ШрифтДиалоговИМеню" russianType="Шрифт"/><Property name="OEMFixedFont" russianName="OEMШрифтМоноширинный" russianType="Шрифт"/><Property name="ANSIFixedFont" russianName="ANSIШрифтМоноширинный" russianType="Шрифт"/><Property name="ANSIVariableFont" russianName="ANSIШрифтПропорциональный" russianType="Шрифт"/><Property name="SystemFont" russianName="СистемныйШрифт" russianType="Шрифт"/>
+        </Properties></NamedConcept>
         <NamedConcept name="ChartSeries" russianName="СерияДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/><Property name="Marker" apiName="Маркер" russianType="ТипМаркераДиаграммы"/>
         </Properties></NamedConcept>

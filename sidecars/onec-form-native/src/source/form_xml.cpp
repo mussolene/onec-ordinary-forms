@@ -848,10 +848,13 @@ model::FontKind parse_font_kind(std::string_view value, xmlNodePtr node) {
         "Unknown font kind");
 }
 
+constexpr std::array<std::string_view, 5> windows_font_names{
+    "DefaultGUIFont", "OEMFixedFont", "ANSIFixedFont", "ANSIVariableFont", "SystemFont"};
+
 model::FontValue parse_font(xmlNodePtr node) {
     static constexpr std::string_view allowed_attributes[] = {
         "kind", "styleName", "styleObjectId", "styleUuid", "faceName", "height",
-        "bold", "italic", "underline", "strikeout", "scale", "scaleOverride"};
+        "bold", "italic", "underline", "strikeout", "scale", "scaleOverride", "windowsFont"};
     for (xmlAttrPtr attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
         const std::string_view name(reinterpret_cast<const char*>(attribute->name));
         if (std::ranges::find(allowed_attributes, name) == std::end(allowed_attributes)) {
@@ -862,6 +865,12 @@ model::FontValue parse_font(xmlNodePtr node) {
     model::FontValue value;
     value.kind = parse_font_kind(required_attribute(node, "kind"), node);
     value.style = parse_style_reference(node);
+    if (const auto selector = optional_attribute(node, "windowsFont")) {
+        const auto found = std::ranges::find(windows_font_names, *selector);
+        if (found == windows_font_names.end())
+            fail("OOF2003", node, {}, "windowsFont", "known Windows font name", *selector, "Unknown Windows font");
+        value.windows_font = static_cast<model::WindowsFont>(std::distance(windows_font_names.begin(), found));
+    }
     if (auto face_name = optional_attribute(node, "faceName")) {
         value.face_name = std::move(*face_name);
     }
@@ -887,6 +896,11 @@ model::FontValue parse_font(xmlNodePtr node) {
         value.scale_override = parse_boolean(*scale_override, node, "scaleOverride");
     }
     const bool has_style = !std::holds_alternative<std::monostate>(value.style);
+    if ((value.kind == model::FontKind::windows_font) != value.windows_font.has_value())
+        fail("OOF2003", node, {}, "windowsFont", "selector required only for Windows font", "invalid selector", "Windows font selector is inconsistent");
+    if (value.kind == model::FontKind::windows_font &&
+        (value.face_name || value.height || value.bold || value.italic || value.underline || value.strikeout || value.scale != 100.0 || value.scale_override))
+        fail("OOF2003", node, {}, "windowsFont", "unmodified Windows font", "explicit font fields", "Windows font overrides are not supported");
     if (value.kind == model::FontKind::style_reference && !has_style) {
         fail("OOF2003", node, {}, "kind", "style reference", "missing", "Style font must carry a style reference");
     }
@@ -3010,6 +3024,14 @@ private:
             serialization_fail(std::string(object_id), std::string(name), "style only for styleReference font", has_style ? "unexpected style" : "missing style", "Font style representation is inconsistent");
         }
         if (has_style) append_style_attributes(attributes, value.style, object_id, name);
+        if ((value.kind == model::FontKind::windows_font) != value.windows_font.has_value())
+            serialization_fail(std::string(object_id), std::string(name), "selector required only for Windows font", "invalid selector", "Windows font selector is inconsistent");
+        if (value.windows_font) {
+            const auto index = static_cast<std::size_t>(*value.windows_font);
+            if (index >= windows_font_names.size() || value.face_name || value.height || value.bold || value.italic || value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)
+                serialization_fail(std::string(object_id), std::string(name), "unmodified Windows font", "unsupported font data", "Windows font is invalid");
+            attributes.emplace_back("windowsFont", std::string(windows_font_names[index]));
+        }
         if (value.kind == model::FontKind::automatic &&
             (value.face_name || value.height || value.italic ||
              value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)) {

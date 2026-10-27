@@ -235,10 +235,7 @@ std::uint32_t font_kind_code(model::FontKind kind) {
         case model::FontKind::automatic:
             return 3;
         case model::FontKind::windows_font:
-            break;
-    }
-    if (kind == model::FontKind::windows_font) {
-        throw std::runtime_error("WindowsFont is not supported by the ordinary-form Font codec");
+            return 1;
     }
     throw std::runtime_error("unknown ordinary-form Font kind " +
         std::to_string(static_cast<unsigned int>(kind)));
@@ -248,6 +245,8 @@ model::FontKind parse_font_kind(std::uint32_t code) {
     switch (code) {
         case 0:
             return model::FontKind::absolute;
+        case 1:
+            return model::FontKind::windows_font;
         case 2:
             return model::FontKind::style_reference;
         case 3:
@@ -683,6 +682,18 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
     };
     const bool has_style = !std::holds_alternative<std::monostate>(value.style);
     const std::uint32_t kind = font_kind_code(value.kind);
+    if (value.kind != model::FontKind::windows_font && value.windows_font)
+        throw std::runtime_error("Windows font selector belongs only to Windows fonts");
+    if (value.kind == model::FontKind::windows_font) {
+        if (!value.windows_font || has_style || has_fields())
+            throw std::runtime_error("Windows font requires an unmodified named selector");
+        const auto selector = static_cast<std::uint32_t>(*value.windows_font);
+        if (selector > 4) throw std::runtime_error("unknown Windows font selector");
+        out.begin_list(); out.write_uint32(8); out.write_uint32(kind); out.write_uint32(0);
+        out.begin_list(); out.write_uint32(selector); out.end_list();
+        out.write_uint32(1); out.write_uint32(100); out.end_list();
+        return;
+    }
     if (value.kind == model::FontKind::automatic) {
         const bool has_unsupported_fields = value.face_name.has_value() || value.height.has_value() ||
             value.italic.has_value() || value.underline.has_value() || value.strikeout.has_value() ||
@@ -756,6 +767,18 @@ model::FontValue read_font(list_stream::ListInStream& in) {
     if (in.read_uint32() != 8) throw std::runtime_error("Font version marker is unsupported");
     model::FontValue value;
     value.kind = parse_font_kind(in.read_uint32());
+    if (value.kind == model::FontKind::windows_font) {
+        if (in.read_uint32() != 0) throw std::runtime_error("Windows font flags are unsupported");
+        in.begin_list();
+        const auto selector = in.read_uint32();
+        if (selector > 4 || in.has_next()) throw std::runtime_error("unknown Windows font selector");
+        in.end_list();
+        if (in.read_uint32() != 1 || in.read_uint32() != 100 || in.has_next())
+            throw std::runtime_error("Windows font record is not canonical");
+        value.windows_font = static_cast<model::WindowsFont>(selector);
+        in.end_list();
+        return value;
+    }
     if (value.kind == model::FontKind::automatic) {
         const auto flags = in.read_uint32();
         if (flags == 0) {

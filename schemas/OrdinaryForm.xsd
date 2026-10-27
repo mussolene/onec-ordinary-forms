@@ -281,8 +281,12 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="WindowsFontType"><xs:restriction base="xs:string">
+    <xs:enumeration value="DefaultGUIFont"/><xs:enumeration value="OEMFixedFont"/><xs:enumeration value="ANSIFixedFont"/><xs:enumeration value="ANSIVariableFont"/><xs:enumeration value="SystemFont"/>
+  </xs:restriction></xs:simpleType>
   <xs:complexType name="FontValueType">
     <xs:attribute name="kind" type="FontKindType" use="required"/>
+    <xs:attribute name="windowsFont" type="WindowsFontType" use="optional"/>
     <xs:attribute name="faceName" type="xs:string" use="optional"/>
     <xs:attribute name="height" type="xs:double" use="optional"/>
     <xs:attribute name="bold" type="xs:boolean" use="optional"/>

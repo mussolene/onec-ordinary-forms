@@ -1003,6 +1003,10 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             } else {
                 const auto* font = std::get_if<FontValue>(&value);
                 if (font == nullptr) return PropertyMutationStatus::invalid_value;
+                if (font->kind == FontKind::windows_font || font->windows_font) {
+                    try { static_cast<void>(storage::value_codec::encode_font(*font)); }
+                    catch (const std::exception&) { return PropertyMutationStatus::invalid_value; }
+                }
                 updated.*(descriptor->font) = *font;
             }
         } else if (owner.chart_area == ChartAreaKind::plot && metamodel::find_chart_plot_format(property) != nullptr) {

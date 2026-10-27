@@ -581,8 +581,12 @@ void append_value_types(std::string& output) {
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="WindowsFontType"><xs:restriction base="xs:string">
+    <xs:enumeration value="DefaultGUIFont"/><xs:enumeration value="OEMFixedFont"/><xs:enumeration value="ANSIFixedFont"/><xs:enumeration value="ANSIVariableFont"/><xs:enumeration value="SystemFont"/>
+  </xs:restriction></xs:simpleType>
   <xs:complexType name="FontValueType">
     <xs:attribute name="kind" type="FontKindType" use="required"/>
+    <xs:attribute name="windowsFont" type="WindowsFontType" use="optional"/>
     <xs:attribute name="faceName" type="xs:string" use="optional"/>
     <xs:attribute name="height" type="xs:double" use="optional"/>
     <xs:attribute name="bold" type="xs:boolean" use="optional"/>
@@ -1342,6 +1346,9 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     }
     output +=
         "        </StandardPictures>\n"
+        "        <NamedConcept name=\"WindowsFonts\" russianName=\"WindowsШрифты\" evidenceRefs=\"ev_9d8015b7a8b246ffb91ce498507abd5f\"><Properties>\n"
+        "          <Property name=\"DefaultGUIFont\" russianName=\"ШрифтДиалоговИМеню\" russianType=\"Шрифт\"/><Property name=\"OEMFixedFont\" russianName=\"OEMШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIFixedFont\" russianName=\"ANSIШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIVariableFont\" russianName=\"ANSIШрифтПропорциональный\" russianType=\"Шрифт\"/><Property name=\"SystemFont\" russianName=\"СистемныйШрифт\" russianType=\"Шрифт\"/>\n"
+        "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartSeries\" russianName=\"СерияДиаграммы\"><Properties>\n"
         "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/><Property name=\"Marker\" apiName=\"Маркер\" russianType=\"ТипМаркераДиаграммы\"/>\n"
         "        </Properties></NamedConcept>\n"

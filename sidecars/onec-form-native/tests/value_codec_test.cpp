@@ -452,13 +452,23 @@ void test_font() {
             static_cast<void>(codec::decode_font("{8,2,0,{-21},1,100}"));
         },
         "unobserved style fonts must be rejected");
+    for (std::uint32_t selector = 0; selector < 5; ++selector) {
+        model::FontValue windows;
+        windows.kind = model::FontKind::windows_font;
+        windows.windows_font = static_cast<model::WindowsFont>(selector);
+        const auto expected = "{8,1,0,{" + std::to_string(selector) + "},1,100}";
+        expect(codec::encode_font(windows) == expected && codec::decode_font(expected) == windows,
+            "platform Windows font must preserve its named selector");
+    }
+    expect_rejected([] { static_cast<void>(codec::decode_font("{8,1,0,{5},1,100}")); },
+        "unknown Windows font selector must fail closed");
     expect_rejected(
         [] {
             model::FontValue unsupported;
             unsupported.kind = model::FontKind::windows_font;
             static_cast<void>(codec::encode_font(unsupported));
         },
-        "unobserved WindowsFont must be rejected");
+        "Windows font without a named selector must be rejected");
     model::FontValue no_face;
     no_face.kind = model::FontKind::absolute;
     expect_rejected([&] { static_cast<void>(codec::encode_font(no_face)); },

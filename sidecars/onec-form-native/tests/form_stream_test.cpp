@@ -16943,6 +16943,26 @@ void test_chart_area_border_font_round_trip() {
             expect(title_document.set_prop_val(owner, model::PropertyId::from_name(name), model::DecimalValue{value}) == model::PropertyMutationStatus::applied_unclassified_storage,
                 "title area bounds must be editable");
     }
+    auto windows_document = title_document;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::title};
+        model::FontValue windows;
+        windows.kind = model::FontKind::windows_font;
+        windows.windows_font = static_cast<model::WindowsFont>(i % 5);
+        expect(windows_document.set_prop_val(owner, model::PropertyId::from_name("Font"), windows) == model::PropertyMutationStatus::applied_unclassified_storage,
+            "Windows font must be accepted on title area");
+    }
+    const auto windows_encoded = form_stream::encode_document(windows_document);
+    expect(windows_encoded.ok(), "Windows fonts must encode for twelve Charts");
+    const auto windows_decoded = form_stream::decode_document(windows_encoded.value(), "ChartAreaStyle");
+    expect(windows_decoded.ok() && windows_decoded.value().reconstruction_complete(), "Windows fonts must decode for twelve Charts");
+    const auto windows_xml = source::serialize_form_xml(windows_decoded.value());
+    expect(windows_xml.ok(), "Windows fonts must serialize to named XML");
+    const auto windows_parsed = source::parse_form_xml(windows_xml.value());
+    expect(windows_parsed.ok(), "Windows fonts must parse from named XML");
+    const auto windows_rebuilt = form_stream::encode_document(windows_parsed.value());
+    expect(windows_rebuilt.ok() && list_stream::dump_compact(windows_rebuilt.value()) == list_stream::dump_compact(windows_encoded.value()),
+        "Windows fonts must survive XML reconstruction");
     const auto title_encoded = form_stream::encode_document(title_document);
     expect(title_encoded.ok(), "title areas must encode");
     auto title_cache = title_encoded.value();
@@ -16972,8 +16992,8 @@ void test_chart_area_border_font_round_trip() {
         "title areas must round-trip with neighboring values");
     auto unsupported = document;
     model::FontValue invalid_font; invalid_font.kind = model::FontKind::windows_font;
-    expect(unsupported.set_prop_val(invalid_area, model::PropertyId::from_name("Font"), invalid_font) == model::PropertyMutationStatus::applied_unclassified_storage &&
-        !form_stream::encode_document(unsupported), "unsupported Chart area font must fail encoding");
+    expect(unsupported.set_prop_val(invalid_area, model::PropertyId::from_name("Font"), invalid_font) == model::PropertyMutationStatus::invalid_value,
+        "Windows font without a selector must be rejected before mutation");
 }
 
 void test_chart_plot_area_formats_round_trip() {

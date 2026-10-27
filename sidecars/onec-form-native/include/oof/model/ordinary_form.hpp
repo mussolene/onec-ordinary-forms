@@ -351,6 +351,8 @@ enum class FontKind : std::uint8_t {
     automatic,
 };
 
+enum class WindowsFont : std::uint8_t { default_gui, oem_fixed, ansi_fixed, ansi_variable, system };
+
 struct FontValue {
     FontKind kind = FontKind::automatic;
     StyleReference style;
@@ -362,6 +364,7 @@ struct FontValue {
     std::optional<bool> strikeout;
     double scale = 100.0;
     bool scale_override = false;
+    std::optional<WindowsFont> windows_font;
 
     friend bool operator==(const FontValue&, const FontValue&) = default;
 };
