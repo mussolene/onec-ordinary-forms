@@ -6304,8 +6304,8 @@ std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_co
 void apply_chart_render_cache(const LV& actual, LV& expected,
     std::size_t middle_start, std::size_t render_start,
     std::string_view path) {
-    constexpr std::array<std::size_t, 7> middle_cache_offsets{84, 86, 87, 89, 90, 92, 93};
-    constexpr std::array<std::size_t, 7> render_cache_offsets{2, 4, 5, 7, 8, 10, 11};
+    constexpr std::array<std::size_t, 8> middle_cache_offsets{84, 86, 87, 88, 89, 90, 92, 93};
+    constexpr std::array<std::size_t, 8> render_cache_offsets{2, 4, 5, 6, 7, 8, 10, 11};
     const auto normalize = [&](std::size_t index) {
         if (index >= actual.items.size() || index >= expected.items.size()) {
             fail("OOF1102", child_path(path, index), "existing Chart render-cache scalar", "out of range", "Chart cache offset exceeds its record");
@@ -6355,6 +6355,8 @@ struct ChartBooleanProperty {
 };
 
 constexpr std::array chart_boolean_properties{
+    ChartBooleanProperty{"ShowTitle", 12, true, false},
+    ChartBooleanProperty{"ShowLegend", 13, true, false},
     ChartBooleanProperty{"Transparent", 20, false, false},
     ChartBooleanProperty{"AutoSeriesText", 43, true, false},
     ChartBooleanProperty{"AutoPointText", 44, true, false},
@@ -6470,6 +6472,7 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
         const auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
         append({style});
     }
+    const auto render_start = info.size();
     append(canonical_chart_render_defaults());
     for (const auto& series : chart.series) {
         for (const auto& point : chart.points) {
@@ -6514,6 +6517,8 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
         const bool value = explicit_bool(properties, spec.name, spec.default_value);
         info.at(middle_start + spec.offset) = raw(value != spec.inverted ? "1" : "0");
     }
+    info.at(render_start + 13) = raw(explicit_bool(properties, "ShowLegend", true) ? "0" : "6");
+    info.at(render_start + 14) = raw(explicit_bool(properties, "ShowTitle", true) ? "0" : "8");
     model::FontValue label_font;
     if (const auto* entry = properties.find(model::PropertyId::from_name("LabelFont"))) {
         const auto* value = std::get_if<model::FontValue>(&entry->value);
@@ -6598,7 +6603,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Chart", "Chart named collections and plain Position", control.name, "Chart uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Title", "Transparent", "AutoSeriesText", "AutoPointText",
+    require_allowed_properties(control.properties(), {"Title", "ShowTitle", "ShowLegend", "Transparent", "AutoSeriesText", "AutoPointText",
         "Outline", "Light", "Gradient", "SeriesInRows", "HideBaseValue", "AutoTransposition",
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",

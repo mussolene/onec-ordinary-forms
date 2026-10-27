@@ -828,8 +828,11 @@ void test_chart_refresh_runtime_property() {
         descriptor->default_value.canonical == "true", "Chart RefreshEnabled must have the observed runtime default");
     for (const auto name : {"ShowTitle", "ShowLegend"}) {
         const auto* property = find_property(ControlKind::chart, name);
-        expect(property && property->version_mask == VersionMask::platform_8_2_and_8_5,
-            "Chart display properties must include the observed 8.5 platform");
+        expect(property && property->version_mask == VersionMask::platform_8_2_and_8_5 &&
+            property->persistence == PersistenceClass::persisted_editable &&
+            property->storage_codec == StorageCodec::control_info &&
+            property->default_value.kind == DefaultKind::boolean && property->default_value.canonical == "true",
+            "Chart display properties must have observed storage, default, and 8.5 availability");
     }
     Form form; form.id = ObjectId{1}; OrdinaryFormDocument document(std::move(form));
     const auto id = PropertyId::from_name("RefreshEnabled");

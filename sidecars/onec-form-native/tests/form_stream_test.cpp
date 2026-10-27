@@ -16302,6 +16302,102 @@ void test_chart_named_boolean_properties() {
         "Chart Boolean property must reject wrong type");
 }
 
+void test_chart_title_and_legend_visibility_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "ChartVisibility";
+    for (std::uint64_t index = 0; index < 12; ++index)
+        form.children.push_back(model::ControlRef{model::ObjectId{100 + index}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto size = index / 4;
+        const std::size_t series_count = size == 0 ? 0 : size == 1 ? 1 : 2;
+        const std::size_t point_count = size == 0 ? 0 : size == 1 ? 1 : 3;
+        model::ChartPayload chart;
+        for (std::size_t n = 0; n < series_count; ++n) {
+            model::ChartSeries series;
+            series.id = model::ObjectId{1000 + index * 10 + n};
+            series.text = "Series" + std::to_string(n);
+            series.color.kind = model::ColorKind::absolute;
+            series.marker = {"ChartMarkerType", "Auto"};
+            chart.series.push_back(std::move(series));
+        }
+        for (std::size_t n = 0; n < point_count; ++n) {
+            model::ChartPoint point;
+            point.id = model::ObjectId{2000 + index * 10 + n};
+            point.text = "Point" + std::to_string(n);
+            point.color.kind = model::ColorKind::absolute;
+            chart.points.push_back(std::move(point));
+        }
+        for (const auto& series : chart.series) for (const auto& point : chart.points)
+            chart.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode control{model::ObjectId{100 + index}, "Chart" + std::to_string(index), std::move(chart)};
+        control.position.width.set(120 + static_cast<std::int32_t>(index));
+        control.position.height.set(80 + static_cast<std::int32_t>(index));
+        const bool title_visible = (index % 2) != 0;
+        const bool legend_visible = (index % 4) >= 2;
+        control.properties().set_explicit(model::PropertyId::from_name("ShowTitle"), title_visible);
+        control.properties().set_explicit(model::PropertyId::from_name("ShowLegend"), legend_visible);
+        control.properties().set_explicit(model::PropertyId::from_name("Light"), false);
+        document.add_control(std::move(control));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    // Designer recomputes paired legend geometry when the legend is hidden.
+    auto designer_saved = encoded.value();
+    auto* saved_chart = find_chart_record(designer_saved);
+    expect(saved_chart != nullptr, "Chart record must exist");
+    saved_chart->items[3].items[106] = list_stream::ListValue::raw_atom("1");
+    saved_chart->items[3].items[171] = list_stream::ListValue::raw_atom("1");
+    const auto saved_decoded = form_stream::decode_document(designer_saved, "ChartVisibility");
+    expect(saved_decoded.ok() && saved_decoded.value().reconstruction_complete(),
+        "platform-recomputed legend geometry must decode completely");
+    // Explicit legend placement has separate fields and is not yet modeled.
+    saved_chart->items[3].items[178] = list_stream::ListValue::raw_atom("5");
+    saved_chart->items[3].items[184] = list_stream::ListValue::raw_atom("0.11");
+    const auto manual_decoded = form_stream::decode_document(designer_saved, "ChartVisibility");
+    expect(!manual_decoded.ok() || !manual_decoded.value().reconstruction_complete(),
+        "explicit legend placement must not be silently discarded");
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChartVisibility");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        decoded ? "Chart visibility must decode completely" : decoded.diagnostics().front().message);
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto* control = decoded.value().find_control(model::ObjectId{100 + index});
+        expect(control != nullptr, "every Chart must survive the round trip");
+        const auto* title = control->properties().find(model::PropertyId::from_name("ShowTitle"));
+        const auto* legend = control->properties().find(model::PropertyId::from_name("ShowLegend"));
+        const auto* light = control->properties().find(model::PropertyId::from_name("Light"));
+        expect((title ? std::get<bool>(title->value) : true) == ((index % 2) != 0) &&
+            (legend ? std::get<bool>(legend->value) : true) == ((index % 4) >= 2),
+            "title and legend visibility must remain independent");
+        expect(light && !std::get<bool>(light->value), "visibility must preserve neighboring Chart properties");
+        const auto& chart = std::get<model::ChartPayload>(control->payload);
+        const auto size = index / 4;
+        expect(chart.series.size() == (size == 0 ? 0 : size == 1 ? 1 : 2) &&
+            chart.points.size() == (size == 0 ? 0 : size == 1 ? 1 : 3),
+            "visibility must preserve Chart data dimensions");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "Chart visibility must serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "Chart visibility XML must parse");
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), "Chart visibility XML must produce Form.bin");
+    const auto loaded = oof::load_form_bin(binary.value(), "ChartVisibility");
+    expect(loaded.ok() && loaded.value().reconstruction_complete(),
+        "Chart visibility Form.bin must load completely");
+    const auto binary_rebuilt = form_stream::encode_document(loaded.value());
+    expect(binary_rebuilt.ok() && list_stream::dump_compact(binary_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Form.bin must preserve Chart visibility and data");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Chart visibility and data must rebuild without storage drift");
+    auto invalid = document;
+    auto* control = const_cast<model::ControlNode*>(invalid.find_control(model::ObjectId{100}));
+    control->properties().set_explicit(model::PropertyId::from_name("ShowTitle"), std::string("not a boolean"));
+    expect(!form_stream::encode_document(invalid), "non-boolean Chart visibility must be rejected");
+}
+
 void test_chart_named_integer_and_delimiter_properties() {
     for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "ChartNumbers";
@@ -18329,6 +18425,7 @@ int main() {
         test_chart_type_roundtrip();
         test_chart_enum_properties();
         test_chart_named_boolean_properties();
+        test_chart_title_and_legend_visibility_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

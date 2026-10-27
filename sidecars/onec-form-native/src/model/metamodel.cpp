@@ -682,6 +682,7 @@ void apply_proven_storage_overrides(
         refresh->default_value = {DefaultKind::boolean, "true"};
     }
     for (const auto name : {"ShowTitle", "ShowLegend"}) {
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::boolean, "true");
         const auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
         if (property == chart_properties.end()) throw std::logic_error("missing Chart display descriptor");
         property->version_mask = VersionMask::platform_8_2_and_8_5;
