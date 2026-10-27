@@ -14975,6 +14975,94 @@ void test_chart_type_roundtrip() {
     }
 }
 
+void test_chart_enum_properties() {
+    for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
+        for (const auto& spec : model::detail::chart_enum_specs) {
+            for (std::size_t ordinal = 0; ordinal < spec.members.size(); ++ordinal) {
+                for (const bool has_event : {false, true}) {
+                    model::Form form; form.id = model::ObjectId{1}; form.name = "ChartEnums";
+                    form.children = {model::ControlRef{model::ObjectId{2}}};
+                    model::OrdinaryFormDocument document(std::move(form));
+                    model::ChartPayload payload;
+                    for (unsigned s = 0; s < series_count; ++s) {
+                        model::ChartSeries series; series.id = model::ObjectId{10 + s};
+                        series.text = "Series" + std::to_string(s); series.color.kind = model::ColorKind::absolute;
+                        series.color.red = static_cast<std::uint8_t>(s + 1); series.marker = {"ChartMarkerType", "Auto"};
+                        payload.series.push_back(std::move(series));
+                    }
+                    for (unsigned p = 0; p < point_count; ++p) {
+                        model::ChartPoint point; point.id = model::ObjectId{20 + p};
+                        point.text = "Point" + std::to_string(p); point.color.kind = model::ColorKind::absolute;
+                        point.color.blue = static_cast<std::uint8_t>(p + 1); payload.points.push_back(std::move(point));
+                    }
+                    for (const auto& series : payload.series) for (const auto& point : payload.points)
+                        payload.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+                    model::ControlNode chart{model::ObjectId{2}, "Chart", std::move(payload)};
+                    chart.properties().set_explicit(model::PropertyId::from_name(spec.property),
+                        model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[ordinal])});
+                    chart.properties().set_explicit(model::PropertyId::from_name("Gradient"), true);
+                    chart.properties().set_explicit(model::PropertyId::from_name("BaseValue"), model::DecimalValue{"-123.45"});
+                    if (has_event) {
+                        chart.events.push_back(model::EventRef{model::ObjectId{100}});
+                        document.add_event(model::Event{model::ObjectId{100}, "Selection", "OnSelection", model::ControlRef{model::ObjectId{2}}});
+                    }
+                    document.add_control(std::move(chart));
+                    auto encoded = form_stream::encode_document(document);
+                    expect(encoded.ok(), "Chart enum must encode with neighboring properties");
+                    const auto middle = std::size_t{18} + 11 * (series_count + point_count);
+                    expect(find_chart_record(encoded.value())->items[3].items[middle + spec.offset].atom == std::to_string(ordinal),
+                        "Chart enum native ordinal must match its domain");
+                    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+                    expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart enum must decode completely");
+                    const auto key = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}};
+                    const auto read = decoded.value().get_prop_val(key, model::PropertyId::from_name(spec.property));
+                    expect(read.value && *read.value == model::PropertyValue{model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[ordinal])}},
+                        "Chart enum named value must survive");
+                    const auto gradient = decoded.value().get_prop_val(key, model::PropertyId::from_name("Gradient"));
+                    const auto base = decoded.value().get_prop_val(key, model::PropertyId::from_name("BaseValue"));
+                    expect(gradient.value && *gradient.value == model::PropertyValue{true} &&
+                        base.value && *base.value == model::PropertyValue{model::DecimalValue{"-123.45"}},
+                        "Chart enum must preserve neighboring properties");
+                    const auto* restored = decoded.value().find_control(model::ObjectId{2});
+                    expect(restored && restored->events.size() == (has_event ? 1U : 0U), "Chart event count must survive");
+                    const auto xml = source::serialize_form_xml(decoded.value());
+                    expect(xml.ok(), "Chart enum must serialize to XML");
+                    const auto parsed = source::parse_form_xml(xml.value());
+                    expect(parsed.ok(), "Chart enum XML must parse");
+                    const auto rebuilt = form_stream::encode_document(parsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                        "Chart enum XML and native storage must rebuild without drift");
+                    auto invalid = encoded.value();
+                    find_chart_record(invalid)->items[3].items[middle + spec.offset] = list_stream::ListValue::raw_atom(std::to_string(spec.members.size()));
+                    expect(!form_stream::decode_document(invalid, "Main"), "unknown Chart enum ordinal must fail");
+                }
+            }
+        }
+    }
+    {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "ChartEnums";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode chart{model::ObjectId{2}, "Chart", model::ChartPayload{}};
+        for (const auto& spec : model::detail::chart_enum_specs)
+            chart.properties().set_explicit(model::PropertyId::from_name(spec.property),
+                model::EnumerationValue{std::string(spec.type_name), std::string(spec.members.back())});
+        chart.events.push_back(model::EventRef{model::ObjectId{100}});
+        document.add_event(model::Event{model::ObjectId{100}, "Selection", "OnSelection", model::ControlRef{model::ObjectId{2}}});
+        document.add_control(std::move(chart));
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "all Chart enums must encode together");
+        const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "all Chart enums must decode together");
+        const auto key = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}};
+        for (const auto& spec : model::detail::chart_enum_specs) {
+            const auto read = decoded.value().get_prop_val(key, model::PropertyId::from_name(spec.property));
+            expect(read.value && *read.value == model::PropertyValue{model::EnumerationValue{std::string(spec.type_name), std::string(spec.members.back())}},
+                "all Chart enums must retain their named values together");
+        }
+    }
+}
+
 void test_chart_named_boolean_properties() {
     constexpr std::array cases{
         std::pair{"Transparent", false}, std::pair{"AutoSeriesText", true},
@@ -17153,6 +17241,7 @@ int main() {
         test_chart_value_tooltip_named_pair_and_xml_text();
         test_embedded_chart_typed_variants_and_guards();
         test_chart_type_roundtrip();
+        test_chart_enum_properties();
         test_chart_named_boolean_properties();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();

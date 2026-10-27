@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <optional>
@@ -6327,6 +6328,20 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     append(canonical_chart_tail_defaults());
     if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
     const auto middle_start = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+    for (const auto& spec : model::detail::chart_enum_specs) {
+        auto ordinal = spec.default_ordinal;
+        if (const auto* entry = properties.find(model::PropertyId::from_name(spec.property))) {
+            const auto path = std::string("$/Chart/") + std::string(spec.property);
+            const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
+            if (!value || value->type_name != spec.type_name)
+                fail("OOF1122", path, std::string(spec.type_name), "different value type", "Chart enumeration has the wrong type");
+            const auto member = std::ranges::find(spec.members, value->member);
+            if (member == spec.members.end())
+                fail("OOF1122", path, "known Chart enumeration member", value->member, "Chart enumeration member is unsupported");
+            ordinal = static_cast<int>(std::distance(spec.members.begin(), member));
+        }
+        info.at(middle_start + spec.offset) = raw(std::to_string(ordinal));
+    }
     info.at(middle_start + 4) = string_value(explicit_string(properties, "LabelDelimiter", ", "));
     for (const auto& [name, offset] : {std::pair{"ValueLabelFormat", 6U}, std::pair{"PercentLabelFormat", 7U}}) {
         info.at(middle_start + offset) = encoded_localized_text(explicit_localized_text(properties, name, "$/Chart"),
@@ -6434,7 +6449,8 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
-        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue"}, "$/Chart");
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue",
+        "AutoSeriesSeparation", "LabelType", "MaxSeries", "Orientation", "GaugeChartValueRepresentation", "LabelLocation", "GaugeChartValuesScaleLabelsLocation", "SpaceMode"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6606,6 +6622,15 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         fail("OOF1115", type_path, "known ChartType ordinal", std::to_string(type_ordinal), "ChartType ordinal is unsupported");
     if (type_ordinal != 4)
         properties.set_explicit(model::PropertyId::from_name("ChartType"), model::EnumerationValue{"ChartType", std::string(type_member->first)});
+    for (const auto& spec : model::detail::chart_enum_specs) {
+        const auto path = child_path(info_path, middle_start + spec.offset);
+        const auto ordinal = integer_atom<int>(at(info, middle_start + spec.offset, info_path), path);
+        if (ordinal < 0 || static_cast<std::size_t>(ordinal) >= spec.members.size())
+            fail("OOF1115", path, "known Chart enumeration ordinal", std::to_string(ordinal), "Chart enumeration ordinal is unsupported");
+        if (ordinal != spec.default_ordinal)
+            properties.set_explicit(model::PropertyId::from_name(spec.property),
+                model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[ordinal])});
+    }
     const auto [back_first, back_second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count));
     const auto back_color = decode_chart_back_color(info, back_first, back_second, info_path);
     if (back_color != chart_back_color_default()) properties.set_explicit(model::PropertyId::from_name("BackColor"), back_color);

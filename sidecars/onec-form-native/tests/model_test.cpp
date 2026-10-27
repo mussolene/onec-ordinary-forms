@@ -758,6 +758,54 @@ void test_chart_type_property() {
         "ChartType must reject a non-enumeration value");
 }
 
+void test_chart_enum_properties() {
+    using namespace oof::model::metamodel;
+    Form form;
+    form.id = ObjectId{1};
+    form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_control(ControlNode{ObjectId{2}, "Chart", ChartPayload{}});
+    const auto chart = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{2}};
+    for (const auto& spec : detail::chart_enum_specs) {
+        const auto* descriptor = find_property(ControlKind::chart, spec.property);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::control_info && descriptor->value_codec == ValueCodec::enumeration &&
+                   descriptor->default_value.kind == DefaultKind::enumeration && descriptor->default_value.canonical == spec.default_qualified,
+            "Chart enumeration descriptor must have proven storage and default");
+        const auto property = PropertyId::from_name(spec.property);
+        const auto initial = document.get_prop_val(chart, property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value &&
+                   *initial.value == PropertyValue{EnumerationValue{std::string(spec.type_name), std::string(spec.members[spec.default_ordinal])}},
+            "Chart enumeration default must materialize with its platform type and member");
+        std::set<std::string_view> seen;
+        for (const auto member : spec.members) {
+            expect(seen.insert(member).second, "Chart enumeration names must be unique");
+            const EnumerationValue value{std::string(spec.type_name), std::string(member)};
+            expect(document.set_prop_val(chart, property, value) == PropertyMutationStatus::applied,
+                "Chart enumeration member must be accepted by SetPropVal");
+            const auto read = document.get_prop_val(chart, property);
+            expect(read.value && *read.value == PropertyValue{value} && document.validate().ok(),
+                "Chart enumeration member must be readable and valid");
+        }
+        for (const auto& invalid : {EnumerationValue{std::string(spec.type_name), "Unknown"},
+                 EnumerationValue{"OtherType", std::string(spec.members[spec.default_ordinal])}}) {
+            expect(document.set_prop_val(chart, property, invalid) == PropertyMutationStatus::invalid_value,
+                "Chart enumeration must reject unknown member and type");
+            Form invalid_form;
+            invalid_form.id = ObjectId{1};
+            invalid_form.children = {ControlRef{ObjectId{2}}};
+            OrdinaryFormDocument invalid_document(std::move(invalid_form));
+            ControlNode invalid_chart{ObjectId{2}, "Chart", ChartPayload{}};
+            invalid_chart.properties().set_explicit(property, invalid);
+            invalid_document.add_control(std::move(invalid_chart));
+            expect(invalid_document.validate().has(InvariantCode::invalid_property),
+                "Chart enumeration validation must reject invalid member and type");
+        }
+        expect(document.set_prop_val(chart, property, true) == PropertyMutationStatus::invalid_value,
+            "Chart enumeration must reject a non-enumeration value");
+    }
+}
+
 void test_chart_appearance_defaults() {
     using namespace oof::model::metamodel;
     Form form;
@@ -2418,6 +2466,7 @@ int main() {
         test_chart_integer_and_delimiter_descriptors();
         test_chart_base_value_property();
         test_chart_type_property();
+        test_chart_enum_properties();
         test_chart_appearance_defaults();
         test_help_metamodel();
         test_shared_control_default_classifications();

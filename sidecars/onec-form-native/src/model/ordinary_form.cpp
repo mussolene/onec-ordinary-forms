@@ -138,6 +138,13 @@ bool property_value_matches(
                     return typed_value.type_name == "ChartType" &&
                         std::ranges::any_of(detail::chart_type_members, [&](const auto& member) { return member.first == typed_value.member; });
                 }
+                if (descriptor.control_kind == ControlKind::chart) {
+                    const auto spec = std::ranges::find(detail::chart_enum_specs, descriptor.api_name, &detail::ChartEnumSpec::property);
+                    if (spec != detail::chart_enum_specs.end()) {
+                        return typed_value.type_name == spec->type_name &&
+                            std::ranges::find(spec->members, typed_value.member) != spec->members.end();
+                    }
+                }
                 if (descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") {
                     return typed_value.type_name == "SpreadsheetDocumentSelectionShowModeType" &&
                         (typed_value.member == "WhenActive" || typed_value.member == "Always");
@@ -232,7 +239,9 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
-    if ((descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ChartType") ||
+    if ((descriptor.control_kind == ControlKind::chart &&
+            (descriptor.api_name == "ChartType" || std::ranges::find(detail::chart_enum_specs, descriptor.api_name,
+                &detail::ChartEnumSpec::property) != detail::chart_enum_specs.end())) ||
         (descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") ||
         (descriptor.control_kind == ControlKind::panel && descriptor.api_name == "ShowTabs") ||
         (descriptor.control_kind == ControlKind::command_bar &&

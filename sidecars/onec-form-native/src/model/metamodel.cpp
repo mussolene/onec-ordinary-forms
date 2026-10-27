@@ -1,4 +1,5 @@
 #include "oof/model/metamodel.hpp"
+#include "chart_type.hpp"
 
 #include <algorithm>
 #include <array>
@@ -676,6 +677,10 @@ void apply_proven_storage_overrides(
     classify_property(chart_properties, "BaseValue", StorageCodec::control_info, DefaultKind::decimal, "0");
     classify_property(chart_properties, "ChartType", StorageCodec::control_info, DefaultKind::enumeration, "ChartType.Column");
     std::ranges::find(chart_properties, "ChartType", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    for (const auto& spec : detail::chart_enum_specs) {
+        classify_property(chart_properties, spec.property, StorageCodec::control_info, DefaultKind::enumeration, spec.default_qualified);
+        std::ranges::find(chart_properties, spec.property, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    }
     for (const auto name : {"Transparent", "Outline", "Gradient", "HideBaseValue", "AutoTransposition",
              "GaugeChartValuesScaleLabelsArcDirection"}) {
         classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::boolean, "false");

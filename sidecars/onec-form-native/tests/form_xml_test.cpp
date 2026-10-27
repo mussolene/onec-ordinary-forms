@@ -2378,6 +2378,49 @@ void test_chart_base_value_xml() {
     expect(!source::serialize_form_xml(document.value()).ok(), "writer must reject malformed BaseValue decimal");
 }
 
+void test_chart_enum_properties_xml() {
+    const auto xml = [](std::string_view property) {
+        return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Chart id=\"2\" name=\"Chart\"><Position/>") +
+            std::string(property) + "<Series/><Points/><Values/></Chart></ChildItems></Form>";
+    };
+    const auto chart = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}};
+    for (const auto& spec : model::detail::chart_enum_specs) {
+        const auto property_id = model::PropertyId::from_name(spec.property);
+        const auto element = [&](std::string_view type, std::string_view member) {
+            return "<" + std::string(spec.property) + " type=\"" + std::string(type) +
+                "\" member=\"" + std::string(member) + "\"/>";
+        };
+        const auto omitted = source::parse_form_xml(xml(""));
+        expect(omitted.ok(), "Chart enum property may be omitted");
+        expect(spec.default_ordinal >= 0 && static_cast<std::size_t>(spec.default_ordinal) < spec.members.size(),
+            "Chart enum default must belong to its domain");
+        const auto default_value = omitted.value().get_prop_val(chart, property_id);
+        expect(default_value.status == model::PropertyReadStatus::proven_default && default_value.value &&
+            *default_value.value == model::PropertyValue{model::EnumerationValue{
+                std::string(spec.type_name), std::string(spec.members[static_cast<std::size_t>(spec.default_ordinal)])}},
+            "omitted Chart enum property must use its named default");
+        for (const auto member : spec.members) {
+            const model::PropertyValue expected = model::EnumerationValue{std::string(spec.type_name), std::string(member)};
+            const auto parsed = source::parse_form_xml(xml(element(spec.type_name, member)));
+            expect(parsed.ok(), "known Chart enum value must parse from XML");
+            const auto read = parsed.value().get_prop_val(chart, property_id);
+            expect(read.value && *read.value == expected, "Chart enum XML must expose the named value");
+            const auto written = source::serialize_form_xml(parsed.value());
+            expect(written.ok(), "known Chart enum value must serialize to XML");
+            const auto reparsed = source::parse_form_xml(written.value());
+            expect(reparsed.ok(), "serialized Chart enum must parse again");
+            const auto roundtrip = reparsed.value().get_prop_val(chart, property_id);
+            expect(roundtrip.value && *roundtrip.value == expected, "Chart enum value must survive XML roundtrip");
+        }
+        expect(!source::parse_form_xml(xml(element(spec.type_name, "Unknown"))).ok(),
+            "unknown Chart enum member must fail");
+        expect(!source::parse_form_xml(xml(element("OtherType", spec.members.front()))).ok(),
+            "foreign Chart enum type must fail");
+        expect(!source::parse_form_xml(xml(element(spec.type_name, spec.members.front()) +
+            element(spec.type_name, spec.members.front()))).ok(), "duplicate Chart enum property must fail");
+    }
+}
+
 void test_chart_type_xml() {
     const auto xml = [](std::string_view property) {
         return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Chart id=\"2\" name=\"Chart\"><Position/>") +
@@ -2624,6 +2667,7 @@ int main() {
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
         test_chart_base_value_xml();
+        test_chart_enum_properties_xml();
         test_chart_type_xml();
         test_chart_summary_series_color_xml();
         test_complete_document_roundtrip();
