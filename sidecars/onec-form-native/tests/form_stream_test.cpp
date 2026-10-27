@@ -615,6 +615,65 @@ void test_table_column_visible_codec() {
     }
 }
 
+void test_table_row_selection_mode() {
+    const auto row_id = model::PropertyId::from_name("RowSelectionMode");
+    const auto selection_id = model::PropertyId::from_name("SelectionMode");
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{3}};
+    for (const auto type : {model::TypeDomainTerm::value_table, model::TypeDomainTerm::value_tree}) {
+        for (unsigned scenario = 0; scenario < 6; ++scenario) {
+            model::Form form; form.id = model::ObjectId{1}; form.name = "RowSelection";
+            form.children.emplace_back(model::ControlRef{model::ObjectId{3}});
+            model::OrdinaryFormDocument doc(std::move(form));
+            model::TypeDomainEntry entry; entry.term = type;
+            doc.add_attribute(model::Attribute{model::ObjectId{2}, "Rows", model::TypeDomainPatternValue{{entry}}});
+            model::ControlNode table{model::ObjectId{3}, "Table", model::TablePayload{}};
+            table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+            auto& columns = std::get<model::TablePayload>(table.payload).columns;
+            for (unsigned c = 0; c < 1 + (scenario >= 3); ++c) {
+                model::TableColumn col; col.name = "Column" + std::to_string(c); col.data_path = col.name;
+                col.header.items.push_back({"en", col.name}); col.control.kind = model::ControlKind::input_field;
+                columns.push_back(std::move(col));
+            }
+            doc.add_control(std::move(table));
+            const unsigned row = scenario % 2;
+            const unsigned selection = (scenario / 2) % 2;
+            const model::EnumerationValue row_value{"TableBoxRowSelectionMode", row ? "Row" : "Cell"};
+            const model::EnumerationValue selection_value{"TableBoxSelectionMode", selection ? "MultiLine" : "SingleLine"};
+            const auto initial = doc.get_prop_val(key, row_id);
+            expect(initial.status == model::PropertyReadStatus::proven_default && initial.value &&
+                   *initial.value == model::PropertyValue{model::EnumerationValue{"TableBoxRowSelectionMode", "Cell"}},
+                "RowSelectionMode must default to the observed Cell member");
+            expect(doc.set_prop_val(key, row_id, row_value) == model::PropertyMutationStatus::applied &&
+                   doc.set_prop_val(key, selection_id, selection_value) == model::PropertyMutationStatus::applied,
+                "both independent Table modes must be writable");
+            const auto encoded = form_stream::encode_document(doc);
+            expect(encoded.ok(), encoded ? "row mode must encode" : encoded.diagnostics().front().message);
+            auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            expect(record && record->items.at(2).items.at(2).items.at(1).items.at(14).atom == std::to_string(row) &&
+                   record->items.at(2).items.at(2).items.at(1).items.at(15).atom == std::to_string(selection),
+                "RowSelectionMode and SelectionMode must use independent observed slots 14 and 15");
+            auto decoded = form_stream::decode_document(encoded.value(), "RowSelection");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "row mode must decode completely");
+            auto read_row = decoded.value().get_prop_val(key, row_id);
+            auto read_selection = decoded.value().get_prop_val(key, selection_id);
+            expect(read_row.value && *read_row.value == model::PropertyValue{row_value} &&
+                   read_selection.value && *read_selection.value == model::PropertyValue{selection_value},
+                "both Table selection modes must round-trip independently");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "row selection mode must serialize as named XML");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "row selection mode XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                "row mode must survive XML and native roundtrip");
+            auto corrupted = encoded.value();
+            auto* bad_record = find_record_with_guid(corrupted, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            bad_record->items.at(2).items.at(2).items.at(1).items.at(14) = list_stream::ListValue::raw_atom("2");
+            expect(!form_stream::decode_document(corrupted, "InvalidRowSelection"), "unknown native row mode must fail closed");
+        }
+    }
+}
+
 void test_table_fixed_column_positions() {
     const auto left_id = model::PropertyId::from_name("FixedLeft");
     const auto right_id = model::PropertyId::from_name("FixedRight");
@@ -17871,6 +17930,7 @@ int main() {
         test_table_column_layout_codec();
         test_table_column_compact_decimal_codec();
         test_table_column_visible_codec();
+        test_table_row_selection_mode();
         test_table_fixed_column_positions();
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();

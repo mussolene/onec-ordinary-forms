@@ -1373,6 +1373,26 @@ void test_table_enum_properties_xml() {
     }
 }
 
+void test_table_row_selection_mode_xml() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Modes" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTree"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Table"><DataPath attributeId="2"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns><SelectionMode type="TableBoxSelectionMode" member="MultiLine"/><RowSelectionMode type="TableBoxRowSelectionMode" member="Row"/></Table></ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "both named Table selection modes must parse together");
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{3}};
+    const auto row = parsed.value().get_prop_val(owner, model::PropertyId::from_name("RowSelectionMode"));
+    const auto selection = parsed.value().get_prop_val(owner, model::PropertyId::from_name("SelectionMode"));
+    expect(row.value && *row.value == model::PropertyValue{model::EnumerationValue{"TableBoxRowSelectionMode", "Row"}} &&
+           selection.value && *selection.value == model::PropertyValue{model::EnumerationValue{"TableBoxSelectionMode", "MultiLine"}},
+        "different Table selection modes must remain distinct");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<RowSelectionMode type=\"TableBoxRowSelectionMode\" member=\"Row\"") != std::string::npos,
+        "Row mode must retain its named type in public XML");
+    std::string wrong_type(xml);
+    const auto start = wrong_type.find("TableBoxRowSelectionMode");
+    expect(start != std::string::npos, "row mode fixture must contain its enum type");
+    wrong_type.replace(start, std::string("TableBoxRowSelectionMode").size(), "TableBoxSelectionMode");
+    expect(!source::parse_form_xml(wrong_type).ok(), "SelectionMode enum type must not be accepted for RowSelectionMode");
+}
+
 void test_value_tree_table_xml_contract() {
     const auto xml = [](std::string_view source_type, std::string_view property, std::string_view events) {
         return std::string("<Form id=\"1\" name=\"TreeForm\" ordinaryFormVersion=\"2.1\"><Attributes>") +
@@ -3150,6 +3170,7 @@ int main() {
         test_value_table_type_domain_xml_roundtrip();
         test_value_tree_type_domain_xml_roundtrip();
         test_table_enum_properties_xml();
+        test_table_row_selection_mode_xml();
         test_value_tree_table_xml_contract();
         test_table_column_visible_and_empty_tree_xml();
         test_table_fixed_column_xml();

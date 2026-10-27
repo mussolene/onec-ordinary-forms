@@ -10285,7 +10285,7 @@ LV encode_table(
         "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines", "UseAlternationRowColor",
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
-        "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView",
+        "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "RowSelectionMode", "InitialListView", "InitialTreeView",
         "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);

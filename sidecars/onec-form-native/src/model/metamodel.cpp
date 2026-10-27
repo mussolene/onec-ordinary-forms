@@ -1090,6 +1090,7 @@ void apply_proven_storage_overrides(
         classify_property(table, spec.property, StorageCodec::control_info, DefaultKind::enumeration, spec.default_qualified);
         std::ranges::find(table, spec.property, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     }
+    std::ranges::find(table, "RowSelectionMode", &PropertyDescriptor::api_name)->api_access = ApiAccess::read_write;
     for (const auto name : {"HeaderHeight", "FooterHeight"}) {
         classify_property(table, name, StorageCodec::control_info, DefaultKind::integer, "1");
         std::ranges::find(table, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;

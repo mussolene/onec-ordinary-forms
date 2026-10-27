@@ -884,6 +884,9 @@ void test_table_enum_properties() {
     OrdinaryFormDocument document(std::move(form));
     document.add_control(ControlNode{ObjectId{2}, "Table", TablePayload{}});
     const auto table = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{2}};
+    const auto* row_descriptor = find_property(ControlKind::table, "RowSelectionMode");
+    expect(row_descriptor && row_descriptor->api_access == ApiAccess::read_write,
+        "RowSelectionMode must be writable as observed on the platform");
     for (const auto& spec : detail::table_enum_specs) {
         const auto* descriptor = find_property(ControlKind::table, spec.property);
         expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
