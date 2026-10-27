@@ -378,8 +378,9 @@ void test_label_picture_api_access() {
     using namespace oof::model::metamodel;
     const auto* descriptor = find_property(ControlKind::label_decoration, "Picture");
     expect(descriptor && descriptor->api_access == ApiAccess::read_write &&
-            descriptor->persistence == PersistenceClass::unclassified,
-        "Label Picture is writable but its storage remains unclassified");
+            descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == StorageCodec::picture_record,
+        "Label Picture must use the named picture storage codec");
     Form form;
     form.id = ObjectId{1};
     form.name = "LabelPictures";
@@ -390,9 +391,9 @@ void test_label_picture_api_access() {
         document.add_control(ControlNode{id, "Label" + std::to_string(index), LabelDecorationPayload{}});
         const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
         expect(document.set_prop_val(owner, PropertyId::from_name("Picture"), picture) ==
-                PropertyMutationStatus::applied_unclassified_storage &&
+                PropertyMutationStatus::applied &&
                 document.get_prop_val(owner, PropertyId::from_name("Picture")).value == PropertyValue{picture},
-            "Label Picture API must accept the verified library picture while reporting unclassified storage");
+            "Label Picture API must accept the verified library picture");
     }
 }
 

@@ -5981,6 +5981,14 @@ DecodedControl decode_label(
         fail("OOF1114", child_path(properties_path, 9), "ScrollingText storage value 0, 2, 3, 4, or 5",
             std::to_string(scrolling_text), "LabelDecoration.ScrollingText storage value is unsupported");
     const bool hyperlink = bool_atom(properties.items[5], child_path(properties_path, 5));
+    const auto picture_path = child_path(properties_path, 12);
+    const auto& picture_slot = properties.items[12];
+    require_arity(picture_slot, 11, picture_path);
+    const auto picture_marker = integer_atom<std::int32_t>(picture_slot.items[1], child_path(picture_path, 1));
+    const auto picture = decode_button_picture(picture_slot.items[2], child_path(picture_path, 2));
+    if (picture_marker != (picture ? 4 : 0))
+        fail("OOF1114", child_path(picture_path, 1), "picture presence marker matching Picture", std::to_string(picture_marker),
+            "LabelDecoration Picture marker disagrees with its picture");
     const auto shortcut = decode_named_shortcut(
         properties.items[8], child_path(properties_path, 8));
     if (horizontal_align != 0 && horizontal_align != 1 && horizontal_align != 2 && horizontal_align != 4) {
@@ -5998,6 +6006,8 @@ DecodedControl decode_label(
         base_properties_path);
     normalized_properties.items[0] = std::move(normalized_base_properties);
     normalized_properties.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
+    normalized_properties.items[12].items[1] = raw("0");
+    normalized_properties.items[12].items[2] = canonical_button_picture();
     auto canonical_common = common;
     canonical_common.named_border_control.reset();
     canonical_common.border.reset();
@@ -6058,9 +6068,17 @@ DecodedControl decode_label(
     if (hyperlink) control.properties().set_explicit(model::PropertyId::from_name("Hyperlink"), true);
     if (shortcut != model::ShortcutValue{}) control.properties().set_explicit(
         model::PropertyId::from_name("Shortcut"), shortcut);
+    if (picture && picture->standard_name)
+        control.properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}});
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
+    DecodedControl decoded{std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
         std::move(named_events)};
+    if (picture && !picture->standard_name)
+        decoded.picture_property_assets.push_back({"Picture", model::PictureAsset{
+            {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
+            picture->format, picture->bytes, picture->transparent}});
+    return decoded;
 }
 
 static std::vector<ls::ListValue> canonical_chart_series_defaults(){return {
@@ -9762,7 +9780,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "Hyperlink", "Shortcut", "HorizontalAlign", "VerticalAlign", "MarkNegatives", "ScrollingText", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "Picture", "Hyperlink", "Shortcut", "HorizontalAlign", "VerticalAlign", "MarkNegatives", "ScrollingText", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
     const auto caption = explicit_localized_text(control.properties(), "Caption", "$/LabelDecoration");
     const bool hyperlink = explicit_bool(control.properties(), "Hyperlink", false);
     const auto shortcut = explicit_named_shortcut(control.properties(), "$/LabelDecoration/Shortcut");
@@ -9794,6 +9812,9 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     auto label_properties = canonical_label_properties(caption, horizontal_align, common, hyperlink, shortcut);
+    auto encoded_picture = encode_named_control_picture(document, control, "Picture", "$/LabelDecoration/Picture");
+    if (!same_list_value(encoded_picture, canonical_button_picture())) label_properties.items[12].items[1] = raw("4");
+    label_properties.items[12].items[2] = std::move(encoded_picture);
     label_properties.items.at(4) = raw(std::to_string(explicit_enum_storage_value(control.properties(),
         "LabelDecoration", "VerticalAlign", "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}})));
     label_properties.items.at(6) = raw(explicit_bool(control.properties(), "MarkNegatives", false) ? "1" : "0");

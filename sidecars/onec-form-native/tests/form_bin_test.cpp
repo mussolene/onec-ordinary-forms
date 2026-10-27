@@ -66,6 +66,38 @@ model::OrdinaryFormDocument button_document(
     return document;
 }
 
+void test_label_pictures_roundtrip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "LabelPictures";
+    for (std::uint64_t id = 2; id < 14; ++id) form.children.push_back(model::ControlRef{model::ObjectId{id}});
+    model::OrdinaryFormDocument document(std::move(form));
+    const std::vector<std::uint8_t> gif{'G', 'I', 'F', '8', '9', 'a', 1, 0, 1, 0, 0x80, 0, 0, 0, 0, 0, 255, 255, 255,
+        0x21, 0xf9, 4, 1, 0, 0, 0, 0, 0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 1, 0x44, 0, 0x3b};
+    document.add_asset(model::PictureAsset{model::ObjectId{40}, "Items/Label0/Picture.gif", model::PictureFormat::gif, gif, false});
+    const auto property = model::PropertyId::from_name("Picture");
+    for (std::uint64_t id = 2; id < 14; ++id) {
+        model::ControlNode control{model::ObjectId{id}, "Label" + std::to_string(id - 2), model::LabelDecorationPayload{}};
+        if (id == 2) control.properties().set_explicit(property, model::PictureRef{model::PictureAssetRef{model::ObjectId{40}}});
+        else control.properties().set_explicit(property, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+        document.add_control(std::move(control));
+    }
+    const auto encoded = oof::save_form_bin(document);
+    expect(encoded.ok(), "label pictures must encode in Form.bin");
+    const auto decoded = oof::load_form_bin(encoded.value(), "LabelPictures");
+    expect(decoded.ok(), "label pictures must decode from Form.bin");
+    expect(decoded.value().assets().size() == 1 && decoded.value().assets().front().bytes == gif,
+        "label external picture must retain its bytes");
+    for (std::uint64_t id = 2; id < 14; ++id) {
+        const auto* label = decoded.value().find_control(model::ObjectId{id});
+        expect(label && label->properties().find(property), "every label must retain its picture");
+        const auto* picture = std::get_if<model::PictureRef>(&label->properties().find(property)->value);
+        expect(picture && (id == 2 ? picture->asset.id() == decoded.value().assets().front().id :
+            picture->standard_name && picture->standard_name->value == "PictureLib.Write"),
+            "label pictures must retain the correct named reference");
+    }
+}
+
 void test_button_base_state_normalization() {
     constexpr std::string_view utf8_caption = "Проверка";
     for (const bool enabled : {false, true}) {
@@ -308,6 +340,7 @@ void test_module_utf8_validation() {
 int main() {
     try {
         test_product_composition_roundtrip();
+        test_label_pictures_roundtrip();
         test_button_base_state_normalization();
         test_unknown_logical_file_is_rejected();
         test_module_newlines_are_canonical_at_container_boundary();
