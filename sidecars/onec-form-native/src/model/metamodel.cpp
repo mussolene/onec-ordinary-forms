@@ -1373,7 +1373,8 @@ void apply_proven_storage_overrides(
         DefaultKind::boolean,
         "true");
 
-    for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode", "ThisForm"}) {
+    for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode", "ThisForm",
+                            "AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow"}) {
         auto property = std::ranges::find(form_properties, name, &PropertyDescriptor::api_name);
         if (property == form_properties.end()) throw std::logic_error("missing runtime Form property");
         property->persistence = PersistenceClass::runtime_only;

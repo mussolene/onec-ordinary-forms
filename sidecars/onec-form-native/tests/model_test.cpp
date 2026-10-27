@@ -517,6 +517,43 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_window_permission_initial_values() {
+    using namespace oof::model::metamodel;
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    for (const auto state : {"Normal", "Docked", "Autohide", "Float"}) {
+        for (const bool connectable : {false, true}) {
+            Form form;
+            form.id = ObjectId{1};
+            form.name = "WindowPermissions";
+            form.properties.set_explicit(PropertyId::from_name("WindowState"), EnumerationValue{"WindowStateVariant", state});
+            form.properties.set_explicit(PropertyId::from_name("ConnectableWindow"), connectable);
+            OrdinaryFormDocument document(std::move(form));
+            const auto xml = oof::source::serialize_form_xml(document);
+            const auto binary = oof::save_form_bin(document);
+            expect(xml.ok() && binary.ok(), "window form must serialize before opening");
+            for (const auto name : {"AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow"}) {
+                const auto property = PropertyId::from_name(name);
+                const auto* descriptor = find_form_property(name);
+                expect(descriptor && descriptor->persistence == PersistenceClass::runtime_only && descriptor->storage_codec == StorageCodec::none,
+                    "window permissions must have no independent stored field");
+                const bool expected = std::string_view{name} == "AllowNormalState" || std::string_view{state} != "Normal" ||
+                    (std::string_view{name} == "AllowJoinWindow" && connectable);
+                const auto result = document.get_prop_val(owner, property);
+                expect(result.status == PropertyReadStatus::computed_value && result.value == PropertyValue{expected},
+                    "initial window permission must match the platform snapshot");
+            }
+            document.mark_opening_started();
+            const bool opened_connectable = connectable || std::string_view{state} == "Docked" || std::string_view{state} == "Autohide";
+            expect(document.get_prop_val(owner, PropertyId::from_name("ConnectableWindow")).value == PropertyValue{opened_connectable},
+                "opening must expose the platform's window connectability");
+            const auto after_xml = oof::source::serialize_form_xml(document);
+            const auto after_binary = oof::save_form_bin(document);
+            expect(after_xml.ok() && after_xml.value() == xml.value() && after_binary.ok() && after_binary.value() == binary.value(),
+                "opening transition must not change the saved form");
+        }
+    }
+}
+
 void test_opening_boundary_for_window_properties() {
     Form form;
     form.id = ObjectId{1};
@@ -3699,6 +3736,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
+        test_window_permission_initial_values();
         test_opening_boundary_for_window_properties();
         test_label_picture_api_access();
         test_tab_order_reorders_siblings();

@@ -993,6 +993,30 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
         if (property == PropertyId::from_name("ThisForm"))
             return {PropertyReadStatus::computed_value, PropertyValue{FormRef{form_.id}}};
+        const bool is_permission = property == PropertyId::from_name("AllowNormalState") ||
+            property == PropertyId::from_name("AllowDockedState") || property == PropertyId::from_name("AllowAutohideState") ||
+            property == PropertyId::from_name("AllowFloatState") || property == PropertyId::from_name("AllowJoinWindow");
+        if (is_permission || (opening_started_ && property == PropertyId::from_name("ConnectableWindow"))) {
+            std::string_view state = "Normal";
+            if (const auto* entry = form_.properties.find(PropertyId::from_name("WindowState"))) {
+                const auto* value = std::get_if<EnumerationValue>(&entry->value);
+                if (!value || value->type_name != "WindowStateVariant" ||
+                    (value->member != "Normal" && value->member != "Docked" && value->member != "Autohide" && value->member != "Float"))
+                    return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                state = value->member;
+            }
+            bool connectable = false;
+            if (const auto* entry = form_.properties.find(PropertyId::from_name("ConnectableWindow"))) {
+                const auto* value = std::get_if<bool>(&entry->value);
+                if (!value) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                connectable = *value;
+            }
+            if (opening_started_ && (state == "Docked" || state == "Autohide")) connectable = true;
+            if (!is_permission) return {PropertyReadStatus::computed_value, PropertyValue{connectable}};
+            const bool value = property == PropertyId::from_name("AllowNormalState") || state != "Normal" ||
+                (property == PropertyId::from_name("AllowJoinWindow") && connectable);
+            return {PropertyReadStatus::computed_value, PropertyValue{value}};
+        }
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {
