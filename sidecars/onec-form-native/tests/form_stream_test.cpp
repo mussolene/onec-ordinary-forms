@@ -8579,6 +8579,44 @@ void test_form_size_change() {
         document.get_prop_val(owner, property).value == initial.value, "reset must restore the proven default");
 }
 
+void test_form_window_dock_location() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "WindowDockLocation";
+    model::OrdinaryFormDocument document(std::move(form));
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("WindowDockLocation");
+    const auto initial = document.get_prop_val(owner, property);
+    expect(initial.status == model::PropertyReadStatus::proven_default &&
+        initial.value == model::PropertyValue{model::EnumerationValue{"WindowDockVariant", "Left"}},
+        "WindowDockLocation must default to Left");
+    for (const auto& [member, ordinal] : {std::pair{"Left", "1"}, std::pair{"Right", "4"}, std::pair{"Top", "2"}, std::pair{"Bottom", "8"}}) {
+        expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowDockVariant", member}) ==
+            model::PropertyMutationStatus::applied, "WindowDockLocation assignment must succeed");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok() && encoded.value().items[7].atom == ordinal, "WindowDockLocation must use the confirmed root field");
+        const auto decoded = form_stream::decode_document(encoded.value(), "WindowDockLocation");
+        expect(decoded.ok() && decoded.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowDockVariant", member}}, "WindowDockLocation must decode");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "WindowDockLocation must serialize to XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowDockVariant", member}}, "WindowDockLocation XML must roundtrip");
+        auto invalid = encoded.value();
+        invalid.items[7] = list_stream::ListValue::raw_atom("3");
+        expect_failure(form_stream::decode_document(invalid, "WindowDockLocation"), "OOF1114", "$/7", "unsupported dock ordinal must fail");
+    }
+    expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowDockVariant", "Invalid"}) ==
+        model::PropertyMutationStatus::invalid_value, "unknown dock location must fail");
+    expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, property).value == initial.value, "reset must restore Left");
+    document.mark_opening_started();
+    for (const auto member : {"Left", "Right", "Top", "Bottom"})
+        expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowDockVariant", member}) ==
+            model::PropertyMutationStatus::forbidden_after_opening_started, "dock assignments must be forbidden after opening starts");
+    expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::forbidden_after_opening_started &&
+        document.get_prop_val(owner, property).value == initial.value, "reset must not bypass the opening restriction");
+}
+
 void test_form_window_location() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "WindowLocation";
     model::OrdinaryFormDocument document(std::move(form));
@@ -20115,6 +20153,7 @@ int main() {
         test_form_size_change();
         test_form_window_appearance_change();
         test_form_window_location();
+        test_form_window_dock_location();
         test_form_allow_close_round_trip();
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();

@@ -153,6 +153,12 @@
       <xs:enumeration value="Auto"/><xs:enumeration value="Center"/><xs:enumeration value="DontOverlapOwner"/>
     </xs:restriction></xs:simpleType></xs:attribute>
   </xs:complexType>
+  <xs:complexType name="WindowDockVariantValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowDockVariant"/>
+    <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="Left"/><xs:enumeration value="Right"/><xs:enumeration value="Top"/><xs:enumeration value="Bottom"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType>
   <xs:complexType name="InputIncompleteChoiceModeValueType">
     <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="IncompleteChoiceMode"/>
     <xs:attribute name="member" use="required">
@@ -1872,7 +1878,7 @@
       <xs:element name="Panel" type="FormPanelType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnterKeyBehavior" type="EnterKeyBehaviorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowLocation" type="WindowLocationVariantValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="WindowDockLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowDockLocation" type="WindowDockVariantValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AllowClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AllowJoinWindow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AllowNormalState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
