@@ -762,6 +762,29 @@ void test_chart_integer_and_delimiter_descriptors() {
     }
 }
 
+void test_input_incomplete_choice_mode_api() {
+    Form form;
+    form.id = ObjectId{1};
+    OrdinaryFormDocument document(std::move(form));
+    const auto property = PropertyId::from_name("IncompleteChoiceMode");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId id{2 + index};
+        document.add_control(ControlNode{id, "Input" + std::to_string(index), InputFieldPayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        const auto initial = document.get_prop_val(owner, property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value &&
+            *initial.value == PropertyValue{EnumerationValue{"IncompleteChoiceMode", "OnEnterPressed"}},
+            "incomplete choice mode must default to OnEnterPressed");
+        expect(document.set_prop_val(owner, property, EnumerationValue{"IncompleteChoiceMode", "OnActivate"}) ==
+            PropertyMutationStatus::applied, "incomplete choice mode must accept OnActivate");
+        const auto read = document.get_prop_val(owner, property);
+        expect(read.value && *read.value == PropertyValue{EnumerationValue{"IncompleteChoiceMode", "OnActivate"}},
+            "incomplete choice mode must return the assigned value");
+        expect(document.set_prop_val(owner, property, EnumerationValue{"IncompleteChoiceMode", "Other"}) ==
+            PropertyMutationStatus::invalid_value, "incomplete choice mode must reject unsupported members");
+    }
+}
+
 void test_panel_scrolling_tab_read() {
     Form form;
     form.id = ObjectId{1};
@@ -2995,6 +3018,7 @@ void test_control_border_and_calendar_selection_descriptors() {
 int main() {
     try {
         test_descriptors();
+        test_input_incomplete_choice_mode_api();
         test_panel_scrolling_tab_read();
         test_unavailable_ordinary_geometry_properties();
         test_command_bar_property_descriptors();

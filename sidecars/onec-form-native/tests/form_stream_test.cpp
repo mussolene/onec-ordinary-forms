@@ -13250,6 +13250,81 @@ void test_input_field_alignment_and_choice_list_height_round_trip() {
         "ChoiceListHeight outside int32 must be rejected by model validation");
 }
 
+void test_input_incomplete_choice_mode_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "InputIncompleteChoice";
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        form.children.push_back(model::ControlRef{model::ObjectId{10 + index}});
+    }
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainPatternValue type;
+    model::TypeDomainEntry entry;
+    entry.term = model::TypeDomainTerm::string;
+    entry.string = model::LengthQualifiers{64, false};
+    type.entries.push_back(entry);
+    document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+    const auto property = model::PropertyId::from_name("IncompleteChoiceMode");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        model::ControlNode input{model::ObjectId{10 + index}, "Input" + std::to_string(index), model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        input.position.top.set(static_cast<std::int32_t>(index * 30));
+        input.position.width.set(180);
+        input.position.height.set(24);
+        if (index % 3 != 0) {
+            input.properties().set_explicit(property, model::EnumerationValue{"IncompleteChoiceMode",
+                index % 3 == 1 ? "OnEnterPressed" : "OnActivate"});
+        }
+        input.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        input.properties().set_explicit(model::PropertyId::from_name("Wrap"), false);
+        input.properties().set_explicit(model::PropertyId::from_name("ChoiceListWidth"), std::int64_t{17});
+        document.add_control(std::move(input));
+    }
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "InputIncompleteChoice");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        decoded ? "all InputField records must decode completely" : decoded.diagnostics().front().message);
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const model::ObjectId id{10 + index};
+        const auto* input = decoded.value().find_control(id);
+        expect(input != nullptr, "all InputField controls must survive the round trip");
+        const auto* mode = input->properties().find(property);
+        if (index % 3 == 2) {
+            expect(mode && std::get<model::EnumerationValue>(mode->value) ==
+                model::EnumerationValue{"IncompleteChoiceMode", "OnActivate"},
+                "OnActivate must be restored as its named value");
+        } else {
+            expect(mode == nullptr, "default OnEnterPressed must be omitted from the decoded explicit properties");
+        }
+        const auto* enabled = input->properties().find(model::PropertyId::from_name("Enabled"));
+        const auto* wrap = input->properties().find(model::PropertyId::from_name("Wrap"));
+        const auto* width = input->properties().find(model::PropertyId::from_name("ChoiceListWidth"));
+        expect(enabled && !std::get<bool>(enabled->value) && wrap && !std::get<bool>(wrap->value) &&
+            width && std::get<std::int64_t>(width->value) == 17,
+            "incomplete choice mode must coexist with existing InputField properties");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "incomplete choice mode must serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "incomplete choice mode XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "InputField enum must rebuild without changing storage");
+
+    auto unknown_storage = encoded.value();
+    unknown_storage.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[37] =
+        list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(unknown_storage, "InputIncompleteChoice").ok(),
+        "unknown incomplete choice storage value must be rejected");
+    auto invalid_document = document;
+    const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{10}};
+    expect(invalid_document.set_prop_val(owner, property,
+        model::EnumerationValue{"IncompleteChoiceMode", "Unknown"}) == model::PropertyMutationStatus::invalid_value,
+        "unknown incomplete choice member must be rejected by the model");
+}
+
 void test_single_input_field_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -18164,6 +18239,7 @@ int main() {
         test_input_field_date_only_type_domain_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
+        test_input_incomplete_choice_mode_round_trip();
         test_single_input_field_round_trip();
         test_spreadsheet_cell_controls();
         test_spreadsheet_document_field_named_properties_and_events();

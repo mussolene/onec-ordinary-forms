@@ -1899,6 +1899,7 @@ struct InputFieldLayoutValues {
     std::int32_t vertical_align = 0;
     std::int32_t choice_list_height = 0;
     std::int32_t choice_list_width = 0;
+    std::int32_t incomplete_choice_mode = 0;
 };
 
 InputFieldFlagValues decode_input_field_flags(
@@ -1959,6 +1960,7 @@ LV canonical_input_field_info(
     value.items[2].items[0].items[18] = raw(std::to_string(layout_values.vertical_align));
     value.items[2].items[0].items[31] = raw(std::to_string(layout_values.choice_list_height));
     value.items[2].items[0].items[32] = raw(std::to_string(layout_values.choice_list_width));
+    value.items[2].items[0].items[37] = raw(std::to_string(layout_values.incomplete_choice_mode));
     if (type.entries.empty()) {
         value.items[2].items[0].items[14] = raw("0");
     } else if (type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::string) {
@@ -8643,10 +8645,17 @@ DecodedControl decode_input_field(
         payload.items[31], child_path(payload_path, 31));
     const auto choice_list_width = integer_atom<std::int32_t>(
         payload.items[32], child_path(payload_path, 32));
+    const auto incomplete_choice_mode = integer_atom<std::int32_t>(
+        payload.items[37], child_path(payload_path, 37));
+    if (incomplete_choice_mode < 0 || incomplete_choice_mode > 1) {
+        fail("OOF1114", child_path(payload_path, 37), "IncompleteChoiceMode storage value 0 or 1",
+            std::to_string(incomplete_choice_mode), "InputField.IncompleteChoiceMode storage value is unsupported");
+    }
     const auto input_field_flags = decode_input_field_flags(
         info, info_path, InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format};
-    const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width};
+    const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width,
+        incomplete_choice_mode};
     auto named_events = decode_control_event_collection(info.items[4], child_path(info_path, 4),
         model::ControlKind::input_field);
     LV normalized_info = info;
@@ -8701,6 +8710,10 @@ DecodedControl decode_input_field(
     if (choice_list_width != 0) {
         control.properties().set_explicit(model::PropertyId::from_name("ChoiceListWidth"),
             static_cast<std::int64_t>(choice_list_width));
+    }
+    if (incomplete_choice_mode == 1) {
+        control.properties().set_explicit(model::PropertyId::from_name("IncompleteChoiceMode"),
+            model::EnumerationValue{"IncompleteChoiceMode", "OnActivate"});
     }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         if (input_field_flags[index] != input_field_flag_mappings[index].default_value) {
@@ -10252,7 +10265,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -10275,6 +10288,8 @@ LV encode_input_field(
             {{"Top", 0}, {"Center", 1}, {"Bottom", 2}}),
         explicit_integer(control.properties(), "ChoiceListHeight", 0, "$/InputField/ChoiceListHeight"),
         explicit_integer(control.properties(), "ChoiceListWidth", 0, "$/InputField/ChoiceListWidth"),
+        explicit_enum_storage_value(control.properties(), "InputField", "IncompleteChoiceMode", "IncompleteChoiceMode", 0,
+            {{"OnEnterPressed", 0}, {"OnActivate", 1}}),
     };
     const auto font = explicit_control_font(control.properties(), "$/InputField/Font");
     const auto border_color = explicit_control_color(control.properties(), "BorderColor", "InputField");

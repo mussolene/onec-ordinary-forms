@@ -134,6 +134,8 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
         (property.api_name == "BeginOfDisplayPeriod" || property.api_name == "EndOfDisplayPeriod")) {
         return "CalendarBeginDateValueType";
     }
+    if (property.control_kind == model::ControlKind::input_field && property.api_name == "IncompleteChoiceMode")
+        return "InputIncompleteChoiceModeValueType";
     if (property.control_kind == model::ControlKind::calendar_field && property.api_name == "SelectionMode")
         return "CalendarDateSelectionModeValueType";
     if (property.control_kind == model::ControlKind::command_bar) {
@@ -425,6 +427,15 @@ void append_value_types(std::string& output) {
   <xs:complexType name="EnumerationValueType">
     <xs:attribute name="type" type="NonEmptyTokenType" use="required"/>
     <xs:attribute name="member" type="NonEmptyTokenType" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="InputIncompleteChoiceModeValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="IncompleteChoiceMode"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="OnEnterPressed"/><xs:enumeration value="OnActivate"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
   </xs:complexType>
 
   <xs:complexType name="CommandBarButtonsAlignmentValueType">
