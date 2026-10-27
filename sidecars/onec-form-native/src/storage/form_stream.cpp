@@ -4268,7 +4268,7 @@ struct DecodedControl {
 
 struct DecodedChartInfo {
     model::ChartPayload payload;
-    std::string title;
+    model::PropertyValue title{std::string{}};
     model::PropertySet properties;
     std::vector<DecodedControlEvent> events;
 };
@@ -6304,7 +6304,7 @@ std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_co
 
 void apply_chart_render_cache(const LV& actual, LV& expected,
     std::size_t middle_start, std::size_t render_start,
-    std::string_view path, bool title_coordinates) {
+    std::string_view path, bool title_geometry) {
     constexpr std::array<std::size_t, 11> middle_cache_offsets{82, 83, 84, 85, 86, 87, 88, 89, 90, 92, 93};
     constexpr std::array<std::size_t, 11> render_cache_offsets{0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11};
     const auto normalize = [&](std::size_t index) {
@@ -6326,7 +6326,7 @@ void apply_chart_render_cache(const LV& actual, LV& expected,
     };
     for (const auto offset : middle_cache_offsets) normalize(middle_start + offset);
     for (const auto offset : render_cache_offsets) normalize(render_start + offset);
-    if (title_coordinates) {
+    if (title_geometry) {
         normalize(middle_start + 91);
         normalize(render_start + 9);
     }
@@ -6402,7 +6402,7 @@ constexpr std::array chart_boolean_properties{
     ChartBooleanProperty{"AutoMinValue", 79, true, false},
 };
 
-LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
+LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValue& title,
     const model::PropertySet& properties = {}) {
     int chart_type = 4;
     if (const auto* entry = properties.find(model::PropertyId::from_name("ChartType"))) {
@@ -6479,7 +6479,7 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     auto middle = canonical_chart_middle_defaults();
     middle[2] = raw(std::to_string(chart_type));
     if (middle.size() <= 11) fail("OOF1122", "$/Chart/Title", "canonical Chart title slot", std::to_string(middle.size()), "Chart defaults do not contain the title slot");
-    middle[11] = encoded_localized(title);
+    middle[11] = encoded_localized_text(title, "$/Chart/TitleArea/Text");
     append(std::move(middle));
     append({string_value(""), raw("0"), raw(chart.series.empty() || chart.points.empty() ? "1" : "0")});
     for (const auto& series : chart.series) {
@@ -6720,12 +6720,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue",
         "AutoSeriesSeparation", "LabelType", "MaxSeries", "Orientation", "GaugeChartValueRepresentation", "LabelLocation", "GaugeChartValuesScaleLabelsLocation", "SpaceMode"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
-    std::string title;
-    if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
-        const auto* text = std::get_if<std::string>(&entry->value);
-        if (text == nullptr) fail("OOF1121", "$/Chart/Title", "string Title", "different value kind", "Chart Title has the wrong type");
-        title = *text;
-    }
+    const auto title = explicit_localized_text(control.properties(), "Title", "$/Chart/TitleArea");
     auto info = encode_chart_info(*chart, title, control.properties());
     if (!control.events.empty()) {
         auto event_table = encode_control_event_collection(document, control, "$/Chart/Events");
@@ -6790,7 +6785,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     }
     const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
     const auto title_offset = middle_start + 11;
-    const std::string title = decoded_single_language_text(at(info, title_offset, info_path), child_path(info_path, title_offset));
+    const auto title = decoded_localized_text(at(info, title_offset, info_path), child_path(info_path, title_offset));
     const auto middle_defaults = canonical_chart_middle_defaults();
     const auto data_start = middle_start + middle_defaults.size() + 3;
     for (std::size_t series = 0; series < series_count; ++series) {
@@ -7086,7 +7081,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         }
     }
     apply_chart_render_cache(info, normalized_expected_info, middle_start, render_start, info_path,
-        payload.title_area && payload.title_area->placement == "UseCoordinates");
+        (payload.title_area && payload.title_area->placement == "UseCoordinates") ||
+        !std::holds_alternative<std::string>(title) || !std::get<std::string>(title).empty());
     const auto tooltip_companions_start = render_start + canonical_chart_render_defaults().size();
     for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
         const auto index = tooltip_companions_start + cell;
@@ -7120,7 +7116,8 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
         string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)),
         std::move(decoded.payload)};
     control.properties() = std::move(decoded.properties);
-    if (!decoded.title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), decoded.title);
+    if (!std::holds_alternative<std::string>(decoded.title) || !std::get<std::string>(decoded.title).empty())
+        control.properties().set_explicit(model::PropertyId::from_name("Title"), decoded.title);
     const auto expected_metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
     require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");
     const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);

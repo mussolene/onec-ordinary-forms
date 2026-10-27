@@ -16920,6 +16920,13 @@ void test_chart_area_border_font_round_trip() {
     const std::array<std::string_view, 9> title_placements{"Auto", "UseCoordinates", "LeftTop", "Top", "RightTop", "LeftBottom", "Bottom", "RightBottom", "None"};
     for (std::uint64_t i = 0; i < 12; ++i) {
         const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::title};
+        model::PropertyValue title_value = i % 2 == 0
+            ? model::PropertyValue{std::string("Заголовок ") + std::to_string(i)}
+            : model::PropertyValue{model::LocalizedStringValue{{{"ru", "Отчет"}, {"en", "Report"}}}};
+        expect(title_document.set_prop_val(owner, model::PropertyId::from_name("Text"), title_value) == model::PropertyMutationStatus::applied,
+            "title area text must accept plain and localized values");
+        const auto read_title = title_document.get_prop_val(owner, model::PropertyId::from_name("Text"));
+        expect(read_title.value && *read_title.value == title_value, "title area text must read back");
         const auto mode = model::EnumerationValue{"ChartTitleAreaPlacement", std::string(title_placements[i % title_placements.size()])};
         expect(title_document.set_prop_val(owner, model::PropertyId::from_name("Placement"), mode) == model::PropertyMutationStatus::applied_unclassified_storage,
             "title area placement must accept platform values");
@@ -16953,6 +16960,11 @@ void test_chart_area_border_font_round_trip() {
     expect(title_decoded.ok() && title_decoded.value().reconstruction_complete(), "title areas must decode completely");
     const auto title_xml = source::serialize_form_xml(title_decoded.value());
     expect(title_xml.ok(), "title areas must serialize to XML");
+    expect(title_xml.value().find("<TitleArea>") != std::string::npos &&
+        title_xml.value().find("<Text>") != std::string::npos,
+        "chart title text must belong to its TitleArea in public XML");
+    constexpr std::string_view old_title_xml = R"XML(<Form id="1" name="F" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Title>Wrong owner</Title><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(old_title_xml), "Chart title outside TitleArea must be rejected");
     const auto title_parsed = source::parse_form_xml(title_xml.value());
     expect(title_parsed.ok(), "title areas must parse from XML");
     const auto title_rebuilt = form_stream::encode_document(title_parsed.value());
@@ -17636,7 +17648,7 @@ void test_chart_named_events() {
 
 void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
-      <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><Title>Новая диаграмма</Title><Series>)XML";
+      <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><TitleArea><Text>Новая диаграмма</Text><Placement>Auto</Placement><Left>0.83</Left><Top>0</Top><Right>1</Right><Bottom>0.08</Bottom></TitleArea><Series>)XML";
     constexpr std::array<std::uint64_t, 5> series_ids{2, 8, 9, 10, 11};
     constexpr std::array<std::string_view, 5> series_texts{"Повтор", "Повтор", "", "Series 4", "Series 5"};
     constexpr std::array<std::string_view, 5> markers{"Auto", "Circle", "Rhomb", "Rect", "Alternation"};

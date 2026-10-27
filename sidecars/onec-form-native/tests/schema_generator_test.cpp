@@ -939,7 +939,7 @@ void test_control_surfaces_and_property_order(
             std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
             properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
                 return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries" ||
-                    property.api_name == "PlotArea" || property.api_name == "LegendArea" || property.api_name == "TitleArea";
+                    property.api_name == "PlotArea" || property.api_name == "LegendArea" || property.api_name == "TitleArea" || property.xml_name == "Title";
             }), properties.end());
             cursor = expect_property_sequence(properties, elements, cursor, true);
             expect_element_shape(elements[cursor++], "PlotArea", "ChartPlotAreaType", "0", "1");
@@ -955,11 +955,13 @@ void test_control_surfaces_and_property_order(
                 const auto style_count = std::ranges::count_if(oof::model::metamodel::chart_area_style_descriptors(),
                     [&](const auto& descriptor) { return descriptor.kind == kind; });
                 const auto format_count = kind == oof::model::ChartAreaKind::plot ? oof::model::metamodel::chart_plot_format_descriptors().size() : 0;
-                expect(fields.size() == 5 + static_cast<std::size_t>(bool_count + color_count + style_count) + format_count && attribute(fields[0], "name") == "Placement" &&
-                    attribute(fields[1], "name") == "Left" && attribute(fields[2], "name") == "Top" &&
-                    attribute(fields[3], "name") == "Right" && attribute(fields[4], "name") == "Bottom" &&
-                    attribute(fields[1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
-                std::size_t boolean_index = 5;
+                const std::size_t base = kind == oof::model::ChartAreaKind::title ? 1 : 0;
+                if (base) expect_element_shape(fields[0], "Text", "LocalizedTextValueType", "0", "1");
+                expect(fields.size() == base + 5 + static_cast<std::size_t>(bool_count + color_count + style_count) + format_count && attribute(fields[base], "name") == "Placement" &&
+                    attribute(fields[base + 1], "name") == "Left" && attribute(fields[base + 2], "name") == "Top" &&
+                    attribute(fields[base + 3], "name") == "Right" && attribute(fields[base + 4], "name") == "Bottom" &&
+                    attribute(fields[base + 1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
+                std::size_t boolean_index = base + 5;
                 for (const auto& descriptor : oof::model::metamodel::chart_area_boolean_descriptors()) {
                     if (descriptor.kind == kind)
                         expect_element_shape(fields[boolean_index++], descriptor.name, "xs:boolean", "0", "1");

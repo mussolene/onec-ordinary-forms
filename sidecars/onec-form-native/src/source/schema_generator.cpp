@@ -665,6 +665,8 @@ void append_value_types(std::string& output) {
         output += "  <xs:complexType";
         append_attribute(output, "name", type_name);
         output += "><xs:sequence>";
+        if (kind == model::ChartAreaKind::title)
+            output += "<xs:element name=\"Text\" type=\"LocalizedTextValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>";
         for (const auto& descriptor : model::metamodel::chart_area_property_descriptors()) {
             output += "<xs:element";
             append_attribute(output, "name", descriptor.name);
@@ -1159,7 +1161,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             std::vector<model::metamodel::PropertyDescriptor> chart_properties;
             for (const auto& property : metamodel.properties_for(control.kind)) {
                 if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries" &&
-                    property.api_name != "PlotArea" && property.api_name != "LegendArea" && property.api_name != "TitleArea") chart_properties.push_back(property);
+                    property.api_name != "PlotArea" && property.api_name != "LegendArea" && property.api_name != "TitleArea" && property.xml_name != "Title") chart_properties.push_back(property);
             }
             append_property_elements(output, chart_properties, "      ", false);
             output += "      <xs:element name=\"PlotArea\" type=\"ChartPlotAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";

@@ -409,7 +409,7 @@
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="LabelBackColor" apiName="LabelBackColor" russianName="ЦветФонаПодписей" russianType="Цвет" valueCodec="color"/>
               <Property name="LabelFont" apiName="LabelFont" russianName="ШрифтПодписей" russianType="Шрифт" valueCodec="font"/>
-              <Property name="Title" apiName="TitleArea.Text" russianName="ОбластьЗаголовка.Текст" russianType="Строка" valueCodec="string"/>
+              <Property name="Title" apiName="TitleArea.Text" russianName="ОбластьЗаголовка.Текст" russianType="Строка" valueCodec="localized-text"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>

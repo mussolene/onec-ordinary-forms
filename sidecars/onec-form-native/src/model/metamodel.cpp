@@ -1622,11 +1622,11 @@ struct Metamodel::Impl {
             form_properties,
             events);
         auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
-        // Публичное Title отображает путь Диаграмма.ОбластьЗаголовка.Текст, а не отдельное свойство диаграммы.
+        // Текст области заголовка хранится в модели диаграммы и выводится внутри TitleArea.
         chart_properties.push_back({
             PropertyId::from_name("Title"), DescriptorOwner::control,
             PropertySurface::control_payload, ControlKind::chart, chart_properties.size(), "Title", "TitleArea.Text",
-            u8"ОбластьЗаголовка.Текст", u8"Строка", ValueKind::string, ValueCodec::string,
+            u8"ОбластьЗаголовка.Текст", u8"Строка", ValueKind::string, ValueCodec::localized_text,
             ApiAccess::read_write, VersionMask::platform_8_5,
             PersistenceClass::persisted_editable, StorageCodec::control_info,
             {DefaultKind::string, ""}});

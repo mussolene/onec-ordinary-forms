@@ -359,7 +359,7 @@ void test_all_control_variants() {
         } else {
             xml += "<Position/>";
             if (descriptor.kind == model::ControlKind::chart) {
-                xml += "<Title>Title</Title><Series><ChartSeries id=\"2\"><Text>Series</Text><Color kind=\"absolute\" red=\"1\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/></ChartSeries></Series>"
+                xml += "<TitleArea><Text>Title</Text><Placement>Auto</Placement><Left>0.83</Left><Top>0</Top><Right>1</Right><Bottom>0.08</Bottom></TitleArea><Series><ChartSeries id=\"2\"><Text>Series</Text><Color kind=\"absolute\" red=\"1\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/></ChartSeries></Series>"
                        "<Points><ChartPoint id=\"1\"><Text>Point</Text><Color kind=\"absolute\" red=\"2\"/></ChartPoint></Points>"
                        "<Values><ChartValue seriesRef=\"2\" pointRef=\"1\"><Number>1</Number></ChartValue></Values>";
             }

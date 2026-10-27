@@ -1710,7 +1710,10 @@ private:
                     const auto field_name = node_name(field);
                     if (!seen.insert(field_name).second)
                         fail("OOF2003", field, id_text, field_name, "one area property", field_name, "Duplicate Chart area property");
-                    if (field_name == "Placement") {
+                    if (kind == model::ChartAreaKind::title && field_name == "Text") {
+                        auto text = parse_property_value(field, mm::ValueCodec::localized_text, id_text);
+                        control.properties().set_explicit(model::PropertyId::from_name("Title"), std::move(text));
+                    } else if (field_name == "Placement") {
                         parsed.placement = node_text(field);
                         if (!valid_chart_area_placement(name, parsed.placement))
                             fail("OOF2003", field, id_text, field_name, "valid area placement", parsed.placement, "Invalid Chart area placement");
@@ -2061,6 +2064,8 @@ private:
                     fail("OOF2003", child, id_text, name, "ChoiceButtonPicture", name,
                         "Use the canonical XML property for the picture alias");
                 }
+                if (descriptor->kind == model::ControlKind::chart && name == "Title")
+                    fail("OOF2003", child, id_text, name, "TitleArea/Text", name, "Chart title text belongs to TitleArea");
                 const mm::PropertyDescriptor* property =
                     metamodel_.property(descriptor->kind, name);
                 if (property == nullptr) {
@@ -3700,6 +3705,11 @@ private:
             write_property_set(control.properties(), properties.subspan(offset, 2), id);
             write_dendrogram_payload(*dendrogram, id);
             write_property_set(control.properties(), properties.subspan(offset + 2), id);
+        } else if (control.kind() == model::ControlKind::chart) {
+            for (const auto& descriptor : metamodel_.properties_for(control.kind())) {
+                if (descriptor.xml_name == "Title") continue;
+                write_property_set(control.properties(), std::span{&descriptor, 1}, id);
+            }
         } else {
             write_property_set(control.properties(), metamodel_.properties_for(control.kind()), id);
         }
@@ -3717,6 +3727,15 @@ private:
                         serialization_fail(id, std::string(name), "bounds between 0 and 1", bound, "Chart area bound is out of range");
                 }
                 writer_.open(name);
+                if (name == "TitleArea") {
+                    const auto* text = control.properties().find(model::PropertyId::from_name("Title"));
+                    if (text != nullptr) {
+                        mm::PropertyDescriptor property;
+                        property.xml_name = "Text";
+                        property.value_codec = mm::ValueCodec::localized_text;
+                        write_property(property, text->value, id);
+                    }
+                }
                 writer_.text("Placement", area->placement);
                 for (const auto& descriptor : mm::chart_area_property_descriptors()) {
                     if (descriptor.coordinate != nullptr)
@@ -3765,7 +3784,18 @@ private:
             };
             write_area("PlotArea", chart->plot_area);
             write_area("LegendArea", chart->legend_area);
-            write_area("TitleArea", chart->title_area);
+            auto title_area = chart->title_area;
+            if (!title_area && control.properties().find(model::PropertyId::from_name("Title")) != nullptr) {
+                model::ChartArea defaults;
+                for (const auto& descriptor : mm::chart_area_property_descriptors())
+                    if (descriptor.coordinate != nullptr)
+                        defaults.*(descriptor.coordinate) = model::DecimalValue{std::string(descriptor.title_default)};
+                const auto* show = control.properties().find(model::PropertyId::from_name("ShowTitle"));
+                if (show != nullptr && std::holds_alternative<bool>(show->value) && !std::get<bool>(show->value))
+                    defaults.placement = "None";
+                title_area = std::move(defaults);
+            }
+            write_area("TitleArea", title_area);
             if (chart->summary_series.color != model::ColorValue{} ||
                 chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
                 writer_.open("SummarySeries");
