@@ -97,6 +97,48 @@ void test_complete_document_roundtrip() {
     expect(repeated.value() == serialized.value(), "Form.xml serialization must be deterministic");
 }
 
+void test_xml_explicit_z_order_normalization() {
+    std::string xml = R"XML(<Form id="1" name="ZOrder" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    for (int index = 0; index < 12; ++index) {
+        xml += "<LabelDecoration id=\"" + std::to_string(index + 10) + "\" name=\"Label" + std::to_string(index) + "\"><Position>";
+        if (index == 0) xml += "<ZOrder>12</ZOrder>";
+        if (index == 11) xml += "<ZOrder>1</ZOrder>";
+        xml += "</Position></LabelDecoration>";
+    }
+    xml += "</ChildItems></Form>";
+    auto document = source::parse_form_xml(xml);
+    expect(document.ok(), "a complete explicit display permutation must parse");
+    const auto& children = document.value().form().children;
+    expect(std::get<model::ControlRef>(children.front()).id() == model::ObjectId{21} &&
+               std::get<model::ControlRef>(children.back()).id() == model::ObjectId{10},
+        "ZOrder must define canonical ChildItems order");
+    for (int index = 0; index < 12; ++index) {
+        const auto id = model::ObjectId{static_cast<std::uint64_t>(index + 10)};
+        const auto tab = document.value().get_prop_val({model::ObjectCategory::control, id}, model::PropertyId::from_name("TabOrder"));
+        expect(tab.value == model::PropertyValue{std::int64_t{index + 1}}, "normalization must preserve the initial tab order");
+        expect(!document.value().find_control(id)->position.z_order.is_explicit(), "normalization must not leave a separate stored ZOrder");
+    }
+    const auto out = source::serialize_form_xml(document.value());
+    expect(out.ok() && out.value().find("<ZOrder>") == std::string::npos, "canonical XML uses ChildItems for display order");
+    const auto reparsed = source::parse_form_xml(out.value());
+    expect(reparsed.ok() && reparsed.value().form().children == children, "canonical XML must preserve the display permutation");
+    const auto encoded = oof::storage::form_stream::encode_document(reparsed.value());
+    expect(encoded.ok(), "normalized display order must build the form stream");
+    const auto invalid = [](std::string_view first, std::string_view second) {
+        return "<Form id=\"1\" name=\"Z\" ordinaryFormVersion=\"2.1\"><ChildItems><LabelDecoration id=\"2\" name=\"A\"><Position>" +
+            std::string(first) + "</Position></LabelDecoration><LabelDecoration id=\"3\" name=\"B\"><Position>" +
+            std::string(second) + "</Position></LabelDecoration></ChildItems></Form>";
+    };
+    const auto partial = source::parse_form_xml(invalid("<ZOrder>2</ZOrder>", ""));
+    expect(partial.ok() && std::get<model::ControlRef>(partial.value().form().children.front()).id() == model::ObjectId{3},
+        "partial display order must leave unspecified siblings in their original relative order");
+    const auto second_first = source::parse_form_xml(invalid("", "<ZOrder>1</ZOrder>"));
+    expect(second_first.ok() && std::get<model::ControlRef>(second_first.value().form().children.front()).id() == model::ObjectId{3},
+        "a single explicit first position must move the second sibling to the front");
+    expect_code(source::parse_form_xml(invalid("<ZOrder>1</ZOrder>", "<ZOrder>1</ZOrder>")), "OOF2003", "duplicate display order must be rejected");
+    expect_code(source::parse_form_xml(invalid("<ZOrder>3</ZOrder>", "")), "OOF2003", "out-of-range display order must be rejected");
+}
+
 void test_reconstruction_completeness_xml_metadata() {
     constexpr std::string_view incomplete_xml =
         R"XML(<Form id="1" name="Partial" ordinaryFormVersion="2.1" reconstructionComplete="false"/>)XML";
@@ -3248,6 +3290,7 @@ int main() {
         test_chart_type_xml();
         test_chart_summary_series_color_xml();
         test_complete_document_roundtrip();
+        test_xml_explicit_z_order_normalization();
         test_usual_group_named_xml_round_trip();
         test_root_page_tree_xml_roundtrip();
         test_page_internal_ids_do_not_change_xml();

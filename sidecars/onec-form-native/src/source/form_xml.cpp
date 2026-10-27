@@ -2575,6 +2575,63 @@ private:
                 children.emplace_back(parse_control(child));
             }
         }
+        const auto control_for = [&](model::ObjectId id) -> model::ControlNode* {
+            const auto found = std::ranges::find(objects_.controls, id, &model::ControlNode::id);
+            return found == objects_.controls.end() ? nullptr : &*found;
+        };
+        bool has_z_order = false;
+        for (const auto& child : children) {
+            const auto* ref = std::get_if<model::ControlRef>(&child);
+            const auto* control = ref ? control_for(ref->id()) : nullptr;
+            if (control && control->position.z_order.is_explicit()) has_z_order = true;
+        }
+        if (has_z_order) {
+            struct OrderedChild {
+                model::ChildItemRef child;
+                model::ControlNode* control;
+                std::int32_t order;
+                std::int32_t tab_order;
+            };
+            std::vector<OrderedChild> ordered;
+            std::set<std::int32_t> orders;
+            std::set<std::int32_t> tab_orders;
+            if (children.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+                fail("OOF2003", node, {}, "ZOrder", "bounded sibling count", "too many", "Invalid display order");
+            for (const auto& child : children) {
+                const auto* ref = std::get_if<model::ControlRef>(&child);
+                auto* control = ref ? control_for(ref->id()) : nullptr;
+                if (!control)
+                    fail("OOF2003", node, {}, "ZOrder", "control siblings", "Page or unresolved control", "Display order requires control siblings");
+                if (!control->position.z_order.is_explicit()) continue;
+                const auto z = control->position.z_order.value();
+                if (!z || *z < 1 || static_cast<std::size_t>(*z) > children.size() || !orders.insert(*z).second)
+                    fail("OOF2003", node, object_id_text(control->id), "ZOrder", "unique sibling position", z ? std::to_string(*z) : "undefined", "Display order conflicts with another sibling or is out of range");
+            }
+            std::int64_t next_free = 1;
+            for (std::size_t index = 0; index < children.size(); ++index) {
+                const auto* ref = std::get_if<model::ControlRef>(&children[index]);
+                auto* control = ref ? control_for(ref->id()) : nullptr;
+                const auto implicit = static_cast<std::int32_t>(index + 1);
+                std::int32_t z = 0;
+                if (control->position.z_order.is_explicit()) z = *control->position.z_order.value();
+                else {
+                    while (orders.contains(static_cast<std::int32_t>(next_free))) ++next_free;
+                    z = static_cast<std::int32_t>(next_free++);
+                }
+                const auto tab = control->position.tab_order.is_explicit() ? control->position.tab_order.value() : std::optional<std::int32_t>{implicit};
+                if (!tab || *tab < 1 || static_cast<std::size_t>(*tab) > children.size() || !tab_orders.insert(*tab).second)
+                    fail("OOF2003", node, object_id_text(control->id), "TabOrder", "unique sibling position", tab ? std::to_string(*tab) : "undefined", "Tab order conflicts with another sibling or is out of range");
+                ordered.push_back({children[index], control, z, *tab});
+            }
+            std::ranges::sort(ordered, {}, &OrderedChild::order);
+            for (std::size_t index = 0; index < ordered.size(); ++index) {
+                children[index] = ordered[index].child;
+                auto& position = ordered[index].control->position;
+                position.z_order.reset();
+                if (ordered[index].tab_order == static_cast<std::int32_t>(index + 1)) position.tab_order.reset();
+                else position.tab_order.set(std::optional<std::int32_t>{ordered[index].tab_order});
+            }
+        }
         return children;
     }
 
