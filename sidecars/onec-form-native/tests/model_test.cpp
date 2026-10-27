@@ -533,12 +533,26 @@ void test_opening_boundary_for_window_properties() {
             "window location must be writable before opening");
     const auto before_appearance = document.get_prop_val(owner, appearance);
     const auto before_location = document.get_prop_val(owner, location);
+    for (const auto name : {"AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow"}) {
+        const auto property = PropertyId::from_name(name);
+        expect(document.set_prop_val(owner, property, true) == PropertyMutationStatus::unsupported_surface &&
+               document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface,
+            "unmodeled window permission mutations must not report success");
+    }
     const auto xml = oof::source::serialize_form_xml(document);
     const auto binary = oof::save_form_bin(document);
     expect(xml.ok() && binary.ok(), "window properties must serialize before opening");
     expect(!document.opening_started(), "new document must be editable before opening");
     document.mark_opening_started();
     document.mark_opening_started();
+    for (const auto name : {"AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow"}) {
+        const auto property = PropertyId::from_name(name);
+        for (const auto value : {false, true})
+            expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::forbidden_after_opening_started,
+                "window permission assignment after opening starts must be forbidden");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::forbidden_after_opening_started,
+            "window permission reset must not bypass the opening restriction");
+    }
     expect(document.opening_started(), "opening transition must be idempotent");
     for (const auto member : {"Auto", "Enable", "Disable"})
         expect(document.set_prop_val(owner, appearance, EnumerationValue{"WindowAppearanceModeChange", member}) ==

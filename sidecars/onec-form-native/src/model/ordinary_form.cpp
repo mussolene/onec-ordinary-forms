@@ -1192,9 +1192,17 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
                                   property == PropertyId::from_name("WindowDockLocation") ||
-                                  property == PropertyId::from_name("ConnectableWindow")))
+                                  property == PropertyId::from_name("ConnectableWindow") ||
+                                  property == PropertyId::from_name("AllowNormalState") ||
+                                  property == PropertyId::from_name("AllowDockedState") ||
+                                  property == PropertyId::from_name("AllowAutohideState") ||
+                                  property == PropertyId::from_name("AllowFloatState") ||
+                                  property == PropertyId::from_name("AllowJoinWindow")))
             return PropertyMutationStatus::forbidden_after_opening_started;
-        if (property == PropertyId::from_name("WindowState") || property == PropertyId::from_name("ConnectableWindow")) return PropertyMutationStatus::unsupported_surface;
+        if (property == PropertyId::from_name("WindowState") || property == PropertyId::from_name("ConnectableWindow") ||
+            property == PropertyId::from_name("AllowNormalState") || property == PropertyId::from_name("AllowDockedState") ||
+            property == PropertyId::from_name("AllowAutohideState") || property == PropertyId::from_name("AllowFloatState") ||
+            property == PropertyId::from_name("AllowJoinWindow")) return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {
@@ -1509,9 +1517,17 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
                                   property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
                                   property == PropertyId::from_name("WindowDockLocation") ||
-                                  property == PropertyId::from_name("ConnectableWindow")))
+                                  property == PropertyId::from_name("ConnectableWindow") ||
+                                  property == PropertyId::from_name("AllowNormalState") ||
+                                  property == PropertyId::from_name("AllowDockedState") ||
+                                  property == PropertyId::from_name("AllowAutohideState") ||
+                                  property == PropertyId::from_name("AllowFloatState") ||
+                                  property == PropertyId::from_name("AllowJoinWindow")))
             return PropertyMutationStatus::forbidden_after_opening_started;
-        if (property == PropertyId::from_name("WindowState") || property == PropertyId::from_name("ConnectableWindow")) return PropertyMutationStatus::unsupported_surface;
+        if (property == PropertyId::from_name("WindowState") || property == PropertyId::from_name("ConnectableWindow") ||
+            property == PropertyId::from_name("AllowNormalState") || property == PropertyId::from_name("AllowDockedState") ||
+            property == PropertyId::from_name("AllowAutohideState") || property == PropertyId::from_name("AllowFloatState") ||
+            property == PropertyId::from_name("AllowJoinWindow")) return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {
