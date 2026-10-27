@@ -187,6 +187,10 @@ struct UndefinedValue {
     friend bool operator==(UndefinedValue, UndefinedValue) = default;
 };
 
+struct NullValue {
+    friend bool operator==(NullValue, NullValue) = default;
+};
+
 struct UuidValue {
     std::string canonical = "00000000-0000-0000-0000-000000000000";
 
@@ -462,6 +466,7 @@ struct CommandBarButton {
 
 using PropertyValue = std::variant<
     UndefinedValue,
+    NullValue,
     bool,
     std::int64_t,
     DecimalValue,

@@ -517,6 +517,40 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_form_runtime_variant_values() {
+    Form form; form.id = ObjectId{1}; form.name = "RuntimeVariants";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto original_xml = oof::source::serialize_form_xml(document);
+    const auto original_bin = oof::save_form_bin(document);
+    expect(original_xml.ok() && original_bin.ok(), "form with runtime variants must serialize");
+    const std::vector<PropertyValue> values{UndefinedValue{}, NullValue{}, true, std::int64_t{123}, DecimalValue{"123.45"},
+        std::string{"Ключ Ω"}, DateValue{"2026-10-27T12:34:56"}, EnumerationValue{"WindowStateVariant", "Float"}};
+    for (const auto name : {"UniqueKey", "ChoiceInitialValue"}) {
+        const auto property = PropertyId::from_name(name);
+        expect(document.get_prop_val(owner, property).value == PropertyValue{UndefinedValue{}}, "runtime variant must initially be undefined");
+        for (const auto& value : values)
+            expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::applied_runtime_only &&
+                document.get_prop_val(owner, property).value == value, "runtime variant must retain the exact supported type and value");
+        expect(document.set_prop_val(owner, property, DecimalValue{"bad"}) == PropertyMutationStatus::invalid_value &&
+            document.set_prop_val(owner, property, TypeDomainPatternValue{}) == PropertyMutationStatus::unsupported_surface,
+            "invalid or unimplemented variant types must not report success");
+    }
+    const auto xml = oof::source::serialize_form_xml(document);
+    const auto bin = oof::save_form_bin(document);
+    expect(xml.ok() && xml.value() == original_xml.value() && bin.ok() && bin.value() == original_bin.value(),
+        "runtime variants must not change saved forms");
+    const auto restored = oof::load_form_bin(bin.value());
+    expect(restored.ok() && restored.value().get_prop_val(owner, PropertyId::from_name("UniqueKey")).value == PropertyValue{UndefinedValue{}} &&
+        restored.value().get_prop_val(owner, PropertyId::from_name("ChoiceInitialValue")).value == PropertyValue{UndefinedValue{}},
+        "restored runtime variants must be undefined");
+    document.mark_opening_started();
+    expect(document.set_prop_val(owner, PropertyId::from_name("UniqueKey"), NullValue{}) == PropertyMutationStatus::applied_runtime_only &&
+        document.get_prop_val(owner, PropertyId::from_name("UniqueKey")).value == PropertyValue{NullValue{}}, "Null must remain distinct from undefined after opening");
+    expect(document.reset_prop_val(owner, PropertyId::from_name("UniqueKey")) == PropertyMutationStatus::reset_runtime_only &&
+        document.get_prop_val(owner, PropertyId::from_name("UniqueKey")).value == PropertyValue{UndefinedValue{}}, "reset must restore undefined");
+}
+
 void test_window_options_aliases() {
     Form form; form.id = ObjectId{1}; form.name = "WindowOptions";
     OrdinaryFormDocument document(std::move(form));
@@ -543,6 +577,8 @@ void test_window_options_aliases() {
         document.get_prop_val(owner, name).value == PropertyValue{std::string{"after"}}, "window option aliases remain writable after opening");
     expect(document.set_prop_val(owner, key, UndefinedValue{}) == PropertyMutationStatus::applied_runtime_only &&
         document.get_prop_val(owner, name).value == PropertyValue{std::string{}}, "undefined must convert to the empty string");
+    expect(document.set_prop_val(owner, key, NullValue{}) == PropertyMutationStatus::applied_runtime_only &&
+        document.get_prop_val(owner, name).value == PropertyValue{std::string{}}, "Null must convert to the empty string");
     expect(document.reset_prop_val(owner, name) == PropertyMutationStatus::reset_runtime_only &&
         document.get_prop_val(owner, key).value == PropertyValue{std::string{}}, "reset must clear the shared alias value");
 }
@@ -3857,6 +3893,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
+        test_form_runtime_variant_values();
         test_window_options_aliases();
         test_form_runtime_boolean_values();
         test_window_permission_mutations();

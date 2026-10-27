@@ -1000,6 +1000,11 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
         if (property == PropertyId::from_name("ThisForm"))
             return {PropertyReadStatus::computed_value, PropertyValue{FormRef{form_.id}}};
+        if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
+            if (const auto* entry = runtime_form_values_.find(property))
+                return {PropertyReadStatus::computed_value, entry->value};
+            return {PropertyReadStatus::computed_value, PropertyValue{UndefinedValue{}}};
+        }
         if (property == PropertyId::from_name("WindowOptionsName") || property == PropertyId::from_name("WindowOptionsKey")) {
             if (const auto* entry = runtime_form_values_.find(PropertyId::from_name("WindowOptionsName")))
                 return {PropertyReadStatus::computed_value, entry->value};
@@ -1231,8 +1236,22 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
+            if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
+                if (!canonical_chart_decimal(decimal->canonical)) return PropertyMutationStatus::invalid_value;
+            } else if (const auto* date = std::get_if<DateValue>(&value)) {
+                try { static_cast<void>(storage::value_codec::date_to_platform(date->canonical)); }
+                catch (const std::exception&) { return PropertyMutationStatus::invalid_value; }
+            } else if (const auto* enumeration = std::get_if<EnumerationValue>(&value)) {
+                if (enumeration->type_name.empty() || enumeration->member.empty()) return PropertyMutationStatus::invalid_value;
+            } else if (!std::holds_alternative<UndefinedValue>(value) && !std::holds_alternative<NullValue>(value) &&
+                       !std::holds_alternative<bool>(value) && !std::holds_alternative<std::int64_t>(value) &&
+                       !std::holds_alternative<std::string>(value)) return PropertyMutationStatus::unsupported_surface;
+            runtime_form_values_.set_explicit(property, std::move(value));
+            return PropertyMutationStatus::applied_runtime_only;
+        }
         if (property == PropertyId::from_name("WindowOptionsName") || property == PropertyId::from_name("WindowOptionsKey")) {
-            if (std::holds_alternative<UndefinedValue>(value)) value = std::string{};
+            if (std::holds_alternative<UndefinedValue>(value) || std::holds_alternative<NullValue>(value)) value = std::string{};
             if (!std::holds_alternative<std::string>(value)) return PropertyMutationStatus::unsupported_surface;
             runtime_form_values_.set_explicit(PropertyId::from_name("WindowOptionsName"), std::move(value));
             return PropertyMutationStatus::applied_runtime_only;
@@ -1606,6 +1625,10 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
+            runtime_form_values_.unset(property);
+            return PropertyMutationStatus::reset_runtime_only;
+        }
         if (property == PropertyId::from_name("WindowOptionsName") || property == PropertyId::from_name("WindowOptionsKey")) {
             runtime_form_values_.unset(PropertyId::from_name("WindowOptionsName"));
             return PropertyMutationStatus::reset_runtime_only;
