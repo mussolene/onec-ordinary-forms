@@ -18011,6 +18011,8 @@ void test_chart_named_integer_and_delimiter_properties() {
                         auto control = *document.find_control(model::ObjectId{2});
                         if (!with_event) control.events.clear();
                         control.properties().set_explicit(model::PropertyId::from_name("BaseValue"), model::DecimalValue{text});
+                        control.properties().set_explicit(model::PropertyId::from_name("MaxValue"), model::DecimalValue{text});
+                        control.properties().set_explicit(model::PropertyId::from_name("MinValue"), model::DecimalValue{"-0.1"});
                         control.properties().set_explicit(model::PropertyId::from_name("AutoMaxValue"), auto_max);
                         control.properties().set_explicit(model::PropertyId::from_name("AutoMinValue"), auto_min);
                         control.properties().set_explicit(model::PropertyId::from_name("ChartType"), model::EnumerationValue{"ChartType", chart_type});
@@ -18022,8 +18024,24 @@ void test_chart_named_integer_and_delimiter_properties() {
                         const auto& stored = find_chart_record(native.value())->items[3];
                         expect(stored.items[middle + 49].atom == text && stored.items[limit].items[1].atom == text,
                             "Chart BaseValue must be exact in both native fields");
+                        expect(stored.items[limit].items[2].items[4].atom == text &&
+                               stored.items[limit].items[2].items[2].atom == "-0.1",
+                            "Chart limits must preserve exact decimal values");
                         auto decoded_base = form_stream::decode_document(native.value());
                         expect(decoded_base.ok() && decoded_base.value().reconstruction_complete(), "Chart BaseValue must decode completely");
+                        for (const auto& [name, expected] : {std::pair{"MaxValue", text}, std::pair{"MinValue", "-0.1"}}) {
+                            const auto actual = decoded_base.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}}, model::PropertyId::from_name(name));
+                            expect(actual.value && *actual.value == model::PropertyValue{model::DecimalValue{expected}}, "Chart limit must retain exact decimal");
+                        }
+                        auto cached = native.value();
+                        auto& cached_info = find_chart_record(cached)->items[3];
+                        cached_info.items[middle + 78] = list_stream::ListValue::raw_atom("9.999999999999998e-39");
+                        cached_info.items[middle + 80] = list_stream::ListValue::raw_atom("777");
+                        auto decoded_cached = form_stream::decode_document(cached);
+                        expect(decoded_cached.ok() && decoded_cached.value().reconstruction_complete(), "Chart derived limit values must not replace exact values");
+                        auto malformed_limit = native.value();
+                        find_chart_record(malformed_limit)->items[3].items[limit].items[2].items[4] = list_stream::ListValue::raw_atom("bad");
+                        expect(!form_stream::decode_document(malformed_limit).ok(), "Chart must reject malformed exact limit");
                         auto xml_base = source::serialize_form_xml(decoded_base.value());
                         expect(xml_base.ok(), "Chart BaseValue must serialize");
                         auto parsed_base = source::parse_form_xml(xml_base.value());

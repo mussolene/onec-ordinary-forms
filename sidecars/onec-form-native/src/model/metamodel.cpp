@@ -730,6 +730,8 @@ void apply_proven_storage_overrides(
         property->version_mask = VersionMask::platform_8_2_and_8_5;
     }
     classify_property(chart_properties, "BaseValue", StorageCodec::control_info, DefaultKind::decimal, "0");
+    for (const auto name : {"MaxValue", "MinValue"})
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::decimal, "0");
     classify_property(chart_properties, "ChartType", StorageCodec::control_info, DefaultKind::enumeration, "ChartType.Column");
     std::ranges::find(chart_properties, "ChartType", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     for (const auto& spec : detail::chart_enum_specs) {

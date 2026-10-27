@@ -6810,6 +6810,19 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     }
     info.at(middle_start + 49) = raw(base_value);
     limits.items.at(1) = raw(base_value);
+    auto& exact_limits = limits.items.at(2);
+    require_arity(exact_limits, 5, "$/Chart/Info/Limits/Values");
+    for (const auto& [name, slot] : {std::pair{"MaxValue", 4U}, std::pair{"MinValue", 2U}}) {
+        std::string value = "0";
+        if (const auto* entry = properties.find(model::PropertyId::from_name(name))) {
+            if (const auto* integer = std::get_if<std::int64_t>(&entry->value)) value = std::to_string(*integer);
+            else if (const auto* decimal = std::get_if<model::DecimalValue>(&entry->value)) {
+                try { value = value_codec::canonical_decimal(decimal->canonical); }
+                catch (const std::exception& error) { fail("OOF1122", std::string("$/Chart/") + name, "xs:decimal", decimal->canonical, error.what()); }
+            } else fail("OOF1122", std::string("$/Chart/") + name, "decimal", "different value type", "Chart limit must be a decimal");
+        }
+        exact_limits.items.at(slot) = raw(value);
+    }
     limits.items.at(3) = raw(explicit_bool(properties, "AutoMaxValue", true) ? "0" : "2");
     limits.items.at(4) = raw(explicit_bool(properties, "AutoMinValue", true) ? "0" : "2");
     auto result = list(std::move(info));
@@ -6875,7 +6888,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
-        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue",
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue", "MaxValue", "MinValue",
         "AutoSeriesSeparation", "LabelType", "MaxSeries", "Orientation", "GaugeChartValueRepresentation", "LabelLocation", "GaugeChartValuesScaleLabelsLocation", "SpaceMode"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     const auto title = explicit_localized_text(control.properties(), "Title", "$/Chart/TitleArea");
@@ -7140,6 +7153,17 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     if (base_value != repeated_base_value)
         fail("OOF1115", repeated_base_path, "matching Chart BaseValue fields", repeated_base_raw, "Chart BaseValue fields disagree");
     if (base_value != "0") properties.set_explicit(model::PropertyId::from_name("BaseValue"), model::DecimalValue{base_value});
+    const auto exact_limits_path = child_path(limit_path, 2);
+    const auto& exact_limits = at(limits, 2, limit_path);
+    require_arity(exact_limits, 5, exact_limits_path);
+    for (const auto& [name, slot] : {std::pair{"MaxValue", 4U}, std::pair{"MinValue", 2U}}) {
+        const auto path = child_path(exact_limits_path, slot);
+        const auto stored = raw_atom(at(exact_limits, slot, exact_limits_path), path);
+        std::string value;
+        try { value = value_codec::canonical_decimal(stored); }
+        catch (const std::exception& error) { fail("OOF1115", path, "xs:decimal Chart limit", stored, error.what()); }
+        if (value != "0") properties.set_explicit(model::PropertyId::from_name(name), model::DecimalValue{value});
+    }
     for (const auto& [name, slot] : {std::pair{"AutoMaxValue", 3U}, std::pair{"AutoMinValue", 4U}}) {
         const auto* entry = properties.find(model::PropertyId::from_name(name));
         const bool enabled = entry == nullptr || std::get<bool>(entry->value);
@@ -7235,6 +7259,14 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         area_defaults(model::ChartAreaKind::title), "$/Chart/TitleArea");
     const auto expected_info = encode_chart_info(payload, title, properties);
     auto normalized_expected_info = expected_info;
+    for (const auto offset : {std::size_t{78}, std::size_t{80}}) {
+        const auto index = middle_start + offset;
+        const auto path = child_path(info_path, index);
+        const auto stored = raw_atom(at(info, index, info_path), path);
+        try { static_cast<void>(value_codec::canonical_platform_decimal(stored)); }
+        catch (const std::exception& error) { fail("OOF1115", path, "numeric derived Chart limit", stored, error.what()); }
+        normalized_expected_info.items[index] = info.items[index];
+    }
     for (std::size_t series = 0; series < series_count; ++series) {
         if (derived_marker_caches[series]) {
             const auto row_offset = std::size_t{5} + series * 11;
