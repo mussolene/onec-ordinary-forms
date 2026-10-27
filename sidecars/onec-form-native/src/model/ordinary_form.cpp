@@ -925,6 +925,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (descriptor->api_name == "Data") return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (is_typed_collection_property(*descriptor)) {
@@ -1091,6 +1092,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         property_control = &control;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (descriptor->api_name == "Data") return PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
@@ -1294,6 +1296,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         property_control = &control;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (descriptor->api_name == "Data") return PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {

@@ -374,6 +374,35 @@ void test_descriptors() {
         "PictureDecoration Shortcut must use the shared typed Shortcut codec and None default");
 }
 
+void test_data_api_preserves_binding_until_supported() {
+    const std::array<ControlPayload, 10> payloads{
+        CalendarFieldPayload{}, ChoiceFieldPayload{}, CheckBoxPayload{}, RadioButtonPayload{},
+        InputFieldPayload{}, ListBoxPayload{}, ProgressBarPayload{}, TrackBarPayload{},
+        LabelDecorationPayload{}, TablePayload{}};
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "DataApi";
+    OrdinaryFormDocument document(std::move(form));
+    const auto property = PropertyId::from_name("Data");
+    for (std::size_t index = 0; index < payloads.size(); ++index) {
+        const ObjectId id{100 + index};
+        ControlNode control{id, "Control" + std::to_string(index), payloads[index]};
+        control.data_path = DataPath{AttributeRef{ObjectId{2}}, {}};
+        document.add_control(std::move(control));
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface,
+            "Data read must not report an unrelated extension value");
+        expect(document.set_prop_val(owner, property, std::string{"Other"}) == PropertyMutationStatus::unsupported_surface,
+            "unimplemented Data write must report unsupported");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface,
+            "unimplemented Data reset must report unsupported");
+        const auto* current = document.find_control(id);
+        expect(current && current->data_path && current->data_path->attribute.id() == ObjectId{2} &&
+                !current->extension_properties.find(property),
+            "Data API must not modify DataPath or create a shadow extension value");
+    }
+}
+
 void test_unavailable_ordinary_geometry_properties() {
     using namespace oof::model::metamodel;
 
@@ -3298,6 +3327,7 @@ int main() {
         test_input_incomplete_choice_mode_api();
         test_panel_scrolling_tab_read();
         test_unavailable_ordinary_geometry_properties();
+        test_data_api_preserves_binding_until_supported();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
         test_default_button_model();
