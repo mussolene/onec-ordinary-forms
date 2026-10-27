@@ -974,6 +974,9 @@ void apply_proven_storage_overrides(
         "");
 
     auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
+    for (const auto name : {"Picture", "ChoiceButtonPicture"}) {
+        classify_property(choice_field, name, StorageCodec::picture_record, DefaultKind::none, "");
+    }
     for (const auto name : {"ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly"})
         classify_property(choice_field, name, StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(choice_field, "ChoiceListHeight", StorageCodec::control_info, DefaultKind::integer, "0");
@@ -1123,6 +1126,9 @@ void apply_proven_storage_overrides(
     std::ranges::find(track_bar, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
+    for (const auto name : {"Picture", "ChoiceButtonPicture"}) {
+        classify_property(input_field, name, StorageCodec::picture_record, DefaultKind::none, "");
+    }
     classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(input_field, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(input_field, "HorizontalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Auto");

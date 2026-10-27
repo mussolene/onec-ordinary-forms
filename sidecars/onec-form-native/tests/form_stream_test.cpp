@@ -5044,6 +5044,125 @@ void test_button_external_picture_assets_round_trip() {
         "malformed Button image base64 must be rejected");
 }
 
+void test_choice_and_input_field_picture_properties_round_trip() {
+    const std::vector<std::uint8_t> picture_bytes{
+        'G','I','F','8','9','a',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41};
+    auto choice_button_bytes = picture_bytes;
+    choice_button_bytes.back() = 99;
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "FieldPictures";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{24, true};
+    document.add_attribute(model::Attribute{model::ObjectId{3}, "Value", model::TypeDomainPatternValue{{string_entry}}});
+
+    model::ControlNode choice{model::ObjectId{2}, "Choices", model::ChoiceFieldPayload{}};
+    choice.properties().set_explicit(model::PropertyId::from_name("Picture"),
+        model::PictureRef{model::PictureAssetRef{model::ObjectId{20}}});
+    choice.properties().set_explicit(model::PropertyId::from_name("ChoiceButtonPicture"),
+        model::PictureRef{model::PictureAssetRef{model::ObjectId{21}}});
+    choice.events.push_back(model::EventRef{model::ObjectId{30}});
+    document.add_event(model::Event{model::ObjectId{30}, "OnChange", "ChoiceChanged", model::ControlRef{choice.id}});
+    document.add_asset(model::PictureAsset{model::ObjectId{20}, "Items/Choices/Picture.gif",
+        model::PictureFormat::gif, picture_bytes, false});
+    document.add_asset(model::PictureAsset{model::ObjectId{21}, "Items/Choices/ChoiceButtonPicture.gif",
+        model::PictureFormat::gif, choice_button_bytes, true});
+    document.add_control(std::move(choice));
+
+    model::ControlNode input{model::ObjectId{4}, "ValueInput", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+    input.properties().set_explicit(model::PropertyId::from_name("ChoiceButtonPicture"),
+        model::PictureRef{model::PictureAssetRef{model::ObjectId{0}}, model::QualifiedName{"PictureLib.ActivateTask"}});
+    input.events.push_back(model::EventRef{model::ObjectId{31}});
+    document.add_event(model::Event{model::ObjectId{31}, "OnChange", "ValueChanged", model::ControlRef{input.id}});
+    document.add_control(std::move(input));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "ChoiceField and InputField picture properties must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    if (!encoded) return;
+    const auto* choice_record = find_record_with_guid(encoded.value(),
+        model::metamodel::descriptor_for(model::ControlKind::choice_field).guid);
+    const auto* input_record = find_record_with_guid(encoded.value(),
+        model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+    const auto empty_picture = list_stream::parse("{4,0,{0},\"\",-1,-1,1,0,\"\"}");
+    expect(choice_record && list_stream::dump_compact(choice_record->items[2].items[1].items[28]) !=
+               list_stream::dump_compact(empty_picture),
+        "ChoiceField.Picture must occupy its named slot 28");
+    expect(choice_record && list_stream::dump_compact(choice_record->items[2].items[1].items[29]) !=
+               list_stream::dump_compact(empty_picture),
+        "ChoiceField.ChoiceButtonPicture must occupy its named slot 29");
+    expect(input_record && list_stream::dump_compact(input_record->items[2].items[2].items[0].items[29]) !=
+               list_stream::dump_compact(empty_picture),
+        "InputField.ChoiceButtonPicture must occupy its named slot 29");
+    expect(input_record && list_stream::dump_compact(input_record->items[2].items[2].items[0].items[28]) ==
+               list_stream::dump_compact(empty_picture),
+        "absent InputField.Picture must retain the canonical empty descriptor");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "FieldPictures");
+    expect(decoded.ok(), decoded ? "field picture properties must decode" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    if (!decoded) return;
+    const auto* decoded_choice = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_input = decoded.value().find_control(model::ObjectId{4});
+    const auto picture_ref = [](const model::ControlNode* control, std::string_view name) -> const model::PictureRef* {
+        if (control == nullptr) return nullptr;
+        const auto* property = control->properties().find(model::PropertyId::from_name(name));
+        return property == nullptr ? nullptr : std::get_if<model::PictureRef>(&property->value);
+    };
+    const auto* choice_picture = picture_ref(decoded_choice, "Picture");
+    const auto* choice_button_picture = picture_ref(decoded_choice, "ChoiceButtonPicture");
+    const auto* standard_picture = picture_ref(decoded_input, "ChoiceButtonPicture");
+    const auto* first_asset = choice_picture == nullptr ? nullptr : decoded.value().find_asset(choice_picture->asset.id());
+    const auto* second_asset = choice_button_picture == nullptr ? nullptr : decoded.value().find_asset(choice_button_picture->asset.id());
+    expect(choice_picture && choice_button_picture && first_asset && second_asset &&
+               first_asset->id != second_asset->id && first_asset->bytes == picture_bytes &&
+               second_asset->bytes == choice_button_bytes && !first_asset->transparent && second_asset->transparent,
+        "both external ChoiceField pictures must produce separate assets with independent bytes and transparency");
+    expect(first_asset && first_asset->relative_path == "Items/Choices/Picture.gif" &&
+               second_asset && second_asset->relative_path == "Items/Choices/ChoiceButtonPicture.gif",
+        "each external picture property must receive its own managed item path");
+    expect(standard_picture && standard_picture->standard_name &&
+               standard_picture->standard_name->value == "PictureLib.ActivateTask" &&
+               decoded_input && !picture_ref(decoded_input, "Picture"),
+        "known standard InputField picture must remain named and its absent Picture must stay absent");
+    expect(decoded_choice && decoded_choice->events.size() == 1 && decoded_input && decoded_input->events.size() == 1,
+        "field picture decoding must preserve control event references");
+    expect(decoded.value().assets().size() == 2, "each external field picture must produce exactly one asset");
+
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "field pictures, standard references, and events must survive exact storage round-trip");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<ChoiceButtonPicture") != std::string::npos &&
+               xml.value().find("ChoiceButtonPicture.gif") != std::string::npos,
+        "field picture properties must use named public XML and relative asset references");
+    if (xml) {
+        auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "field picture public XML must parse without raw stream values");
+        if (parsed) {
+            for (const auto& asset : decoded.value().assets()) {
+                parsed.value().set_asset_bytes(asset.id, asset.bytes);
+            }
+            const auto xml_reencoded = form_stream::encode_document(parsed.value());
+            expect(xml_reencoded.ok() && list_stream::dump_compact(xml_reencoded.value()) ==
+                       list_stream::dump_compact(encoded.value()),
+                "named field picture XML must rebuild the exact stream values");
+        }
+    }
+
+    auto malformed = encoded.value();
+    auto* mutable_choice = const_cast<list_stream::ListValue*>(find_record_with_guid(malformed,
+        model::metamodel::descriptor_for(model::ControlKind::choice_field).guid));
+    expect(mutable_choice != nullptr, "ChoiceField picture record must remain locatable for malformed-input coverage");
+    if (mutable_choice != nullptr) mutable_choice->items[2].items[1].items[29] = list_stream::ListValue::raw_atom("invalid");
+    expect(!form_stream::decode_document(malformed, "MalformedChoiceButtonPicture"),
+        "malformed ChoiceButtonPicture data must fail closed");
+}
+
 void test_all_standard_button_pictures_round_trip_without_assets() {
     const auto descriptors = model::metamodel::standard_picture_descriptors();
     expect(descriptors.size() == 294, "the complete sanitized standard picture catalog must be present");
@@ -17257,6 +17376,7 @@ int main() {
         test_automatic_button_text_without_explicit_text_round_trip();
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
+        test_choice_and_input_field_picture_properties_round_trip();
         test_button_then_label_decoration_round_trip();
         test_label_decoration_click_event_round_trip_and_guards();
         test_label_border_color_round_trip();

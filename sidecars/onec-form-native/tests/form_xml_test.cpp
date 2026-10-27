@@ -1820,6 +1820,91 @@ void test_standard_picture_xml_reference_roundtrip() {
     expect(!source::parse_form_xml(unknown).ok(), "unknown standard picture names must be rejected");
 }
 
+void test_choice_and_input_field_picture_references_xml() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="FieldPictures" ordinaryFormVersion="2.1">
+  <Attributes>
+    <Attribute id="3" name="Choice"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute>
+  </Attributes>
+  <PictureAssets>
+    <PictureAsset id="10" relativePath="Items/First/Picture.gif" format="gif"/>
+    <PictureAsset id="11" relativePath="Items/Second/Picture.png" format="png"/>
+  </PictureAssets>
+  <ChildItems>
+    <ChoiceField id="2" name="Choice">
+      <DataPath attributeId="3"/><Position/>
+      <Picture standardName="PictureLib.Write"/><ChoiceButtonPicture>10</ChoiceButtonPicture>
+    </ChoiceField>
+    <InputField id="4" name="Input">
+      <DataPath attributeId="3"/><Position/>
+      <Picture>10</Picture><ChoiceButtonPicture>11</ChoiceButtonPicture>
+    </InputField>
+  </ChildItems>
+</Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "ChoiceField and InputField picture references must parse" :
+        parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+
+    const auto check_picture = [&](model::ObjectId control_id, std::string_view property_name,
+                                   model::ObjectId asset_id,
+                                   std::optional<model::QualifiedName> standard_name = std::nullopt) {
+        const auto* control = parsed.value().find_control(control_id);
+        const auto* property = control == nullptr ? nullptr : control->properties().find(
+            model::PropertyId::from_name(property_name));
+        expect(property && std::holds_alternative<model::PictureRef>(property->value),
+            "field picture properties must materialize as PictureRef values");
+        const auto& reference = std::get<model::PictureRef>(property->value);
+        expect(reference.asset.id() == asset_id && reference.standard_name == standard_name,
+            "each field picture property must retain its own asset or standard resource reference");
+    };
+    check_picture(model::ObjectId{2}, "Picture", model::ObjectId{0},
+        model::QualifiedName{"PictureLib.Write"});
+    check_picture(model::ObjectId{2}, "ChoiceButtonPicture", model::ObjectId{10});
+    check_picture(model::ObjectId{4}, "Picture", model::ObjectId{10});
+    check_picture(model::ObjectId{4}, "ChoiceButtonPicture", model::ObjectId{11});
+
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() &&
+               serialized.value().find("<Picture standardName=\"PictureLib.Write\"/>") != std::string::npos &&
+               serialized.value().find("<ChoiceButtonPicture>10</ChoiceButtonPicture>") != std::string::npos &&
+               serialized.value().find("<Picture>10</Picture>") != std::string::npos &&
+               serialized.value().find("<ChoiceButtonPicture>11</ChoiceButtonPicture>") != std::string::npos,
+        "ChoiceField and InputField pictures must serialize together as distinct named references");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && source::serialize_form_xml(reparsed.value()).value() == serialized.value(),
+        "field picture references must survive a deterministic XML-only roundtrip");
+
+    constexpr std::string_view empty_xml = R"XML(<Form id="1" name="EmptyPictures" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="3" name="Value"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
+  <ChildItems>
+    <ChoiceField id="2" name="Choice"><DataPath attributeId="3"/><Position/><Picture/><ChoiceButtonPicture/></ChoiceField>
+    <InputField id="4" name="Input"><DataPath attributeId="3"/><Position/><Picture/><ChoiceButtonPicture/></InputField>
+  </ChildItems>
+</Form>)XML";
+    expect(!source::parse_form_xml(empty_xml).ok(),
+        "empty field picture references must be rejected; omitted properties express absence");
+
+    constexpr std::string_view duplicate_xml = R"XML(<Form id="1" name="DuplicatePictures" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="3" name="Value"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
+  <ChildItems><ChoiceField id="2" name="Choice"><DataPath attributeId="3"/><Position/><Picture/><Picture/></ChoiceField></ChildItems>
+</Form>)XML";
+    expect(!source::parse_form_xml(duplicate_xml).ok(),
+        "duplicate field picture properties must be rejected");
+
+    constexpr std::string_view dangling_xml = R"XML(<Form id="1" name="DanglingPicture" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="3" name="Value"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
+  <ChildItems><InputField id="4" name="Input"><DataPath attributeId="3"/><Position/><ChoiceButtonPicture>99</ChoiceButtonPicture></InputField></ChildItems>
+</Form>)XML";
+    expect_code(source::parse_form_xml(dangling_xml), "OOF2004",
+        "field picture references to unknown assets must be rejected");
+
+    std::string unknown_standard(xml);
+    const auto standard_at = unknown_standard.find("PictureLib.Write");
+    unknown_standard.replace(standard_at, std::string("PictureLib.Write").size(), "PictureLib.Unknown");
+    expect(!source::parse_form_xml(unknown_standard).ok(),
+        "unknown standard field picture references must be rejected");
+}
+
 void test_button_menu_model_roundtrip_and_rejections() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="run" type="Action"><Text>Run</Text><Explanation/><ToolTip/><Shortcut Alt="false" Ctrl="true" Shift="false"><Key>R</Key></Shortcut><Action handler="RunHandler" name="ActionName"><Text><Item language="ru">Action caption</Item><Item language="en">Action title</Item></Text><ToolTip><Item language="ru">Action tip</Item></ToolTip><Description><Item language="ru">Action description</Item></Description></Action></CommandBarButton><CommandBarButton name="more" type="Submenu"><Text>More</Text><Order>Ascending</Order><Buttons><CommandBarButton name="sep" type="Separator"/><CommandBarButton name="inherited" type="Action"><Action handler="NestedHandler" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
@@ -2757,6 +2842,7 @@ int main() {
         test_event_owner_invariant();
         test_button_foreign_enum_default_is_retained();
         test_standard_picture_xml_reference_roundtrip();
+        test_choice_and_input_field_picture_references_xml();
         test_button_menu_model_roundtrip_and_rejections();
         test_client_interface_variant_xml_contract();
         test_gantt_named_collections_roundtrip_and_rejections();

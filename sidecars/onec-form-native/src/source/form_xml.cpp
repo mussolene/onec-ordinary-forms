@@ -1269,7 +1269,10 @@ bool valid_picture_path(std::string_view path, model::PictureFormat format) {
     for (std::size_t index = 2; index + 1 < parts.size(); index += 2) {
         if (parts[index] != "Buttons") return false;
     }
-    const std::string_view file = parts.back();
+    std::string_view file = parts.back();
+    if (parts.size() == 3 && file.starts_with("ChoiceButtonPicture.")) {
+        file.remove_prefix(std::string_view("ChoiceButton").size());
+    }
     switch (format) {
         case model::PictureFormat::gif: return file == "Picture.gif";
         case model::PictureFormat::png: return file == "Picture.png";
@@ -1513,7 +1516,7 @@ private:
                     asset_node,
                     id,
                     "relativePath",
-                    "Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format>",
+                    "Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>",
                     asset.relative_path,
                     "Picture asset path is outside the ordinary-form source package contract");
             }
@@ -3245,7 +3248,7 @@ private:
         for (const auto& asset : document_.assets()) {
             const std::string id = object_id_text(asset.id);
             if (!valid_picture_path(asset.relative_path, asset.format)) {
-                serialization_fail(id, "relativePath", "Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format>", asset.relative_path, "Picture asset path is outside the source package contract");
+                serialization_fail(id, "relativePath", "Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>", asset.relative_path, "Picture asset path is outside the source package contract");
             }
             writer_.empty("PictureAsset", {
                 {"id", id},

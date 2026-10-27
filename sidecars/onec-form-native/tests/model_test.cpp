@@ -1138,10 +1138,18 @@ void test_help_metamodel() {
         find_property(ControlKind::radio_button, "FirstInGroup")->surface ==
             PropertySurface::control_extension,
         "inherited RadioButton FirstInGroup must have one shared extension owner");
-    expect(
-        find_property(ControlKind::input_field, "SelButtonPicture") != nullptr &&
-            find_property(ControlKind::input_field, "ChoiceButtonPicture") != nullptr,
-        "duplicate Russian choice-button labels must retain distinct API properties");
+    const auto* sel_button_picture = find_property(ControlKind::input_field, "SelButtonPicture");
+    const auto* choice_button_picture = find_property(ControlKind::input_field, "ChoiceButtonPicture");
+    expect(sel_button_picture &&
+            sel_button_picture->persistence == PersistenceClass::unclassified &&
+            sel_button_picture->storage_codec == StorageCodec::unclassified,
+        "SelButtonPicture must remain unclassified without direct storage evidence");
+    expect(choice_button_picture &&
+            choice_button_picture->persistence == PersistenceClass::persisted_editable &&
+            choice_button_picture->storage_codec == StorageCodec::picture_record &&
+            choice_button_picture->value_codec == ValueCodec::picture &&
+            choice_button_picture->default_value.kind == DefaultKind::none,
+        "InputField ChoiceButtonPicture must use the typed picture record without an assumed default");
     const auto* form_caption_descriptor = find_form_property("Caption");
     expect(
         form_caption_descriptor && form_caption_descriptor->russian_name == u8"Заголовок" &&
@@ -2146,6 +2154,77 @@ void test_property_reference_rejection() {
         "typed property references must participate in invariant validation");
 }
 
+void test_picture_property_model_api() {
+    using namespace oof::model::metamodel;
+
+    Form form;
+    form.id = ObjectId{1};
+    form.children = {ControlRef{ObjectId{10}}, ControlRef{ObjectId{11}}};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_asset(PictureAsset{ObjectId{50}, "Items/Choice/Picture.gif", PictureFormat::gif, {}, true});
+    document.add_asset(PictureAsset{ObjectId{51}, "Items/Input/Picture.gif", PictureFormat::gif, {}, true});
+    document.add_control(ControlNode{ObjectId{10}, "Choice", ChoiceFieldPayload{}});
+    document.add_control(ControlNode{ObjectId{11}, "Input", InputFieldPayload{}});
+
+    const auto verify_descriptor = [](ControlKind kind, std::string_view name) {
+        const auto* descriptor = find_property(kind, name);
+        expect(descriptor && descriptor->value_kind == ValueKind::picture &&
+                descriptor->value_codec == ValueCodec::picture &&
+                descriptor->api_access == ApiAccess::read_write &&
+                descriptor->persistence == PersistenceClass::persisted_editable &&
+                descriptor->storage_codec == StorageCodec::picture_record &&
+                descriptor->default_value.kind == DefaultKind::none,
+            "field picture properties must use the persisted typed picture descriptor without a fabricated default");
+    };
+    for (const auto kind : {ControlKind::choice_field, ControlKind::input_field}) {
+        verify_descriptor(kind, "Picture");
+        verify_descriptor(kind, "ChoiceButtonPicture");
+    }
+
+    const auto choice = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{10}};
+    const auto input = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{11}};
+    for (const auto& [owner, property] : {
+             std::pair{choice, PropertyId::from_name("Picture")},
+             std::pair{choice, PropertyId::from_name("ChoiceButtonPicture")},
+             std::pair{input, PropertyId::from_name("Picture")},
+             std::pair{input, PropertyId::from_name("ChoiceButtonPicture")}}) {
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::no_default,
+            "unset picture properties must report the unproven empty-picture default");
+    }
+
+    const PictureRef choice_standard{PictureAssetRef{}, QualifiedName{"PictureLib.Calendar"}};
+    const PictureRef choice_button_asset{PictureAssetRef{ObjectId{50}}, std::nullopt};
+    const PictureRef input_asset{PictureAssetRef{ObjectId{51}}, std::nullopt};
+    const PictureRef input_button_standard{PictureAssetRef{}, QualifiedName{"PictureLib.ChooseValue"}};
+    const auto set_and_check = [&](OrdinaryFormDocument::ObjectKey owner, std::string_view property_name,
+                                   const PictureRef& picture) {
+        const auto property = PropertyId::from_name(property_name);
+        expect(document.set_prop_val(owner, property, picture) == PropertyMutationStatus::applied,
+            "picture properties must accept a valid standard or asset reference");
+        const auto read = document.get_prop_val(owner, property);
+        expect(read.status == PropertyReadStatus::explicit_value && read.value &&
+                *read.value == PropertyValue{picture},
+            "picture properties must return the assigned typed reference");
+    };
+    set_and_check(choice, "Picture", choice_standard);
+    set_and_check(choice, "ChoiceButtonPicture", choice_button_asset);
+    set_and_check(input, "Picture", input_asset);
+    set_and_check(input, "ChoiceButtonPicture", input_button_standard);
+
+    expect(document.set_prop_val(choice, PropertyId::from_name("Picture"),
+               PictureRef{PictureAssetRef{ObjectId{999}}, std::nullopt}) ==
+               PropertyMutationStatus::invalid_reference,
+        "field picture properties must reject an asset reference that does not resolve");
+    expect(document.set_prop_val(choice, PropertyId::from_name("Picture"), std::string{"not a picture"}) ==
+            PropertyMutationStatus::invalid_value,
+        "field picture properties must reject values outside the typed picture domain");
+    const auto reset_property = PropertyId::from_name("ChoiceButtonPicture");
+    expect(document.reset_prop_val(input, reset_property) == PropertyMutationStatus::reset &&
+            document.get_prop_val(input, reset_property).status == PropertyReadStatus::no_default,
+        "resetting an explicit field picture must restore its no-default state");
+    expect(document.validate().ok(), "valid standard and transparent GIF references must validate");
+}
+
 void test_gantt_interval_date_validation() {
     const auto make_document = [](std::string start, std::string end) {
         Form form;
@@ -2536,6 +2615,7 @@ int main() {
         test_root_page_and_remaining_page_policies();
         test_dangling_and_child_policy_rejection();
         test_property_reference_rejection();
+        test_picture_property_model_api();
         test_gantt_interval_date_validation();
         test_property_applicability_and_type_validation();
         test_event_sequence_invariants();
