@@ -9778,6 +9778,10 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
         bool group_border;
     };
     constexpr std::array cases{
+        BorderCase{model::ControlKind::panel, "Panel", false, false},
+        BorderCase{model::ControlKind::splitter, "Splitter", false, false},
+        BorderCase{model::ControlKind::html_document_field, "HTMLDocumentField", true, false},
+        BorderCase{model::ControlKind::table, "Table", true, false},
         BorderCase{model::ControlKind::calendar_field, "CalendarField", true, false},
         BorderCase{model::ControlKind::check_box, "CheckBox", false, false},
         BorderCase{model::ControlKind::choice_field, "ChoiceField", true, false},
@@ -9806,6 +9810,8 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
         return model::BorderValue{};
     };
     const auto type_specific_xml = [](const BorderCase& test_case) -> std::string {
+        if (test_case.kind == model::ControlKind::table)
+            return R"XML(<Attributes><Attribute id="3" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>)XML";
         if (test_case.kind == model::ControlKind::check_box)
             return R"XML(<Attributes><Attribute id="3" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes>)XML";
         if (test_case.kind == model::ControlKind::input_field)
@@ -9818,7 +9824,7 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
         std::string data_path;
         if (test_case.kind == model::ControlKind::check_box ||
             test_case.kind == model::ControlKind::input_field ||
-            test_case.kind == model::ControlKind::list_box)
+            test_case.kind == model::ControlKind::list_box || test_case.kind == model::ControlKind::table)
             data_path = R"XML(<DataPath attributeId="3"/>)XML";
         std::string events;
         std::string selection_mode;
@@ -9829,15 +9835,23 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
             events = R"XML(<Events><OnChange id="4">HandleBorderChange</OnChange></Events>)XML";
         if (test_case.kind == model::ControlKind::calendar_field)
             selection_mode = R"XML(<SelectionMode type="DateSelectionMode" member="Multiple"/>)XML";
+        std::string columns;
+        if (test_case.kind == model::ControlKind::table)
+            columns = R"XML(<Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns>)XML";
+        std::string children;
+        if (test_case.kind == model::ControlKind::panel)
+            children = R"XML(<ChildItems><Page name="Page"><Position><Width>100</Width><Bindings><AnchorBinding coordinate="right" targetCoordinate="right" targetId="2" offset="0"/><AnchorBinding coordinate="bottom" targetCoordinate="bottom" targetId="2" offset="0"/></Bindings></Position></Page></ChildItems>)XML";
         return std::string("<Form id=\"1\" name=\"NamedBorders\" ordinaryFormVersion=\"2.1\">") +
             type_specific_xml(test_case) + "<ChildItems><" + std::string(test_case.public_name) +
             " id=\"2\" name=\"Control\">" + data_path + "<Position/>" +
-            std::string(border) + selection_mode +
-            std::string(R"XML(<BorderColor kind="absolute" red="17" green="83" blue="201"/>)XML") + events +
+            columns + std::string(border) + selection_mode +
+            std::string(R"XML(<BorderColor kind="absolute" red="17" green="83" blue="201"/>)XML") + events + children +
             "</" + std::string(test_case.public_name) + "></ChildItems></Form>";
     };
     const auto border_record = [](auto& encoded, const BorderCase& test_case) -> auto* {
         auto* record = find_record_with_guid(encoded, model::metamodel::descriptor_for(test_case.kind).guid);
+        if (test_case.kind == model::ControlKind::html_document_field) return &record->items[2].items[4];
+        if (test_case.kind == model::ControlKind::table) return &record->items[2].items[2].items[0].items[11];
         if (test_case.group_border) return &record->items[2].items[1].items[3];
         auto* base = &record->items[2].items[1].items[0];
         if (test_case.kind == model::ControlKind::check_box)
@@ -9884,6 +9898,17 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
             expect(list_stream::dump_compact(*encoded_default_border) == control_border_style,
                 std::string(test_case.public_name) + " style Border default must use the six-field native tuple");
 
+        if (test_case.kind == model::ControlKind::splitter) {
+            expect(list_stream::dump_compact(*encoded_default_border) == "{3,0,{-18},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e}",
+                "Splitter native default must retain its observed owner record");
+            auto assigned_default = default_encoded.value();
+            *border_record(assigned_default, test_case) = list_stream::parse("{3,0,{0},0,0,3,48312c09-257f-4b29-b280-284dd89efc1e}");
+            auto decoded_default = form_stream::decode_document(assigned_default);
+            expect(decoded_default.ok() && decoded_default.value().reconstruction_complete() &&
+                !decoded_default.value().find_control(model::ObjectId{2})->properties().contains(border_property),
+                "Splitter setter default must normalize to named implicit default");
+        }
+
         const auto explicit_default = source::parse_form_xml(xml_for(test_case, default_border_xml(test_case)));
         expect(explicit_default.ok(), std::string(test_case.public_name) + " explicit Border default must parse");
         if (explicit_default) {
@@ -9907,7 +9932,9 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
         const auto single_decoded = form_stream::decode_document(single_encoded.value(), "NamedSingleBorder");
         const auto* single_control = single_decoded ? single_decoded.value().find_control(model::ObjectId{2}) : nullptr;
         const auto* single_property = single_control ? single_control->properties().find(border_property) : nullptr;
-        if (test_case.kind == model::ControlKind::label_decoration) {
+        if (test_case.kind == model::ControlKind::label_decoration || test_case.kind == model::ControlKind::panel ||
+            test_case.kind == model::ControlKind::splitter || test_case.kind == model::ControlKind::table ||
+            test_case.kind == model::ControlKind::html_document_field) {
             const bool no_unknown_profile_warning = single_decoded &&
                 std::none_of(single_decoded.diagnostics().begin(), single_decoded.diagnostics().end(),
                     [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; });
@@ -9997,11 +10024,13 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
             value.items[6] = list_stream::ListValue::raw_atom("11111111-1111-4111-8111-111111111111");
         }, "unknown factory");
 
+        if (test_case.kind != model::ControlKind::html_document_field) {
         auto unknown_neighbor = single_encoded.value();
         list_stream::ListValue* base = nullptr;
         auto* record = find_record_with_guid(unknown_neighbor,
             model::metamodel::descriptor_for(test_case.kind).guid);
-        if (test_case.group_border) base = &record->items[2].items[1].items[0];
+        if (test_case.kind == model::ControlKind::table) base = &record->items[2].items[2].items[0];
+        else if (test_case.group_border) base = &record->items[2].items[1].items[0];
         else if (test_case.kind == model::ControlKind::check_box)
             base = &record->items[2].items[1].items[0].items[0];
         else if (test_case.kind == model::ControlKind::input_field ||
@@ -10018,6 +10047,7 @@ void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {
                         diagnostic.severity == oof::DiagnosticSeverity::warning;
                 }),
             std::string(test_case.public_name) + " unknown neighboring slot 15 must warn and preserve Border");
+        }
     }
 
     const auto calendar_xml = [](std::string_view selection) {

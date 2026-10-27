@@ -2807,6 +2807,61 @@ void test_control_border_and_calendar_selection_descriptors() {
                 border->default_value.kind == DefaultKind::border,
             "each proven Border owner must expose the named typed persisted property");
     }
+    struct BorderCase {
+        ControlKind kind;
+        ControlPayload payload;
+        StorageCodec storage;
+        std::string_view default_value;
+    };
+    const std::array newly_classified_borders{
+        BorderCase{ControlKind::panel, PanelPayload{}, StorageCodec::control_base, "WithoutBorder:0"},
+        BorderCase{ControlKind::splitter, SplitterPayload{}, StorageCodec::control_base, "WithoutBorder:0"},
+        BorderCase{ControlKind::table, TablePayload{}, StorageCodec::control_base, "StyleBorders.ControlBorder"},
+        BorderCase{ControlKind::html_document_field, HtmlDocumentFieldPayload{}, StorageCodec::control_info,
+            "StyleBorders.ControlBorder"},
+    };
+    for (std::size_t index = 0; index < newly_classified_borders.size(); ++index) {
+        const auto& test = newly_classified_borders[index];
+        const auto* descriptor = find_property(test.kind, "Border");
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == test.storage && descriptor->value_codec == ValueCodec::border &&
+                   descriptor->default_value.kind == DefaultKind::border &&
+                   descriptor->default_value.canonical == test.default_value,
+            "new Border descriptors must match their observed codec and default");
+
+        Form form;
+        form.id = ObjectId{1};
+        const ObjectId control_id{static_cast<std::uint64_t>(index + 2)};
+        form.children = {ControlRef{control_id}};
+        OrdinaryFormDocument document(std::move(form));
+        document.add_control(ControlNode{control_id, "BorderControl", test.payload});
+        const auto control = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, control_id};
+        const auto property = PropertyId::from_name("Border");
+        const auto initial = document.get_prop_val(control, property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value,
+            "new Border property API must expose a typed default");
+        BorderValue explicit_border;
+        explicit_border.border_type = ControlBorderType::double_line;
+        explicit_border.width = 2;
+        expect(document.set_prop_val(control, property, explicit_border) == PropertyMutationStatus::applied,
+            "new Border property API must accept a supported typed border");
+        const auto read = document.get_prop_val(control, property);
+        expect(read.status == PropertyReadStatus::explicit_value && read.value &&
+                   *read.value == PropertyValue{explicit_border},
+            "new Border property API must return the explicit typed value");
+        expect(document.set_prop_val(control, property, std::string{"single"}) == PropertyMutationStatus::invalid_value,
+            "new Border property API must reject a wrong value type");
+        BorderValue rounded_border;
+        rounded_border.border_type = ControlBorderType::rounded;
+        rounded_border.width = 1;
+        expect(document.set_prop_val(control, property, rounded_border) == PropertyMutationStatus::invalid_value,
+            "rounded Border values must remain unsupported outside UsualGroup");
+        expect(document.reset_prop_val(control, property) == PropertyMutationStatus::reset,
+            "new Border property API must reset explicit values");
+        const auto reset = document.get_prop_val(control, property);
+        expect(reset.status == PropertyReadStatus::proven_default && reset.value && *reset.value == *initial.value,
+            "new Border property API reset must restore the typed default");
+    }
     const auto* selection_mode = find_property(ControlKind::calendar_field, "SelectionMode");
     expect(selection_mode && selection_mode->persistence == PersistenceClass::persisted_editable &&
             selection_mode->storage_codec == StorageCodec::control_info &&

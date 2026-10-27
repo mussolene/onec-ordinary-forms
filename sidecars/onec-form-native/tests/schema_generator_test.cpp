@@ -1563,6 +1563,8 @@ int main() {
         Schema compiled_palette =
             compile_schema(schemas.ordinary_form_palette_xsd, "OrdinaryFormPalette.xsd");
         expect(compiled_palette != nullptr, "palette XSD must compile");
+        expect(validate_document(compiled_form.get(), R"XML(<Form id="1" name="RootBorder" ordinaryFormVersion="2.1"><Panel><Border kind="absolute" borderType="Single" width="2"/></Panel></Form>)XML") != 0,
+            "control Border support must not introduce an unproven root form panel property");
 
         test_schema_version_and_controls(metamodel, form_schema);
         test_localized_text_schema(form_schema, compiled_form.get());

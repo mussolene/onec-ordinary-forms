@@ -773,16 +773,21 @@ void apply_proven_storage_overrides(
 
     for (const auto kind : {ControlKind::calendar_field, ControlKind::check_box, ControlKind::choice_field,
              ControlKind::input_field, ControlKind::label_decoration, ControlKind::list_box,
-             ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
+             ControlKind::panel, ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
+             ControlKind::splitter, ControlKind::table,
              ControlKind::track_bar, ControlKind::text_document_field}) {
         const auto default_value = kind == ControlKind::calendar_field || kind == ControlKind::choice_field ||
                 kind == ControlKind::input_field || kind == ControlKind::list_box ||
-                kind == ControlKind::progress_bar
+                kind == ControlKind::progress_bar || kind == ControlKind::table
             ? "StyleBorders.ControlBorder" : "WithoutBorder:0";
         auto& control = properties[static_cast<std::size_t>(kind)];
         classify_property(control, "Border", StorageCodec::control_base, DefaultKind::border, default_value);
         std::ranges::find(control, "Border", &PropertyDescriptor::api_name)->value_codec = ValueCodec::border;
     }
+    auto& html_document_field_border = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
+    classify_property(html_document_field_border, "Border", StorageCodec::control_info,
+        DefaultKind::border, "StyleBorders.ControlBorder");
+    std::ranges::find(html_document_field_border, "Border", &PropertyDescriptor::api_name)->value_codec = ValueCodec::border;
     auto& usual_group_border = properties[static_cast<std::size_t>(ControlKind::usual_group)];
     classify_property(usual_group_border, "Border", StorageCodec::control_info,
         DefaultKind::border, "Rounded:1");

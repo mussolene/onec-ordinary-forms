@@ -1000,7 +1000,8 @@ model::BorderValue control_border_default(std::optional<model::ControlKind> owne
         value.width = 1;
     } else if (owner == model::ControlKind::calendar_field || owner == model::ControlKind::choice_field ||
         owner == model::ControlKind::input_field || owner == model::ControlKind::list_box ||
-        owner == model::ControlKind::progress_bar || owner == model::ControlKind::spreadsheet_document_field) {
+        owner == model::ControlKind::progress_bar || owner == model::ControlKind::spreadsheet_document_field ||
+        owner == model::ControlKind::html_document_field || owner == model::ControlKind::table) {
         value.kind = model::BorderKind::style_reference;
         value.style = model::QualifiedName{"StyleBorders.ControlBorder"};
     }
@@ -1028,7 +1029,8 @@ LV encode_control_border(const model::BorderValue& border, std::string_view path
     const auto state = border == control_border_default(owner) ? "0" : "3";
     const auto factory = owner == model::ControlKind::usual_group
         ? "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2" : "48312c09-257f-4b29-b280-284dd89efc1e";
-    return list({raw("3"), raw("0"), list({raw("0")}), raw(std::to_string(type->second)),
+    return list({raw("3"), raw("0"), list({raw(owner == model::ControlKind::splitter &&
+            border == control_border_default(owner) ? "-18" : "0")}), raw(std::to_string(type->second)),
         raw(std::to_string(border.width)), raw(state), raw(factory)});
 }
 
@@ -1060,6 +1062,10 @@ model::BorderValue decode_control_border(const LV& value, std::string_view path,
     auto normalized = value;
     const auto expected = encode_control_border(border, path, owner);
     normalized.items[5] = expected.items[5];
+    if (owner == model::ControlKind::splitter && border == control_border_default(owner) &&
+        (list_stream::dump_compact(value.items[2]) == "{0}" ||
+         list_stream::dump_compact(value.items[2]) == "{-18}"))
+        normalized.items[2] = expected.items[2];
     // The platform XDTO reader restores these named enum values from an absent factory.
     if (state == 0 && border.width == 1 &&
         (border.border_type == model::ControlBorderType::underline || border.border_type == model::ControlBorderType::overline) &&
@@ -2472,9 +2478,9 @@ DecodedOwnerPages decode_owner_pages(
     if (panel) {
         const auto base_path = child_path(child_path(path, 1), 0);
         const auto common = decode_common_control_base(normalized.items[0], base_path,
-            CommonControlBaseCapabilities{true, false, {}, {}, model::ControlKind::panel});
+            CommonControlBaseCapabilities{true, false, {}, model::ControlKind::panel, model::ControlKind::panel});
         apply_common_control_base(decoded_panel.properties, common);
-        for (const auto slot : {1U, 4U, 5U, 12U})
+        for (const auto slot : {1U, 4U, 5U, 11U, 12U})
             expected.items[1].items[0].items[slot] = normalized.items[0].items[slot];
         const auto tabs_path = child_path(child_path(path, 1), 3 + incoming_end - 2);
         const auto tabs = integer_atom<std::size_t>(normalized.items[3], tabs_path);
@@ -2522,7 +2528,7 @@ LV encode_owner_pages(
     auto envelope = panel ? canonical_panel_payload(pages, *owner) :
         canonical_root_panel_payload(width, height, pages, owner);
     if (panel) require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs"}, "$/Panel");
+        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border"}, "$/Panel");
     else require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
     envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
     if (panel) {
@@ -2530,6 +2536,8 @@ LV encode_owner_pages(
         common.enabled = explicit_bool(properties, "Enabled", true);
         common.tool_tip = explicit_localized_text(properties, "ToolTip", "$/Panel");
         common.font = explicit_control_font(properties, "$/Panel/Font");
+        common.named_border_control = model::ControlKind::panel;
+        common.border = explicit_control_border(properties, model::ControlKind::panel, "$/Panel/Border");
         common.named_transparent_control = model::ControlKind::panel;
         common.transparent = explicit_bool(properties, "Transparent", false);
         encode_common_control_base(envelope.items[1].items[0], common, "$/Panel");
@@ -5445,7 +5453,7 @@ DecodedControl decode_splitter(
     require_arity(properties, 4, properties_path);
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true});
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true, {}, model::ControlKind::splitter});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
     const auto back_color = decode_control_color(base.items[2], child_path(base_path, 2));
@@ -5458,7 +5466,9 @@ DecodedControl decode_splitter(
     else fail("OOF1114", child_path(properties_path, 2), "Orientation Auto(2), Vertical(0), or Horizontal(1)",
         std::to_string(orientation_storage), "Splitter orientation value is unsupported");
 
-    if (list_stream::dump_compact(properties) != list_stream::dump_compact(
+    auto normalized_properties = properties;
+    normalize_named_control_border(normalized_properties.items[0], model::ControlKind::splitter, base_path);
+    if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
         canonical_splitter_properties(enabled, orientation_storage, tool_tip, border_color, back_color)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Splitter");
     const auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -5748,7 +5758,9 @@ DecodedControl decode_html_document_field(
             std::to_string(output), "HTMLDocumentField.Output storage value is unsupported");
     }
     const auto border_color = decode_control_color(data.items[3], child_path(data_path, 3));
+    const auto border = decode_control_border(data.items[4], child_path(data_path, 4), model::ControlKind::html_document_field);
     auto normalized_data = data;
+    normalized_data.items[4] = canonical_html_document_field_data(0).items[4];
     normalized_data.items[3] = canonical_html_document_field_data(0).items[3];
     normalized_data.items[6] = raw("0");
     auto named_events = decode_control_event_collection(data.items[2], child_path(data_path, 2),
@@ -5775,6 +5787,8 @@ DecodedControl decode_html_document_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::HtmlDocumentFieldPayload{}};
     if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    if (border != control_border_default(model::ControlKind::html_document_field))
+        control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
     static constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
     if (output != 0) {
         control.properties().set_explicit(
@@ -8884,7 +8898,7 @@ DecodedControl decode_table(
     }
     const auto base_path = child_path(child_path(info_path, 2), 0);
     const auto common = decode_common_control_base(info.items[2].items[0], base_path,
-        CommonControlBaseCapabilities{true, true, model::ControlKind::table});
+        CommonControlBaseCapabilities{true, true, model::ControlKind::table, model::ControlKind::table});
     apply_common_control_base(control.properties(), common);
     LV normalized_info = info;
     normalized_info.items[4] = list({raw("0")});
@@ -8947,7 +8961,7 @@ DecodedControl decode_table(
     }
     auto& normalized_base = normalized_info.items[2].items[0];
     const auto& canonical_base = canonical_info.items[2].items[0];
-    for (const auto slot : {1U, 4U, 6U, 7U, 12U}) normalized_base.items.at(slot) = canonical_base.items.at(slot);
+    for (const auto slot : {1U, 4U, 6U, 7U, 11U, 12U}) normalized_base.items.at(slot) = canonical_base.items.at(slot);
     auto& normalized_columns = normalized_info.items[2].items[1].items[23];
     const auto& canonical_columns = canonical_info.items[2].items[1].items[23];
     for (std::size_t index = 1; index < normalized_columns.items.size(); ++index) {
@@ -9353,7 +9367,7 @@ LV encode_splitter(const model::ControlNode& control, const GeometryContext& con
         fail("OOF1122", "$/Splitter", "named Splitter without events, DataPath, extensions, or children and plain Position",
             control.name, "Splitter uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Orientation", "ToolTip", "BorderColor", "BackColor"},
+    require_allowed_properties(control.properties(), {"Enabled", "Orientation", "ToolTip", "BorderColor", "BackColor", "Border"},
         "$/Splitter");
     if (!std::holds_alternative<model::SplitterPayload>(control.payload)) {
         fail("OOF1122", "$/Splitter", "SplitterPayload", "different payload", "Splitter payload is invalid");
@@ -9364,7 +9378,8 @@ LV encode_splitter(const model::ControlNode& control, const GeometryContext& con
         "Orientation", 2, {{"Auto", 2}, {"Vertical", 0}, {"Horizontal", 1}});
     const auto back_color = explicit_splitter_color(control.properties(), "BackColor");
     const auto border_color = explicit_splitter_color(control.properties(), "BorderColor");
-    const auto properties = canonical_splitter_properties(enabled, orientation, tool_tip, border_color, back_color);
+    auto properties = canonical_splitter_properties(enabled, orientation, tool_tip, border_color, back_color);
+    encode_named_control_border(properties.items[0], model::ControlKind::splitter, control.properties(), "$/Splitter");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         list({raw("0"), properties}), encode_geometry(control.position, context, IncomingAnchorLists{}),
@@ -9870,12 +9885,15 @@ LV encode_html_document_field(const model::OrdinaryFormDocument& document, const
         fail("OOF1122", "$/HTMLDocumentField", "named HTMLDocumentField with plain Position and no DataPath, Events, extensions, or children",
             control.name, "HTMLDocumentField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Output", "BorderColor"}, "$/HTMLDocumentField");
+    require_allowed_properties(control.properties(), {"Output", "BorderColor", "Border"}, "$/HTMLDocumentField");
     const auto output = explicit_enum_storage_value(
         control.properties(), "HTMLDocumentField", "Output", "Output", 0,
         {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}});
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::html_document_field);
     auto data = canonical_html_document_field_data(output);
+    data.items[4] = encode_control_border(explicit_control_border(control.properties(),
+        model::ControlKind::html_document_field, "$/HTMLDocumentField/Border"),
+        "$/HTMLDocumentField/Border", model::ControlKind::html_document_field);
     data.items[2] = encode_control_event_collection(document, control, "$/HTMLDocumentField/Events");
     data.items[3] = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "HTMLDocumentField"), "$/HTMLDocumentField/BorderColor");
     return list({
@@ -10173,7 +10191,7 @@ LV encode_table(
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView",
-        "HeaderHeight", "FooterHeight", "Output"}, "$/Table");
+        "HeaderHeight", "FooterHeight", "Output", "Border"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -10189,6 +10207,7 @@ LV encode_table(
     const auto& table = std::get<model::TablePayload>(control.payload);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
     auto info = canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table");
+    encode_named_control_border(info.items[2].items[0], model::ControlKind::table, control.properties(), "$/Table");
     info.items.at(4) = encode_control_event_collection(document, control, "$/Table/Events");
     auto& table_properties = info.items.at(2).items.at(1);
     auto flags = integer_atom<std::uint32_t>(table_properties.items.at(1), "$/Table/Flags");
@@ -11784,7 +11803,7 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
                     require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs"}, child_path(path, ordinal) + "/Panel");
+                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border"}, child_path(path, ordinal) + "/Panel");
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");

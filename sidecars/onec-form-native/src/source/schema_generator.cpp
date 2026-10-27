@@ -967,7 +967,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     output += "  <xs:complexType name=\"FormPanelType\"><xs:sequence>\n";
     std::vector<model::metamodel::PropertyDescriptor> main_panel_properties;
     for (const auto& property : metamodel.properties_for(model::ControlKind::panel))
-        if (property.surface == model::metamodel::PropertySurface::control_payload &&
+        // Рамка подтверждена для дочерней панели, но не для корневой панели формы.
+        if (property.surface == model::metamodel::PropertySurface::control_payload && property.api_name != "Border" &&
             property.persistence == model::metamodel::PersistenceClass::persisted_editable) main_panel_properties.push_back(property);
     append_property_elements(output, main_panel_properties);
     output += "  </xs:sequence></xs:complexType>\n";
