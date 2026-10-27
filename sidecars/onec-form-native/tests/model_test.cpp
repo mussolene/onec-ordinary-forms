@@ -1089,6 +1089,16 @@ void test_shared_control_default_classifications() {
             descriptor->default_value.canonical == default_value && descriptor->value_codec == value_codec;
     };
 
+    for (const auto kind : {ControlKind::html_document_field, ControlKind::geographical_schema_field,
+             ControlKind::graphical_schema_field}) {
+        expect(classified(kind, "BorderColor", StorageCodec::control_base,
+                   DefaultKind::color, "automatic", ValueCodec::color),
+            "document and schema field BorderColor must use the observed automatic default");
+    }
+    expect(classified(ControlKind::text_document_field, "Border", StorageCodec::control_base,
+               DefaultKind::border, "WithoutBorder:0", ValueCodec::border),
+        "TextDocumentField Border must use the observed absolute no-border default");
+
     expect(classified(ControlKind::button, "Enabled", StorageCodec::control_base,
                DefaultKind::boolean, "true", ValueCodec::boolean) &&
                classified(ControlKind::splitter, "Enabled", StorageCodec::control_base,

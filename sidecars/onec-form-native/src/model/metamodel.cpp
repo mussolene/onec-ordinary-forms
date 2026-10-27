@@ -719,7 +719,9 @@ void apply_proven_storage_overrides(
             ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,
             ControlKind::text_document_field, ControlKind::radio_button, ControlKind::picture_decoration, ControlKind::list_box,
             ControlKind::input_field, ControlKind::calendar_field, ControlKind::usual_group,
-            ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table});
+            ControlKind::progress_bar, ControlKind::track_bar, ControlKind::table,
+            ControlKind::html_document_field, ControlKind::geographical_schema_field,
+            ControlKind::graphical_schema_field});
     classify_shared_control_property("TextColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
             ControlKind::picture_decoration, ControlKind::radio_button, ControlKind::track_bar});
@@ -748,7 +750,7 @@ void apply_proven_storage_overrides(
     for (const auto kind : {ControlKind::calendar_field, ControlKind::check_box, ControlKind::choice_field,
              ControlKind::input_field, ControlKind::label_decoration, ControlKind::list_box,
              ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
-             ControlKind::track_bar}) {
+             ControlKind::track_bar, ControlKind::text_document_field}) {
         const auto default_value = kind == ControlKind::calendar_field || kind == ControlKind::choice_field ||
                 kind == ControlKind::input_field || kind == ControlKind::list_box ||
                 kind == ControlKind::progress_bar

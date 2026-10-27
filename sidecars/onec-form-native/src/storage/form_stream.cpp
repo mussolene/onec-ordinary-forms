@@ -1737,7 +1737,7 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
 }
 
 LV canonical_text_document_field_info(bool enabled, const model::ColorValue& border_color,
-                                      const model::FontValue& font) {
+                                      const model::FontValue& font, const model::BorderValue& border) {
     auto base = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
         "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
@@ -1746,6 +1746,7 @@ LV canonical_text_document_field_info(bool enabled, const model::ColorValue& bor
     base.items[1] = raw(enabled ? "1" : "0");
     base.items[4] = encode_control_font(font, "$/TextDocumentField/Font");
     base.items[6] = encode_control_color(border_color, "$/TextDocumentField/BorderColor");
+    base.items[11] = encode_control_border(border, "$/TextDocumentField/Border", model::ControlKind::text_document_field);
     return list({std::move(base), raw("6"), raw("1"),
         raw("00000000-0000-0000-0000-000000000000"), list({raw("0")}), raw("0"), raw("0")});
 }
@@ -4179,11 +4180,14 @@ DecodedControl decode_default_complex_control(
     if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", child_path(path, 1), "positive int64 control ID", std::to_string(id), "Default complex control ID is invalid");
     std::vector<DecodedControlEvent> named_events;
+    model::ColorValue border_color;
     if (kind == model::ControlKind::graphical_schema_field) {
         require_arity(record.items[2], 6, child_path(path, 2));
         require_arity(record.items[2].items[0], 21, child_path(child_path(path, 2), 0));
         require_raw_constant(record.items[2].items[0].items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
         auto normalized_info = record.items[2];
+        border_color = decode_control_color(normalized_info.items[0].items[6], child_path(child_path(child_path(path, 2), 0), 6));
+        normalized_info.items[0].items[6] = canonical_graphical_schema_field_info().items[0].items[6];
         named_events = decode_control_event_collection(normalized_info.items[3], child_path(child_path(path, 2), 3), kind);
         normalized_info.items[3] = list({raw("0")});
         if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_graphical_schema_field_info()))
@@ -4196,7 +4200,10 @@ DecodedControl decode_default_complex_control(
     } else {
         require_arity(record.items[2], 21, child_path(path, 2));
         require_raw_constant(record.items[2].items[0], "19", child_path(child_path(path, 2), 0));
-        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_geographical_schema_field_info()))
+        auto normalized_info = record.items[2];
+        border_color = decode_control_color(normalized_info.items[6], child_path(child_path(path, 2), 6));
+        normalized_info.items[6] = canonical_geographical_schema_field_info().items[6];
+        if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_geographical_schema_field_info()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GeographicalSchemaField");
         auto normalized_schema = record.items[3];
         require_arity(normalized_schema, 5, child_path(path, 3));
@@ -4222,6 +4229,7 @@ DecodedControl decode_default_complex_control(
         ? model::ControlPayload{model::PivotChartPayload{}}
         : model::ControlPayload{model::GeographicalSchemaFieldPayload{}};
     model::ControlNode control{model::ObjectId{id}, name, std::move(payload)};
+    if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     control.position = std::move(geometry.position);
     return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
@@ -5623,7 +5631,9 @@ DecodedControl decode_html_document_field(
         fail("OOF1114", child_path(data_path, 6), "UseOutput storage value 0, 1, or 2",
             std::to_string(output), "HTMLDocumentField.Output storage value is unsupported");
     }
+    const auto border_color = decode_control_color(data.items[3], child_path(data_path, 3));
     auto normalized_data = data;
+    normalized_data.items[3] = canonical_html_document_field_data(0).items[3];
     normalized_data.items[6] = raw("0");
     auto named_events = decode_control_event_collection(data.items[2], child_path(data_path, 2),
         model::ControlKind::html_document_field);
@@ -5648,6 +5658,7 @@ DecodedControl decode_html_document_field(
         "HTMLDocumentField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::HtmlDocumentFieldPayload{}};
+    if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     static constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
     if (output != 0) {
         control.properties().set_explicit(
@@ -7206,7 +7217,8 @@ DecodedControl decode_text_document_field(
     const bool enabled = bool_atom(base.items[1], child_path(child_path(path, 2), 0) + "/1");
     const auto border_color = decode_control_color(base.items[6], child_path(child_path(path, 2), 0) + "/6");
     const auto font = decode_control_font(base.items[4], child_path(child_path(path, 2), 0) + "/4");
-    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_text_document_field_info(enabled, border_color, font)))
+    const auto border = decode_control_border(base.items[11], child_path(child_path(path, 2), 0) + "/11", model::ControlKind::text_document_field);
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_text_document_field_info(enabled, border_color, font, border)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(path, 2), "TextDocumentField");
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -7221,6 +7233,7 @@ DecodedControl decode_text_document_field(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     if (font != model::FontValue{}) control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+    if (border != control_border_default(model::ControlKind::text_document_field)) control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -9508,13 +9521,14 @@ LV encode_html_document_field(const model::OrdinaryFormDocument& document, const
         fail("OOF1122", "$/HTMLDocumentField", "named HTMLDocumentField with plain Position and no DataPath, Events, extensions, or children",
             control.name, "HTMLDocumentField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Output"}, "$/HTMLDocumentField");
+    require_allowed_properties(control.properties(), {"Output", "BorderColor"}, "$/HTMLDocumentField");
     const auto output = explicit_enum_storage_value(
         control.properties(), "HTMLDocumentField", "Output", "Output", 0,
         {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}});
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::html_document_field);
     auto data = canonical_html_document_field_data(output);
     data.items[2] = encode_control_event_collection(document, control, "$/HTMLDocumentField/Events");
+    data.items[3] = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "HTMLDocumentField"), "$/HTMLDocumentField/BorderColor");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
@@ -9533,13 +9547,14 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
         control.position.default_control.is_explicit() || control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty())
         fail("OOF1122", "$/TextDocumentField", "named unbound TextDocumentField with plain Position", control.name, "TextDocumentField uses an unsupported storage concept");
-    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Font"}, "$/TextDocumentField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Font", "Border"}, "$/TextDocumentField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const auto border_color = explicit_control_color(control.properties(), "BorderColor");
     const auto font = explicit_control_font(control.properties(), "$/TextDocumentField/Font");
+    const auto border = explicit_control_border(control.properties(), model::ControlKind::text_document_field, "$/TextDocumentField/Border");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
-        canonical_text_document_field_info(enabled, border_color, font),
+        canonical_text_document_field_info(enabled, border_color, font, border),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}), list({raw("0")})});
 }
@@ -9553,15 +9568,18 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
         !control.children.empty() || (control.kind() == model::ControlKind::pivot_chart && !control.events.empty()))
         fail("OOF1122", path, "named default complex control without DataPath, events, extensions, or children", control.name,
             "Default complex control uses an unsupported storage concept");
-    require_allowed_properties(control.properties(), {}, path);
+    if (control.kind() == model::ControlKind::pivot_chart) require_allowed_properties(control.properties(), {}, path);
+    else require_allowed_properties(control.properties(), {"BorderColor"}, path);
     std::vector<LV> fields{raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value()))};
     if (control.kind() == model::ControlKind::graphical_schema_field) {
         fields.push_back(canonical_graphical_schema_field_info());
+        fields.back().items[0].items[6] = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "GraphicalSchemaField"), path + "/BorderColor");
         fields.back().items[3] = encode_control_event_collection(document, control, path + "/Events");
     } else if (control.kind() == model::ControlKind::pivot_chart) {
         fields.push_back(canonical_default_pivot_chart_info());
     } else {
         fields.push_back(canonical_geographical_schema_field_info());
+        fields.back().items[6] = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "GeographicalSchemaField"), path + "/BorderColor");
         fields.push_back(canonical_geographical_schema());
         fields.back().items[3] = encode_control_event_collection(document, control, path + "/Events");
     }

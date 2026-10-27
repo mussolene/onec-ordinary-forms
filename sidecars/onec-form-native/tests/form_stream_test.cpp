@@ -7880,6 +7880,10 @@ void test_text_document_field_persisted_profile_and_rejections() {
     font.height = 20;
     font.bold = true;
     field.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+    model::BorderValue border;
+    border.border_type = model::ControlBorderType::single;
+    border.width = 2;
+    field.properties().set_explicit(model::PropertyId::from_name("Border"), border);
     document.add_control(std::move(field));
 
     for (const auto name : {"Enabled", "BorderColor", "Font"}) {
@@ -7888,9 +7892,6 @@ void test_text_document_field_persisted_profile_and_rejections() {
             descriptor->storage_codec == model::metamodel::StorageCodec::control_base,
             "TextDocumentField persisted properties must use their typed base descriptor");
     }
-    expect(model::metamodel::find_property(model::ControlKind::text_document_field, "Border")->persistence ==
-        model::metamodel::PersistenceClass::unclassified,
-        "unverified Border value remains unclassified");
 
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "TextDocumentField must encode from named properties" :
@@ -7911,6 +7912,9 @@ void test_text_document_field_persisted_profile_and_rejections() {
     expect(actual_font != nullptr && std::get<model::FontValue>(actual_font->value) == font,
         "Font must survive TextDocumentField round-trip");
 
+    const auto* actual_border = round_trip->properties().find(model::PropertyId::from_name("Border"));
+    expect(actual_border && std::get<model::BorderValue>(actual_border->value) == border,
+        "Border must survive alongside TextDocumentField font and color");
     auto changed = encoded.value();
     std::function<list_stream::ListValue*(list_stream::ListValue&)> find_text_document_record;
     find_text_document_record = [&](list_stream::ListValue& value) -> list_stream::ListValue* {
@@ -7923,6 +7927,18 @@ void test_text_document_field_persisted_profile_and_rejections() {
     auto* text_doc_record = find_text_document_record(changed);
     expect(text_doc_record != nullptr, "encoded TextDocumentField record must be discoverable in the stream");
     if (text_doc_record == nullptr) return;
+    // Synthetic runtime readback of WithoutBorder:0 retains state 3 instead of the default state 0.
+    auto runtime_default_border = encoded.value();
+    find_text_document_record(runtime_default_border)->items[2].items[0].items[11] =
+        list_stream::parse("{3,0,{0},0,0,3,48312c09-257f-4b29-b280-284dd89efc1e}");
+    const auto runtime_default_decoded = form_stream::decode_document(runtime_default_border, "TextDocumentForm");
+    expect(runtime_default_decoded.ok() && !runtime_default_decoded.value().reconstruction_complete() &&
+               std::any_of(runtime_default_decoded.diagnostics().begin(), runtime_default_decoded.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
+        "runtime WithoutBorder state 3 must not be reported as completely reconstructed");
+    auto invalid_border = encoded.value();
+    find_text_document_record(invalid_border)->items[2].items[0].items[11] = list_stream::parse("{3,0,{0},999,2,3,48312c09-257f-4b29-b280-284dd89efc1e}");
+    expect(!form_stream::decode_document(invalid_border, "TextDocumentForm"), "unknown Border type must fail closed");
     text_doc_record->items[2].items[1] = list_stream::ListValue::raw_atom("7");
     const auto partial_text_document = form_stream::decode_document(changed, "TextDocumentForm");
     const auto* partial_text_control = partial_text_document ?
@@ -15117,6 +15133,11 @@ void test_complex_control_named_events() {
                 xml += "</" + std::string(spec.tag) + "></ChildItems></Form>";
                 const auto parsed = source::parse_form_xml(xml);
                 expect(parsed.ok(), "complex control event fixture must parse");
+                model::ColorValue border_color;
+                border_color.kind = model::ColorKind::absolute;
+                border_color.red = 17; border_color.green = 39; border_color.blue = 81;
+                if (spec.kind != model::ControlKind::gantt_chart)
+                    const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{2}))->properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
                 const auto encoded = form_stream::encode_document(parsed.value());
                 expect(encoded.ok(), "complex control event fixture must encode");
                 auto native = encoded.value();
@@ -15140,6 +15161,18 @@ void test_complex_control_named_events() {
                 const auto decoded = form_stream::decode_document(encoded.value());
                 expect(decoded.ok() && decoded.value().reconstruction_complete(), "complex control events must decode completely");
                 const auto* control = decoded.value().find_control(model::ObjectId{2});
+                if (spec.kind != model::ControlKind::gantt_chart) {
+                    const auto* color = control->properties().find(model::PropertyId::from_name("BorderColor"));
+                    expect(color && std::get<model::ColorValue>(color->value) == border_color, "BorderColor must round trip with events");
+                    auto invalid = encoded.value();
+                    auto* invalid_record = find_record(find_record, invalid);
+                    auto& slot = spec.kind == model::ControlKind::html_document_field ? invalid_record->items[2].items[3] :
+                        spec.kind == model::ControlKind::geographical_schema_field ? invalid_record->items[2].items[6] : invalid_record->items[2].items[0].items[6];
+                    slot = list_stream::parse("{4,9,{0},4}");
+                    expect(!form_stream::decode_document(invalid), "invalid BorderColor must fail closed");
+                    const auto repeated = form_stream::encode_document(decoded.value());
+                    expect(repeated.ok() && list_stream::dump_compact(repeated.value()) == list_stream::dump_compact(encoded.value()), "BorderColor and events must preserve native stream");
+                }
                 expect(control && control->events.size() == ((mask & 1U) ? 1U : 0U) + ((mask & 2U) ? 1U : 0U), "event count must round trip");
                 for (const auto& ref : control->events) {
                     const auto* event = decoded.value().find_event(ref.id());
@@ -16433,7 +16466,7 @@ void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
         auto unknown_property = parsed.value();
         auto* control = const_cast<model::ControlNode*>(unknown_property.find_control(
             model::ObjectId{record_index == 1 ? 2u : 19u}));
-        control->properties().set_explicit(model::PropertyId::from_name("BorderColor"), model::ColorValue{});
+        control->properties().set_explicit(model::PropertyId::from_name("Width"), std::int64_t{10});
         expect(!form_stream::encode_document(unknown_property),
             "Unverified explicit property must not silently become a default");
     }

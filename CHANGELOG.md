@@ -2,6 +2,9 @@
 
 ## 1.0.0 - Не выпущен
 
+- Добавлено сохранение рамки TextDocumentField и цвета рамки
+  HTMLDocumentField, GeographicalSchemaField и GraphicalSchemaField.
+
 - Для TrackBar добавлено сохранение LargeStep и MarkingStep с проверкой
   допустимых целых значений.
 
