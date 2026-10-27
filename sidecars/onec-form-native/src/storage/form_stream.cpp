@@ -1,4 +1,5 @@
 #include "../model/chart_type.hpp"
+#include "../model/table_properties.hpp"
 #include "oof/storage/form_stream.hpp"
 
 #include <algorithm>
@@ -8822,6 +8823,17 @@ DecodedControl decode_table(
         if (value != spec.default_value) control.properties().set_explicit(model::PropertyId::from_name(spec.name), value);
         normalized_table_properties.items.at(spec.slot) = raw(std::to_string(spec.default_value ? spec.true_code : spec.false_code));
     }
+    for (const auto& spec : model::detail::table_enum_specs) {
+        const auto slot_path = child_path(table_properties_path, spec.slot);
+        const auto code = integer_atom<int>(info.items[2].items[1].items.at(spec.slot), slot_path);
+        if (code < 0 || static_cast<std::size_t>(code) >= spec.members.size())
+            fail("OOF1115", slot_path, "known Table enumeration ordinal", std::to_string(code),
+                "Table enumeration ordinal is unsupported");
+        if (code != spec.default_ordinal)
+            control.properties().set_explicit(model::PropertyId::from_name(spec.property),
+                model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[static_cast<std::size_t>(code)])});
+        normalized_table_properties.items.at(spec.slot) = raw(std::to_string(spec.default_ordinal));
+    }
     const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path);
     for (const auto& spec : table_appearance_properties) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
@@ -10053,7 +10065,8 @@ LV encode_table(
         "AutoInsertNewRow", "Footer", "Header", "EnableStartDrag", "EnableDrag", "ChangeSettingOfColumns",
         "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines", "UseAlternationRowColor",
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
-        "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont"}, "$/Table");
+        "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
+        "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -10081,6 +10094,22 @@ LV encode_table(
     for (const auto& spec : table_boolean_slots) {
         const bool value = explicit_bool(control.properties(), spec.name, spec.default_value);
         table_properties.items.at(spec.slot) = raw(std::to_string(value ? spec.true_code : spec.false_code));
+    }
+    for (const auto& spec : model::detail::table_enum_specs) {
+        auto ordinal = spec.default_ordinal;
+        if (const auto* entry = control.properties().find(model::PropertyId::from_name(spec.property))) {
+            const auto property_path = std::string("$/Table/") + std::string(spec.property);
+            const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
+            if (!value || value->type_name != spec.type_name)
+                fail("OOF1122", property_path, std::string(spec.type_name), "different value type",
+                    "Table enumeration has the wrong type");
+            const auto member = std::ranges::find(spec.members, value->member);
+            if (member == spec.members.end())
+                fail("OOF1122", property_path, "known Table enumeration member", value->member,
+                    "Table enumeration member is unsupported");
+            ordinal = static_cast<int>(std::distance(spec.members.begin(), member));
+        }
+        table_properties.items.at(spec.slot) = raw(std::to_string(ordinal));
     }
     for (const auto& spec : table_appearance_properties) {
         const auto* property = control.properties().find(model::PropertyId::from_name(spec.name));

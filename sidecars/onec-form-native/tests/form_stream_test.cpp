@@ -1,4 +1,5 @@
 #include "../src/model/chart_type.hpp"
+#include "../src/model/table_properties.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -523,6 +524,95 @@ void test_table_boolean_properties() {
     record->items.at(2).items.at(2).items.at(1).items.at(1) = list_stream::ListValue::raw_atom("117643813");
     const auto partial = form_stream::decode_document(unknown, "UnknownTableBit");
     expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown Table flag bits must remain incomplete");
+}
+
+void test_table_enumeration_properties() {
+    auto seed = form_stream::decode_document(captured_table_payload(), "TableEnums");
+    expect(seed.ok(), "Table enum fixture must decode");
+    const auto found = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(found != seed.value().collections().controls.end(), "fixture must contain Table");
+    const auto table_id = found->id;
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, table_id};
+    for (const auto columns : {1U, 2U}) {
+        for (const bool with_event : {false, true}) {
+            auto baseline = seed.value();
+            auto* table = const_cast<model::ControlNode*>(baseline.find_control(table_id));
+            expect(table != nullptr, "fixture Table must exist");
+            if (columns == 2) {
+                auto& payload = std::get<model::TablePayload>(table->payload);
+                auto extra = payload.columns.front();
+                extra.name = "Extra";
+                extra.data_path = "Extra";
+                payload.columns.push_back(std::move(extra));
+            }
+            if (with_event) {
+                const model::ObjectId event_id{9001};
+                table->events.push_back(model::EventRef{event_id});
+                baseline.add_event(model::Event{event_id, "Selection", "OnSelection",
+                    model::EventOwner{model::ControlRef{table_id}}});
+            }
+            const auto default_native = form_stream::encode_document(baseline);
+            expect(default_native.ok(), default_native ? "default Table must encode" : default_native.diagnostics().front().message);
+            for (const auto& spec : model::detail::table_enum_specs) {
+                const auto property = model::PropertyId::from_name(spec.property);
+                const auto default_value = baseline.get_prop_val(key, property);
+                expect(default_value.value && *default_value.value == model::PropertyValue{model::EnumerationValue{
+                    std::string(spec.type_name), std::string(spec.members[static_cast<std::size_t>(spec.default_ordinal)])}},
+                    std::string(spec.property) + " must have its observed default");
+                for (std::size_t index = 0; index < spec.members.size(); ++index) {
+                    auto document = baseline;
+                    const model::EnumerationValue value{std::string(spec.type_name), std::string(spec.members[index])};
+                    expect(document.set_prop_val(key, property, value) == model::PropertyMutationStatus::applied,
+                        std::string(spec.property) + " must accept its member");
+                    auto encoded = form_stream::encode_document(document);
+                    expect(encoded.ok(), encoded ? "Table enum must encode" : encoded.diagnostics().front().message);
+                    const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+                    expect(record && record->items.at(2).items.at(2).items.at(1).items.at(spec.slot).atom == std::to_string(index),
+                        std::string(spec.property) + " must use the observed ordinal");
+                    if (static_cast<int>(index) == spec.default_ordinal)
+                        expect(list_stream::dump_compact(encoded.value()) == list_stream::dump_compact(default_native.value()),
+                            "explicit default must match the omitted property");
+                    auto decoded = form_stream::decode_document(encoded.value(), "TableEnums");
+                    expect(decoded.ok() && decoded.value().reconstruction_complete(), "Table enum must decode completely");
+                    const auto read = decoded.value().get_prop_val(key, property);
+                    expect(read.value && *read.value == model::PropertyValue{value}, "Table enum must round-trip");
+                    const auto xml = source::serialize_form_xml(decoded.value());
+                    expect(xml.ok(), "Table enum must serialize to XML");
+                    const auto parsed = source::parse_form_xml(xml.value());
+                    expect(parsed.ok(), "Table enum XML must parse");
+                    const auto rebuilt = form_stream::encode_document(parsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                        "Table enum XML/native round-trip must match");
+                }
+                for (const auto invalid : {-1, static_cast<int>(spec.members.size())}) {
+                    auto corrupted = default_native.value();
+                    auto* record = find_record_with_guid(corrupted, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+                    expect(record != nullptr, "Table record must exist");
+                    record->items.at(2).items.at(2).items.at(1).items.at(spec.slot) = list_stream::ListValue::raw_atom(std::to_string(invalid));
+                    expect(!form_stream::decode_document(corrupted, "InvalidTableEnum"),
+                        std::string(spec.property) + " must reject invalid ordinals");
+                }
+            }
+            auto all = baseline;
+            for (const auto& spec : model::detail::table_enum_specs) {
+                const auto index = (static_cast<std::size_t>(spec.default_ordinal) + 1) % spec.members.size();
+                expect(all.set_prop_val(key, model::PropertyId::from_name(spec.property),
+                    model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[index])}) == model::PropertyMutationStatus::applied,
+                    "all Table enum values must be assignable together");
+            }
+            const auto encoded_all = form_stream::encode_document(all);
+            expect(encoded_all.ok(), "combined Table enum values must encode");
+            const auto decoded_all = form_stream::decode_document(encoded_all.value(), "CombinedTableEnums");
+            expect(decoded_all.ok() && decoded_all.value().reconstruction_complete(), "combined Table enum values must decode");
+            for (const auto& spec : model::detail::table_enum_specs) {
+                const auto index = (static_cast<std::size_t>(spec.default_ordinal) + 1) % spec.members.size();
+                const auto read = decoded_all.value().get_prop_val(key, model::PropertyId::from_name(spec.property));
+                expect(read.value && *read.value == model::PropertyValue{model::EnumerationValue{
+                    std::string(spec.type_name), std::string(spec.members[index])}}, "combined Table enum must survive");
+            }
+        }
+    }
 }
 
 void test_table_appearance_properties() {
@@ -17135,6 +17225,7 @@ int main() {
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();
         test_table_boolean_properties();
+        test_table_enumeration_properties();
         test_table_appearance_properties();
         test_table_first_in_group_observed_metadata();
         test_table_first_in_group_fresh_model_xml_bin();

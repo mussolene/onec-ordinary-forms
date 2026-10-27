@@ -1,4 +1,5 @@
 #include "../src/model/chart_type.hpp"
+#include "../src/model/table_properties.hpp"
 #include <array>
 #include <exception>
 #include <iostream>
@@ -1315,6 +1316,61 @@ void test_value_tree_type_domain_xml_roundtrip() {
     disguised_entry.term = model::TypeDomainTerm::object;
     disguised_entry.type_uuid = model::UuidValue{"e603c0f2-92fb-4d47-8f38-a44a381cf235"};
     expect(!source::serialize_form_xml(disguised).ok(), "ValueTree UUID must not serialize as an object alias");
+}
+
+void test_table_enum_properties_xml() {
+    const auto xml = [](std::string_view property_name, std::string_view property) {
+        const bool before_columns = property_name == "HorizontalScrollBar" || property_name == "VerticalScrollBar";
+        const auto prefix = std::string("<Form id=\"1\" name=\"RowsForm\" ordinaryFormVersion=\"2.1\">") +
+            "<Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\"/>" +
+            "</TypeDomain></Attribute></Attributes><ChildItems><Table id=\"3\" name=\"Rows\">" +
+            "<DataPath attributeId=\"2\"/><Position/>";
+        constexpr std::string_view columns =
+            "<Columns><Column name=\"Code\"><DataPath>Code</DataPath><Header>"
+            "<Item language=\"ru\">Код</Item></Header><Control type=\"InputField\"/>"
+            "</Column></Columns>";
+        return prefix + (before_columns ? std::string(property) : std::string{}) + std::string(columns) +
+            (before_columns ? std::string{} : std::string(property)) + "</Table></ChildItems></Form>";
+    };
+    const auto table = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{3}};
+    for (const auto& spec : model::detail::table_enum_specs) {
+        const auto property_id = model::PropertyId::from_name(spec.property);
+        const auto element = [&](std::string_view type, std::string_view member) {
+            return "<" + std::string(spec.property) + " type=\"" + std::string(type) +
+                "\" member=\"" + std::string(member) + "\"/>";
+        };
+        const auto omitted = source::parse_form_xml(xml(spec.property, ""));
+        expect(omitted.ok(), "Table enum property may be omitted");
+        expect(spec.default_ordinal >= 0 && static_cast<std::size_t>(spec.default_ordinal) < spec.members.size(),
+            "Table enum default must belong to its domain");
+        const auto default_value = omitted.value().get_prop_val(table, property_id);
+        expect(default_value.status == model::PropertyReadStatus::proven_default && default_value.value &&
+            *default_value.value == model::PropertyValue{model::EnumerationValue{
+                std::string(spec.type_name), std::string(spec.members[static_cast<std::size_t>(spec.default_ordinal)])}},
+            "omitted Table enum property must use its named default");
+        for (const auto member : spec.members) {
+            const model::PropertyValue expected = model::EnumerationValue{std::string(spec.type_name), std::string(member)};
+            const auto parsed = source::parse_form_xml(xml(spec.property, element(spec.type_name, member)));
+            expect(parsed.ok(), "known Table enum value must parse from XML");
+            const auto read = parsed.value().get_prop_val(table, property_id);
+            expect(read.value && *read.value == expected, "Table enum XML must expose the named value");
+            const auto written = source::serialize_form_xml(parsed.value());
+            expect(written.ok(), "known Table enum value must serialize to XML");
+            const auto reparsed = source::parse_form_xml(written.value());
+            expect(reparsed.ok(), "serialized Table enum must parse again");
+            const auto roundtrip = reparsed.value().get_prop_val(table, property_id);
+            expect(roundtrip.value && *roundtrip.value == expected, "Table enum value must survive XML roundtrip");
+        }
+        expect(!source::parse_form_xml(xml(spec.property, element(spec.type_name, "Unknown"))).ok(),
+            "unknown Table enum member must fail");
+        expect(!source::parse_form_xml(xml(spec.property, element("OtherType", spec.members.front()))).ok(),
+            "foreign Table enum type must fail");
+        const auto default_member = spec.members[static_cast<std::size_t>(spec.default_ordinal)];
+        expect(!source::parse_form_xml(xml(spec.property, element("OtherType", default_member))).ok(),
+            "foreign enum type must fail even when its member matches the Table default");
+        expect(!source::parse_form_xml(xml(spec.property, element(spec.type_name, spec.members.front()) +
+            element(spec.type_name, spec.members.front()))).ok(), "duplicate Table enum property must fail");
+    }
 }
 
 void test_table_columns_named_profile() {
@@ -2692,6 +2748,7 @@ int main() {
         test_value_list_type_domain_xml_roundtrip();
         test_value_table_type_domain_xml_roundtrip();
         test_value_tree_type_domain_xml_roundtrip();
+        test_table_enum_properties_xml();
         test_table_columns_named_profile();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();

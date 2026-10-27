@@ -1,4 +1,5 @@
 #include "../src/model/chart_type.hpp"
+#include "../src/model/table_properties.hpp"
 #include <array>
 #include <exception>
 #include <iostream>
@@ -803,6 +804,58 @@ void test_chart_enum_properties() {
         }
         expect(document.set_prop_val(chart, property, true) == PropertyMutationStatus::invalid_value,
             "Chart enumeration must reject a non-enumeration value");
+    }
+}
+
+void test_table_enum_properties() {
+    using namespace oof::model::metamodel;
+    Form form;
+    form.id = ObjectId{1};
+    form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_control(ControlNode{ObjectId{2}, "Table", TablePayload{}});
+    const auto table = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{2}};
+    for (const auto& spec : detail::table_enum_specs) {
+        const auto* descriptor = find_property(ControlKind::table, spec.property);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::control_info && descriptor->value_codec == ValueCodec::enumeration &&
+                   descriptor->default_value.kind == DefaultKind::enumeration && descriptor->default_value.canonical == spec.default_qualified,
+            "Table enumeration descriptor must expose its observed storage and default");
+        const auto property = PropertyId::from_name(spec.property);
+        const auto initial = document.get_prop_val(table, property);
+        const EnumerationValue default_value{std::string(spec.type_name), std::string(spec.members[spec.default_ordinal])};
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value && *initial.value == PropertyValue{default_value},
+            "Table enumeration default must use the platform type and member");
+        std::set<std::string_view> seen;
+        for (const auto member : spec.members) {
+            expect(seen.insert(member).second, "Table enumeration member names must be unique");
+            const EnumerationValue value{std::string(spec.type_name), std::string(member)};
+            expect(document.set_prop_val(table, property, value) == PropertyMutationStatus::applied,
+                "Table enumeration member must be accepted by SetPropVal");
+            const auto read = document.get_prop_val(table, property);
+            expect(read.value && *read.value == PropertyValue{value}, "Table enumeration member must be readable");
+        }
+        for (const auto& invalid : {EnumerationValue{std::string(spec.type_name), "Unknown"},
+                 EnumerationValue{"OtherType", std::string(spec.members[spec.default_ordinal])}}) {
+            expect(document.set_prop_val(table, property, invalid) == PropertyMutationStatus::invalid_value,
+                "Table enumeration must reject an unknown member or type");
+            Form invalid_form;
+            invalid_form.id = ObjectId{1};
+            invalid_form.children = {ControlRef{ObjectId{2}}};
+            OrdinaryFormDocument invalid_document(std::move(invalid_form));
+            ControlNode invalid_table{ObjectId{2}, "Table", TablePayload{}};
+            invalid_table.properties().set_explicit(property, invalid);
+            invalid_document.add_control(std::move(invalid_table));
+            expect(invalid_document.validate().has(InvariantCode::invalid_property),
+                "Table enumeration validation must reject an unknown member or type");
+        }
+        expect(document.set_prop_val(table, property, true) == PropertyMutationStatus::invalid_value,
+            "Table enumeration must reject a non-enumeration value");
+        expect(document.reset_prop_val(table, property) == PropertyMutationStatus::reset,
+            "Table enumeration reset must remove the explicit property");
+        const auto reset = document.get_prop_val(table, property);
+        expect(reset.status == PropertyReadStatus::proven_default && reset.value && *reset.value == PropertyValue{default_value},
+            "Table enumeration reset must recover the default");
     }
 }
 
@@ -2467,6 +2520,7 @@ int main() {
         test_chart_base_value_property();
         test_chart_type_property();
         test_chart_enum_properties();
+        test_table_enum_properties();
         test_chart_appearance_defaults();
         test_help_metamodel();
         test_shared_control_default_classifications();
