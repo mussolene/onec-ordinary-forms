@@ -142,6 +142,9 @@ bool property_value_matches(
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "SizeChange")
                     return typed_value.type_name == "WindowSizeChange" &&
                         (typed_value.member == "Change" || typed_value.member == "DontChange");
+                if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "ChangeWindowAppearanceMode")
+                    return typed_value.type_name == "WindowAppearanceModeChange" &&
+                        (typed_value.member == "Auto" || typed_value.member == "Enable" || typed_value.member == "Disable");
                 if (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ChartType") {
                     return typed_value.type_name == "ChartType" &&
                         std::ranges::any_of(detail::chart_type_members, [&](const auto& member) { return member.first == typed_value.member; });
@@ -272,6 +275,8 @@ bool property_api_enumeration_matches(
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "EnterKeyBehavior")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "SizeChange")
+        return property_value_matches(descriptor, PropertyValue{value});
+    if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "ChangeWindowAppearanceMode")
         return property_value_matches(descriptor, PropertyValue{value});
     if ((descriptor.control_kind == ControlKind::chart &&
             (descriptor.api_name == "ChartType" || std::ranges::find(detail::chart_enum_specs, descriptor.api_name,

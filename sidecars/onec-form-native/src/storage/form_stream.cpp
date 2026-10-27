@@ -11388,7 +11388,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_exact(payload.items[12], list({raw("0")}), "$/12", "Unsupported root table");
         require_exact(payload.items[13], canonical_style_record(10), "$/13", "Unsupported page-style record");
         require_raw_constant(payload.items[14], "1", "$/14");
-        require_raw_constant(payload.items[15], "2", "$/15");
+        const auto window_appearance_change = integer_atom<std::int32_t>(payload.items[15], "$/15");
+        if (window_appearance_change < 0 || window_appearance_change > 2)
+            fail("OOF1114", "$/15", "WindowAppearanceModeChange ordinal 0..2", std::to_string(window_appearance_change), "Unsupported window appearance change mode");
         require_raw_constant(payload.items[16], "0", "$/16");
         const bool desktop_mode = bool_atom(payload.items[17], "$/17");
         const bool allow_close = bool_atom(payload.items[18], "$/18");
@@ -11478,6 +11480,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (window_appearance_change != 2) form.properties.set_explicit(model::PropertyId::from_name("ChangeWindowAppearanceMode"),
+            model::EnumerationValue{"WindowAppearanceModeChange", window_appearance_change == 0 ? "Enable" : "Disable"});
         if (dont_change_size) form.properties.set_explicit(model::PropertyId::from_name("SizeChange"),
             model::EnumerationValue{"WindowSizeChange", "DontChange"});
         if (!navigate_on_enter) form.properties.set_explicit(model::PropertyId::from_name("EnterKeyBehavior"),
@@ -12182,7 +12186,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12194,6 +12198,8 @@ Result<list_stream::ListValue> encode_document(
             "EnterKeyBehaviorType", 1, {{"DefaultButton", 0}, {"ControlNavigation", 1}});
         const auto size_change = explicit_enum_storage_value(document.form().properties, "Form", "SizeChange",
             "WindowSizeChange", 0, {{"Change", 0}, {"DontChange", 1}});
+        const auto window_appearance_change = explicit_enum_storage_value(document.form().properties, "Form", "ChangeWindowAppearanceMode",
+            "WindowAppearanceModeChange", 2, {{"Enable", 0}, {"Disable", 1}, {"Auto", 2}});
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -12658,7 +12664,7 @@ Result<list_stream::ListValue> encode_document(
             list({raw("0")}),
             canonical_style_record(10),
             raw("1"),
-            raw("2"),
+            raw(std::to_string(window_appearance_change)),
             raw("0"),
             raw(desktop_mode ? "1" : "0"),
             raw(allow_close ? "1" : "0"),

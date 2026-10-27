@@ -141,6 +141,12 @@
       <xs:enumeration value="Change"/><xs:enumeration value="DontChange"/>
     </xs:restriction></xs:simpleType></xs:attribute>
   </xs:complexType>
+  <xs:complexType name="WindowAppearanceModeChangeValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowAppearanceModeChange"/>
+    <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="Auto"/><xs:enumeration value="Enable"/><xs:enumeration value="Disable"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType>
   <xs:complexType name="InputIncompleteChoiceModeValueType">
     <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="IncompleteChoiceMode"/>
     <xs:attribute name="member" use="required">
@@ -1848,7 +1854,7 @@
       <xs:element name="CloseOnChoice" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CloseOnOwnerClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SizeChange" type="WindowSizeChangeValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChangeWindowAppearanceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangeWindowAppearanceMode" type="WindowAppearanceModeChangeValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowOptionsName" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CaptionPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowOptionsKey" type="xs:string" minOccurs="0" maxOccurs="1"/>
