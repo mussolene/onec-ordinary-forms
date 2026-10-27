@@ -76,10 +76,14 @@ void test_label_pictures_roundtrip() {
         0x21, 0xf9, 4, 1, 0, 0, 0, 0, 0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 1, 0x44, 0, 0x3b};
     document.add_asset(model::PictureAsset{model::ObjectId{40}, "Items/Label0/Picture.gif", model::PictureFormat::gif, gif, false});
     const auto property = model::PropertyId::from_name("Picture");
+    constexpr std::array sizes{"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "ByFontSize"};
+    constexpr std::array locations{"Left", "Top", "Right", "Bottom", "Center"};
     for (std::uint64_t id = 2; id < 14; ++id) {
         model::ControlNode control{model::ObjectId{id}, "Label" + std::to_string(id - 2), model::LabelDecorationPayload{}};
         if (id == 2) control.properties().set_explicit(property, model::PictureRef{model::PictureAssetRef{model::ObjectId{40}}});
-        else control.properties().set_explicit(property, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+        else if (id % 3 != 0) control.properties().set_explicit(property, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+        control.properties().set_explicit(model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", sizes[(id - 2) % sizes.size()]});
+        control.properties().set_explicit(model::PropertyId::from_name("LabelPictureLocation"), model::EnumerationValue{"LabelPictureLocation", locations[(id - 2) % locations.size()]});
         document.add_control(std::move(control));
     }
     const auto encoded = oof::save_form_bin(document);
@@ -90,11 +94,23 @@ void test_label_pictures_roundtrip() {
         "label external picture must retain its bytes");
     for (std::uint64_t id = 2; id < 14; ++id) {
         const auto* label = decoded.value().find_control(model::ObjectId{id});
-        expect(label && label->properties().find(property), "every label must retain its picture");
-        const auto* picture = std::get_if<model::PictureRef>(&label->properties().find(property)->value);
-        expect(picture && (id == 2 ? picture->asset.id() == decoded.value().assets().front().id :
-            picture->standard_name && picture->standard_name->value == "PictureLib.Write"),
-            "label pictures must retain the correct named reference");
+        expect(label != nullptr, "every label must survive the roundtrip");
+        const auto* picture_entry = label->properties().find(property);
+        if (id != 2 && id % 3 == 0) expect(!picture_entry, "empty picture must remain empty");
+        else {
+            expect(picture_entry != nullptr, "label must retain its picture");
+            const auto* picture = std::get_if<model::PictureRef>(&picture_entry->value);
+            expect(picture && (id == 2 ? picture->asset.id() == decoded.value().assets().front().id :
+                picture->standard_name && picture->standard_name->value == "PictureLib.Write"),
+                "label pictures must retain the correct named reference");
+        }
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{id}};
+        expect(decoded.value().get_prop_val(owner, model::PropertyId::from_name("PictureSize")).value ==
+                model::PropertyValue{model::EnumerationValue{"PictureSize", sizes[(id - 2) % sizes.size()]}},
+            "label picture size must survive the roundtrip");
+        expect(decoded.value().get_prop_val(owner, model::PropertyId::from_name("LabelPictureLocation")).value ==
+                model::PropertyValue{model::EnumerationValue{"LabelPictureLocation", locations[(id - 2) % locations.size()]}},
+            "label picture location must survive the roundtrip");
     }
 }
 

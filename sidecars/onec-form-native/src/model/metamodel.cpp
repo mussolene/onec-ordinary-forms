@@ -1023,6 +1023,14 @@ void apply_proven_storage_overrides(
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     std::ranges::find(label_decoration, "Picture", &PropertyDescriptor::api_name)->api_access = ApiAccess::read_write;
     classify_property(label_decoration, "Picture", StorageCodec::picture_record, DefaultKind::none, "");
+    for (const auto name : {"LabelPictureLocation", "PictureSize"}) {
+        auto property = std::ranges::find(label_decoration, name, &PropertyDescriptor::api_name);
+        if (property == label_decoration.end()) throw std::logic_error("missing Label picture property");
+        property->api_access = ApiAccess::read_write;
+        property->value_codec = ValueCodec::enumeration;
+    }
+    classify_property(label_decoration, "LabelPictureLocation", StorageCodec::control_info, DefaultKind::enumeration, "LabelPictureLocation.Left");
+    classify_property(label_decoration, "PictureSize", StorageCodec::control_info, DefaultKind::enumeration, "PictureSize.AutoSize");
     classify_property(label_decoration, "VerticalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Center");
     classify_property(label_decoration, "MarkNegatives", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(label_decoration, "ScrollingText", StorageCodec::control_info, DefaultKind::enumeration,

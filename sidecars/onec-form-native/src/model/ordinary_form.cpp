@@ -209,7 +209,11 @@ bool property_value_matches(
                 if (descriptor.control_kind == ControlKind::label_decoration && descriptor.api_name == "VerticalAlign")
                     return typed_value.type_name == "VerticalAlign" &&
                         (typed_value.member == "Top" || typed_value.member == "Center" || typed_value.member == "Bottom");
-                if (descriptor.control_kind == ControlKind::picture_decoration && descriptor.api_name == "PictureSize")
+                if (descriptor.control_kind == ControlKind::label_decoration && descriptor.api_name == "LabelPictureLocation")
+                    return typed_value.type_name == "LabelPictureLocation" &&
+                        (typed_value.member == "Left" || typed_value.member == "Top" || typed_value.member == "Right" ||
+                         typed_value.member == "Bottom" || typed_value.member == "Center");
+                if ((descriptor.control_kind == ControlKind::picture_decoration || descriptor.control_kind == ControlKind::label_decoration) && descriptor.api_name == "PictureSize")
                     return typed_value.type_name == "PictureSize" &&
                         (typed_value.member == "RealSize" || typed_value.member == "Stretch" ||
                          typed_value.member == "Proportionally" || typed_value.member == "Tile" ||
@@ -268,7 +272,8 @@ bool property_api_enumeration_matches(
         ((descriptor.control_kind == ControlKind::check_box || descriptor.control_kind == ControlKind::radio_button) &&
          (descriptor.api_name == "HorizontalAlign" || descriptor.api_name == "VerticalAlign" || descriptor.api_name == "TitleLocation")) ||
         (descriptor.control_kind == ControlKind::label_decoration && descriptor.api_name == "ScrollingText") ||
-        (descriptor.control_kind == ControlKind::picture_decoration && descriptor.api_name == "PictureSize") ||
+        (descriptor.control_kind == ControlKind::label_decoration && descriptor.api_name == "LabelPictureLocation") ||
+        ((descriptor.control_kind == ControlKind::picture_decoration || descriptor.control_kind == ControlKind::label_decoration) && descriptor.api_name == "PictureSize") ||
         (descriptor.control_kind == ControlKind::calendar_field && descriptor.api_name == "SelectionMode") ||
         (descriptor.control_kind == ControlKind::progress_bar &&
          (descriptor.api_name == "Orientation" || descriptor.api_name == "ShowStyle")) ||

@@ -5984,11 +5984,17 @@ DecodedControl decode_label(
     const auto picture_path = child_path(properties_path, 12);
     const auto& picture_slot = properties.items[12];
     require_arity(picture_slot, 11, picture_path);
-    const auto picture_marker = integer_atom<std::int32_t>(picture_slot.items[1], child_path(picture_path, 1));
+    const auto picture_size_copy = integer_atom<std::int32_t>(picture_slot.items[1], child_path(picture_path, 1));
+    const auto picture_size = integer_atom<std::int32_t>(properties.items[13], child_path(properties_path, 13));
+    const auto picture_location = integer_atom<std::int32_t>(properties.items[11], child_path(properties_path, 11));
+    if (picture_location < 1 || picture_location > 5)
+        fail("OOF1114", child_path(properties_path, 11), "LabelPictureLocation 1 through 5", std::to_string(picture_location), "Label picture location is unsupported");
+    if (picture_size < 0 || picture_size > 7 || picture_size == 5 || picture_size == 6)
+        fail("OOF1114", child_path(properties_path, 13), "PictureSize 0 through 4 or 7", std::to_string(picture_size), "Label picture size is unsupported");
     const auto picture = decode_button_picture(picture_slot.items[2], child_path(picture_path, 2));
-    if (picture_marker != (picture ? 4 : 0))
-        fail("OOF1114", child_path(picture_path, 1), "picture presence marker matching Picture", std::to_string(picture_marker),
-            "LabelDecoration Picture marker disagrees with its picture");
+    if (picture_size_copy != picture_size && (picture || picture_size_copy != 0))
+        fail("OOF1114", child_path(picture_path, 1), "PictureSize copy or zero for empty picture", std::to_string(picture_size_copy),
+            "LabelDecoration PictureSize copy disagrees with the property");
     const auto shortcut = decode_named_shortcut(
         properties.items[8], child_path(properties_path, 8));
     if (horizontal_align != 0 && horizontal_align != 1 && horizontal_align != 2 && horizontal_align != 4) {
@@ -6008,6 +6014,8 @@ DecodedControl decode_label(
     normalized_properties.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
     normalized_properties.items[12].items[1] = raw("0");
     normalized_properties.items[12].items[2] = canonical_button_picture();
+    normalized_properties.items[11] = raw("1");
+    normalized_properties.items[13] = raw("4");
     auto canonical_common = common;
     canonical_common.named_border_control.reset();
     canonical_common.border.reset();
@@ -6068,6 +6076,14 @@ DecodedControl decode_label(
     if (hyperlink) control.properties().set_explicit(model::PropertyId::from_name("Hyperlink"), true);
     if (shortcut != model::ShortcutValue{}) control.properties().set_explicit(
         model::PropertyId::from_name("Shortcut"), shortcut);
+    if (picture_location != 1) {
+        constexpr std::array members{"", "Left", "Top", "Right", "Bottom", "Center"};
+        control.properties().set_explicit(model::PropertyId::from_name("LabelPictureLocation"), model::EnumerationValue{"LabelPictureLocation", members.at(picture_location)});
+    }
+    if (picture_size != 4) {
+        constexpr std::array members{"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "", "", "ByFontSize"};
+        control.properties().set_explicit(model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", members.at(picture_size)});
+    }
     if (picture && picture->standard_name)
         control.properties().set_explicit(model::PropertyId::from_name("Picture"),
             model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}});
@@ -9780,7 +9796,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "Picture", "Hyperlink", "Shortcut", "HorizontalAlign", "VerticalAlign", "MarkNegatives", "ScrollingText", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "Picture", "LabelPictureLocation", "PictureSize", "Hyperlink", "Shortcut", "HorizontalAlign", "VerticalAlign", "MarkNegatives", "ScrollingText", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
     const auto caption = explicit_localized_text(control.properties(), "Caption", "$/LabelDecoration");
     const bool hyperlink = explicit_bool(control.properties(), "Hyperlink", false);
     const auto shortcut = explicit_named_shortcut(control.properties(), "$/LabelDecoration/Shortcut");
@@ -9813,8 +9829,15 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     auto label_properties = canonical_label_properties(caption, horizontal_align, common, hyperlink, shortcut);
     auto encoded_picture = encode_named_control_picture(document, control, "Picture", "$/LabelDecoration/Picture");
-    if (!same_list_value(encoded_picture, canonical_button_picture())) label_properties.items[12].items[1] = raw("4");
+    const auto picture_size = explicit_enum_storage_value(control.properties(), "LabelDecoration", "PictureSize", "PictureSize", 4,
+        {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3}, {"AutoSize", 4}, {"ByFontSize", 7}});
+    const auto picture_location = explicit_enum_storage_value(control.properties(), "LabelDecoration", "LabelPictureLocation", "LabelPictureLocation", 1,
+        {{"Left", 1}, {"Top", 2}, {"Right", 3}, {"Bottom", 4}, {"Center", 5}});
+    if (!same_list_value(encoded_picture, canonical_button_picture()) || picture_size != 4)
+        label_properties.items[12].items[1] = raw(std::to_string(picture_size));
     label_properties.items[12].items[2] = std::move(encoded_picture);
+    label_properties.items[11] = raw(std::to_string(picture_location));
+    label_properties.items[13] = raw(std::to_string(picture_size));
     label_properties.items.at(4) = raw(std::to_string(explicit_enum_storage_value(control.properties(),
         "LabelDecoration", "VerticalAlign", "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}})));
     label_properties.items.at(6) = raw(explicit_bool(control.properties(), "MarkNegatives", false) ? "1" : "0");
