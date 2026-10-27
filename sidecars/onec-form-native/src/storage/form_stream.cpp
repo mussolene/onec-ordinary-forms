@@ -1041,7 +1041,7 @@ LV encode_control_border(const model::BorderValue& border, std::string_view path
         !std::holds_alternative<std::monostate>(border.style) || border.width > 5 ||
         (border.border_type == model::ControlBorderType::without_border && border.width > 1) ||
         (border.border_type == model::ControlBorderType::rounded &&
-            (owner != model::ControlKind::usual_group || border.width != 1)))
+            ((owner != model::ControlKind::usual_group && owner != model::ControlKind::chart) || border.width != 1)))
         fail("OOF1122", std::string(path), "supported absolute Border type and integer width 0..5",
             "unsupported border", "Border cannot be represented by this control");
     const auto state = border == control_border_default(owner) ? "0" : "3";
@@ -1072,7 +1072,7 @@ model::BorderValue decode_control_border(const LV& value, std::string_view path,
     border.width = integer_atom<std::uint32_t>(value.items[4], child_path(path, 4));
     if (border.width > 5 || (border.border_type == model::ControlBorderType::without_border && border.width > 1) ||
         (border.border_type == model::ControlBorderType::rounded &&
-            (owner != model::ControlKind::usual_group || border.width != 1)))
+            ((owner != model::ControlKind::usual_group && owner != model::ControlKind::chart) || border.width != 1)))
         fail("OOF1114", child_path(path, 4), "integer Border width 0..5 (WithoutBorder at most 1)",
             std::to_string(border.width), "Unsupported Border width");
     const auto state = integer_atom<unsigned>(value.items[5], child_path(path, 5));
@@ -6587,7 +6587,7 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
             if (descriptor.kind != kind) continue;
             if (descriptor.border) {
                 info.at(middle_start + descriptor.storage_offset) = encode_control_border(
-                    (area.*(descriptor.border)).value_or(model::BorderValue{}), name);
+                    (area.*(descriptor.border)).value_or(model::BorderValue{}), name, model::ControlKind::chart);
             } else {
                 info.at(middle_start + descriptor.storage_offset) = encode_control_font(
                     (area.*(descriptor.font)).value_or(model::FontValue{}), name);
@@ -7028,7 +7028,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             if (!include_area_style || descriptor.kind != kind) continue;
             const auto index = middle_start + descriptor.storage_offset;
             if (descriptor.border) {
-                auto value = decode_control_border(at(info, index, info_path), child_path(info_path, index));
+                auto value = decode_control_border(at(info, index, info_path), child_path(info_path, index), model::ControlKind::chart);
                 if (value != model::BorderValue{}) area.*(descriptor.border) = std::move(value);
             } else {
                 auto value = decode_control_font(at(info, index, info_path), child_path(info_path, index));

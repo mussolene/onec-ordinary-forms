@@ -994,9 +994,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         } else if (const auto* descriptor = metamodel::find_chart_area_style(owner.chart_area, property)) {
             if (descriptor->border) {
                 const auto* border = std::get_if<BorderValue>(&value);
-                if (border == nullptr || !valid_border_value(*border) ||
-                    (border->kind == BorderKind::absolute && border->border_type == ControlBorderType::rounded))
-                    return PropertyMutationStatus::invalid_value;
+                if (border == nullptr || !valid_border_value(*border)) return PropertyMutationStatus::invalid_value;
                 updated.*(descriptor->border) = *border;
             } else {
                 const auto* font = std::get_if<FontValue>(&value);

@@ -16891,6 +16891,31 @@ void test_chart_area_border_font_round_trip() {
     expect(malformed_chart != nullptr, "Chart record must exist for malformed style check");
     malformed_chart->items.at(3).items.at(18 + 32) = list_stream::parse("{8,2,0,{-20},1,99}");
     expect(!form_stream::decode_document(malformed), "malformed Chart area font must fail typed validation");
+    auto rounded_document = document;
+    model::BorderValue rounded;
+    rounded.border_type = model::ControlBorderType::rounded;
+    rounded.width = 1;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot}) {
+            const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};
+            expect(rounded_document.set_prop_val(owner, model::PropertyId::from_name("Border"), rounded) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "rounded area border must be accepted as observed on the platform");
+        }
+    }
+    const auto rounded_encoded = form_stream::encode_document(rounded_document);
+    expect(rounded_encoded.ok(), "rounded area borders must encode");
+    const auto rounded_decoded = form_stream::decode_document(rounded_encoded.value(), "ChartAreaStyle");
+    expect(rounded_decoded.ok() && rounded_decoded.value().reconstruction_complete(), "rounded area borders must decode completely");
+    const auto rounded_xml = source::serialize_form_xml(rounded_decoded.value());
+    expect(rounded_xml.ok(), "rounded area borders must serialize to XML");
+    const auto rounded_parsed = source::parse_form_xml(rounded_xml.value());
+    expect(rounded_parsed.ok(), "rounded area borders must parse from XML");
+    const auto rounded_rebuilt = form_stream::encode_document(rounded_parsed.value());
+    expect(rounded_rebuilt.ok() && list_stream::dump_compact(rounded_rebuilt.value()) == list_stream::dump_compact(rounded_encoded.value()),
+        "rounded area borders must round-trip without losing neighboring values");
+    rounded.width = 2;
+    expect(rounded_document.set_prop_val(invalid_area, model::PropertyId::from_name("Border"), rounded) == model::PropertyMutationStatus::invalid_value,
+        "rounded area borders must reject an unsupported width");
     auto unsupported = document;
     model::FontValue invalid_font; invalid_font.kind = model::FontKind::windows_font;
     expect(unsupported.set_prop_val(invalid_area, model::PropertyId::from_name("Font"), invalid_font) == model::PropertyMutationStatus::applied_unclassified_storage &&
