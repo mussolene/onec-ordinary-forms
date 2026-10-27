@@ -11379,7 +11379,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
         const auto form_named_events = decode_form_events(payload.items[4], "$/4");
         const bool auto_title = bool_atom(payload.items[5], "$/5");
-        require_raw_constant(payload.items[6], "4", "$/6");
+        const auto window_state = integer_atom<std::int32_t>(payload.items[6], "$/6");
+        if (window_state != 4 && window_state != 1 && window_state != 16 && window_state != 2)
+            fail("OOF1114", "$/6", "WindowStateVariant ordinal 4, 1, 16, or 2", std::to_string(window_state), "Unsupported window state");
         const auto dock_location = integer_atom<std::int32_t>(payload.items[7], "$/7");
         if (dock_location != 1 && dock_location != 4 && dock_location != 2 && dock_location != 8)
             fail("OOF1114", "$/7", "WindowDockVariant ordinal 1, 4, 2, or 8", std::to_string(dock_location), "Unsupported window dock location");
@@ -11484,6 +11486,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (window_state != 4) form.properties.set_explicit(model::PropertyId::from_name("WindowState"),
+            model::EnumerationValue{"WindowStateVariant", window_state == 1 ? "Docked" : window_state == 16 ? "Autohide" : "Float"});
         if (dock_location != 1) form.properties.set_explicit(model::PropertyId::from_name("WindowDockLocation"),
             model::EnumerationValue{"WindowDockVariant", dock_location == 4 ? "Right" : dock_location == 2 ? "Top" : "Bottom"});
         if (center_window || avoid_owner) form.properties.set_explicit(model::PropertyId::from_name("WindowLocation"),
@@ -12194,7 +12198,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowLocation", "WindowDockLocation"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12210,6 +12214,8 @@ Result<list_stream::ListValue> encode_document(
             "WindowAppearanceModeChange", 2, {{"Enable", 0}, {"Disable", 1}, {"Auto", 2}});
         const auto window_location = explicit_enum_storage_value(document.form().properties, "Form", "WindowLocation",
             "WindowLocationVariant", 0, {{"Auto", 0}, {"Center", 1}, {"DontOverlapOwner", 2}});
+        const auto window_state = explicit_enum_storage_value(document.form().properties, "Form", "WindowState",
+            "WindowStateVariant", 4, {{"Normal", 4}, {"Docked", 1}, {"Autohide", 16}, {"Float", 2}});
         const auto dock_location = explicit_enum_storage_value(document.form().properties, "Form", "WindowDockLocation",
             "WindowDockVariant", 1, {{"Left", 1}, {"Right", 4}, {"Top", 2}, {"Bottom", 8}});
         const std::int32_t width = explicit_integer(
@@ -12667,7 +12673,7 @@ Result<list_stream::ListValue> encode_document(
             std::move(encoded_extension),
             encode_form_events(document),
             raw(auto_title ? "1" : "0"),
-            raw("4"),
+            raw(std::to_string(window_state)),
             raw(std::to_string(dock_location)),
             raw("0"),
             raw(window_location == 1 ? "1" : "0"),

@@ -142,6 +142,8 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
         return "WindowAppearanceModeChangeValueType";
     if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "WindowLocation")
         return "WindowLocationVariantValueType";
+    if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "WindowState")
+        return "WindowStateVariantValueType";
     if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "WindowDockLocation")
         return "WindowDockVariantValueType";
     if (property.value_codec == ValueCodec::form_reference &&
@@ -469,6 +471,12 @@ void append_value_types(std::string& output) {
     <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowLocationVariant"/>
     <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
       <xs:enumeration value="Auto"/><xs:enumeration value="Center"/><xs:enumeration value="DontOverlapOwner"/>
+    </xs:restriction></xs:simpleType></xs:attribute>
+  </xs:complexType>
+  <xs:complexType name="WindowStateVariantValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="WindowStateVariant"/>
+    <xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string">
+      <xs:enumeration value="Normal"/><xs:enumeration value="Docked"/><xs:enumeration value="Autohide"/><xs:enumeration value="Float"/>
     </xs:restriction></xs:simpleType></xs:attribute>
   </xs:complexType>
   <xs:complexType name="WindowDockVariantValueType">

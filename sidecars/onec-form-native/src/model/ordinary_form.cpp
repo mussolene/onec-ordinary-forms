@@ -148,6 +148,9 @@ bool property_value_matches(
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowLocation")
                     return typed_value.type_name == "WindowLocationVariant" &&
                         (typed_value.member == "Auto" || typed_value.member == "Center" || typed_value.member == "DontOverlapOwner");
+                if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowState")
+                    return typed_value.type_name == "WindowStateVariant" &&
+                        (typed_value.member == "Normal" || typed_value.member == "Docked" || typed_value.member == "Autohide" || typed_value.member == "Float");
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowDockLocation")
                     return typed_value.type_name == "WindowDockVariant" &&
                         (typed_value.member == "Left" || typed_value.member == "Right" || typed_value.member == "Top" || typed_value.member == "Bottom");
@@ -285,6 +288,8 @@ bool property_api_enumeration_matches(
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "ChangeWindowAppearanceMode")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowLocation")
+        return property_value_matches(descriptor, PropertyValue{value});
+    if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowState")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowDockLocation")
         return property_value_matches(descriptor, PropertyValue{value});
@@ -1183,10 +1188,12 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
-        if (opening_started_ && (property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
+        if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
+                                  property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
                                   property == PropertyId::from_name("WindowDockLocation")))
             return PropertyMutationStatus::forbidden_after_opening_started;
+        if (property == PropertyId::from_name("WindowState")) return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {
@@ -1497,10 +1504,12 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
-        if (opening_started_ && (property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
+        if (opening_started_ && (property == PropertyId::from_name("WindowState") ||
+                                  property == PropertyId::from_name("ChangeWindowAppearanceMode") ||
                                   property == PropertyId::from_name("WindowLocation") ||
                                   property == PropertyId::from_name("WindowDockLocation")))
             return PropertyMutationStatus::forbidden_after_opening_started;
+        if (property == PropertyId::from_name("WindowState")) return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_form_property(property);
         properties = &form_.properties;
     } else if (owner.category == ObjectCategory::control) {

@@ -8651,6 +8651,40 @@ void test_form_window_location() {
         document.get_prop_val(owner, property).value == initial.value, "reset must restore Auto");
 }
 
+void test_form_window_state_codec() {
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("WindowState");
+    for (const auto& [member, ordinal] : {std::pair{"Normal", "4"}, std::pair{"Docked", "1"}, std::pair{"Autohide", "16"}, std::pair{"Float", "2"}}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "WindowState";
+        form.properties.set_explicit(property, model::EnumerationValue{"WindowStateVariant", member});
+        model::OrdinaryFormDocument document(std::move(form));
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "WindowState must encode");
+        const auto* slot = bounded_list_item(encoded.value(), {6});
+        expect(slot && !slot->is_list && slot->atom == ordinal, "WindowState must use the proven form slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "WindowState");
+        expect(decoded.ok() && decoded.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowStateVariant", member}}, "WindowState must decode");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "WindowState XML serialization must succeed");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowStateVariant", member}}, "WindowState XML must roundtrip");
+        expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowStateVariant", "Float"}) ==
+            model::PropertyMutationStatus::unsupported_surface, "WindowState API must not pretend to enforce unmodeled dependencies");
+        expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::unsupported_surface,
+            "WindowState reset must not bypass unmodeled dependencies");
+        document.mark_opening_started();
+        expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowStateVariant", member}) ==
+            model::PropertyMutationStatus::forbidden_after_opening_started, "WindowState must reject mutation after opening starts");
+        expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::forbidden_after_opening_started,
+            "WindowState reset must reject mutation after opening starts");
+    }
+    model::Form invalid; invalid.id = model::ObjectId{1}; invalid.name = "InvalidWindowState";
+    invalid.properties.set_explicit(property, model::EnumerationValue{"WindowStateVariant", "Invalid"});
+    expect(!form_stream::encode_document(model::OrdinaryFormDocument(std::move(invalid))).ok(), "invalid WindowState must fail encoding");
+}
+
 void test_form_window_appearance_change() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "WindowAppearanceChange";
     model::OrdinaryFormDocument document(std::move(form));
@@ -20151,6 +20185,7 @@ int main() {
         test_form_auto_title_boolean_round_trip_and_validation();
         test_form_enter_key_behavior();
         test_form_size_change();
+        test_form_window_state_codec();
         test_form_window_appearance_change();
         test_form_window_location();
         test_form_window_dock_location();
