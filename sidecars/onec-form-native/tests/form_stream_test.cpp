@@ -8548,6 +8548,37 @@ void test_form_enter_key_behavior() {
         document.get_prop_val(owner, property).value == initial.value, "reset must restore the proven default");
 }
 
+void test_form_size_change() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "SizeBehavior";
+    model::OrdinaryFormDocument document(std::move(form));
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto property = model::PropertyId::from_name("SizeChange");
+    const auto initial = document.get_prop_val(owner, property);
+    expect(initial.status == model::PropertyReadStatus::proven_default &&
+        initial.value == model::PropertyValue{model::EnumerationValue{"WindowSizeChange", "Change"}},
+        "SizeChange must default to window resizing");
+    for (const auto& [member, ordinal] : {std::pair{"DontChange", "1"}, std::pair{"Change", "0"}}) {
+        expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowSizeChange", member}) ==
+            model::PropertyMutationStatus::applied, "SizeChange assignment must succeed");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "SizeChange must encode");
+        const auto* slot = bounded_list_item(encoded.value(), {10});
+        expect(slot && !slot->is_list && slot->atom == ordinal, "SizeChange must use the proven form slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "SizeBehavior");
+        expect(decoded.ok() && decoded.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowSizeChange", member}}, "SizeChange must decode");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "SizeChange must serialize to XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && parsed.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{model::EnumerationValue{"WindowSizeChange", member}}, "SizeChange XML must roundtrip");
+    }
+    expect(document.set_prop_val(owner, property, model::EnumerationValue{"WindowSizeChange", "Invalid"}) ==
+        model::PropertyMutationStatus::invalid_value, "unknown SizeChange must fail");
+    expect(document.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, property).value == initial.value, "reset must restore the proven default");
+}
+
 void test_form_allow_close_round_trip() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "AllowClose";
     for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
@@ -20016,6 +20047,7 @@ int main() {
         test_form_caption_localized_text_round_trip_and_rejections();
         test_form_auto_title_boolean_round_trip_and_validation();
         test_form_enter_key_behavior();
+        test_form_size_change();
         test_form_allow_close_round_trip();
         test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();

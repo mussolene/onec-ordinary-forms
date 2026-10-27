@@ -11383,7 +11383,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(payload.items[7], "1", "$/7");
         require_raw_constant(payload.items[8], "0", "$/8");
         require_raw_constant(payload.items[9], "0", "$/9");
-        require_raw_constant(payload.items[10], "0", "$/10");
+        const bool dont_change_size = bool_atom(payload.items[10], "$/10");
         require_list(payload.items[11], "$/11");
         require_exact(payload.items[12], list({raw("0")}), "$/12", "Unsupported root table");
         require_exact(payload.items[13], canonical_style_record(10), "$/13", "Unsupported page-style record");
@@ -11478,6 +11478,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (dont_change_size) form.properties.set_explicit(model::PropertyId::from_name("SizeChange"),
+            model::EnumerationValue{"WindowSizeChange", "DontChange"});
         if (!navigate_on_enter) form.properties.set_explicit(model::PropertyId::from_name("EnterKeyBehavior"),
             model::EnumerationValue{"EnterKeyBehaviorType", "DefaultButton"});
         if (caption != model::PropertyValue{std::string{}}) {
@@ -12180,7 +12182,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior"},
+            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12190,6 +12192,8 @@ Result<list_stream::ListValue> encode_document(
         const bool desktop_mode = explicit_bool(document.form().properties, "DesktopMode", false);
         const auto enter_behavior = explicit_enum_storage_value(document.form().properties, "Form", "EnterKeyBehavior",
             "EnterKeyBehaviorType", 1, {{"DefaultButton", 0}, {"ControlNavigation", 1}});
+        const auto size_change = explicit_enum_storage_value(document.form().properties, "Form", "SizeChange",
+            "WindowSizeChange", 0, {{"Change", 0}, {"DontChange", 1}});
         const std::int32_t width = explicit_integer(
             document.form().properties,
             "Width",
@@ -12649,7 +12653,7 @@ Result<list_stream::ListValue> encode_document(
             raw("1"),
             raw("0"),
             raw("0"),
-            raw("0"),
+            raw(std::to_string(size_change)),
             list(std::move(context_rows)),
             list({raw("0")}),
             canonical_style_record(10),
