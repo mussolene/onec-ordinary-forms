@@ -853,6 +853,7 @@ LV encode_control_color(const model::ColorValue& color, std::string_view path) {
     }
     std::int32_t style_id = 0;
     if (name->value == "StyleColors.FormBackColor") style_id = -1;
+    else if (name->value == "StyleColors.FormTextColor") style_id = -3;
     else if (name->value == "StyleColors.ButtonTextColor") style_id = -21;
     else if (name->value == "StyleColors.ButtonBackColor") style_id = -7;
     else if (name->value == "StyleColors.ButtonBorderColor") style_id = -34;
@@ -896,6 +897,7 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
         const auto style_id = integer_atom<std::int32_t>(value.items[2].items[0], child_path(path, 2) + "/0");
         std::string_view style_name;
         if (style_id == -1) style_name = "StyleColors.FormBackColor";
+        else if (style_id == -3) style_name = "StyleColors.FormTextColor";
         else if (style_id == -21) style_name = "StyleColors.ButtonTextColor";
         else if (style_id == -7) style_name = "StyleColors.ButtonBackColor";
         else if (style_id == -34) style_name = "StyleColors.ButtonBorderColor";
@@ -6333,6 +6335,44 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     limits.items.at(3) = raw(explicit_bool(properties, "AutoMaxValue", true) ? "0" : "2");
     limits.items.at(4) = raw(explicit_bool(properties, "AutoMinValue", true) ? "0" : "2");
     auto result = list(std::move(info));
+    model::ColorValue border_default; border_default.kind = model::ColorKind::style_reference;
+    border_default.style = model::QualifiedName{"StyleColors.BorderColor"};
+    model::ColorValue text_default; text_default.kind = model::ColorKind::style_reference;
+    text_default.style = model::QualifiedName{"StyleColors.FormTextColor"};
+    model::ColorValue gauge_default; gauge_default.kind = model::ColorKind::absolute;
+    gauge_default.red = gauge_default.green = gauge_default.blue = 169;
+    const auto label_base = middle_start + 104 + 3 * expected_cell_count;
+    for (const auto& [name, index, default_color] : {
+            std::tuple{"BorderColor", middle_start + 95, border_default},
+            std::tuple{"LabelBorderColor", label_base + 2, model::ColorValue{}},
+            std::tuple{"LabelBackColor", label_base, model::ColorValue{}},
+            std::tuple{"GaugeBushColor", middle_start + 76, gauge_default},
+            std::tuple{"LabelTextColor", middle_start + 8, text_default}}) {
+        auto color = default_color;
+        if (const auto* entry = properties.find(model::PropertyId::from_name(name))) {
+            const auto* value = std::get_if<model::ColorValue>(&entry->value);
+            if (!value) fail("OOF1122", std::string("$/Chart/") + name, "ColorValue", "different value type", "Chart color has the wrong type");
+            color = *value;
+        }
+        result.items.at(index) = encode_control_color(color, std::string("$/Chart/") + name);
+        if (std::string_view(name) == "LabelTextColor") {
+            result.items.at(expected - 1) = encode_control_color(color == text_default ? model::ColorValue{} : color, "$/Chart/LabelTextColor");
+        }
+    }
+    model::BorderValue label_default; label_default.border_type = model::ControlBorderType::single; label_default.width = 1;
+    for (const auto& [name, index, default_border] : {
+            std::tuple{"Border", middle_start + 96, model::BorderValue{}},
+            std::tuple{"LabelBorder", label_base + 1, label_default}}) {
+        auto border = default_border;
+        if (const auto* entry = properties.find(model::PropertyId::from_name(name))) {
+            const auto* value = std::get_if<model::BorderValue>(&entry->value);
+            if (!value) fail("OOF1122", std::string("$/Chart/") + name, "BorderValue", "different value type", "Chart border has the wrong type");
+            border = *value;
+        }
+        auto encoded = encode_control_border(border, std::string("$/Chart/") + name);
+        if (encoded.items.size() == 7) encoded.items[5] = raw(border == default_border ? "0" : "3");
+        result.items.at(index) = std::move(encoded);
+    }
     const auto [back_first, back_second] = chart_back_color_slots(series_count, point_count);
     encode_chart_back_color(result, back_first, back_second, properties, "$/Chart/BackColor");
     return result;
@@ -6356,7 +6396,8 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "Outline", "Light", "Gradient", "SeriesInRows", "HideBaseValue", "AutoTransposition",
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
-        "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor"}, "$/Chart");
+        "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6523,6 +6564,38 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     const auto [back_first, back_second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count));
     const auto back_color = decode_chart_back_color(info, back_first, back_second, info_path);
     if (back_color != chart_back_color_default()) properties.set_explicit(model::PropertyId::from_name("BackColor"), back_color);
+    model::ColorValue border_default; border_default.kind = model::ColorKind::style_reference;
+    border_default.style = model::QualifiedName{"StyleColors.BorderColor"};
+    model::ColorValue text_default; text_default.kind = model::ColorKind::style_reference;
+    text_default.style = model::QualifiedName{"StyleColors.FormTextColor"};
+    model::ColorValue gauge_default; gauge_default.kind = model::ColorKind::absolute;
+    gauge_default.red = gauge_default.green = gauge_default.blue = 169;
+    const auto label_base = middle_start + 104 + 3 * series_size * static_cast<std::size_t>(point_count);
+    for (const auto& [name, index, default_color] : {
+            std::tuple{"BorderColor", middle_start + 95, border_default},
+            std::tuple{"LabelBorderColor", label_base + 2, model::ColorValue{}},
+            std::tuple{"LabelBackColor", label_base, model::ColorValue{}},
+            std::tuple{"GaugeBushColor", middle_start + 76, gauge_default},
+            std::tuple{"LabelTextColor", middle_start + 8, text_default}}) {
+        const auto color = decode_control_color(at(info, index, info_path), child_path(info_path, index));
+        if (std::string_view(name) == "LabelTextColor") {
+            const auto companion = decode_control_color(at(info, expected - 1, info_path), child_path(info_path, expected - 1));
+            if ((color == text_default && companion != model::ColorValue{}) ||
+                (color != text_default && companion != color))
+                fail("OOF1114", child_path(info_path, expected - 1), "observed LabelTextColor companion", "different color", "Chart LabelTextColor pair is inconsistent or unsupported");
+        }
+        if (color != default_color) properties.set_explicit(model::PropertyId::from_name(name), color);
+    }
+    model::BorderValue label_default; label_default.border_type = model::ControlBorderType::single; label_default.width = 1;
+    for (const auto& [name, index, default_border] : {
+            std::tuple{"Border", middle_start + 96, model::BorderValue{}},
+            std::tuple{"LabelBorder", label_base + 1, label_default}}) {
+        const auto& stored = at(info, index, info_path);
+        const auto border = decode_control_border(stored, child_path(info_path, index));
+        if (border.kind == model::BorderKind::absolute)
+            require_raw_constant(at(stored, 5, child_path(info_path, index)), border == default_border ? "0" : "3", child_path(child_path(info_path, index), 5));
+        if (border != default_border) properties.set_explicit(model::PropertyId::from_name(name), border);
+    }
     for (const auto& spec : chart_boolean_properties) {
         const auto index = middle_start + spec.offset;
         const bool stored = bool_atom(at(info, index, info_path), child_path(info_path, index));

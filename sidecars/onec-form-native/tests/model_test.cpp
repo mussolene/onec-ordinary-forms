@@ -679,6 +679,55 @@ void test_chart_integer_and_delimiter_descriptors() {
     }
 }
 
+void test_chart_appearance_defaults() {
+    using namespace oof::model::metamodel;
+    Form form;
+    form.id = ObjectId{1};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_control(ControlNode{ObjectId{2}, "Chart", ChartPayload{}});
+    const auto chart = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{2}};
+    for (const auto& [name, canonical, is_border] : {
+             std::tuple{"Border", "WithoutBorder:0", true}, std::tuple{"LabelBorder", "Single:1", true},
+             std::tuple{"BorderColor", "StyleColors.BorderColor", false},
+             std::tuple{"LabelBorderColor", "automatic", false},
+             std::tuple{"LabelTextColor", "StyleColors.FormTextColor", false},
+             std::tuple{"LabelBackColor", "automatic", false},
+             std::tuple{"GaugeBushColor", "RGB(169,169,169)", false}}) {
+        const auto* descriptor = find_property(ControlKind::chart, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::control_info &&
+                   descriptor->value_codec == (is_border ? ValueCodec::border : ValueCodec::color) &&
+                   descriptor->default_value.kind == (is_border ? DefaultKind::border : DefaultKind::color) &&
+                   descriptor->default_value.canonical == canonical,
+            std::string("Chart appearance descriptor must match observed storage and default: ") + name);
+        const auto result = document.get_prop_val(chart, PropertyId::from_name(name));
+        expect(result.status == PropertyReadStatus::proven_default && result.value,
+            std::string("Chart appearance default must be readable: ") + name);
+        if (!result.value) continue;
+        if (is_border) {
+            const auto* border = std::get_if<BorderValue>(&*result.value);
+            const bool single = std::string_view(name) == "LabelBorder";
+            expect(border && border->kind == BorderKind::absolute &&
+                       border->border_type == (single ? ControlBorderType::single : ControlBorderType::without_border) &&
+                       border->width == (single ? 1U : 0U), "Chart border must have its typed default");
+        } else {
+            const auto* color = std::get_if<ColorValue>(&*result.value);
+            expect(color != nullptr, "Chart color must have a typed default");
+            if (!color) continue;
+            if (std::string_view(name) == "GaugeBushColor") {
+                expect(color->kind == ColorKind::absolute && color->red == 169 && color->green == 169 &&
+                           color->blue == 169 && color->alpha == 255, "Chart gauge color must be opaque RGB");
+            } else if (std::string_view(canonical) == "automatic") {
+                expect(color->kind == ColorKind::automatic, "Chart color must be automatic");
+            } else {
+                const auto* style = std::get_if<QualifiedName>(&color->style);
+                expect(color->kind == ColorKind::style_reference && style && style->value == canonical,
+                    "Chart color must reference its named style");
+            }
+        }
+    }
+}
+
 void test_help_metamodel() {
     using namespace oof::model::metamodel;
 
@@ -2263,6 +2312,7 @@ int main() {
         test_progress_bar_storage_descriptors();
         test_track_bar_storage_descriptors();
         test_chart_integer_and_delimiter_descriptors();
+        test_chart_appearance_defaults();
         test_help_metamodel();
         test_shared_control_default_classifications();
         test_variant_coverage();

@@ -681,6 +681,17 @@ void apply_proven_storage_overrides(
              "SeriesInRows", "TransparentLabel"}) {
         classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::boolean, "true");
     }
+    for (const auto& [name, value] : {std::pair{"Border", "WithoutBorder:0"},
+             std::pair{"LabelBorder", "Single:1"}}) {
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::border, value);
+        std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::border;
+    }
+    for (const auto& [name, value] : {std::pair{"BorderColor", "StyleColors.BorderColor"},
+             std::pair{"LabelBorderColor", "automatic"}, std::pair{"LabelTextColor", "StyleColors.FormTextColor"},
+             std::pair{"LabelBackColor", "automatic"}, std::pair{"GaugeBushColor", "RGB(169,169,169)"}}) {
+        classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::color, value);
+        std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::color;
+    }
 
     classify_property(chart_properties, "LabelDelimiter", StorageCodec::control_info, DefaultKind::string, ", ");
     for (const auto name : {"ValueLabelFormat", "PercentLabelFormat"}) {

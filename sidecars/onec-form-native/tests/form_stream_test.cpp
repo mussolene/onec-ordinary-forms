@@ -15015,6 +15015,64 @@ void test_chart_named_boolean_properties() {
             find_chart_record(wrong)->items[3].items[second] = list_stream::parse("{4,0,{123},0}");
             expect(!form_stream::decode_document(wrong), "inconsistent Chart BackColor pair must fail");
         }
+        {
+            auto document = make_document(series_count, point_count, std::nullopt, true);
+            auto* control = const_cast<model::ControlNode*>(document.find_control(model::ObjectId{2}));
+            model::ColorValue color; color.kind = model::ColorKind::absolute;
+            color.red = 17; color.green = 38; color.blue = 81;
+            for (const auto name : {"BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor"})
+                control->properties().set_explicit(model::PropertyId::from_name(name), color);
+            model::BorderValue border; border.border_type = model::ControlBorderType::single; border.width = 2;
+            for (const auto name : {"Border", "LabelBorder"})
+                control->properties().set_explicit(model::PropertyId::from_name(name), border);
+            auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), "Chart appearance properties must encode");
+            const auto middle = std::size_t{18} + 11 * (series_count + point_count);
+            const auto label = middle + 104 + 3 * series_count * point_count;
+            auto& info = find_chart_record(encoded.value())->items[3];
+            for (const auto index : {middle + 8, middle + 76, middle + 95, label, label + 2, info.items.size() - 1})
+                expect(list_stream::dump_compact(info.items[index]) == "{4,0,{5318161},0}", "Chart color must use its observed slot");
+            for (const auto index : {middle + 96, label + 1})
+                expect(list_stream::dump_compact(info.items[index]) == "{3,0,{0},1,2,3,48312c09-257f-4b29-b280-284dd89efc1e}", "Chart border must use its observed slot");
+            const auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart appearance must decode completely");
+            const auto rebuilt = form_stream::encode_document(decoded.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "Chart appearance must round-trip");
+            auto wrong = encoded.value();
+            find_chart_record(wrong)->items[3].items.back() = list_stream::parse("{4,0,{123},0}");
+            expect(!form_stream::decode_document(wrong), "Chart LabelTextColor pair must agree");
+            wrong = encoded.value();
+            find_chart_record(wrong)->items[3].items[label + 1].items[4] = list_stream::ListValue::raw_atom("6");
+            expect(!form_stream::decode_document(wrong), "Chart border width outside supported bounds must fail");
+            wrong = encoded.value();
+            find_chart_record(wrong)->items[3].items.pop_back();
+            expect(!form_stream::decode_document(wrong), "truncated Chart appearance must fail");
+        }
+        for (const bool automatic : {true, false}) {
+            auto document = make_document(series_count, point_count, std::nullopt, true);
+            auto* control = const_cast<model::ControlNode*>(document.find_control(model::ObjectId{2}));
+            model::ColorValue color;
+            if (!automatic) {
+                color.kind = model::ColorKind::style_reference;
+                color.style = model::QualifiedName{"StyleColors.BorderColor"};
+            }
+            control->properties().set_explicit(model::PropertyId::from_name("LabelTextColor"), color);
+            auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), "Chart LabelTextColor automatic and style must encode");
+            auto& info = find_chart_record(encoded.value())->items[3];
+            const auto index = std::size_t{26} + 11 * (series_count + point_count);
+            const auto expected_color = automatic ? "{4,4,{0},4}" : "{4,3,{-22},3}";
+            expect(list_stream::dump_compact(info.items[index]) == expected_color &&
+                list_stream::dump_compact(info.items.back()) == expected_color,
+                "Chart LabelTextColor nondefault pairs must match");
+            const auto decoded = form_stream::decode_document(encoded.value());
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart LabelTextColor pair must decode");
+            const auto* property = decoded.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("LabelTextColor"));
+            expect(property && std::get<model::ColorValue>(property->value) == color, "Chart LabelTextColor must survive decoding");
+            auto wrong = encoded.value();
+            find_chart_record(wrong)->items[3].items.back() = list_stream::parse("{4,0,{123},0}");
+            expect(!form_stream::decode_document(wrong), "Chart LabelTextColor mismatched pair must fail");
+        }
         auto damaged = form_stream::encode_document(make_document(series_count, point_count, std::nullopt, true));
         expect(damaged.ok(), "Chart paired limit fixture must encode");
         auto* record = find_chart_record(damaged.value());
@@ -15364,6 +15422,7 @@ void test_chart_named_events() {
         back_color.kind = model::ColorKind::absolute;
         back_color.red = 37; back_color.green = 67; back_color.blue = 107;
         control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
+        control.properties().set_explicit(model::PropertyId::from_name("LabelTextColor"), back_color);
         for (std::size_t i = 0; i < selected.size(); ++i) {
             const model::ObjectId id{100 + i}; control.events.push_back(model::EventRef{id});
             document.add_event(model::Event{id, selected[i].first, std::string("Handle") + selected[i].first,

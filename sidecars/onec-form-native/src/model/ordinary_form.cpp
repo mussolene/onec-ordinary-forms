@@ -350,9 +350,16 @@ std::optional<PropertyValue> materialize_default(
                 color.red = 83; color.green = 106; color.blue = 194;
                 return PropertyValue{color};
             }
+            if (value.canonical == "RGB(169,169,169)") {
+                ColorValue color;
+                color.kind = ColorKind::absolute;
+                color.red = 169; color.green = 169; color.blue = 169;
+                return PropertyValue{color};
+            }
             if (value.canonical == "StyleColors.ButtonTextColor" ||
                 value.canonical == "StyleColors.ButtonBackColor" ||
                 value.canonical == "StyleColors.FormBackColor" ||
+                value.canonical == "StyleColors.FormTextColor" ||
                 value.canonical == "StyleColors.ButtonBorderColor" ||
                 value.canonical == "StyleColors.BorderColor" ||
                 value.canonical == "StyleColors.SpecialTextColor" ||
@@ -393,6 +400,12 @@ std::optional<PropertyValue> materialize_default(
         }
         case DefaultKind::border:
             if (value.canonical == "WithoutBorder:0") return PropertyValue{BorderValue{}};
+            if (value.canonical == "Single:1") {
+                BorderValue border;
+                border.border_type = ControlBorderType::single;
+                border.width = 1;
+                return PropertyValue{border};
+            }
             if (value.canonical == "Rounded:1") {
                 BorderValue border;
                 border.border_type = ControlBorderType::rounded;
