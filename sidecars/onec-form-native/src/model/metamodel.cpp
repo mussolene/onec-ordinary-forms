@@ -1023,6 +1023,7 @@ void apply_proven_storage_overrides(
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     std::ranges::find(label_decoration, "Picture", &PropertyDescriptor::api_name)->api_access = ApiAccess::read_write;
     classify_property(label_decoration, "Picture", StorageCodec::picture_record, DefaultKind::none, "");
+    classify_property(label_decoration, "Format", StorageCodec::control_info, DefaultKind::string, "");
     for (const auto name : {"LabelPictureLocation", "PictureSize"}) {
         auto property = std::ranges::find(label_decoration, name, &PropertyDescriptor::api_name);
         if (property == label_decoration.end()) throw std::logic_error("missing Label picture property");

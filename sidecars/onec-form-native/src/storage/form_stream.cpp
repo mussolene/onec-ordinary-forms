@@ -5981,6 +5981,7 @@ DecodedControl decode_label(
         fail("OOF1114", child_path(properties_path, 9), "ScrollingText storage value 0, 2, 3, 4, or 5",
             std::to_string(scrolling_text), "LabelDecoration.ScrollingText storage value is unsupported");
     const bool hyperlink = bool_atom(properties.items[5], child_path(properties_path, 5));
+    const auto format = decoded_single_language_text(properties.items[10], child_path(properties_path, 10));
     const auto picture_path = child_path(properties_path, 12);
     const auto& picture_slot = properties.items[12];
     require_arity(picture_slot, 11, picture_path);
@@ -6014,6 +6015,7 @@ DecodedControl decode_label(
     normalized_properties.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
     normalized_properties.items[12].items[1] = raw("0");
     normalized_properties.items[12].items[2] = canonical_button_picture();
+    normalized_properties.items[10] = encoded_localized(format);
     normalized_properties.items[11] = raw("1");
     normalized_properties.items[13] = raw("4");
     auto canonical_common = common;
@@ -6026,6 +6028,7 @@ DecodedControl decode_label(
     canonical_properties.items.at(4) = raw(std::to_string(vertical_align));
     canonical_properties.items.at(6) = raw(mark_negatives ? "1" : "0");
     canonical_properties.items.at(9) = raw(std::to_string(scrolling_text));
+    canonical_properties.items.at(10) = encoded_localized(format);
     if (list_stream::dump_compact(normalized_properties) !=
         list_stream::dump_compact(canonical_properties)) {
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
@@ -6074,6 +6077,7 @@ DecodedControl decode_label(
             model::EnumerationValue{"ScrollingTextMode", members.at(static_cast<std::size_t>(scrolling_text))});
     }
     if (hyperlink) control.properties().set_explicit(model::PropertyId::from_name("Hyperlink"), true);
+    if (!format.empty()) control.properties().set_explicit(model::PropertyId::from_name("Format"), format);
     if (shortcut != model::ShortcutValue{}) control.properties().set_explicit(
         model::PropertyId::from_name("Shortcut"), shortcut);
     if (picture_location != 1) {
@@ -9796,7 +9800,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "Picture", "LabelPictureLocation", "PictureSize", "Hyperlink", "Shortcut", "HorizontalAlign", "VerticalAlign", "MarkNegatives", "ScrollingText", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "Format", "Picture", "LabelPictureLocation", "PictureSize", "Hyperlink", "Shortcut", "HorizontalAlign", "VerticalAlign", "MarkNegatives", "ScrollingText", "Enabled", "ToolTip", "BorderColor", "Font", "TextColor", "BackColor", "Border", "Transparent"}, "$/LabelDecoration");
     const auto caption = explicit_localized_text(control.properties(), "Caption", "$/LabelDecoration");
     const bool hyperlink = explicit_bool(control.properties(), "Hyperlink", false);
     const auto shortcut = explicit_named_shortcut(control.properties(), "$/LabelDecoration/Shortcut");
@@ -9838,6 +9842,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
     label_properties.items[12].items[2] = std::move(encoded_picture);
     label_properties.items[11] = raw(std::to_string(picture_location));
     label_properties.items[13] = raw(std::to_string(picture_size));
+    label_properties.items[10] = encoded_localized(explicit_string(control.properties(), "Format"));
     label_properties.items.at(4) = raw(std::to_string(explicit_enum_storage_value(control.properties(),
         "LabelDecoration", "VerticalAlign", "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}})));
     label_properties.items.at(6) = raw(explicit_bool(control.properties(), "MarkNegatives", false) ? "1" : "0");

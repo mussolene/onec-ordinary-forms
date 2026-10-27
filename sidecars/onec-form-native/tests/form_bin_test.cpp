@@ -82,6 +82,7 @@ void test_label_pictures_roundtrip() {
         model::ControlNode control{model::ObjectId{id}, "Label" + std::to_string(id - 2), model::LabelDecorationPayload{}};
         if (id == 2) control.properties().set_explicit(property, model::PictureRef{model::PictureAssetRef{model::ObjectId{40}}});
         else if (id % 3 != 0) control.properties().set_explicit(property, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+        control.properties().set_explicit(model::PropertyId::from_name("Format"), std::string("ЧДЦ=") + std::to_string(id));
         control.properties().set_explicit(model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", sizes[(id - 2) % sizes.size()]});
         control.properties().set_explicit(model::PropertyId::from_name("LabelPictureLocation"), model::EnumerationValue{"LabelPictureLocation", locations[(id - 2) % locations.size()]});
         document.add_control(std::move(control));
@@ -105,6 +106,8 @@ void test_label_pictures_roundtrip() {
                 "label pictures must retain the correct named reference");
         }
         const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{id}};
+        expect(decoded.value().get_prop_val(owner, model::PropertyId::from_name("Format")).value == model::PropertyValue{std::string("ЧДЦ=") + std::to_string(id)},
+            "label format must survive the roundtrip");
         expect(decoded.value().get_prop_val(owner, model::PropertyId::from_name("PictureSize")).value ==
                 model::PropertyValue{model::EnumerationValue{"PictureSize", sizes[(id - 2) % sizes.size()]}},
             "label picture size must survive the roundtrip");
