@@ -1719,6 +1719,12 @@ private:
                 auto& area = name == "PlotArea" ? chart.plot_area : name == "TitleArea" ? chart.title_area : chart.legend_area;
                 if (area) fail("OOF2003", child, id_text, name, "one chart area", name, "Duplicate Chart area");
                 model::ChartArea parsed;
+                for (const auto& definition : mm::chart_area_property_descriptors()) {
+                    if (definition.coordinate != nullptr)
+                        parsed.*(definition.coordinate) = model::DecimalValue{std::string(
+                            kind == model::ChartAreaKind::plot ? definition.plot_default :
+                            kind == model::ChartAreaKind::title ? definition.title_default : definition.legend_default)};
+                }
                 std::set<std::string> seen;
                 for (xmlNodePtr field : element_children(child)) {
                     const auto field_name = node_name(field);
@@ -1729,6 +1735,7 @@ private:
                         control.properties().set_explicit(model::PropertyId::from_name("Title"), std::move(text));
                     } else if (field_name == "Placement") {
                         parsed.placement = node_text(field);
+                        parsed.explicit_geometry[0] = true;
                         if (!valid_chart_area_placement(name, parsed.placement))
                             fail("OOF2003", field, id_text, field_name, "valid area placement", parsed.placement, "Invalid Chart area placement");
                     } else {
@@ -1742,6 +1749,7 @@ private:
                             else parsed.*(style->font) = parse_font(field);
                         } else if (const auto* descriptor = mm::find_chart_area_property(id); descriptor && descriptor->coordinate) {
                             (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
+                            parsed.explicit_geometry[1 + descriptor->coordinate_offset] = true;
                         } else if (const auto* descriptor = kind == model::ChartAreaKind::plot ? mm::find_chart_plot_format(id) : nullptr) {
                             auto value = parse_property_value(field, descriptor->value_codec, id_text);
                             if (descriptor->text) parsed.*(descriptor->text) = std::move(value);
@@ -1755,9 +1763,6 @@ private:
                         } else fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
                     }
                 }
-                for (const auto& descriptor : mm::chart_area_property_descriptors())
-                    if (!seen.contains(std::string(descriptor.name)))
-                        fail("OOF2003", child, id_text, name, "Placement and four bounds", "missing", "Chart area requires all properties");
                 for (const auto* value : {&parsed.left, &parsed.top, &parsed.right, &parsed.bottom}) {
                     if (value->canonical != "0" && value->canonical != "1" && !value->canonical.starts_with("0."))
                         fail("OOF2003", child, id_text, name, "bounds between 0 and 1", value->canonical, "Chart area bound is out of range");
@@ -2106,6 +2111,14 @@ private:
                 } else {
                     fail("OOF2003", child, id_text, name, "property on its typed XML surface", name, "Control property appears on the wrong object-model surface");
                 }
+            }
+        }
+        if (auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
+            for (const auto [area, property] : {std::pair{&chart->legend_area, "ShowLegend"}, std::pair{&chart->title_area, "ShowTitle"}}) {
+                if (!*area || (*area)->explicit_geometry[0]) continue;
+                const auto* shown = control.properties().find(model::PropertyId::from_name(property));
+                if (shown != nullptr && std::holds_alternative<bool>(shown->value) && !std::get<bool>(shown->value))
+                    (*area)->placement = "None";
             }
         }
         if (dendrogram != nullptr) validate_dendrogram_graph(*dendrogram, node, id_text);
@@ -3758,12 +3771,21 @@ private:
                         write_property(property, text->value, id);
                     }
                 }
-                writer_.text("Placement", area->placement);
-                for (const auto& descriptor : mm::chart_area_property_descriptors()) {
-                    if (descriptor.coordinate != nullptr)
-                        writer_.text(descriptor.name, canonical_decimal(((*area).*(descriptor.coordinate)).canonical, nullptr, descriptor.name, id));
-                }
                 const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
+                const auto* shown = kind == model::ChartAreaKind::plot ? nullptr : control.properties().find(
+                    model::PropertyId::from_name(kind == model::ChartAreaKind::title ? "ShowTitle" : "ShowLegend"));
+                const bool visible = shown == nullptr || !std::holds_alternative<bool>(shown->value) || std::get<bool>(shown->value);
+                const std::string_view default_placement = kind != model::ChartAreaKind::plot && !visible ? "None" : "Auto";
+                if (area->explicit_geometry[0] || area->placement != default_placement)
+                    writer_.text("Placement", area->placement);
+                for (const auto& descriptor : mm::chart_area_property_descriptors()) {
+                    if (descriptor.coordinate == nullptr) continue;
+                    const auto value = canonical_decimal(((*area).*(descriptor.coordinate)).canonical, nullptr, descriptor.name, id);
+                    const auto default_value = kind == model::ChartAreaKind::plot ? descriptor.plot_default :
+                        kind == model::ChartAreaKind::title ? descriptor.title_default : descriptor.legend_default;
+                    if (area->explicit_geometry[1 + descriptor.coordinate_offset] || value != default_value)
+                        writer_.text(descriptor.name, value);
+                }
                 for (const auto& descriptor : mm::chart_area_boolean_descriptors()) {
                     const auto& value = (*area).*(descriptor.member);
                     if (descriptor.kind == kind && value) writer_.text(descriptor.name, *value ? "true" : "false");

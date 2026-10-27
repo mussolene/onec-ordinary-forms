@@ -16428,8 +16428,14 @@ void test_chart_area_modes_round_trip() {
             payload.series.push_back(series); payload.points.push_back(point);
             payload.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
         }
-        payload.plot_area = model::ChartArea{plot_modes[i % 3], {"0.13"}, {"0.24"}, {"0.75"}, {"0.86"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
-        payload.legend_area = model::ChartArea{legend_modes[i % 7], {"0.11"}, {"0.22"}, {"0.77"}, {"0.88"}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
+        model::ChartArea plot;
+        plot.placement = plot_modes[i % 3];
+        plot.left = {"0.13"}; plot.top = {"0.24"}; plot.right = {"0.75"}; plot.bottom = {"0.86"};
+        payload.plot_area = plot;
+        model::ChartArea legend;
+        legend.placement = legend_modes[i % 7];
+        legend.left = {"0.11"}; legend.top = {"0.22"}; legend.right = {"0.77"}; legend.bottom = {"0.88"};
+        payload.legend_area = legend;
         model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
         control.position.width.set(160); control.position.height.set(120);
         control.properties().set_explicit(model::PropertyId::from_name("ShowLegend"), i % 7 != 6);
@@ -16808,6 +16814,77 @@ void test_chart_area_border_font_round_trip() {
     }
     model::ColorValue rgb; rgb.kind = model::ColorKind::absolute;
     rgb.red = 23; rgb.green = 67; rgb.blue = 101;
+    auto states_document = document;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot, model::ChartAreaKind::title}) {
+            const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};
+            const auto left = model::PropertyId::from_name("Left");
+            const auto top = model::PropertyId::from_name("Top");
+            const auto initial = states_document.get_prop_val(owner, left);
+            expect(initial.status == model::PropertyReadStatus::proven_default && initial.value, "area coordinate must begin at its default");
+            expect(states_document.set_prop_val(owner, model::PropertyId::from_name("BorderColor"), rgb) == model::PropertyMutationStatus::applied_unclassified_storage,
+                "setting a different area property must succeed");
+            expect(states_document.get_prop_val(owner, left).status == model::PropertyReadStatus::proven_default &&
+                states_document.get_prop_val(owner, top).status == model::PropertyReadStatus::proven_default,
+                "setting a color must not mark coordinates explicit");
+            expect(states_document.set_prop_val(owner, left, *initial.value) == model::PropertyMutationStatus::applied_unclassified_storage &&
+                states_document.get_prop_val(owner, left).status == model::PropertyReadStatus::explicit_value &&
+                states_document.get_prop_val(owner, top).status == model::PropertyReadStatus::proven_default,
+                "setting one default explicitly must not change another coordinate state");
+            for (const auto name : {"Placement", "Top", "Right", "Bottom"}) {
+                const auto property = model::PropertyId::from_name(name);
+                const auto before = states_document.get_prop_val(owner, property);
+                expect(before.status == model::PropertyReadStatus::proven_default && before.value,
+                    "each area property must start at its own default");
+                expect(states_document.set_prop_val(owner, property, *before.value) == model::PropertyMutationStatus::applied_unclassified_storage &&
+                    states_document.get_prop_val(owner, property).status == model::PropertyReadStatus::explicit_value,
+                    "explicit assignment of each area default must be tracked");
+                expect(states_document.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset_unclassified_storage &&
+                    states_document.get_prop_val(owner, property).status == model::PropertyReadStatus::proven_default &&
+                    states_document.get_prop_val(owner, left).status == model::PropertyReadStatus::explicit_value,
+                    "reset must clear only the selected area property");
+            }
+        }
+    }
+    const auto states_xml = source::serialize_form_xml(states_document);
+    expect(states_xml.ok(), "explicit default area coordinates must serialize to XML");
+    auto states_parsed = source::parse_form_xml(states_xml.value());
+    expect(states_parsed.ok(), "explicit default area coordinates must parse from XML");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot, model::ChartAreaKind::title}) {
+            const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};
+            const auto left = model::PropertyId::from_name("Left");
+            const auto top = model::PropertyId::from_name("Top");
+            expect(states_parsed.value().get_prop_val(owner, left).status == model::PropertyReadStatus::explicit_value &&
+                states_parsed.value().get_prop_val(owner, top).status == model::PropertyReadStatus::proven_default,
+                "XML must preserve each coordinate explicit state independently");
+            expect(states_parsed.value().reset_prop_val(owner, left) == model::PropertyMutationStatus::reset_unclassified_storage &&
+                states_parsed.value().get_prop_val(owner, left).status == model::PropertyReadStatus::proven_default &&
+                states_parsed.value().get_prop_val(owner, model::PropertyId::from_name("BorderColor")).status == model::PropertyReadStatus::explicit_value,
+                "resetting one coordinate must leave neighboring properties intact");
+        }
+    }
+    constexpr std::string_view hidden_area_xml = R"XML(<Form id="1" name="Hidden" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><ShowTitle>false</ShowTitle><ShowLegend>false</ShowLegend><LegendArea><BorderColor kind="absolute" red="23"/></LegendArea><TitleArea><Text>Hidden title</Text></TitleArea><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    const auto hidden_area = source::parse_form_xml(hidden_area_xml);
+    expect(hidden_area.ok(), "area may omit placement and bounds");
+    for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::title}) {
+        const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}, kind};
+        const auto placement = hidden_area.value().get_prop_val(owner, model::PropertyId::from_name("Placement"));
+        expect(placement.status == model::PropertyReadStatus::proven_default && placement.value &&
+            std::get<model::EnumerationValue>(*placement.value).member == "None",
+            "omitted placement must respect hidden area visibility");
+    }
+    expect(form_stream::encode_document(hidden_area.value()).ok(), "hidden areas with omitted placement must encode");
+    const auto states_binary = oof::save_form_bin(states_document);
+    expect(states_binary.ok(), "explicit default area coordinates must encode");
+    const auto states_loaded = oof::load_form_bin(states_binary.value(), "ChartAreaStyle");
+    expect(states_loaded.ok(), "area coordinates must decode from Form.bin");
+    for (std::uint64_t i = 0; i < 12; ++i)
+        for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot, model::ChartAreaKind::title}) {
+            const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};
+            expect(states_loaded.value().get_prop_val(owner, model::PropertyId::from_name("Left")).status == model::PropertyReadStatus::proven_default,
+                "Form.bin cannot distinguish an explicit coordinate equal to its default");
+        }
     for (std::uint64_t i = 0; i < 12; ++i) {
         for (const auto kind : {model::ChartAreaKind::legend, model::ChartAreaKind::plot}) {
             const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};

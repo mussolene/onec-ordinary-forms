@@ -730,6 +730,7 @@ struct ChartArea {
     DecimalValue top{"0"};
     DecimalValue right{"1"};
     DecimalValue bottom{"1"};
+    std::array<bool, 5> explicit_geometry{};
     std::optional<bool> transparent;
     std::optional<bool> scrolling;
     std::optional<bool> show_data_table;

@@ -6996,6 +6996,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         if (mode >= placements.size()) fail("OOF1115", mode_path, "known Chart area placement", std::to_string(mode), "Unsupported Chart area placement");
         model::ChartArea area;
         area.placement = placements[mode];
+        area.explicit_geometry[0] = area.placement != defaults.placement;
         const auto bound = [&](std::size_t offset) {
             const auto path = child_path(info_path, render_start + bounds_offset + offset);
             return chart_area_fraction(raw_atom(at(info, render_start + bounds_offset + offset, info_path), path), path);
@@ -7005,6 +7006,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             const auto value = bound(descriptor.coordinate_offset);
             area.*(descriptor.coordinate) = model::DecimalValue{descriptor.coordinate_offset < 2
                 ? value : chart_area_complement(value, name)};
+            area.explicit_geometry[1 + descriptor.coordinate_offset] =
+                (area.*(descriptor.coordinate)) != (defaults.*(descriptor.coordinate));
         }
         const auto kind = mode_offset == 12 ? model::ChartAreaKind::plot : mode_offset == 14 ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
         for (const auto& descriptor : model::metamodel::chart_area_boolean_descriptors()) {

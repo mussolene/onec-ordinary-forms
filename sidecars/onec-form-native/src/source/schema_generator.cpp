@@ -675,6 +675,7 @@ void append_value_types(std::string& output) {
             output += "<xs:element";
             append_attribute(output, "name", descriptor.name);
             append_attribute(output, "type", descriptor.coordinate == nullptr ? placement_type : "ChartAreaCoordinateType");
+            append_attribute(output, "minOccurs", "0");
             output += "/>";
         }
         for (const auto& descriptor : model::metamodel::chart_area_boolean_descriptors()) {

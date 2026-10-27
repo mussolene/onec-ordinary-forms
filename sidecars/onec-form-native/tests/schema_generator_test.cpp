@@ -961,6 +961,8 @@ void test_control_surfaces_and_property_order(
                     attribute(fields[base + 1], "name") == "Left" && attribute(fields[base + 2], "name") == "Top" &&
                     attribute(fields[base + 3], "name") == "Right" && attribute(fields[base + 4], "name") == "Bottom" &&
                     attribute(fields[base + 1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
+                for (std::size_t i = base; i < base + 5; ++i)
+                    expect(attribute(fields[i], "minOccurs") == "0", "Chart area default fields must be optional");
                 std::size_t boolean_index = base + 5;
                 for (const auto& descriptor : oof::model::metamodel::chart_area_boolean_descriptors()) {
                     if (descriptor.kind == kind)
