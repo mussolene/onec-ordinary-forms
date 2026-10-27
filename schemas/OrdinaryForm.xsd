@@ -2668,7 +2668,6 @@
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="RowInputMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="RowSelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentColumn" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>

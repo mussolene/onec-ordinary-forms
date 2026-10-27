@@ -1086,6 +1086,12 @@ void apply_proven_storage_overrides(
     classify_property(list_box, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
 
     auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
+    if (const auto choice_mode = std::ranges::find(table, "ChoiceMode", &PropertyDescriptor::api_name);
+        choice_mode != table.end()) {
+        choice_mode->persistence = PersistenceClass::runtime_only;
+        choice_mode->storage_codec = StorageCodec::none;
+        choice_mode->default_value = {DefaultKind::none, {}};
+    }
     for (const auto& spec : detail::table_enum_specs) {
         classify_property(table, spec.property, StorageCodec::control_info, DefaultKind::enumeration, spec.default_qualified);
         std::ranges::find(table, spec.property, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;

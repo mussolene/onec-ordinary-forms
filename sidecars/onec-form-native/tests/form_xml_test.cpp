@@ -1373,6 +1373,23 @@ void test_table_enum_properties_xml() {
     }
 }
 
+void test_table_choice_mode_runtime_only() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ChoiceForm" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Table"><DataPath attributeId="2"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns></Table></ChildItems></Form>)XML";
+    auto document = source::parse_form_xml(xml);
+    expect(document.ok(), "Table ChoiceMode fixture must parse");
+    const model::OrdinaryFormDocument::ObjectKey table{model::ObjectCategory::control, model::ObjectId{3}};
+    const auto property = model::PropertyId::from_name("ChoiceMode");
+    expect(document.value().get_prop_val(table, property).status == model::PropertyReadStatus::no_default,
+        "context dependent ChoiceMode must not assume a default");
+    expect(document.value().set_prop_val(table, property, true) == model::PropertyMutationStatus::applied_runtime_only,
+        "Table ChoiceMode must be a runtime-only value");
+    expect(!source::serialize_form_xml(document.value()).ok(), "runtime ChoiceMode must not be saved in XML");
+    expect(document.value().reset_prop_val(table, property) == model::PropertyMutationStatus::reset_runtime_only &&
+        source::serialize_form_xml(document.value()).ok(), "Table must serialize after runtime reset");
+    std::string bad(xml); const auto end = bad.find("</Table>"); bad.insert(end, "<ChoiceMode>true</ChoiceMode>");
+    expect(!source::parse_form_xml(bad).ok(), "runtime ChoiceMode must not be accepted in XML");
+}
+
 void test_table_row_selection_mode_xml() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="Modes" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTree"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Table"><DataPath attributeId="2"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns><SelectionMode type="TableBoxSelectionMode" member="MultiLine"/><RowSelectionMode type="TableBoxRowSelectionMode" member="Row"/></Table></ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
@@ -3170,6 +3187,7 @@ int main() {
         test_value_table_type_domain_xml_roundtrip();
         test_value_tree_type_domain_xml_roundtrip();
         test_table_enum_properties_xml();
+        test_table_choice_mode_runtime_only();
         test_table_row_selection_mode_xml();
         test_value_tree_table_xml_contract();
         test_table_column_visible_and_empty_tree_xml();

@@ -91,7 +91,8 @@ FooterTextColor, SelectionBackColor, SelectionTextColor, AlternationRowBackColor
 HeaderFont и FooterFont с платформенными значениями по умолчанию.
 Table сохраняет AutoInsertNewRow, Footer, Header, EnableStartDrag, EnableDrag,
 ChangeSettingOfColumns, ChangePositionOfColumns, ChangeRowSet, HorizontalLines,
-VerticalLines и UseAlternationRowColor. ChoiceMode пока не поддерживается.
+VerticalLines и UseAlternationRowColor. ChoiceMode таблицы относится к
+состоянию времени исполнения и не сохраняется в Form.xml.
 Table сохраняет 22 именованных события. OnCurrentParentChange доступно при
 источнике ValueTree; вызов событий в интерфейсе отдельно не проверен.
 LabelDecoration сохраняет Hyperlink и Shortcut, PictureDecoration сохраняет
