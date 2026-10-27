@@ -1972,9 +1972,9 @@ void test_help_metamodel() {
                 descriptor->default_value.canonical == default_value,
             "proven InputField Boolean must have its persisted descriptor and default");
     }
-    expect(find_property(ControlKind::input_field, "TextEdit")->persistence == PersistenceClass::unclassified &&
-            find_property(ControlKind::input_field, "TextEdit")->storage_codec == StorageCodec::unclassified,
-        "TextEdit must remain unsupported without verified strict persistence");
+    expect(find_property(ControlKind::input_field, "TextEdit")->persistence == PersistenceClass::persisted_editable &&
+            find_property(ControlKind::input_field, "TextEdit")->storage_codec == StorageCodec::control_info,
+        "TextEdit must use the verified InputField codec");
     for (const auto name : {"ChoiceIncomplete", "MarkIncomplete"}) {
         const auto* descriptor = find_property(ControlKind::input_field, name);
         expect(descriptor && descriptor->persistence == PersistenceClass::runtime_only &&

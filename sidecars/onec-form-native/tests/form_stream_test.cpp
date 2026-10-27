@@ -13346,11 +13346,7 @@ void test_button_label_input_field_round_trip() {
         .items[2].items[2].items[0];
     payload.items[12] = list_stream::ListValue::raw_atom("9");
     const auto partial_text_edit = form_stream::decode_document(malformed_text_edit, "Main");
-    expect(partial_text_edit.ok() && !partial_text_edit.value().reconstruction_complete() &&
-               std::any_of(partial_text_edit.diagnostics().begin(), partial_text_edit.diagnostics().end(),
-                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }) &&
-               partial_text_edit.value().find_control(model::ObjectId{9})->data_path.has_value(),
-        "valid unknown InputField TextEdit slot must warn and preserve known DataPath");
+    expect(!partial_text_edit.ok(), "invalid InputField TextEdit boolean must be rejected");
     auto unsupported_text_edit_flag = encoded.value();
     unsupported_text_edit_flag.items[1].items[2].items[2].items[3]
         .items[2].items[2].items[0].items[12] = list_stream::ListValue::raw_atom("1");
@@ -13358,10 +13354,10 @@ void test_button_label_input_field_round_trip() {
     expect(partial_text_edit_flag.ok() && !partial_text_edit_flag.value().reconstruction_complete() &&
                std::any_of(partial_text_edit_flag.diagnostics().begin(), partial_text_edit_flag.diagnostics().end(),
                    [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
-        "valid unknown InputField TextEdit flag must warn without rejecting the named model");
-    expect_failure(form_stream::encode_document(make_input_document(
-        10, true, false, false, false, false, false, {{"TextEdit", false}})),
-        "OOF1122", "$/InputField", "unsupported explicit TextEdit=false must fail encoding");
+        "mismatched InputField TextEdit flags must warn without rejecting the named model");
+    expect(form_stream::encode_document(make_input_document(
+        10, true, false, false, false, false, false, {{"TextEdit", false}})).ok(),
+        "verified explicit TextEdit=false must encode");
 }
 
 void test_input_field_date_only_type_domain_round_trip() {
@@ -13473,6 +13469,48 @@ void test_input_field_date_only_type_domain_round_trip() {
         list_stream::parse(value_codec::encode_type_domain(model::TypeDomainPatternValue{{string_entry}}));
     expect_failure(form_stream::decode_document(mismatched_attribute, "DateInput"), "OOF1122",
         "$/1/2/2/1/2/1", "Date-only InputField TypeDomain must still match its linked Attribute");
+}
+
+void test_input_field_text_edit_round_trip() {
+    for (const bool date : {false, true}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "InputTextEdit";
+        for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        if (date) { entry.term = model::TypeDomainTerm::date; entry.date = model::DateQualifiers{true, false}; }
+        else { entry.term = model::TypeDomainTerm::string; entry.string = model::LengthQualifiers{64, false}; }
+        type.entries.push_back(entry);
+        document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+        const auto property = model::PropertyId::from_name("TextEdit");
+        for (std::uint64_t i = 0; i < 12; ++i) {
+            model::ControlNode input{model::ObjectId{100 + i}, "Input" + std::to_string(i), model::InputFieldPayload{}};
+            input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+            if (i % 2 == 0) input.properties().set_explicit(property, false);
+            document.add_control(std::move(input));
+        }
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "twelve InputFields with TextEdit must encode");
+        const auto* record = find_record_with_guid(encoded.value(), model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+        const auto* payload_flag = record ? bounded_list_item(*record, {2, 2, 0, 12}) : nullptr;
+        const auto* outer_flag = record ? bounded_list_item(*record, {2, 5}) : nullptr;
+        expect(payload_flag && outer_flag && payload_flag->atom == "1" && outer_flag->atom == "1",
+            "disabled TextEdit must encode both platform-observed flags");
+        const auto decoded = form_stream::decode_document(encoded.value(), "InputTextEdit");
+        expect(decoded.ok(), "twelve InputFields with TextEdit must decode");
+        for (std::uint64_t i = 0; i < 12; ++i) {
+            const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{100 + i}};
+            expect(decoded.value().get_prop_val(owner, property).value == model::PropertyValue{i % 2 != 0},
+                "TextEdit must preserve both values on every field");
+        }
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<TextEdit>false</TextEdit>") != std::string::npos, "TextEdit must use named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "TextEdit XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "TextEdit XML must rebuild the original form stream");
+    }
 }
 
 void test_input_field_shortcut_round_trip() {
@@ -20252,6 +20290,7 @@ int main() {
         test_button_label_input_field_round_trip();
         test_input_field_date_only_type_domain_round_trip();
         test_input_field_shortcut_round_trip();
+        test_input_field_text_edit_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_input_incomplete_choice_mode_round_trip();

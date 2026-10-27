@@ -1246,6 +1246,7 @@ void apply_proven_storage_overrides(
     }
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
+    classify_property(input_field, "TextEdit", StorageCodec::control_info, DefaultKind::boolean, "true");
     if (const auto choice_list = std::ranges::find(input_field, "ChoiceList", &PropertyDescriptor::api_name);
         choice_list != input_field.end()) {
         choice_list->persistence = PersistenceClass::runtime_only;

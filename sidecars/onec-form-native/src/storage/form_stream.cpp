@@ -1833,6 +1833,7 @@ struct InputFieldFlagMapping {
     std::size_t slot;
     bool default_value;
     std::size_t paired_slot;
+    bool inverted = false;
 };
 
 constexpr std::size_t no_paired_slot = std::numeric_limits<std::size_t>::max();
@@ -1852,6 +1853,7 @@ constexpr std::array input_field_flag_mappings{
     InputFieldFlagMapping{"PasswordMode", InputFieldFlagScope::payload, 5, false, 5},
     InputFieldFlagMapping{"AutoMarkIncomplete", InputFieldFlagScope::payload, 35, false, no_paired_slot},
     InputFieldFlagMapping{"AutoChoiceIncomplete", InputFieldFlagScope::payload, 36, false, no_paired_slot},
+    InputFieldFlagMapping{"TextEdit", InputFieldFlagScope::payload, 12, true, no_paired_slot, true},
 };
 
 list_stream::ListValue& input_field_flag_value(LV& info, const InputFieldFlagMapping& mapping) {
@@ -1924,7 +1926,7 @@ InputFieldFlagValues decode_input_field_flags(
             child_path(path, mapping.slot) : mapping.scope == InputFieldFlagScope::base_info ?
                 child_path(child_path(child_path(child_path(path, 2), 0), 0), mapping.slot) :
                 child_path(child_path(child_path(path, 2), 0), mapping.slot);
-        flags[index] = bool_atom(input_field_flag_value(info, mapping), flag_path);
+        flags[index] = bool_atom(input_field_flag_value(info, mapping), flag_path) != mapping.inverted;
         if (pair_mode == InputFieldPairMode::require_matching_pair && mapping.paired_slot != no_paired_slot) {
             const auto paired_value = bool_atom(
                 info.items[3].items[1].items[1].items[mapping.paired_slot],
@@ -1981,8 +1983,9 @@ LV canonical_input_field_info(
     }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
-        const bool encoded = flags[index];
+        const bool encoded = flags[index] != mapping.inverted;
         input_field_flag_value(value, mapping) = raw(encoded ? "1" : "0");
+        if (mapping.name == "TextEdit") value.items[5] = raw(encoded ? "1" : "0");
         if (mapping.paired_slot != no_paired_slot) {
             value.items[3].items[1].items[1].items[mapping.paired_slot] = raw(encoded ? "1" : "0");
         }
@@ -10609,7 +10612,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
