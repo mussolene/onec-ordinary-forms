@@ -520,6 +520,45 @@ void test_table_column_layout_codec() {
     }
 }
 
+void test_table_column_visible_codec() {
+    auto seed = form_stream::decode_document(captured_table_payload(), "TableColumnVisible");
+    expect(seed.ok(), "captured Table fixture must decode for visibility cases");
+    const auto table_it = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table_it != seed.value().collections().controls.end(), "captured Table fixture must expose Table");
+    const auto table_id = table_it->id;
+    const auto& default_column = std::get<model::TablePayload>(table_it->payload).columns.front();
+    expect(default_column.visible, "captured Table Column must default to visible");
+    for (int index = 0; index < 12; ++index) {
+        auto document = seed.value();
+        auto* table = const_cast<model::ControlNode*>(document.find_control(table_id));
+        const bool visible = index % 2 == 0;
+        std::get<model::TablePayload>(table->payload).columns.front().visible = visible;
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "Table Column visibility must encode without a baseline");
+        const auto* record = find_record_with_guid(encoded.value(),
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr, "encoded Table record must exist");
+        const auto& flags = record->items.at(2).items.at(2).items.at(1).items.at(23).items.at(1)
+            .items.at(1).items.at(1).items.at(1).items.at(9);
+        expect(flags.atom == (visible ? "12590592" : "12589568"),
+            "Column Visible must use the independently observed 0x400 flag");
+        const auto decoded = form_stream::decode_document(encoded.value(), "ColumnVisibleRoundtrip");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "Column visibility must decode with complete reconstruction");
+        const auto* result = decoded.value().find_control(table_id);
+        expect(result && std::get<model::TablePayload>(result->payload).columns.front().visible == visible,
+            "Column visibility must survive native roundtrip");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && (xml.value().find("<Visible>false</Visible>") != std::string::npos) == !visible,
+            "XML must name false visibility and omit the true default");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok() && std::get<model::TablePayload>(parsed.value().find_control(table_id)->payload)
+                .columns.front().visible == visible,
+            "Column visibility must survive the named XML roundtrip");
+    }
+}
+
 void test_table_read_only_runtime_flags() {
     for (const bool read_only : {true, false}) {
         auto literal = captured_table_payload();
@@ -17708,6 +17747,7 @@ int main() {
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
         test_table_column_layout_codec();
+        test_table_column_visible_codec();
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();
         test_table_boolean_properties();

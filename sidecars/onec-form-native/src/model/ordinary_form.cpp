@@ -1754,6 +1754,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
             }
+            if (!tree_source && table->columns.empty()) {
+                invalid_table("ValueTable requires at least one Column");
+            }
             std::set<std::string> column_names;
             for (const auto& column : table->columns) {
                 if (column.layout_width) {

@@ -2118,6 +2118,8 @@ private:
                     column.layout_width = model::DecimalValue{std::move(width)};
                 } else if (field_name == "TextFont") {
                     column.text_font = parse_font(field);
+                } else if (field_name == "Visible") {
+                    column.visible = parse_boolean(node_text(field), field, "Visible", owner);
                 } else if (field_name == "Control") {
                     for (xmlAttrPtr attr = field->properties; attr != nullptr; attr = attr->next) {
                         const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
@@ -2194,7 +2196,7 @@ private:
                     control_seen = true;
                 } else {
                     fail("OOF2003", field, std::string(owner), field_name,
-                        "DataPath, Header, Width, TextFont, and Control", field_name, "Unsupported Table Column field");
+                        "DataPath, Header, Width, TextFont, Visible, and Control", field_name, "Unsupported Table Column field");
                 }
             }
             if (!data_path_seen || !header_seen || !control_seen || column.data_path.empty() || column.header.items.empty()) {
@@ -2202,10 +2204,6 @@ private:
                     "DataPath, localized Header, and typed Control", "incomplete", "Table Column is incomplete");
             }
             columns.push_back(std::move(column));
-        }
-        if (columns.empty()) {
-            fail("OOF2003", node, std::string(owner), "Column",
-                "at least one Column", "empty", "Table Columns collection is empty");
         }
         return columns;
     }
@@ -3696,10 +3694,6 @@ private:
     }
 
     void write_table_columns(const std::vector<model::TableColumn>& columns, std::string_view owner) {
-        if (columns.empty()) {
-            serialization_fail(std::string(owner), "Columns", "at least one typed Column", "empty",
-                "Table Columns collection is empty");
-        }
         writer_.open("Columns");
         for (const auto& column : columns) {
             std::string_view control_type;
@@ -3740,6 +3734,7 @@ private:
                 writer_.text("Width", width, {{"unit", "form"}});
             }
             if (column.text_font != model::FontValue{}) write_font("TextFont", column.text_font, owner);
+            if (!column.visible) writer_.text("Visible", "false");
             writer_.open("Control", {{"type", std::string(control_type)}});
             if (column.control.value_type.has_value()) {
                 if (column.control.kind != model::ControlKind::input_field) {

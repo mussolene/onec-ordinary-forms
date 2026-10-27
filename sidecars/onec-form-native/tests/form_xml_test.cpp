@@ -1417,6 +1417,58 @@ void test_value_tree_table_xml_contract() {
         "ValueTable must reject the parent-change action");
 }
 
+void test_table_column_visible_and_empty_tree_xml() {
+    const auto xml = [](std::string_view type, std::string_view columns) {
+        return std::string(R"XML(<Form id="1" name="ColumnVisibility" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term=")XML") +
+            std::string(type) + R"XML("/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Table"><DataPath attributeId="2"/><Position/>)XML" +
+            std::string(columns) + "</Table></ChildItems></Form>";
+    };
+    const auto column_xml = [](std::string_view visible) {
+        return std::string(R"XML(<Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header>)XML") +
+            std::string(visible) + R"XML(<Control type="InputField"/></Column></Columns>)XML";
+    };
+    for (const auto& [input, expected] : std::array{
+             std::pair<std::string_view, bool>{"", true},
+             std::pair<std::string_view, bool>{"<Visible>true</Visible>", true},
+             std::pair<std::string_view, bool>{"<Visible>false</Visible>", false}}) {
+        const auto parsed = source::parse_form_xml(xml("valueTable", column_xml(input)));
+        expect(parsed.ok(), "named Table Column visibility must parse");
+        const auto* table = parsed.value().find_control(model::ObjectId{3});
+        expect(table && std::get<model::TablePayload>(table->payload).columns.front().visible == expected,
+            "named Table Column visibility must retain the chosen value");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok() &&
+            (serialized.value().find("<Visible>false</Visible>") != std::string::npos) == !expected &&
+            serialized.value().find("<Visible>true</Visible>") == std::string::npos,
+            "default visibility must be omitted and false must be named in XML");
+        const auto parsed_again = source::parse_form_xml(serialized.value());
+        expect(parsed_again.ok() && std::get<model::TablePayload>(parsed_again.value()
+            .find_control(model::ObjectId{3})->payload).columns.front().visible == expected,
+            "Table Column visibility must survive XML roundtrip");
+    }
+    expect(!source::parse_form_xml(xml("valueTable", column_xml("<Visible>unknown</Visible>"))).ok(),
+        "Column Visible must reject a non-Boolean value");
+
+    auto empty_tree = source::parse_form_xml(xml("valueTree", "<Columns/>"));
+    expect(empty_tree.ok(), "ValueTree Table must accept a named empty Columns collection");
+    const auto* tree = empty_tree.value().find_control(model::ObjectId{3});
+    expect(tree && std::get<model::TablePayload>(tree->payload).columns.empty(),
+        "empty ValueTree Columns must remain empty in the model");
+    const auto native = oof::storage::form_stream::encode_document(empty_tree.value());
+    expect(native.ok(), "empty ValueTree Columns must encode without a baseline");
+    const auto decoded = oof::storage::form_stream::decode_document(native.value(), "EmptyTreeTable");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "empty ValueTree Columns must decode completely");
+    const auto serialized = source::serialize_form_xml(decoded.value());
+    expect(serialized.ok(), "empty ValueTree Columns must serialize into named XML");
+    const auto again = source::parse_form_xml(serialized.value());
+    expect(again.ok() && std::get<model::TablePayload>(again.value()
+        .find_control(model::ObjectId{3})->payload).columns.empty(),
+        "empty ValueTree Columns must survive XML and native roundtrip");
+    expect(!source::parse_form_xml(xml("valueTable", "<Columns/>")),
+        "empty ValueTable Columns must be rejected by the current model contract");
+}
+
 void test_table_columns_named_profile() {
     constexpr std::string_view valid = R"XML(
 <Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
@@ -3074,6 +3126,7 @@ int main() {
         test_value_tree_type_domain_xml_roundtrip();
         test_table_enum_properties_xml();
         test_value_tree_table_xml_contract();
+        test_table_column_visible_and_empty_tree_xml();
         test_table_columns_named_profile();
         test_table_column_layout_xml();
         test_inherited_property_has_one_surface();

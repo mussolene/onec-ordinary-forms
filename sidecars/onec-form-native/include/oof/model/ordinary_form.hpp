@@ -826,6 +826,7 @@ struct TableColumn {
     // Ширина сохраняемого макета в единицах формы; API Width использует символы.
     std::optional<DecimalValue> layout_width;
     FontValue text_font;
+    bool visible = true;
 };
 
 struct TablePayload final : TypedControlPayload<ControlKind::table> {

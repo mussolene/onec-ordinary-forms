@@ -3467,6 +3467,11 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         throw std::logic_error("canonical Table Column property record has the wrong arity");
     }
     properties.items[1] = encoded_localized(column.header);
+    constexpr std::uint32_t visible_mask = 0x400U;
+    if (!column.visible) {
+        const auto flags = integer_atom<std::uint32_t>(properties.items[9], std::string(path) + "/Flags");
+        properties.items[9] = raw(std::to_string(flags & ~visible_mask));
+    }
     if (tree_source) {
         properties.items[5] = raw(std::to_string(ordinal));
         properties.items[6] = raw("-1");
@@ -8694,6 +8699,9 @@ model::TableColumn decode_table_column(
     require_raw_constant(properties.items[0], "23", child_path(properties_path, 0));
 
     model::TableColumn column;
+    constexpr std::uint32_t visible_mask = 0x400U;
+    const auto flags = integer_atom<std::uint32_t>(properties.items[9], child_path(properties_path, 9));
+    column.visible = (flags & visible_mask) != 0;
     for (const auto slot : {4U, 32U, 45U}) {
         const auto width_path = child_path(properties_path, slot);
         const auto stored = raw_atom(properties.items[slot], width_path);

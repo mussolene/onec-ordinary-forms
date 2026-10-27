@@ -1079,6 +1079,7 @@
           <Property name="Name" russianName="Имя"/><Property name="DataPath" russianName="Данные"/>
           <Property name="Header" russianName="ТекстШапки"/>
           <Property name="Width" russianName="Ширина" russianType="Число" unit="form"/><Property name="TextFont" russianName="ШрифтТекста" russianType="Шрифт"/>
+          <Property name="Visible" russianName="Видимость" russianType="Булево"/>
           <Property name="Control" russianName="ЭлементУправления"/>
         </Properties></NamedConcept>
         <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>

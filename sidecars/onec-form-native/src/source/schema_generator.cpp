@@ -1034,13 +1034,14 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "      <xs:element name=\"Header\" type=\"LocalizedStringValueType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Width\" type=\"TableColumnWidthType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"TextFont\" type=\"FontValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"Visible\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Control\" type=\"TableColumnControlType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
         "    </xs:sequence>\n"
         "    <xs:attribute name=\"name\" type=\"xs:string\" use=\"required\"/>\n"
         "  </xs:complexType>\n"
         "  <xs:complexType name=\"TableColumnsType\">\n"
         "    <xs:sequence>\n"
-        "      <xs:element name=\"Column\" type=\"TableColumnType\" minOccurs=\"1\" maxOccurs=\"unbounded\"/>\n"
+        "      <xs:element name=\"Column\" type=\"TableColumnType\" minOccurs=\"0\" maxOccurs=\"unbounded\"/>\n"
         "    </xs:sequence>\n"
         "  </xs:complexType>\n\n";
 
@@ -1274,6 +1275,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"DataPath\" russianName=\"Данные\"/>\n"
         "          <Property name=\"Header\" russianName=\"ТекстШапки\"/>\n"
         "          <Property name=\"Width\" russianName=\"Ширина\" russianType=\"Число\" unit=\"form\"/><Property name=\"TextFont\" russianName=\"ШрифтТекста\" russianType=\"Шрифт\"/>\n"
+        "          <Property name=\"Visible\" russianName=\"Видимость\" russianType=\"Булево\"/>\n"
         "          <Property name=\"Control\" russianName=\"ЭлементУправления\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"SpreadsheetDocumentCellControl\" russianName=\"ЭлементУправленияЯчейкиТабличногоДокумента\"><Properties>\n"
