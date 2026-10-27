@@ -6,7 +6,10 @@
 
 ## Сборка и тесты
 
-Нужны CMake 3.20+, компилятор C++20, libxml2 и zlib. Из корня репозитория:
+Нужны CMake 3.20+, компилятор C++20, libxml2 2.14.6 или новее и zlib.
+На macOS можно установить libxml2 через Homebrew и указать CMake ее префикс
+параметром `-DCMAKE_PREFIX_PATH=$(brew --prefix libxml2)`. Старые версии
+libxml2 некорректно проверяют длинные значения `xs:decimal`. Из корня репозитория:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

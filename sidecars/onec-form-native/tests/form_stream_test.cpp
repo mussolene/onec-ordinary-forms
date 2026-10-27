@@ -15247,6 +15247,74 @@ void test_chart_named_integer_and_delimiter_properties() {
             invalid_chart->properties().set_explicit(model::PropertyId::from_name(name), invalid);
             expect(!form_stream::encode_document(invalid_document), "Chart encoder must reject an out-of-range integer");
         }
+        for (const bool with_event : {false, true}) {
+            for (const bool auto_max : {false, true}) for (const bool auto_min : {false, true}) {
+                for (const auto chart_type : {"Column", "Line"}) {
+                    for (const auto text : {"0", "123456789012345678901234567890123456789",
+                             "0.00000000000000000000000000000000000001", "-123456789012345.12345678901234567890123"}) {
+                        model::Form variant_form; variant_form.id = model::ObjectId{1}; variant_form.name = "ChartNumbers";
+                        variant_form.children = {model::ControlRef{model::ObjectId{2}}};
+                        model::OrdinaryFormDocument variant(std::move(variant_form));
+                        auto control = *document.find_control(model::ObjectId{2});
+                        if (!with_event) control.events.clear();
+                        control.properties().set_explicit(model::PropertyId::from_name("BaseValue"), model::DecimalValue{text});
+                        control.properties().set_explicit(model::PropertyId::from_name("AutoMaxValue"), auto_max);
+                        control.properties().set_explicit(model::PropertyId::from_name("AutoMinValue"), auto_min);
+                        control.properties().set_explicit(model::PropertyId::from_name("ChartType"), model::EnumerationValue{"ChartType", chart_type});
+                        if (with_event) variant.add_event(model::Event{model::ObjectId{100}, "Selection", "OnSelection", model::ControlRef{model::ObjectId{2}}});
+                        variant.add_control(std::move(control));
+                        auto native = form_stream::encode_document(variant);
+                        expect(native.ok(), "Chart BaseValue must encode with types, auto flags and events");
+                        const auto limit = middle + 126 + 3 * series_count * point_count + series_count + (with_event ? 1U : 0U);
+                        const auto& stored = find_chart_record(native.value())->items[3];
+                        expect(stored.items[middle + 49].atom == text && stored.items[limit].items[1].atom == text,
+                            "Chart BaseValue must be exact in both native fields");
+                        auto decoded_base = form_stream::decode_document(native.value());
+                        expect(decoded_base.ok() && decoded_base.value().reconstruction_complete(), "Chart BaseValue must decode completely");
+                        auto xml_base = source::serialize_form_xml(decoded_base.value());
+                        expect(xml_base.ok(), "Chart BaseValue must serialize");
+                        auto parsed_base = source::parse_form_xml(xml_base.value());
+                        expect(parsed_base.ok(), "Chart BaseValue XML must parse");
+                        auto rebuilt_base = form_stream::encode_document(parsed_base.value());
+                        expect(rebuilt_base.ok() && list_stream::dump_compact(rebuilt_base.value()) == list_stream::dump_compact(native.value()),
+                            "Chart BaseValue must roundtrip through named XML");
+                        auto mismatch = native.value();
+                        find_chart_record(mismatch)->items[3].items[limit].items[1] = list_stream::ListValue::raw_atom("987654321");
+                        expect(!form_stream::decode_document(mismatch), "Chart BaseValue must reject mismatched fields");
+                        auto malformed = native.value();
+                        find_chart_record(malformed)->items[3].items[middle + 49] = list_stream::ListValue::raw_atom("bad");
+                        expect(!form_stream::decode_document(malformed), "Chart BaseValue must reject malformed decimals");
+                        auto malformed_repeated = native.value();
+                        find_chart_record(malformed_repeated)->items[3].items[limit].items[1] = list_stream::ListValue::raw_atom("bad");
+                        const auto rejected_repeated = form_stream::decode_document(malformed_repeated);
+                        const auto logical_limit = limit - (with_event ? 1U : 0U);
+                        expect(!rejected_repeated.ok() && !rejected_repeated.diagnostics().empty() &&
+                            rejected_repeated.diagnostics().front().path.ends_with("/" + std::to_string(logical_limit) + "/1") &&
+                            rejected_repeated.diagnostics().front().actual == "bad",
+                            "Chart BaseValue must report the malformed repeated field and its value");
+                    }
+                }
+            }
+        }
+        for (const model::PropertyValue& invalid : std::array<model::PropertyValue, 3>{true, std::string{"1.5"}, model::DecimalValue{"bad"}}) {
+            auto variant = document;
+            auto* control = const_cast<model::ControlNode*>(variant.find_control(model::ObjectId{2}));
+            control->properties().set_explicit(model::PropertyId::from_name("BaseValue"), invalid);
+            expect(!form_stream::encode_document(variant), "Chart BaseValue must reject invalid types and decimals");
+        }
+        {
+            auto variant = document;
+            auto* control = const_cast<model::ControlNode*>(variant.find_control(model::ObjectId{2}));
+            control->properties().set_explicit(model::PropertyId::from_name("BaseValue"), std::numeric_limits<std::int64_t>::min());
+            auto native = form_stream::encode_document(variant);
+            expect(native.ok(), "Chart BaseValue must encode signed integer");
+            const auto limit = middle + 126 + 3 * series_count * point_count + series_count + 1;
+            const auto& stored = find_chart_record(native.value())->items[3];
+            expect(stored.items[middle + 49].atom == "-9223372036854775808" &&
+                stored.items[limit].items[1].atom == "-9223372036854775808", "Chart integer BaseValue must be exact in both fields");
+            auto decoded_base = form_stream::decode_document(native.value());
+            expect(decoded_base.ok() && decoded_base.value().reconstruction_complete(), "Chart integer BaseValue must decode completely");
+        }
         for (const auto name : {"ValueLabelFormat", "PercentLabelFormat"}) {
             for (const model::PropertyValue& value : std::array<model::PropertyValue, 8>{
                      std::string{}, std::string("Строка & < >"),

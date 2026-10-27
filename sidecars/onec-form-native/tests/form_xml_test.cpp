@@ -2345,6 +2345,39 @@ void test_command_bar_border_xml_contract() {
     expect(!source::serialize_form_xml(document_with_border(invalid)).ok(), "writer must reject style Border without a reference");
 }
 
+void test_chart_base_value_xml() {
+    const auto xml = [](std::string_view property) {
+        return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Chart id=\"2\" name=\"Chart\"><Position/>") +
+            std::string(property) + "<Series/><Points/><Values/></Chart></ChildItems></Form>";
+    };
+    const auto property = model::PropertyId::from_name("BaseValue");
+    const auto chart = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}};
+    for (const auto* text : {"12345678901234567890123456789012345678", "0.00000000000000000000000000000000000001",
+             "-123456789012345.12345678901234567890123", "0"}) {
+        const auto parsed = source::parse_form_xml(xml("<BaseValue>" + std::string(text) + "</BaseValue>"));
+        expect(parsed.ok(), "valid Chart BaseValue must parse from XML");
+        const auto read = parsed.value().get_prop_val(chart, property);
+        expect(read.value && *read.value == model::PropertyValue{model::DecimalValue{text}},
+            "Chart BaseValue XML must preserve decimal precision");
+        const auto written = source::serialize_form_xml(parsed.value());
+        expect(written.ok(), "valid Chart BaseValue must serialize");
+        const auto reparsed = source::parse_form_xml(written.value());
+        expect(reparsed.ok(), "serialized Chart BaseValue must parse again");
+        const auto reread = reparsed.value().get_prop_val(chart, property);
+        expect(reread.value && *reread.value == *read.value, "Chart BaseValue must survive XML roundtrip");
+    }
+    for (const auto* invalid : {"bad", "1.2.3", "1e3", ""})
+        expect(!source::parse_form_xml(xml("<BaseValue>" + std::string(invalid) + "</BaseValue>")).ok(),
+            "invalid decimal Chart BaseValue XML must be rejected");
+    expect(!source::parse_form_xml(xml("<BaseValue>1</BaseValue><BaseValue>2</BaseValue>")).ok(),
+        "duplicate Chart BaseValue must be rejected");
+    auto document = source::parse_form_xml(xml(""));
+    expect(document.ok(), "Chart BaseValue can be omitted");
+    expect(document.value().set_prop_val(chart, property, model::DecimalValue{"bad"}) == model::PropertyMutationStatus::applied,
+        "property API accepts the DecimalValue type");
+    expect(!source::serialize_form_xml(document.value()).ok(), "writer must reject malformed BaseValue decimal");
+}
+
 void test_chart_type_xml() {
     const auto xml = [](std::string_view property) {
         return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Chart id=\"2\" name=\"Chart\"><Position/>") +
@@ -2590,6 +2623,7 @@ int main() {
         test_runtime_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
+        test_chart_base_value_xml();
         test_chart_type_xml();
         test_chart_summary_series_color_xml();
         test_complete_document_roundtrip();

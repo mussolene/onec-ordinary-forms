@@ -673,6 +673,7 @@ void apply_proven_storage_overrides(
         "SpreadsheetDocumentSelectionShowModeType.WhenActive");
 
     auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+    classify_property(chart_properties, "BaseValue", StorageCodec::control_info, DefaultKind::decimal, "0");
     classify_property(chart_properties, "ChartType", StorageCodec::control_info, DefaultKind::enumeration, "ChartType.Column");
     std::ranges::find(chart_properties, "ChartType", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     for (const auto name : {"Transparent", "Outline", "Gradient", "HideBaseValue", "AutoTransposition",

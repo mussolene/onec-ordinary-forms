@@ -343,6 +343,12 @@ double parse_double(
 class CompiledOrdinaryFormSchema {
 public:
     CompiledOrdinaryFormSchema() {
+        const std::string_view runtime_version = xmlParserVersion ? xmlParserVersion : "";
+        int version_number = 0;
+        const auto parsed = std::from_chars(runtime_version.data(), runtime_version.data() + runtime_version.size(), version_number);
+        if (parsed.ec != std::errc{} || parsed.ptr != runtime_version.data() + runtime_version.size() || version_number < 21406) {
+            throw std::runtime_error("libxml2 runtime version 2.14.6 or newer is required for xs:decimal validation");
+        }
         const GeneratedSchemas generated = generate_schemas(mm::Metamodel::instance());
         if (generated.ordinary_form_xsd.size() > static_cast<std::size_t>(INT_MAX)) {
             throw std::runtime_error("generated ordinary-form schema is too large");

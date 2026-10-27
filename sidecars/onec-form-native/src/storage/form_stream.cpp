@@ -6356,6 +6356,19 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
         raw(explicit_bool(properties, "TransparentLabel", true) ? "1" : "0");
     auto& limits = info.at(middle_start + 126 + 3 * expected_cell_count + series_count);
     require_arity(limits, 5, "$/Chart/Info/Limits");
+    std::string base_value = "0";
+    if (const auto* entry = properties.find(model::PropertyId::from_name("BaseValue"))) {
+        if (const auto* integer = std::get_if<std::int64_t>(&entry->value)) {
+            base_value = std::to_string(*integer);
+        } else if (const auto* decimal = std::get_if<model::DecimalValue>(&entry->value)) {
+            try { base_value = value_codec::canonical_decimal(decimal->canonical); }
+            catch (const std::exception& error) { fail("OOF1122", "$/Chart/BaseValue", "xs:decimal", decimal->canonical, error.what()); }
+        } else {
+            fail("OOF1122", "$/Chart/BaseValue", "decimal", "different value type", "Chart BaseValue must be a decimal");
+        }
+    }
+    info.at(middle_start + 49) = raw(base_value);
+    limits.items.at(1) = raw(base_value);
     limits.items.at(3) = raw(explicit_bool(properties, "AutoMaxValue", true) ? "0" : "2");
     limits.items.at(4) = raw(explicit_bool(properties, "AutoMinValue", true) ? "0" : "2");
     auto result = list(std::move(info));
@@ -6421,7 +6434,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
-        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType"}, "$/Chart");
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6662,6 +6675,25 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     const auto limit_path = child_path(info_path, limit_index);
     const auto& limits = at(info, limit_index, info_path);
     require_arity(limits, 5, limit_path);
+    const auto base_path = child_path(info_path, middle_start + 49);
+    const auto repeated_base_path = child_path(limit_path, 1);
+    const auto base_raw = raw_atom(at(info, middle_start + 49, info_path), base_path);
+    const auto repeated_base_raw = raw_atom(limits.items[1], repeated_base_path);
+    std::string base_value;
+    std::string repeated_base_value;
+    try {
+        base_value = value_codec::canonical_decimal(base_raw);
+    } catch (const std::exception& error) {
+        fail("OOF1115", base_path, "xs:decimal Chart BaseValue field", base_raw, error.what());
+    }
+    try {
+        repeated_base_value = value_codec::canonical_decimal(repeated_base_raw);
+    } catch (const std::exception& error) {
+        fail("OOF1115", repeated_base_path, "xs:decimal Chart BaseValue field", repeated_base_raw, error.what());
+    }
+    if (base_value != repeated_base_value)
+        fail("OOF1115", repeated_base_path, "matching Chart BaseValue fields", repeated_base_raw, "Chart BaseValue fields disagree");
+    if (base_value != "0") properties.set_explicit(model::PropertyId::from_name("BaseValue"), model::DecimalValue{base_value});
     for (const auto& [name, slot] : {std::pair{"AutoMaxValue", 3U}, std::pair{"AutoMinValue", 4U}}) {
         const auto* entry = properties.find(model::PropertyId::from_name(name));
         const bool enabled = entry == nullptr || std::get<bool>(entry->value);

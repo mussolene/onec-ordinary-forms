@@ -680,6 +680,37 @@ void test_chart_integer_and_delimiter_descriptors() {
     }
 }
 
+void test_chart_base_value_property() {
+    using namespace oof::model::metamodel;
+    const auto* descriptor = find_property(ControlKind::chart, "BaseValue");
+    expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+        descriptor->storage_codec == StorageCodec::control_info && descriptor->value_codec == ValueCodec::decimal &&
+        descriptor->default_value.kind == DefaultKind::decimal && descriptor->default_value.canonical == "0",
+        "Chart BaseValue must use decimal storage and its observed zero default");
+    Form form;
+    form.id = ObjectId{1};
+    form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_control(ControlNode{ObjectId{2}, "Chart", ChartPayload{}});
+    const auto chart = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{2}};
+    const auto property = PropertyId::from_name("BaseValue");
+    const auto default_value = document.get_prop_val(chart, property);
+    expect(default_value.status == PropertyReadStatus::proven_default && default_value.value &&
+        *default_value.value == PropertyValue{DecimalValue{"0"}}, "Chart BaseValue default must be zero");
+    for (const auto* text : {"12345678901234567890123456789012345678", "0.00000000000000000000000000000000000001",
+             "-123456789012345.12345678901234567890123", "0"}) {
+        const PropertyValue value = DecimalValue{text};
+        expect(document.set_prop_val(chart, property, value) == PropertyMutationStatus::applied,
+            "Chart BaseValue must accept a decimal value");
+        const auto read = document.get_prop_val(chart, property);
+        expect(read.value && *read.value == value && document.validate().ok(),
+            "Chart BaseValue property API must retain decimal precision");
+    }
+    expect(document.set_prop_val(chart, property, true) == PropertyMutationStatus::invalid_value &&
+        document.set_prop_val(chart, property, std::string{"1.5"}) == PropertyMutationStatus::invalid_value,
+        "Chart BaseValue must reject unrelated property types");
+}
+
 void test_chart_type_property() {
     using namespace oof::model::metamodel;
     const auto* descriptor = find_property(ControlKind::chart, "ChartType");
@@ -2385,6 +2416,7 @@ int main() {
         test_progress_bar_storage_descriptors();
         test_track_bar_storage_descriptors();
         test_chart_integer_and_delimiter_descriptors();
+        test_chart_base_value_property();
         test_chart_type_property();
         test_chart_appearance_defaults();
         test_help_metamodel();

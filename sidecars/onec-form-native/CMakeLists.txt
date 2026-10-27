@@ -1,4 +1,4 @@
-find_package(LibXml2 REQUIRED)
+find_package(LibXml2 2.14.6 REQUIRED)
 find_package(ZLIB REQUIRED)
 
 function(oof_enable_project_warnings target_name)
