@@ -1469,6 +1469,31 @@ void test_table_column_visible_and_empty_tree_xml() {
         "empty ValueTable Columns must be rejected by the current model contract");
 }
 
+void test_table_fixed_column_xml() {
+    const auto xml = [](std::string_view type, std::string_view left, std::string_view right) {
+        return std::string(R"XML(<Form id="1" name="FixedColumns" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term=")XML") +
+            std::string(type) + R"XML("/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Table"><DataPath attributeId="2"/><Position/><Columns><Column name="A"><DataPath>A</DataPath><Header><Item language="en">A</Item></Header><Control type="InputField"/></Column><Column name="B"><DataPath>B</DataPath><Header><Item language="en">B</Item></Header><Control type="InputField"/></Column><Column name="C"><DataPath>C</DataPath><Header><Item language="en">C</Item></Header><Visible>false</Visible><Control type="InputField"/></Column></Columns><FixedLeft>)XML" +
+            std::string(left) + "</FixedLeft><FixedRight>" + std::string(right) +
+            "</FixedRight></Table></ChildItems></Form>";
+    };
+    for (const auto type : {"valueTable", "valueTree"}) {
+        const auto parsed = source::parse_form_xml(xml(type, "1", "1"));
+        expect(parsed.ok(), "valid fixed counts must parse from XML");
+        const auto written = source::serialize_form_xml(parsed.value());
+        expect(written.ok() && written.value().find("<FixedLeft>1</FixedLeft>") != std::string::npos &&
+            written.value().find("<FixedRight>1</FixedRight>") != std::string::npos,
+            "fixed counts must be retained as named XML properties");
+        expect(source::parse_form_xml(written.value()).ok(), "fixed counts must survive XML roundtrip");
+        expect(!source::parse_form_xml(xml(type, "-1", "0")).ok(), "negative fixed count must be rejected");
+        const auto hidden_after_fix = source::parse_form_xml(xml(type, "2", "1"));
+        expect(hidden_after_fix.ok(), "saved fixed counts must survive hiding a previously visible column");
+        const auto hidden_xml = source::serialize_form_xml(hidden_after_fix.value());
+        expect(hidden_xml.ok() && source::parse_form_xml(hidden_xml.value()).ok(),
+            "fixed counts with a hidden column must survive XML roundtrip");
+        expect(!source::parse_form_xml(xml(type, "1.5", "0")).ok(), "XML fixed counts must be integral");
+    }
+}
+
 void test_table_columns_named_profile() {
     constexpr std::string_view valid = R"XML(
 <Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
@@ -3127,6 +3152,7 @@ int main() {
         test_table_enum_properties_xml();
         test_value_tree_table_xml_contract();
         test_table_column_visible_and_empty_tree_xml();
+        test_table_fixed_column_xml();
         test_table_columns_named_profile();
         test_table_column_layout_xml();
         test_inherited_property_has_one_surface();

@@ -2676,8 +2676,8 @@
       <xs:element name="CurrentData" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentParent" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="FixedLeft" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="FixedRight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FixedLeft" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FixedRight" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectionTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FooterTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

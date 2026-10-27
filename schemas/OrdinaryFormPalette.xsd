@@ -647,8 +647,8 @@
               <Property name="CurrentData" apiName="CurrentData" russianName="ТекущиеДанные" russianType="" valueCodec="unclassified"/>
               <Property name="CurrentParent" apiName="CurrentParent" russianName="ТекущийРодитель" russianType="" valueCodec="unclassified"/>
               <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
-              <Property name="FixedLeft" apiName="FixedLeft" russianName="ФиксацияСлева" russianType="Число" valueCodec="decimal"/>
-              <Property name="FixedRight" apiName="FixedRight" russianName="ФиксацияСправа" russianType="Число" valueCodec="decimal"/>
+              <Property name="FixedLeft" apiName="FixedLeft" russianName="ФиксацияСлева" russianType="Число" valueCodec="integer32"/>
+              <Property name="FixedRight" apiName="FixedRight" russianName="ФиксацияСправа" russianType="Число" valueCodec="integer32"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="SelectionTextColor" apiName="SelectionTextColor" russianName="ЦветТекстаВыделения" russianType="Цвет" valueCodec="color"/>
               <Property name="FooterTextColor" apiName="FooterTextColor" russianName="ЦветТекстаПодвала" russianType="Цвет" valueCodec="color"/>

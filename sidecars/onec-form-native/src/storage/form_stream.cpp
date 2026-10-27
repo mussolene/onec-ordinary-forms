@@ -3543,6 +3543,11 @@ constexpr std::array table_boolean_slots{
     TableBooleanSlot{"UseAlternationRowColor", 38, false, 2, 1},
 };
 
+constexpr std::array table_fixed_column_slots{
+    std::pair<std::string_view, std::size_t>{"FixedLeft", 11},
+    std::pair<std::string_view, std::size_t>{"FixedRight", 12},
+};
+
 LV canonical_table_control_info(
     const model::TypeDomainPatternValue& source_type,
     const std::vector<model::TableColumn>& columns,
@@ -9012,6 +9017,16 @@ DecodedControl decode_table(
                 model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[static_cast<std::size_t>(code)])});
         normalized_table_properties.items.at(spec.slot) = raw(std::to_string(spec.default_ordinal));
     }
+    for (const auto& [name, slot] : table_fixed_column_slots) {
+        const auto slot_path = child_path(table_properties_path, slot);
+        const auto value = integer_atom<std::int32_t>(info.items[2].items[1].items.at(slot), slot_path);
+        if (value < 0 || value > 256)
+            fail("OOF1114", slot_path, "fixed-column count from 0 to 256", std::to_string(value),
+                "Table fixed-column count is outside the supported range");
+        if (value != 0)
+            control.properties().set_explicit(model::PropertyId::from_name(name), static_cast<std::int64_t>(value));
+        normalized_table_properties.items.at(slot) = raw("0");
+    }
     for (const auto& [name, slot] : std::array{std::pair<std::string_view, std::size_t>{"HeaderHeight", 16},
                                               std::pair<std::string_view, std::size_t>{"FooterHeight", 17}}) {
         const auto value = integer_atom<std::int16_t>(info.items[2].items[1].items.at(slot), child_path(table_properties_path, slot));
@@ -10267,7 +10282,7 @@ LV encode_table(
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "InitialListView", "InitialTreeView",
-        "HeaderHeight", "FooterHeight", "Output", "Border", "Tree"}, "$/Table");
+        "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree"}, "$/Table");
     require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
     const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
@@ -10324,6 +10339,14 @@ LV encode_table(
             ordinal = static_cast<int>(std::distance(spec.members.begin(), member));
         }
         table_properties.items.at(spec.slot) = raw(std::to_string(ordinal));
+    }
+    for (const auto& [name, slot] : table_fixed_column_slots) {
+        const auto path = std::string("$/Table/") + std::string(name);
+        const auto value = explicit_integer(control.properties(), name, 0, path);
+        if (value < 0 || value > 256)
+            fail("OOF1120", path, "fixed-column count from 0 to 256", std::to_string(value),
+                "Table fixed-column count is outside the supported range");
+        table_properties.items.at(slot) = raw(std::to_string(value));
     }
     for (const auto& [name, slot] : std::array{std::pair<std::string_view, std::size_t>{"HeaderHeight", 16},
                                               std::pair<std::string_view, std::size_t>{"FooterHeight", 17}}) {

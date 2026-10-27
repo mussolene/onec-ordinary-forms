@@ -1094,6 +1094,10 @@ void apply_proven_storage_overrides(
         classify_property(table, name, StorageCodec::control_info, DefaultKind::integer, "1");
         std::ranges::find(table, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     }
+    for (const auto name : {"FixedLeft", "FixedRight"}) {
+        classify_property(table, name, StorageCodec::control_info, DefaultKind::integer, "0");
+        std::ranges::find(table, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    }
     classify_property(table, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
     for (const auto name : {"HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor"})
         classify_property(table, name, StorageCodec::control_info, DefaultKind::color, "automatic");

@@ -559,6 +559,72 @@ void test_table_column_visible_codec() {
     }
 }
 
+void test_table_fixed_column_positions() {
+    const auto left_id = model::PropertyId::from_name("FixedLeft");
+    const auto right_id = model::PropertyId::from_name("FixedRight");
+    const auto make_document = [&](model::TypeDomainTerm source_type, unsigned scenario,
+                                   std::int64_t left, std::int64_t right) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "FixedColumns";
+        form.children.emplace_back(model::ControlRef{model::ObjectId{3}});
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainEntry type; type.term = source_type;
+        document.add_attribute(model::Attribute{model::ObjectId{2}, "Rows", model::TypeDomainPatternValue{{type}}});
+        model::ControlNode table{model::ObjectId{3}, "Table", model::TablePayload{}};
+        table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+        auto& columns = std::get<model::TablePayload>(table.payload).columns;
+        for (unsigned i = 0; i < 3; ++i) {
+            model::TableColumn col; col.name = "Column" + std::to_string(i); col.data_path = col.name;
+            col.header.items.push_back({"en", col.name}); col.control.kind = model::ControlKind::input_field;
+            col.layout_width = model::DecimalValue{"100"};
+            if ((scenario == 3 || scenario == 5) && i == 2) col.visible = false;
+            if ((scenario == 4 || scenario == 5) && i == 0) col.layout_width = model::DecimalValue{"0"};
+            columns.push_back(std::move(col));
+        }
+        table.properties().set_explicit(left_id, left);
+        table.properties().set_explicit(right_id, right);
+        document.add_control(std::move(table));
+        return document;
+    };
+    constexpr std::array values{
+        std::pair{0, 0}, std::pair{1, 1}, std::pair{3, 0},
+        std::pair{2, 1}, std::pair{2, 1}, std::pair{1, 0}};
+    for (const auto source_type : {model::TypeDomainTerm::value_table, model::TypeDomainTerm::value_tree}) {
+        for (unsigned i = 0; i < values.size(); ++i) {
+            auto document = make_document(source_type, i, values[i].first, values[i].second);
+            expect(document.validate().ok(), "valid fixed columns must satisfy model invariants");
+            const auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), "valid fixed columns must encode");
+            const auto* table = find_record_with_guid(encoded.value(),
+                model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            expect(table != nullptr, "fixed-column Table record must exist");
+            const auto& properties = table->items.at(2).items.at(2).items.at(1).items;
+            expect(properties.at(11).atom == std::to_string(values[i].first) &&
+                   properties.at(12).atom == std::to_string(values[i].second),
+                "fixed columns must use observed native slots 11 and 12");
+            const auto decoded = form_stream::decode_document(encoded.value(), "FixedColumns");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "fixed columns must decode completely");
+            const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{3}};
+            const auto l = decoded.value().get_prop_val(owner, left_id);
+            const auto r = decoded.value().get_prop_val(owner, right_id);
+            expect(l.value && r.value && std::get<std::int64_t>(*l.value) == values[i].first &&
+                   std::get<std::int64_t>(*r.value) == values[i].second, "fixed column values must survive storage");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "fixed column values must serialize as XML");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "fixed column values must parse from XML");
+            const auto again = form_stream::encode_document(parsed.value());
+            expect(again.ok() && list_stream::dump_compact(again.value()) == list_stream::dump_compact(encoded.value()),
+                "fixed column settings must survive XML and native roundtrip");
+        }
+        for (const auto& [scenario, left, right] : std::array{
+                 std::tuple{0U, -1, 0}, std::tuple{0U, 0, -1}}) {
+            auto invalid = make_document(source_type, scenario, left, right);
+            expect(!invalid.validate().ok() && !form_stream::encode_document(invalid),
+                "invalid fixed column counts must fail closed");
+        }
+    }
+}
+
 void test_table_read_only_runtime_flags() {
     for (const bool read_only : {true, false}) {
         auto literal = captured_table_payload();
@@ -17748,6 +17814,7 @@ int main() {
         test_captured_table_column_record();
         test_table_column_layout_codec();
         test_table_column_visible_codec();
+        test_table_fixed_column_positions();
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();
         test_table_boolean_properties();

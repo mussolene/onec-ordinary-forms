@@ -1762,8 +1762,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 if (column.layout_width) {
                     try {
                         const auto width = storage::value_codec::canonical_decimal(column.layout_width->canonical);
-                        if (width != column.layout_width->canonical || width.starts_with('-'))
+                        if (width != column.layout_width->canonical || width.starts_with('-')) {
                             invalid_table("Table Column layout width must be a canonical nonnegative decimal");
+                        }
                     } catch (const std::exception&) {
                         invalid_table("Table Column layout width is invalid");
                     }
@@ -1811,6 +1812,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     column.control.kind != ControlKind::check_box) {
                     invalid_table("Table Column Control kind is unsupported");
                 }
+            }
+            for (const auto name : {"FixedLeft", "FixedRight"}) {
+                const auto* entry = control.properties().find(PropertyId::from_name(name));
+                if (!entry) continue;
+                const auto* value = std::get_if<std::int64_t>(&entry->value);
+                if (value && (*value < 0 || *value > 256))
+                    invalid_table("Table fixed column counts must be between 0 and 256");
             }
         }
         validate_property_set(
