@@ -778,6 +778,20 @@ void test_input_list_choice_mode_api() {
             "list choice mode must accept true");
         const auto read = document.get_prop_val(owner, property);
         expect(read.value && *read.value == PropertyValue{true}, "list choice mode must return the assigned value");
+        const auto button = PropertyId::from_name("ChoiceListButton");
+        expect(document.get_prop_val(owner, button).value == std::optional<PropertyValue>{PropertyValue{true}},
+            "enabling list choice mode must enable the list choice button");
+        expect(document.set_prop_val(owner, button, false) == PropertyMutationStatus::applied,
+            "the button can be independently disabled");
+        expect(document.get_prop_val(owner, property).value == std::optional<PropertyValue>{PropertyValue{true}},
+            "disabling the button must not disable list choice mode");
+        expect(document.set_prop_val(owner, property, false) == PropertyMutationStatus::applied &&
+            document.get_prop_val(owner, button).value == std::optional<PropertyValue>{PropertyValue{false}},
+            "disabling list choice mode must disable the list choice button");
+        expect(document.set_prop_val(owner, button, true) == PropertyMutationStatus::applied &&
+            document.set_prop_val(owner, property, false) == PropertyMutationStatus::applied &&
+            document.get_prop_val(owner, button).value == std::optional<PropertyValue>{PropertyValue{false}},
+            "assigning false again must disable the button");
         expect(document.set_prop_val(owner, property, std::string{"true"}) == PropertyMutationStatus::invalid_value,
             "list choice mode must reject non-boolean values");
     }

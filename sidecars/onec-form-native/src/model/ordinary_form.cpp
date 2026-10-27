@@ -969,6 +969,10 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
     }
 
+    if (owner.category == ObjectCategory::control && descriptor->control_kind == ControlKind::input_field &&
+        descriptor->api_name == "ListChoiceMode") {
+        properties->set_explicit(PropertyId::from_name("ChoiceListButton"), std::get<bool>(value));
+    }
     properties->set_explicit(descriptor->id, std::move(value));
     if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
         return PropertyMutationStatus::applied_runtime_only;
