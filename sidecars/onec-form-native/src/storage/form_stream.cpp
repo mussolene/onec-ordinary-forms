@@ -792,12 +792,30 @@ LV canonical_root_panel_payload(
     return value;
 }
 
-LV canonical_panel_payload(const std::vector<model::Page>& pages, model::ControlRef owner) {
+LV canonical_panel_payload(const std::vector<model::Page>& pages, model::ControlRef owner,
+    bool separate_by_page = true) {
     if (pages.empty()) {
         fail("OOF1122", "$/Panel/Pages", "at least one named Panel Page", "empty",
             "Panel page storage requires explicit Pages");
     }
-    auto envelope = canonical_root_panel_payload(8, 8, pages, owner);
+    auto envelope = canonical_root_panel_payload(8, 8,
+        separate_by_page ? pages : std::vector<model::Page>{pages.front()}, owner);
+    if (!separate_by_page) {
+        auto shared_boundaries = encode_page_position(pages.front().position.value(), 0, owner);
+        if (!shared_boundaries) throw DecodeFailure(shared_boundaries.diagnostics().front());
+        for (const auto& page : pages) {
+            auto boundaries = encode_page_position(page.position.value(), 0, owner);
+            if (!boundaries) throw DecodeFailure(boundaries.diagnostics().front());
+            if (list_stream::dump_compact(boundaries.value()) != list_stream::dump_compact(shared_boundaries.value())) {
+                fail("OOF1122", "$/Panel/Pages/Position", "identical shared Page positions", page.name,
+                    "Panel without page distribution requires a single shared page position");
+            }
+        }
+        const auto page_table = encode_page_table(pages);
+        if (!page_table) throw DecodeFailure(page_table.diagnostics().front());
+        envelope.items[1].items[11] = page_table.value();
+        envelope.items[1].items[10] = raw("0");
+    }
     envelope.items[1].items[9] = raw("1");
     envelope.items[1].items[12] = raw("0");
     return envelope;
@@ -2448,23 +2466,26 @@ DecodedOwnerPages decode_owner_pages(
             "Owner Page table cannot be empty");
     }
     const auto count = pages.size();
-    if (integer_atom<std::uint32_t>(at(normalized, 9, path), child_path(path, 9)) != count * 4) {
-        fail("OOF1114", child_path(path, 9), std::to_string(count * 4), describe(at(normalized, 9, path)),
-            "Owner boundary count does not match its Page table");
+    const bool separate_by_page = !panel || bool_atom(at(normalized, 4, path), child_path(path, 4));
+    const auto boundary_page_count = separate_by_page ? count : 1;
+    if (integer_atom<std::uint32_t>(at(normalized, 9, path), child_path(path, 9)) != boundary_page_count * 4) {
+        fail("OOF1114", child_path(path, 9), std::to_string(boundary_page_count * 4), describe(at(normalized, 9, path)),
+            "Owner boundary count does not match its page distribution mode");
     }
-    if (normalized.items.size() < 10 + count * 4) {
-        fail("OOF1102", std::string(path), "four boundary rows per Page", describe(normalized),
+    if (normalized.items.size() < 10 + boundary_page_count * 4) {
+        fail("OOF1102", std::string(path), "four boundary rows per stored Page area", describe(normalized),
             "Owner Page boundary table is truncated");
     }
     for (std::size_t page_index = 0; page_index < count; ++page_index) {
+        const auto boundary_index = separate_by_page ? page_index : 0;
         LV boundaries = list(std::vector<LV>(
-            normalized.items.begin() + static_cast<std::ptrdiff_t>(10 + page_index * 4),
-            normalized.items.begin() + static_cast<std::ptrdiff_t>(14 + page_index * 4)));
-        auto position = decode_page_position(boundaries, static_cast<std::uint32_t>(page_index), owner);
+            normalized.items.begin() + static_cast<std::ptrdiff_t>(10 + boundary_index * 4),
+            normalized.items.begin() + static_cast<std::ptrdiff_t>(14 + boundary_index * 4)));
+        auto position = decode_page_position(boundaries, static_cast<std::uint32_t>(boundary_index), owner);
         if (!position) throw DecodeFailure(position.diagnostics().front());
         pages[page_index].position.set(std::move(position.value()));
     }
-    auto expected = panel ? canonical_panel_payload(pages, *owner) :
+    auto expected = panel ? canonical_panel_payload(pages, *owner, separate_by_page) :
         canonical_root_panel_payload(8, 8, pages, owner);
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
@@ -2475,6 +2496,8 @@ DecodedOwnerPages decode_owner_pages(
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     model::PanelPayload decoded_panel;
     if (!auto_tab_order) decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+    if (panel && !separate_by_page)
+        decoded_panel.properties.set_explicit(model::PropertyId::from_name("SeparateByPage"), false);
     if (panel) {
         const auto base_path = child_path(child_path(path, 1), 0);
         const auto common = decode_common_control_base(normalized.items[0], base_path,
@@ -2525,10 +2548,10 @@ LV encode_owner_pages(
     std::int32_t width = 8,
     std::int32_t height = 8,
     const model::PropertySet& properties = {}) {
-    auto envelope = panel ? canonical_panel_payload(pages, *owner) :
+    auto envelope = panel ? canonical_panel_payload(pages, *owner, explicit_bool(properties, "SeparateByPage", true)) :
         canonical_root_panel_payload(width, height, pages, owner);
     if (panel) require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border"}, "$/Panel");
+        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage"}, "$/Panel");
     else require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
     envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
     if (panel) {
@@ -11918,7 +11941,7 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
                     require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border"}, child_path(path, ordinal) + "/Panel");
+                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage"}, child_path(path, ordinal) + "/Panel");
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");

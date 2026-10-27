@@ -160,6 +160,12 @@ void test_descriptors() {
         expect(property && property->storage_codec == StorageCodec::control_base,
             std::string("Panel common property must have a base codec: ") + name);
     }
+    const auto* separate_by_page = find_property(ControlKind::panel, "SeparateByPage");
+    expect(separate_by_page && separate_by_page->storage_codec == StorageCodec::control_info &&
+        separate_by_page->value_codec == ValueCodec::boolean &&
+        separate_by_page->default_value.kind == DefaultKind::boolean &&
+        separate_by_page->default_value.canonical == "true",
+        "Panel SeparateByPage must use the observed boolean default and control-info storage");
     const auto* panel_tabs = find_property(ControlKind::panel, "ShowTabs");
     expect(panel_tabs && panel_tabs->storage_codec == StorageCodec::control_info &&
         panel_tabs->value_codec == ValueCodec::enumeration &&

@@ -14909,6 +14909,78 @@ void test_owned_panel_common_properties_and_page_event() {
     }
 }
 
+void test_panel_shared_page_position_round_trip() {
+    for (const std::size_t count : {2U, 3U}) for (const bool separate : {true, false}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "PanelPagePosition";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode panel{model::ObjectId{2}, "Tabs", model::PanelPayload{}};
+        if (!separate) panel.properties().set_explicit(model::PropertyId::from_name("SeparateByPage"), false);
+        for (std::size_t index = 0; index < count; ++index) {
+            model::Page page;
+            page.id = model::ObjectId{3 + index};
+            page.name = "Page" + std::to_string(index);
+            model::Position position;
+            position.left.set(6);
+            position.top.set(7);
+            position.width.set(200 + (separate ? static_cast<std::int32_t>(index) : 0));
+            position.height.set(100);
+            for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+                model::AnchorBinding binding;
+                binding.coordinate = edge;
+                binding.target_coordinate = edge;
+                binding.target = model::ControlRef{model::ObjectId{2}};
+                binding.offset.set(-6);
+                position.bindings.anchors.push_back(std::move(binding));
+            }
+            page.position.set(std::move(position));
+            if (index == 0) page.children = {model::ControlRef{model::ObjectId{20}}};
+            panel.children.push_back(model::PageRef{page.id});
+            document.add_page(std::move(page));
+        }
+        document.add_control(std::move(panel));
+        document.add_control(model::ControlNode{model::ObjectId{20}, "Inner", model::ButtonPayload{}});
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        const auto decoded = form_stream::decode_document(encoded.value(), "PanelPagePosition");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            decoded ? "Panel page position must decode completely" : decoded.diagnostics().front().message);
+        const auto* restored = decoded.value().find_control(model::ObjectId{2});
+        expect(restored && restored->children.size() == count, "Panel must retain every page");
+        const auto* property = restored->properties().find(model::PropertyId::from_name("SeparateByPage"));
+        expect(separate ? property == nullptr : property && !std::get<bool>(property->value),
+            "Panel must retain its independent or shared page position mode");
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto* ref = std::get_if<model::PageRef>(&restored->children[index]);
+            const auto* page = ref ? decoded.value().find_page(ref->id()) : nullptr;
+            expect(page && page->position.value().left.value() == 6 && page->position.value().top.value() == 7 &&
+                page->position.value().width.value() == 200 + (separate ? static_cast<std::int32_t>(index) : 0) &&
+                page->position.value().height.value() == 100 && page->position.value().bindings.anchors.size() == 2,
+                "every Page must retain its named rectangle and owner constraints");
+        }
+        expect(decoded.value().find_control(model::ObjectId{20}) != nullptr,
+            "shared or separate page geometry must retain the nested control");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "Panel page position must serialize to named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "Panel page position XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "shared and separate page positions must rebuild without storage drift");
+        if (!separate) {
+            auto inconsistent = document;
+            auto* second = const_cast<model::Page*>(inconsistent.find_page(model::ObjectId{4}));
+            auto position = second->position.value();
+            position.width.set(201);
+            second->position.set(std::move(position));
+            expect(!form_stream::encode_document(inconsistent).ok(),
+                "different page rectangles cannot represent one shared panel position");
+        }
+    }
+}
+
 void test_recursive_panel_pages_keep_owner_geometry_separate() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -18032,6 +18104,7 @@ int main() {
         test_owned_panel_colors_and_repeated_background();
         test_owned_panel_auto_tab_order_round_trip();
         test_owned_panel_common_properties_and_page_event();
+        test_panel_shared_page_position_round_trip();
         test_recursive_panel_pages_keep_owner_geometry_separate();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
