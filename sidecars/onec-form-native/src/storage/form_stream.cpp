@@ -1,3 +1,4 @@
+#include "../model/chart_type.hpp"
 #include "oof/storage/form_stream.hpp"
 
 #include <algorithm>
@@ -6215,6 +6216,16 @@ constexpr std::array chart_boolean_properties{
 
 LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
     const model::PropertySet& properties = {}) {
+    int chart_type = 4;
+    if (const auto* entry = properties.find(model::PropertyId::from_name("ChartType"))) {
+        const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
+        if (!value || value->type_name != "ChartType")
+            fail("OOF1122", "$/Chart/ChartType", "ChartType enumeration", "different value type", "ChartType has the wrong type");
+        const auto found = std::ranges::find(model::detail::chart_type_members, value->member, &decltype(model::detail::chart_type_members)::value_type::first);
+        if (found == model::detail::chart_type_members.end())
+            fail("OOF1122", "$/Chart/ChartType", "known ChartType member", value->member, "ChartType member is unsupported");
+        chart_type = found->second;
+    }
     const auto series_count = chart.series.size();
     const auto point_count = chart.points.size();
     const auto expected = chart_info_item_count(series_count, point_count, "$/Chart/Info");
@@ -6258,6 +6269,10 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
             "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
     }
     auto summary_row = canonical_chart_series_defaults();
+    constexpr std::array line_color_types{0, 1, 14, 15, 26, 33, 35, 43, 44};
+    if (std::ranges::find(line_color_types, chart_type) != line_color_types.end()) {
+        summary_row[0].items[2].items[0] = raw("8874375");
+    }
     if (chart.summary_series.marker.member == "Rhomb") summary_row[2] = raw("3");
     if (chart.summary_series.color.kind == model::ColorKind::absolute) {
         summary_row[0] = encode_chart_color_property(chart.summary_series.color, "$/Chart/SummarySeries/Color");
@@ -6274,6 +6289,7 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title,
         append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_color_property(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], row[9], raw("0")});
     }
     auto middle = canonical_chart_middle_defaults();
+    middle[2] = raw(std::to_string(chart_type));
     if (middle.size() <= 11) fail("OOF1122", "$/Chart/Title", "canonical Chart title slot", std::to_string(middle.size()), "Chart defaults do not contain the title slot");
     middle[11] = encoded_localized(title);
     append(std::move(middle));
@@ -6405,7 +6421,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
-        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont"}, "$/Chart");
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     std::string title;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
@@ -6570,6 +6586,13 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     payload.summary_series.marker = summary_marker;
     payload.summary_series.color = summary_color;
     model::PropertySet properties;
+    const auto type_path = child_path(info_path, middle_start + 2);
+    const auto type_ordinal = integer_atom<int>(at(info, middle_start + 2, info_path), type_path);
+    const auto type_member = std::ranges::find(model::detail::chart_type_members, type_ordinal, &decltype(model::detail::chart_type_members)::value_type::second);
+    if (type_member == model::detail::chart_type_members.end())
+        fail("OOF1115", type_path, "known ChartType ordinal", std::to_string(type_ordinal), "ChartType ordinal is unsupported");
+    if (type_ordinal != 4)
+        properties.set_explicit(model::PropertyId::from_name("ChartType"), model::EnumerationValue{"ChartType", std::string(type_member->first)});
     const auto [back_first, back_second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count));
     const auto back_color = decode_chart_back_color(info, back_first, back_second, info_path);
     if (back_color != chart_back_color_default()) properties.set_explicit(model::PropertyId::from_name("BackColor"), back_color);

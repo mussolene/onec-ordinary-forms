@@ -1,3 +1,4 @@
+#include "../src/model/chart_type.hpp"
 #include <array>
 #include <exception>
 #include <iostream>
@@ -677,6 +678,53 @@ void test_chart_integer_and_delimiter_descriptors() {
             property->value_codec == ValueCodec::integer32 && property->default_value.kind == DefaultKind::integer &&
             property->default_value.canonical == default_value, "Chart integer descriptor must match platform storage and default");
     }
+}
+
+void test_chart_type_property() {
+    using namespace oof::model::metamodel;
+    const auto* descriptor = find_property(ControlKind::chart, "ChartType");
+    expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+               descriptor->storage_codec == StorageCodec::control_info && descriptor->value_codec == ValueCodec::enumeration &&
+               descriptor->default_value.kind == DefaultKind::enumeration && descriptor->default_value.canonical == "ChartType.Column",
+        "ChartType must have its observed descriptor and default");
+    Form form;
+    form.id = ObjectId{1};
+    form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_control(ControlNode{ObjectId{2}, "Chart", ChartPayload{}});
+    const auto chart = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{2}};
+    const auto property = PropertyId::from_name("ChartType");
+    const auto default_value = document.get_prop_val(chart, property);
+    expect(default_value.status == PropertyReadStatus::proven_default && default_value.value &&
+               *default_value.value == PropertyValue{EnumerationValue{"ChartType", "Column"}},
+        "ChartType default must be Column");
+    expect(detail::chart_type_members.size() == 47, "ChartType must expose 47 mapped values");
+    std::set<int> ordinals;
+    std::set<std::string_view> names;
+    for (const auto& [name, ordinal] : detail::chart_type_members) {
+        expect(ordinals.insert(ordinal).second && ordinal >= 0 && ordinal < 47 && names.insert(name).second,
+            "ChartType mappings must be unique and cover the ordinal domain");
+        const EnumerationValue value{"ChartType", std::string(name)};
+        expect(document.set_prop_val(chart, property, value) == PropertyMutationStatus::applied,
+            "each mapped ChartType must be accepted by the property API");
+        const auto read = document.get_prop_val(chart, property);
+        expect(read.value && *read.value == PropertyValue{value} && document.validate().ok(),
+            "each mapped ChartType must be readable and valid");
+    }
+    for (const auto& invalid : {EnumerationValue{"ChartType", "Unknown"}, EnumerationValue{"OtherType", "Column"}}) {
+        expect(document.set_prop_val(chart, property, invalid) == PropertyMutationStatus::invalid_value,
+            "ChartType must reject an invalid name or type in the property API");
+        Form invalid_form;
+        invalid_form.id = ObjectId{1};
+        invalid_form.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        ControlNode invalid_chart{ObjectId{2}, "Chart", ChartPayload{}};
+        invalid_chart.properties().set_explicit(property, invalid);
+        invalid_document.add_control(std::move(invalid_chart));
+        expect(invalid_document.validate().has(InvariantCode::invalid_property), "ChartType validation must reject an invalid name or type");
+    }
+    expect(document.set_prop_val(chart, property, true) == PropertyMutationStatus::invalid_value,
+        "ChartType must reject a non-enumeration value");
 }
 
 void test_chart_appearance_defaults() {
@@ -2337,6 +2385,7 @@ int main() {
         test_progress_bar_storage_descriptors();
         test_track_bar_storage_descriptors();
         test_chart_integer_and_delimiter_descriptors();
+        test_chart_type_property();
         test_chart_appearance_defaults();
         test_help_metamodel();
         test_shared_control_default_classifications();

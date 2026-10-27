@@ -1,3 +1,4 @@
+#include "../src/model/chart_type.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -14890,6 +14891,90 @@ void test_embedded_chart_typed_variants_and_guards() {
     }
 }
 
+void test_chart_type_roundtrip() {
+    for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
+        for (const auto& [name, ordinal] : model::detail::chart_type_members) {
+            for (const bool absolute : {false, true}) {
+                model::Form form; form.id = model::ObjectId{1}; form.name = "ChartTypes";
+                form.children = {model::ControlRef{model::ObjectId{2}}};
+                model::OrdinaryFormDocument document(std::move(form));
+                model::ChartPayload payload;
+                if (absolute) {
+                    payload.summary_series.color.kind = model::ColorKind::absolute;
+                    payload.summary_series.color.red = 153; payload.summary_series.color.green = 25;
+                    payload.summary_series.color.blue = 25;
+                }
+                for (unsigned s = 0; s < series_count; ++s) {
+                    model::ChartSeries series; series.id = model::ObjectId{10 + s};
+                    series.text = "Series" + std::to_string(s); series.color.kind = model::ColorKind::absolute;
+                    series.color.red = static_cast<std::uint8_t>(s + 1); series.marker = {"ChartMarkerType", "Auto"};
+                    payload.series.push_back(std::move(series));
+                }
+                for (unsigned p = 0; p < point_count; ++p) {
+                    model::ChartPoint point; point.id = model::ObjectId{20 + p};
+                    point.text = "Point" + std::to_string(p); point.color.kind = model::ColorKind::absolute;
+                    point.color.blue = static_cast<std::uint8_t>(p + 1); payload.points.push_back(std::move(point));
+                }
+                for (const auto& series : payload.series) for (const auto& point : payload.points)
+                    payload.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+                const auto original_payload = payload;
+                model::ControlNode chart{model::ObjectId{2}, "Chart", std::move(payload)};
+                chart.properties().set_explicit(model::PropertyId::from_name("ChartType"),
+                    model::EnumerationValue{"ChartType", std::string(name)});
+                chart.events.push_back(model::EventRef{model::ObjectId{100}});
+                document.add_event(model::Event{model::ObjectId{100}, "Selection", "OnSelection", model::ControlRef{model::ObjectId{2}}});
+                document.add_control(std::move(chart));
+                auto encoded = form_stream::encode_document(document);
+                expect(encoded.ok(), "ChartType must encode with both SummarySeries colors and events");
+                const auto middle = std::size_t{18} + 11 * (series_count + point_count);
+                expect(find_chart_record(encoded.value())->items[3].items[middle + 2].atom == std::to_string(ordinal),
+                    "ChartType native ordinal must match the observed mapping");
+                const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+                expect(decoded.ok() && decoded.value().reconstruction_complete(), "ChartType must decode completely");
+                const auto* control = decoded.value().find_control(model::ObjectId{2});
+                const auto read = decoded.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+                    model::PropertyId::from_name("ChartType"));
+                expect(control && read.value && *read.value == model::PropertyValue{model::EnumerationValue{"ChartType", std::string(name)}},
+                    "ChartType must retain its named value");
+                const auto& restored = std::get<model::ChartPayload>(control->payload);
+                expect(restored.summary_series.color == original_payload.summary_series.color &&
+                    restored.series.size() == original_payload.series.size() && restored.points.size() == original_payload.points.size() &&
+                    restored.values.size() == original_payload.values.size(), "Chart data and SummarySeries Color must survive");
+                for (std::size_t i = 0; i < restored.series.size(); ++i) {
+                    const auto& a = restored.series[i]; const auto& b = original_payload.series[i];
+                    expect(a.id == b.id && a.text == b.text && a.color == b.color && a.marker == b.marker,
+                        "Chart series must retain their data");
+                }
+                for (std::size_t i = 0; i < restored.points.size(); ++i) {
+                    const auto& a = restored.points[i]; const auto& b = original_payload.points[i];
+                    expect(a.id == b.id && a.text == b.text && a.color == b.color, "Chart points must retain their data");
+                }
+                for (std::size_t i = 0; i < restored.values.size(); ++i) {
+                    const auto& a = restored.values[i]; const auto& b = original_payload.values[i];
+                    expect(a.series_ref == b.series_ref && a.point_ref == b.point_ref && a.value == b.value && a.tooltip == b.tooltip,
+                        "Chart values must retain their data");
+                }
+                expect(control->events.size() == 1, "Chart Selection event must survive");
+                const auto* event = decoded.value().find_event(control->events.front().id());
+                expect(event && event->name == "Selection" && event->handler == "OnSelection" &&
+                    std::holds_alternative<model::ControlRef>(event->owner) &&
+                    std::get<model::ControlRef>(event->owner).id() == model::ObjectId{2},
+                    "Chart Selection handler and owner must survive");
+                const auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "ChartType must serialize to XML");
+                const auto reparsed = source::parse_form_xml(xml.value());
+                expect(reparsed.ok(), "ChartType XML must parse");
+                const auto rebuilt = form_stream::encode_document(reparsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                    "ChartType XML and native storage must rebuild without drift");
+                auto invalid = encoded.value();
+                find_chart_record(invalid)->items[3].items[middle + 2] = list_stream::ListValue::raw_atom("47");
+                expect(!form_stream::decode_document(invalid, "Main"), "unknown ChartType ordinal must fail");
+            }
+        }
+    }
+}
+
 void test_chart_named_boolean_properties() {
     constexpr std::array cases{
         std::pair{"Transparent", false}, std::pair{"AutoSeriesText", true},
@@ -16999,6 +17084,7 @@ int main() {
         test_independent_tab_order_observed_geometry_and_guards();
         test_chart_value_tooltip_named_pair_and_xml_text();
         test_embedded_chart_typed_variants_and_guards();
+        test_chart_type_roundtrip();
         test_chart_named_boolean_properties();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();

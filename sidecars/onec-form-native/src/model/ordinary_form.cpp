@@ -1,3 +1,4 @@
+#include "chart_type.hpp"
 #include "oof/model/ordinary_form.hpp"
 
 #include <array>
@@ -133,6 +134,10 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::type_domain;
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 if (expected != metamodel::ValueCodec::enumeration) return false;
+                if (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ChartType") {
+                    return typed_value.type_name == "ChartType" &&
+                        std::ranges::any_of(detail::chart_type_members, [&](const auto& member) { return member.first == typed_value.member; });
+                }
                 if (descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") {
                     return typed_value.type_name == "SpreadsheetDocumentSelectionShowModeType" &&
                         (typed_value.member == "WhenActive" || typed_value.member == "Always");
@@ -227,7 +232,8 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
-    if ((descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") ||
+    if ((descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ChartType") ||
+        (descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") ||
         (descriptor.control_kind == ControlKind::panel && descriptor.api_name == "ShowTabs") ||
         (descriptor.control_kind == ControlKind::command_bar &&
          (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) ||

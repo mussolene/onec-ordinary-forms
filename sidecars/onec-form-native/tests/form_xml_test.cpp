@@ -1,3 +1,4 @@
+#include "../src/model/chart_type.hpp"
 #include <array>
 #include <exception>
 #include <iostream>
@@ -2344,6 +2345,40 @@ void test_command_bar_border_xml_contract() {
     expect(!source::serialize_form_xml(document_with_border(invalid)).ok(), "writer must reject style Border without a reference");
 }
 
+void test_chart_type_xml() {
+    const auto xml = [](std::string_view property) {
+        return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Chart id=\"2\" name=\"Chart\"><Position/>") +
+            std::string(property) + "<Series/><Points/><Values/></Chart></ChildItems></Form>";
+    };
+    const auto property_id = model::PropertyId::from_name("ChartType");
+    for (const auto& [name, ordinal] : model::detail::chart_type_members) {
+        static_cast<void>(ordinal);
+        const auto input = xml("<ChartType type=\"ChartType\" member=\"" + std::string(name) + "\"/>");
+        const auto parsed = source::parse_form_xml(input);
+        expect(parsed.ok(), "every known ChartType must parse from XML");
+        const auto value = parsed.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}}, property_id);
+        expect(value.value && *value.value == model::PropertyValue{model::EnumerationValue{"ChartType", std::string(name)}},
+            "ChartType XML must expose its named value");
+        const auto written = source::serialize_form_xml(parsed.value());
+        expect(written.ok(), "every known ChartType must serialize to XML");
+        const auto reparsed = source::parse_form_xml(written.value());
+        expect(reparsed.ok(), "serialized ChartType must parse again");
+        const auto roundtrip = reparsed.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}}, property_id);
+        expect(roundtrip.value && *roundtrip.value == *value.value, "ChartType value must survive XML roundtrip");
+    }
+    for (const auto invalid : {"<ChartType type=\"ChartType\" member=\"Unknown\"/>",
+             "<ChartType type=\"OtherType\" member=\"Column\"/>", "<ChartType type=\"ChartType\"/>",
+             "<ChartType type=\"ChartType\" member=\"Column\"/><ChartType type=\"ChartType\" member=\"Line\"/>"}) {
+        expect(!source::parse_form_xml(xml(invalid)).ok(), "invalid or duplicate ChartType XML must fail");
+    }
+    const auto omitted = source::parse_form_xml(xml(""));
+    expect(omitted.ok(), "ChartType can be omitted");
+    const auto default_value = omitted.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}}, property_id);
+    expect(default_value.status == model::PropertyReadStatus::proven_default && default_value.value &&
+        *default_value.value == model::PropertyValue{model::EnumerationValue{"ChartType", "Column"}},
+        "omitted ChartType must use Column");
+}
+
 void test_chart_summary_series_color_xml() {
     const auto xml = [](std::string_view summary) {
         return std::string("<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Chart id=\"2\" name=\"Chart\"><Position/>") +
@@ -2555,6 +2590,7 @@ int main() {
         test_runtime_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
+        test_chart_type_xml();
         test_chart_summary_series_color_xml();
         test_complete_document_roundtrip();
         test_usual_group_named_xml_round_trip();
