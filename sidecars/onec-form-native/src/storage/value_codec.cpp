@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cctype>
 #include <cstdint>
 #include <cmath>
 #include <limits>
@@ -47,6 +48,45 @@ std::string canonical_decimal(std::string_view text) {
     if (!fraction.empty()) { result.push_back('.'); result.append(fraction); }
     return result;
 }
+std::string canonical_platform_decimal(std::string_view text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) text.remove_prefix(1);
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.remove_suffix(1);
+    const auto marker = text.find_first_of("eE");
+    if (marker == std::string_view::npos) return canonical_decimal(text);
+    auto exponent_text = text.substr(marker + 1);
+    if (!exponent_text.empty() && exponent_text.front() == '+') {
+        exponent_text.remove_prefix(1);
+        if (!exponent_text.empty() && (exponent_text.front() == '-' || exponent_text.front() == '+'))
+            throw std::invalid_argument("invalid platform decimal exponent sign");
+    }
+    int exponent = 0;
+    const auto parsed = std::from_chars(exponent_text.data(), exponent_text.data() + exponent_text.size(), exponent);
+    if (exponent_text.empty() || parsed.ec != std::errc{} || parsed.ptr != exponent_text.data() + exponent_text.size() ||
+        exponent < -4096 || exponent > 4096)
+        throw std::invalid_argument("invalid or excessive platform decimal exponent");
+    auto mantissa = canonical_decimal(text.substr(0, marker));
+    const bool negative = mantissa.front() == '-';
+    if (negative) mantissa.erase(0, 1);
+    const auto point = mantissa.find('.');
+    const auto integer_size = point == std::string::npos ? mantissa.size() : point;
+    if (point != std::string::npos) mantissa.erase(point, 1);
+    const auto shifted = static_cast<std::int64_t>(integer_size) + exponent;
+    std::string expanded = negative ? "-" : "";
+    if (shifted <= 0) {
+        expanded += "0.";
+        expanded.append(static_cast<std::size_t>(-shifted), '0');
+        expanded += mantissa;
+    } else if (static_cast<std::size_t>(shifted) >= mantissa.size()) {
+        expanded += mantissa;
+        expanded.append(static_cast<std::size_t>(shifted) - mantissa.size(), '0');
+    } else {
+        expanded.append(mantissa, 0, static_cast<std::size_t>(shifted));
+        expanded += '.';
+        expanded.append(mantissa, static_cast<std::size_t>(shifted), std::string::npos);
+    }
+    return canonical_decimal(expanded);
+}
+
 namespace {
 
 constexpr std::uint32_t localized_string_version = 1;

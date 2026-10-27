@@ -1235,6 +1235,15 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     expect(attribute(summary_properties[1], "apiName") == "Marker" && attribute(summary_properties[1], "russianName") == "Маркер" &&
         attribute(summary, "evidenceRefs").find("ev_0bf2de977ee74d0e8e69e117b819f78c") != std::string::npos,
         "SummarySeries Marker palette must retain proven API provenance");
+    xmlNodePtr table_column = direct_child_with_attribute(palette, "NamedConcept", "name", "TableColumn");
+    xmlNodePtr column_properties = direct_child(table_column, "Properties");
+    xmlNodePtr column_width = direct_child_with_attribute(column_properties, "Property", "name", "Width");
+    xmlNodePtr column_font = direct_child_with_attribute(column_properties, "Property", "name", "TextFont");
+    expect(column_width != nullptr && attribute(column_width, "russianName") == "Ширина" &&
+        attribute(column_width, "russianType") == "Число" && attribute(column_width, "unit") == "form",
+        "column width palette must declare layout units and its Russian platform name");
+    expect(column_font != nullptr && attribute(column_font, "russianName") == "ШрифтТекста" &&
+        attribute(column_font, "russianType") == "Шрифт", "column font palette must declare the platform name and type");
     xmlNodePtr command_button = direct_child_with_attribute(palette, "NamedConcept", "name", "CommandBarButton");
     xmlNodePtr command_button_properties = direct_child(command_button, "Properties");
     const auto command_properties = direct_children(command_button_properties, "Property");

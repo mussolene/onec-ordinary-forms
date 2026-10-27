@@ -1854,6 +1854,14 @@
       <xs:enumeration value="CheckBox"/>
     </xs:restriction>
   </xs:simpleType>
+  <xs:simpleType name="TableColumnWidthValueType"><xs:restriction base="xs:decimal"><xs:minInclusive value="0"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="TableColumnWidthType">
+    <xs:simpleContent>
+      <xs:extension base="TableColumnWidthValueType">
+        <xs:attribute name="unit" type="xs:string" use="required" fixed="form"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
   <xs:complexType name="TableColumnControlType">
     <xs:sequence>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
@@ -1869,6 +1877,8 @@
     <xs:sequence>
       <xs:element name="DataPath" type="xs:string" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Header" type="LocalizedStringValueType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Width" type="TableColumnWidthType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Control" type="TableColumnControlType" minOccurs="1" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

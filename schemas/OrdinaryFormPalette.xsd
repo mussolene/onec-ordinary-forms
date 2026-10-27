@@ -1076,7 +1076,9 @@
         </Properties></NamedConcept>
         <NamedConcept name="TableColumn" russianName="КолонкаТабличногоПоля"><Properties>
           <Property name="Name" russianName="Имя"/><Property name="DataPath" russianName="Данные"/>
-          <Property name="Header" russianName="ТекстШапки"/><Property name="Control" russianName="ЭлементУправления"/>
+          <Property name="Header" russianName="ТекстШапки"/>
+          <Property name="Width" russianName="Ширина" russianType="Число" unit="form"/><Property name="TextFont" russianName="ШрифтТекста" russianType="Шрифт"/>
+          <Property name="Control" russianName="ЭлементУправления"/>
         </Properties></NamedConcept>
         <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/>

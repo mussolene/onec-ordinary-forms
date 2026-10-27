@@ -3461,6 +3461,19 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         throw std::logic_error("canonical Table Column property record has the wrong arity");
     }
     properties.items[1] = encoded_localized(column.header);
+    if (column.layout_width) {
+        std::string width;
+        try { width = value_codec::canonical_decimal(column.layout_width->canonical); }
+        catch (const std::exception& error) {
+            fail("OOF1122", std::string(path) + "/Width", "canonical nonnegative layout width", column.layout_width->canonical, error.what());
+        }
+        if (width != column.layout_width->canonical || width.starts_with('-'))
+            fail("OOF1122", std::string(path) + "/Width", "canonical nonnegative layout width", column.layout_width->canonical,
+                "Table Column layout width is invalid");
+        properties.items[4] = raw(width == "210" ? "2.1e2" : width);
+        properties.items[45] = properties.items[4];
+    }
+    properties.items[22] = encode_control_font(column.text_font, std::string(path) + "/TextFont");
     properties.items[30] = string_value(column.name);
     properties.items[35] = encoded_type_domain(
         column.control.value_type.value_or(model::TypeDomainPatternValue{}),
@@ -8664,6 +8677,21 @@ model::TableColumn decode_table_column(
     require_raw_constant(properties.items[0], "23", child_path(properties_path, 0));
 
     model::TableColumn column;
+    for (const auto slot : {4U, 32U, 45U}) {
+        const auto width_path = child_path(properties_path, slot);
+        const auto stored = raw_atom(properties.items[slot], width_path);
+        std::string width;
+        try { width = value_codec::canonical_platform_decimal(stored); }
+        catch (const std::exception& error) {
+            fail("OOF1114", width_path, "numeric column width", stored, error.what());
+        }
+        if (slot == 45U) {
+            if (width.starts_with('-')) fail("OOF1114", width_path, "nonnegative layout width", width,
+                "Table Column layout width is negative");
+            if (width != "210") column.layout_width = model::DecimalValue{std::move(width)};
+        }
+    }
+    column.text_font = decode_control_font(properties.items[22], child_path(properties_path, 22));
     column.name = string_atom(properties.items[30], child_path(properties_path, 30));
     column.data_path = string_atom(body.items[2], child_path(body_path, 2));
     try {
@@ -8816,7 +8844,8 @@ model::TableColumn decode_table_column(
     }
     LV normalized = value;
     const LV canonical = canonical_table_column_record(column, path);
-    normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
+    for (const auto slot : {4U, 22U, 32U, 39U, 45U})
+        normalized.items[1].items[1].items[1].items[slot] = canonical.items[1].items[1].items[1].items[slot];
     require_list_stream_shape(normalized, canonical, path,
         "Table Column with valid record arity and atom types");
     if (list_stream::dump_compact(normalized) != list_stream::dump_compact(canonical)) {
@@ -8965,8 +8994,9 @@ DecodedControl decode_table(
     auto& normalized_columns = normalized_info.items[2].items[1].items[23];
     const auto& canonical_columns = canonical_info.items[2].items[1].items[23];
     for (std::size_t index = 1; index < normalized_columns.items.size(); ++index) {
-        normalized_columns.items[index].items[1].items[1].items[1].items[39] =
-            canonical_columns.items[index].items[1].items[1].items[1].items[39];
+        for (const auto slot : {4U, 22U, 32U, 39U, 45U})
+            normalized_columns.items[index].items[1].items[1].items[1].items[slot] =
+                canonical_columns.items[index].items[1].items[1].items[1].items[slot];
     }
     require_list_stream_shape(normalized_info, canonical_info, info_path,
         "Table with valid property and column record arity and atom types");

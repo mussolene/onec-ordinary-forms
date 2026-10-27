@@ -1723,6 +1723,17 @@ ValidationReport OrdinaryFormDocument::validate() const {
             }
             std::set<std::string> column_names;
             for (const auto& column : table->columns) {
+                if (column.layout_width) {
+                    try {
+                        const auto width = storage::value_codec::canonical_decimal(column.layout_width->canonical);
+                        if (width != column.layout_width->canonical || width.starts_with('-'))
+                            invalid_table("Table Column layout width must be a canonical nonnegative decimal");
+                    } catch (const std::exception&) {
+                        invalid_table("Table Column layout width is invalid");
+                    }
+                }
+                try { (void)storage::value_codec::encode_font(column.text_font); }
+                catch (const std::exception&) { invalid_table("Table Column TextFont is invalid"); }
                 if (column.name.empty() || !column_names.insert(column.name).second) {
                     invalid_table("Table Column names must be non-empty and unique");
                 }

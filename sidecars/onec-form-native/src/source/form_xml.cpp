@@ -2088,6 +2088,31 @@ private:
                 } else if (field_name == "Header") {
                     column.header = parse_localized_string(field);
                     header_seen = true;
+                } else if (field_name == "Width") {
+                    for (xmlAttrPtr attr = field->properties; attr != nullptr; attr = attr->next) {
+                        const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                        if (attr_name != "unit") {
+                            fail("OOF2003", field, std::string(owner), std::string(attr_name),
+                                "unit attribute", std::string(attr_name), "Unsupported Table Column Width attribute");
+                        }
+                    }
+                    const std::string unit = required_attribute(field, "unit", owner);
+                    if (unit != "form") {
+                        fail("OOF2003", field, std::string(owner), "unit", "form", unit,
+                            "Table Column Width unit must be form");
+                    }
+                    for (xmlNodePtr child : element_children(field)) {
+                        fail("OOF2003", child, std::string(owner), "Width", "decimal text", node_name(child),
+                            "Table Column Width cannot contain child elements");
+                    }
+                    std::string width = canonical_decimal(node_text(field), field, "Width", owner);
+                    if (width.front() == '-') {
+                        fail("OOF2003", field, std::string(owner), "Width", "non-negative decimal", width,
+                            "Table Column Width cannot be negative");
+                    }
+                    column.layout_width = model::DecimalValue{std::move(width)};
+                } else if (field_name == "TextFont") {
+                    column.text_font = parse_font(field);
                 } else if (field_name == "Control") {
                     for (xmlAttrPtr attr = field->properties; attr != nullptr; attr = attr->next) {
                         const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
@@ -2164,7 +2189,7 @@ private:
                     control_seen = true;
                 } else {
                     fail("OOF2003", field, std::string(owner), field_name,
-                        "DataPath, Header, and Control", field_name, "Unsupported Table Column field");
+                        "DataPath, Header, Width, TextFont, and Control", field_name, "Unsupported Table Column field");
                 }
             }
             if (!data_path_seen || !header_seen || !control_seen || column.data_path.empty() || column.header.items.empty()) {
@@ -3691,6 +3716,15 @@ private:
             writer_.open("Column", {{"name", column.name}});
             writer_.text("DataPath", column.data_path);
             write_localized("Header", column.header, owner);
+            if (column.layout_width) {
+                const std::string width = canonical_decimal(column.layout_width->canonical, nullptr, "Width", owner);
+                if (width.front() == '-') {
+                    serialization_fail(std::string(owner), "Width", "non-negative decimal", width,
+                        "Table Column Width cannot be negative");
+                }
+                writer_.text("Width", width, {{"unit", "form"}});
+            }
+            if (column.text_font != model::FontValue{}) write_font("TextFont", column.text_font, owner);
             writer_.open("Control", {{"type", std::string(control_type)}});
             if (column.control.value_type.has_value()) {
                 if (column.control.kind != model::ControlKind::input_field) {

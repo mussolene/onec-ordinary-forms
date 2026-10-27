@@ -531,6 +531,17 @@ void test_platform_date_codec() {
 }
 
 void test_canonical_decimal() {
+    for (const auto& [input, expected] : std::array{
+             std::pair{"2.1e2", "210"}, std::pair{"-1.25E+3", "-1250"},
+             std::pair{"1e-3", "0.001"}, std::pair{"0.0001e2", "0.01"},
+             std::pair{"123456789012345678901234567890.125e-2", "1234567890123456789012345678.90125"}})
+        expect(codec::canonical_platform_decimal(input) == expected, "native exponent must expand without decimal precision loss");
+    for (const auto input : {"1e", "1e+", "1e+-2", "1e++2", "1e2e3", "1e999999999", "1e4097", "1e-4097", "nan"}) {
+        bool rejected = false;
+        try { (void)codec::canonical_platform_decimal(input); } catch (const std::invalid_argument&) { rejected = true; }
+        expect(rejected, "invalid or excessive native decimal exponent must fail");
+    }
+
     expect(codec::canonical_decimal("  +00012.37500\n") == "12.375",
         "shared decimal canonicalization must preserve arbitrary precision and normalize lexical form");
     expect(codec::canonical_decimal("-0.000") == "0",

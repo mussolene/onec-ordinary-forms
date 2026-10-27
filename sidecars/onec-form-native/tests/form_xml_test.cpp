@@ -1478,6 +1478,55 @@ void test_table_columns_named_profile() {
     expect(!source::parse_form_xml(dangling_source).ok(), "Table source must reject a dangling attribute link");
 }
 
+void test_table_column_layout_xml() {
+    const auto make_xml = [](std::string_view width, std::string_view font) {
+        return std::string(R"XML(<Form id="1" name="LayoutForm" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header>)XML") +
+            std::string(width) + std::string(font) +
+            R"XML(<Control type="InputField"/></Column></Columns></Table></ChildItems></Form>)XML";
+    };
+
+    const std::string layout_xml = make_xml(
+        R"XML(<Width unit="form">140</Width>)XML",
+        R"XML(<TextFont kind="absolute" faceName="Arial" height="10"/>)XML");
+    const auto parsed = source::parse_form_xml(layout_xml);
+    expect(parsed.ok(), parsed ? "Table Column layout width and TextFont must parse" :
+        parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* table = parsed.value().find_control(model::ObjectId{3});
+    expect(table != nullptr, "layout XML must expose the named Table");
+    const auto& column = std::get<model::TablePayload>(table->payload).columns.front();
+    expect(column.layout_width == model::DecimalValue{"140"} &&
+               column.text_font.kind == model::FontKind::absolute &&
+               column.text_font.face_name == "Arial" && column.text_font.height == 10.0,
+        "Table Column layout width and named font data must remain typed values");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Width unit=\"form\">140</Width>") != std::string::npos &&
+               serialized.value().find("<TextFont kind=\"absolute\" faceName=\"Arial\" height=\"10\"/>") != std::string::npos,
+        "Table Column layout values must serialize with the form unit and named font properties");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().find_control(model::ObjectId{3}) != nullptr &&
+               std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
+                       .columns.front().layout_width == column.layout_width &&
+               std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
+                       .columns.front().text_font == column.text_font,
+        "Table Column layout values must survive XML roundtrip");
+
+    const auto default_xml = source::parse_form_xml(make_xml("", R"XML(<TextFont kind="automatic"/>)XML"));
+    expect(default_xml.ok(), "automatic TextFont may be represented explicitly in XML");
+    const auto default_serialized = source::serialize_form_xml(default_xml.value());
+    expect(default_serialized.ok() && default_serialized.value().find("TextFont") == std::string::npos,
+        "explicit automatic TextFont must normalize to the omitted default");
+
+    for (const auto& [width, font, label] : std::array{
+             std::tuple<std::string_view, std::string_view, std::string_view>{"<Width>100</Width>", "", "missing Width unit"},
+             std::tuple<std::string_view, std::string_view, std::string_view>{"<Width unit=\"pixels\">100</Width>", "", "wrong Width unit"},
+             std::tuple<std::string_view, std::string_view, std::string_view>{"<Width unit=\"form\">-1</Width>", "", "negative Width"},
+             std::tuple<std::string_view, std::string_view, std::string_view>{"<Width unit=\"form\">not-a-number</Width>", "", "nonnumeric Width"},
+             std::tuple<std::string_view, std::string_view, std::string_view>{"", "<TextFont kind=\"automatic\" unexpected=\"true\"/>", "unknown TextFont property"}}) {
+        expect(!source::parse_form_xml(make_xml(width, font)).ok(),
+            std::string("Table Column must reject ") + std::string(label));
+    }
+}
+
 void test_inherited_property_has_one_surface() {
     constexpr std::string_view xml =
         "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -2925,6 +2974,7 @@ int main() {
         test_value_tree_type_domain_xml_roundtrip();
         test_table_enum_properties_xml();
         test_table_columns_named_profile();
+        test_table_column_layout_xml();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();
         test_strict_rejections();

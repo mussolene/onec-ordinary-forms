@@ -401,6 +401,125 @@ void test_captured_table_column_record() {
         "independent captured Table/Column record must re-encode exactly apart from recompressed editor bytes");
 }
 
+void test_table_column_layout_codec() {
+    auto seed = form_stream::decode_document(captured_table_payload(), "TableColumnLayout");
+    expect(seed.ok(), "captured Table fixture must decode for layout codec cases");
+    const auto table_it = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table_it != seed.value().collections().controls.end(), "captured Table fixture must expose Table");
+    const auto table_id = table_it->id;
+
+    struct FontCase { std::string_view name; model::FontValue value; };
+    model::FontValue default_font;
+    model::FontValue arial10;
+    arial10.kind = model::FontKind::absolute;
+    arial10.face_name = "Arial";
+    arial10.height = 10;
+    model::FontValue arial16 = arial10;
+    arial16.height = 16;
+    const std::array fonts{
+        FontCase{"automatic", default_font}, FontCase{"Arial10", arial10}, FontCase{"Arial16", arial16}};
+    const std::array<std::string_view, 4> widths{"0", "100", "140", "210"};
+    auto original_native = captured_table_payload();
+    const auto* original_record = find_record_with_guid(original_native,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(original_record != nullptr, "captured Table must provide the canonical default font slot");
+    const auto& original_font_slot = original_record->items[2].items[2].items[1].items[23].items[1]
+        .items[1].items[1].items[1].items[22];
+
+    for (const auto width : widths) {
+        for (const auto& font : fonts) {
+            auto document = seed.value();
+            auto* table = const_cast<model::ControlNode*>(document.find_control(table_id));
+            expect(table != nullptr, "Table fixture must remain addressable by ID");
+            auto& columns = std::get<model::TablePayload>(table->payload).columns;
+            expect(!columns.empty(), "captured Table must contain a Column");
+            columns.front().layout_width = model::DecimalValue{std::string(width)};
+            columns.front().text_font = font.value;
+
+            const auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), std::string("Table Column layout case must encode: ") +
+                std::string(width) + "/" + std::string(font.name));
+            auto native = encoded.value();
+            auto* record = find_record_with_guid(native,
+                model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            expect(record != nullptr, "encoded layout case must retain the Table record");
+            auto& native_columns = record->items[2].items[2].items[1].items[23].items;
+            auto& native_properties = native_columns.at(1).items[1].items[1].items[1].items;
+            const std::string expected_native_width = width == "210" ? "2.1e2" : std::string(width);
+            expect(!native_properties[45].is_list && native_properties[45].atom == expected_native_width,
+                "authoritative Table Column field 45 must encode the selected layout width");
+            if (font.name == "automatic") {
+                expect(list_stream::dump_compact(native_properties[22]) ==
+                           list_stream::dump_compact(original_font_slot),
+                    "automatic Table Column TextFont must use the canonical default field 22");
+            } else {
+                expect(list_stream::dump_compact(native_properties[22]) !=
+                           list_stream::dump_compact(original_font_slot),
+                    "absolute TextFont must be written to native field 22");
+            }
+
+            const auto decoded = form_stream::decode_document(encoded.value(), "TableColumnLayoutRoundtrip");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                "width and font case must decode with complete reconstruction");
+            const auto* roundtrip_table = decoded.value().find_control(table_id);
+            expect(roundtrip_table != nullptr, "roundtrip must retain the Table");
+            const auto& roundtrip_column = std::get<model::TablePayload>(roundtrip_table->payload).columns.front();
+            const std::optional<model::DecimalValue> expected_width = width == "210" ? std::nullopt :
+                std::optional<model::DecimalValue>{model::DecimalValue{std::string(width)}};
+            expect(roundtrip_column.layout_width == expected_width &&
+                       roundtrip_column.text_font == font.value,
+                "native roundtrip must preserve known Table Column width and TextFont semantics");
+        }
+    }
+
+    auto cache_mismatch = captured_table_payload();
+    auto* cache_record = find_record_with_guid(cache_mismatch,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(cache_record != nullptr, "cache mismatch fixture must contain Table");
+    auto& cache_properties = cache_record->items[2].items[2].items[1].items[23].items[1]
+        .items[1].items[1].items[1].items;
+    cache_properties[4] = list_stream::ListValue::raw_atom("999");
+    cache_properties[32] = list_stream::ListValue::raw_atom("998");
+    const auto cache_decoded = form_stream::decode_document(cache_mismatch, "TableColumnCacheMismatch");
+    expect(cache_decoded.ok() && cache_decoded.value().reconstruction_complete(),
+        "cached width fields 4 and 32 must not affect known semantic reconstruction");
+    const auto cache_encoded = form_stream::encode_document(cache_decoded.value());
+    expect(cache_encoded.ok(), "cache mismatch model must re-encode");
+    auto normalized = cache_encoded.value();
+    auto* normalized_record = find_record_with_guid(normalized,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(normalized_record != nullptr, "normalized result must contain Table");
+    const auto& normalized_properties = normalized_record->items[2].items[2].items[1].items[23].items[1]
+        .items[1].items[1].items[1].items;
+    const auto canonical_encoded = form_stream::encode_document(seed.value());
+    expect(canonical_encoded.ok(), "canonical Table model must encode for cache comparison");
+    auto canonical_native = canonical_encoded.value();
+    const auto* canonical_record = find_record_with_guid(canonical_native,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(canonical_record != nullptr, "canonical result must contain Table");
+    const auto& canonical_properties = canonical_record->items[2].items[2].items[1].items[23].items[1]
+        .items[1].items[1].items[1].items;
+    expect(list_stream::dump_compact(normalized_properties[4]) == list_stream::dump_compact(canonical_properties[4]) &&
+               list_stream::dump_compact(normalized_properties[32]) == list_stream::dump_compact(canonical_properties[32]),
+        "non-authoritative cached widths must normalize to canonical writer-generated values");
+
+    for (const auto& [slot, value, label] : std::array{
+             std::tuple<std::size_t, std::string_view, std::string_view>{45, "-1", "negative authoritative width"},
+             std::tuple<std::size_t, std::string_view, std::string_view>{45, "not-a-number", "nonnumeric authoritative width"},
+             std::tuple<std::size_t, std::string_view, std::string_view>{22, "malformed", "malformed TextFont"}}) {
+        auto malformed = captured_table_payload();
+        auto* record = find_record_with_guid(malformed,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr, "malformed layout fixture must contain Table");
+        auto& properties = record->items[2].items[2].items[1].items[23].items[1]
+            .items[1].items[1].items[1].items;
+        properties[slot] = list_stream::ListValue::raw_atom(std::string(value));
+        expect(!form_stream::decode_document(malformed, "MalformedTableColumnLayout"),
+            std::string("native decoder must reject ") + std::string(label));
+    }
+}
+
 void test_table_read_only_runtime_flags() {
     for (const bool read_only : {true, false}) {
         auto literal = captured_table_payload();
@@ -17502,6 +17621,7 @@ int main() {
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
+        test_table_column_layout_codec();
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();
         test_table_boolean_properties();
