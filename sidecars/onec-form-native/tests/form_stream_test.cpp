@@ -18931,6 +18931,9 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
             if (series == 0 && point == 0) xml += "<Undefined>undefined</Undefined>";
             else if (series == 0 && point == 1) xml += "<Number>0</Number>";
             else if (series == 4 && point == 2) xml += "<Number>-23.75</Number>";
+            else if (series == 1 && point == 0) xml += "<String>Text</String><Details><Number>-23.5</Number></Details><ToolTip>Hint</ToolTip>";
+            else if (series == 1 && point == 1) xml += "<Boolean>true</Boolean><Details><Boolean>false</Boolean></Details>";
+            else if (series == 1 && point == 2) xml += "<Date>2026-10-28T12:30:00</Date><Details><Date>2024-01-02T03:04:05</Date></Details>";
             else xml += "<Number>" + std::to_string(series * 3 + point + 1) + ".125</Number>";
             xml += "</ChartValue>";
         }
@@ -18952,6 +18955,12 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
            list_stream::dump_compact(platform_layout_info[point_start + 9]) == R"OOF({"S",""})OOF" &&
            list_stream::dump_compact(platform_layout_info[point_start + 8]) == R"OOF({"U"})OOF",
            "Chart series and point keys must use platform-observed row slot 9");
+    const auto data_start = point_start + point_ids.size() * 11 + 100;
+    const auto string_cell = data_start + 3 * point_ids.size();
+    expect(list_stream::dump_compact(platform_layout_info[string_cell]) == R"OOF({"S","Text"})OOF" &&
+           list_stream::dump_compact(platform_layout_info[string_cell + 1]) == R"OOF({"N",-23.5})OOF" &&
+           platform_layout_info[string_cell + 2].atom == "Hint",
+           "Chart cell Value, Details and ToolTip must use observed consecutive platform slots");
     auto decoded = form_stream::decode_document(encoded.value());
     expect(decoded.ok(), "named dense Chart must decode from a full document");
     const auto* chart_control = decoded.value().find_control(model::ObjectId{2});
@@ -18981,6 +18990,17 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     const auto unknown_result = form_stream::decode_document(unknown_key);
     expect(!unknown_result.ok() || !unknown_result.value().reconstruction_complete(),
         "unrecognized Chart key must not claim complete reconstruction");
+    const auto typed_cell = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{8} && value.point_ref == model::ObjectId{1};
+    });
+    expect(typed_cell != chart->values.end() && typed_cell->value == model::PropertyValue{std::string{"Text"}} &&
+           typed_cell->details == model::PropertyValue{model::DecimalValue{"-23.5"}} && typed_cell->tooltip == "Hint",
+           "Chart typed cell, details and tooltip must retain their named values");
+    auto unknown_cell = encoded.value();
+    find_chart_record(unknown_cell)->items[3].items[string_cell] = list_stream::parse(R"OOF({"X",42})OOF");
+    const auto unknown_cell_result = form_stream::decode_document(unknown_cell);
+    expect(!unknown_cell_result.ok() || !unknown_cell_result.value().reconstruction_complete(),
+           "unrecognized Chart cell value must not claim complete reconstruction");
     const auto* title = chart_control->properties().find(model::PropertyId::from_name("Title"));
     expect(title != nullptr && std::get<std::string>(title->value) == "Новая диаграмма", "Chart Title must use its property descriptor surface");
     const auto cell = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {

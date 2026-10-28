@@ -743,8 +743,9 @@ struct ChartPoint {
 struct ChartValue {
     ObjectId series_ref{};
     ObjectId point_ref{};
-    std::variant<DecimalValue, UndefinedValue> value{DecimalValue{}};
+    PropertyValue value{DecimalValue{}};
     std::string tooltip{};
+    PropertyValue details{UndefinedValue{}};
 };
 
 struct ChartSummarySeries {

@@ -6664,8 +6664,9 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         for (const auto& point : chart.points) {
             const auto found = value_index.find(ChartValueKey{series.id.value(), point.id.value()});
             if (found == value_index.end()) fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", "missing pair", "Chart matrix contains a missing pair");
-            if (const auto* decimal = std::get_if<model::DecimalValue>(&found->second->value)) append({list({string_value("N"), raw(decimal->canonical)}), list({string_value("U")}), string_value(found->second->tooltip)});
-            else append({list({string_value("U")}), list({string_value("U")}), string_value(found->second->tooltip)});
+            append({encoded_chart_key_value(found->second->value, "$/Chart/Values/Value"),
+                encoded_chart_key_value(found->second->details, "$/Chart/Values/Details"),
+                string_value(found->second->tooltip)});
         }
     }
     append(canonical_chart_data_defaults());
@@ -6997,18 +6998,14 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     for (std::size_t series = 0; series < series_count; ++series) {
         for (std::size_t point = 0; point < point_count; ++point) {
             const auto cell_offset = data_start + (series * point_count + point) * 3;
-            const auto& encoded = at(info, cell_offset, info_path);
-            require_list(encoded, child_path(info_path, cell_offset));
-            if (encoded.items.empty() || encoded.items.size() > 2) fail("OOF1102", child_path(info_path, cell_offset), "typed numeric or Undefined Chart cell", describe(encoded), "Chart cell has an unsupported value shape");
-            const auto type = string_atom(encoded.items[0], child_path(info_path, cell_offset));
-            require_exact(at(info, cell_offset + 1, info_path), list({string_value("U")}), child_path(info_path, cell_offset + 1), "Chart value info is unsupported");
             model::ChartValue value;
             value.tooltip = string_atom(at(info, cell_offset + 2, info_path), child_path(info_path, cell_offset + 2));
             value.series_ref = payload.series[series].id;
             value.point_ref = payload.points[point].id;
-            if (type == "N" && encoded.items.size() == 2) value.value = model::DecimalValue{raw_atom(encoded.items[1], child_path(info_path, cell_offset + 1))};
-            else if (type == "U" && encoded.items.size() == 1) value.value = model::UndefinedValue{};
-            else fail("OOF1115", child_path(info_path, cell_offset), "N or U Chart value tag", type, "Chart cell uses an unsupported value kind");
+            const auto cell_value = decoded_chart_key_value(at(info, cell_offset, info_path), child_path(info_path, cell_offset));
+            const auto details = decoded_chart_key_value(at(info, cell_offset + 1, info_path), child_path(info_path, cell_offset + 1));
+            value.value = cell_value.value_or(model::PropertyValue{model::UndefinedValue{}});
+            value.details = details.value_or(model::PropertyValue{model::UndefinedValue{}});
             payload.values.push_back(std::move(value));
         }
     }
@@ -7319,6 +7316,13 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             "Chart Tooltip text fragment differs from its named value");
     }
     auto shape_info = info;
+    for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
+        for (const auto offset : {std::size_t{0}, std::size_t{1}}) {
+            const auto slot = data_start + cell * 3 + offset;
+            if (!decoded_chart_key_value(info.items[slot], child_path(info_path, slot)))
+                shape_info.items[slot] = normalized_expected_info.items[slot];
+        }
+    }
     for (std::size_t i = 0; i < series_count; ++i) {
         const auto slot = std::size_t{5} + i * 11 + 9;
         if (!decoded_chart_key_value(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];

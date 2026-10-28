@@ -1849,14 +1849,15 @@ private:
                         value.series_ref = parse_object_id(required_attribute(item, "seriesRef"), item);
                         value.point_ref = parse_object_id(required_attribute(item, "pointRef"), item);
                         const auto fields = element_children(item);
-                        if (fields.empty() || fields.size() > 2 || (fields.size() == 2 && node_name(fields[1]) != "ToolTip"))
-                            fail("OOF2003", item, id_text, "ChartValue", "one Number or Undefined and optional ToolTip", std::to_string(fields.size()), "ChartValue requires one typed value and optional plain string ToolTip");
-                        if (node_name(fields.front()) == "Number") value.value = model::DecimalValue{canonical_decimal(node_text(fields.front()), fields.front(), "Number", id_text)};
-                        else if (node_name(fields.front()) == "Undefined") {
-                            if (node_text(fields.front()) != "undefined") fail("OOF2003", fields.front(), id_text, "Undefined", "undefined", node_text(fields.front()), "Invalid Undefined value");
-                            value.value = model::UndefinedValue{};
-                        } else fail("OOF2003", fields.front(), id_text, node_name(fields.front()), "Number or Undefined", node_name(fields.front()), "Unknown ChartValue type");
-                        if (fields.size() == 2) value.tooltip = node_text(fields[1]);
+                        if (fields.empty())
+                            fail("OOF2003", item, id_text, "ChartValue", "typed value", "empty", "ChartValue requires a typed value");
+                        value.value = parse_chart_scalar(fields.front(), id_text);
+                        for (std::size_t i = 1; i < fields.size(); ++i) {
+                            const auto field_name = node_name(fields[i]);
+                            if (field_name == "Details") value.details = parse_chart_key(fields[i], id_text);
+                            else if (field_name == "ToolTip") value.tooltip = node_text(fields[i]);
+                            else fail("OOF2003", fields[i], id_text, field_name, "Details or ToolTip", field_name, "Unknown ChartValue field");
+                        }
                         chart.values.push_back(std::move(value));
                     } else {
                         fail("OOF2003", item, id_text, node_name(item), name == "Series" ? "ChartSeries" : name == "Points" ? "ChartPoint" : "ChartValue", node_name(item), "Unknown Chart collection item");
@@ -2166,17 +2167,20 @@ private:
         return reference;
     }
 
-    model::PropertyValue parse_chart_key(xmlNodePtr node, std::string_view owner) {
-        const auto fields = element_children(node);
-        if (fields.size() != 1) fail("OOF2003", node, std::string(owner), "Value", "one typed value", std::to_string(fields.size()), "Chart key requires one typed value");
-        auto* field = fields.front();
+    model::PropertyValue parse_chart_scalar(xmlNodePtr field, std::string_view owner) {
         const auto kind = node_name(field);
         if (kind == "String") return node_text(field);
         if (kind == "Number") return model::DecimalValue{canonical_decimal(node_text(field), field, kind, owner)};
         if (kind == "Boolean") return parse_boolean(node_text(field), field, kind, owner);
         if (kind == "Date") return parse_gantt_date(field, owner, kind);
         if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
-        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date or Undefined", kind, "Unsupported Chart key type");
+        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date or Undefined", kind, "Unsupported Chart value type");
+    }
+
+    model::PropertyValue parse_chart_key(xmlNodePtr node, std::string_view owner) {
+        const auto fields = element_children(node);
+        if (fields.size() != 1) fail("OOF2003", node, std::string(owner), "Value", "one typed value", std::to_string(fields.size()), "Chart key requires one typed value");
+        return parse_chart_scalar(fields.front(), owner);
     }
 
     model::DateValue parse_gantt_date(xmlNodePtr node, std::string_view owner_id, std::string_view name) {
@@ -3985,16 +3989,20 @@ private:
                     write_enumeration("Marker", chart->summary_series.marker);
                 writer_.close("SummarySeries");
             }
-            const auto write_chart_key = [&](const model::PropertyValue& value, std::string_view owner) {
-                if (std::holds_alternative<model::UndefinedValue>(value)) return;
-                writer_.open("Value");
-                if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
+            const auto write_chart_scalar = [&](const model::PropertyValue& value, std::string_view owner) {
+                if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
+                else if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
                 else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
                 else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
                 else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
                 else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
-                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean or Date", "unsupported", "Unsupported Chart key type");
-                writer_.close("Value");
+                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean, Date or Undefined", "unsupported", "Unsupported Chart value type");
+            };
+            const auto write_chart_key = [&](std::string_view name, const model::PropertyValue& value, std::string_view owner) {
+                if (std::holds_alternative<model::UndefinedValue>(value)) return;
+                writer_.open(name);
+                write_chart_scalar(value, owner);
+                writer_.close(name);
             };
             writer_.open("Series");
             for (const auto& item : chart->series) {
@@ -4002,7 +4010,7 @@ private:
                 writer_.text("Text", item.text);
                 write_color("Color", item.color, object_id_text(item.id));
                 write_enumeration("Marker", item.marker);
-                write_chart_key(item.value, object_id_text(item.id));
+                write_chart_key("Value", item.value, object_id_text(item.id));
                 writer_.close("ChartSeries");
             }
             writer_.close("Series");
@@ -4011,15 +4019,15 @@ private:
                 writer_.open("ChartPoint", {{"id", object_id_text(item.id)}});
                 writer_.text("Text", item.text);
                 write_color("Color", item.color, object_id_text(item.id));
-                write_chart_key(item.value, object_id_text(item.id));
+                write_chart_key("Value", item.value, object_id_text(item.id));
                 writer_.close("ChartPoint");
             }
             writer_.close("Points");
             writer_.open("Values");
             for (const auto& item : chart->values) {
                 writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
-                if (const auto* number = std::get_if<model::DecimalValue>(&item.value)) writer_.text("Number", number->canonical);
-                else writer_.text("Undefined", "undefined");
+                write_chart_scalar(item.value, object_id_text(item.series_ref));
+                write_chart_key("Details", item.details, object_id_text(item.series_ref));
                 if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
                 writer_.close("ChartValue");
             }
