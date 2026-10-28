@@ -997,14 +997,16 @@ void test_control_surfaces_and_property_order(
             expect_element_shape(elements[cursor++], "Values", "ChartValueCollectionType", "1", "1");
             expect_element_shape(summary_fields[1], "Marker", "EnumerationValueType", "0", "1");
             const auto series_fields = direct_children(sequence_for_type(schema, "ChartSeriesType"), "element");
-            expect(series_fields.size() == 3 && attribute(series_fields[0], "name") == "Text" &&
+            expect(series_fields.size() == 4 && attribute(series_fields[0], "name") == "Text" &&
                 attribute(series_fields[1], "name") == "Color" && attribute(series_fields[1], "type") == "ColorValueType" &&
-                attribute(series_fields[2], "name") == "Marker" && attribute(series_fields[2], "type") == "EnumerationValueType",
-                "ChartSeries schema must expose named Text, Color, and Marker fields");
+                attribute(series_fields[2], "name") == "Marker" && attribute(series_fields[2], "type") == "EnumerationValueType" &&
+                attribute(series_fields[3], "name") == "Value" && attribute(series_fields[3], "type") == "ChartKeyValueType",
+                "ChartSeries schema must expose named Text, Color, Marker, and typed Value fields");
             const auto point_fields = direct_children(sequence_for_type(schema, "ChartPointType"), "element");
-            expect(point_fields.size() == 2 && attribute(point_fields[0], "name") == "Text" &&
-                attribute(point_fields[1], "name") == "Color" && attribute(point_fields[1], "type") == "ColorValueType",
-                "ChartPoint schema must expose named Text and Color fields");
+            expect(point_fields.size() == 3 && attribute(point_fields[0], "name") == "Text" &&
+                attribute(point_fields[1], "name") == "Color" && attribute(point_fields[1], "type") == "ColorValueType" &&
+                attribute(point_fields[2], "name") == "Value" && attribute(point_fields[2], "type") == "ChartKeyValueType",
+                "ChartPoint schema must expose named Text, Color, and typed Value fields");
         } else {
             if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
                 expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");

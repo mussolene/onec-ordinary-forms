@@ -730,12 +730,14 @@ struct ChartSeries {
     std::string text;
     ColorValue color;
     EnumerationValue marker;
+    PropertyValue value{UndefinedValue{}};
 };
 
 struct ChartPoint {
     ObjectId id{};
     std::string text;
     ColorValue color;
+    PropertyValue value{UndefinedValue{}};
 };
 
 struct ChartValue {

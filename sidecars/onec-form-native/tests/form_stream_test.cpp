@@ -18910,7 +18910,7 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
             std::string(series_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
             std::to_string(40 + index * 30) + "\" green=\"" + std::to_string(90 + index * 20) +
             "\" blue=\"" + std::to_string(120 + index * 10) + "\"/><Marker type=\"ChartMarkerType\" member=\"" +
-            std::string(markers[index]) + "\"/></ChartSeries>";
+            std::string(markers[index]) + "\"/>" + std::string(std::array<std::string_view, 5>{"<Value><String>key</String></Value>", "<Value><Number>-12.5</Number></Value>", "<Value><Boolean>true</Boolean></Value>", "<Value><Date>2026-10-28T12:30:00</Date></Value>", ""}[index]) + "</ChartSeries>";
     }
     xml += "</Series><Points>";
     constexpr std::array<std::uint64_t, 3> point_ids{1, 7, 12};
@@ -18919,7 +18919,7 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
         xml += "<ChartPoint id=\"" + std::to_string(point_ids[index]) + "\"><Text>" +
             std::string(point_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
             std::to_string(20 + index * 50) + "\" green=\"" + std::to_string(30 + index * 40) +
-            "\" blue=\"" + std::to_string(40 + index * 30) + "\"/></ChartPoint>";
+            "\" blue=\"" + std::to_string(40 + index * 30) + "\"/>" + std::string(std::array<std::string_view, 3>{"<Value><String></String></Value>", "<Value><Boolean>false</Boolean></Value>", "<Value><Date>2024-01-02T03:04:05</Date></Value>"}[index]) + "</ChartPoint>";
     }
     xml += "</Points><Values>";
     for (std::size_t reverse_series = series_ids.size(); reverse_series > 0; --reverse_series) {
@@ -18944,6 +18944,14 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     auto encoded = form_stream::encode_document(parsed.value());
     if (!encoded.ok()) throw std::runtime_error("Chart encode: " + encoded.diagnostics().front().code + " " + encoded.diagnostics().front().message + " expected=" + encoded.diagnostics().front().expected + " actual=" + encoded.diagnostics().front().actual + " " + encoded.diagnostics().front().path);
     expect(encoded.ok(), "named dense Chart must encode in a full document");
+    const auto* platform_layout_chart = find_chart_record(encoded.value());
+    expect(platform_layout_chart != nullptr, "encoded Chart must have a control record");
+    const auto& platform_layout_info = platform_layout_chart->items[3].items;
+    const auto point_start = std::size_t{5} + (series_ids.size() + 1) * 11 + 2;
+    expect(list_stream::dump_compact(platform_layout_info[5 + 9]) == R"OOF({"S","key"})OOF" &&
+           list_stream::dump_compact(platform_layout_info[point_start + 9]) == R"OOF({"S",""})OOF" &&
+           list_stream::dump_compact(platform_layout_info[point_start + 8]) == R"OOF({"U"})OOF",
+           "Chart series and point keys must use platform-observed row slot 9");
     auto decoded = form_stream::decode_document(encoded.value());
     expect(decoded.ok(), "named dense Chart must decode from a full document");
     const auto* chart_control = decoded.value().find_control(model::ObjectId{2});
@@ -18956,6 +18964,23 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
         "Chart RGB channels must preserve platform blue-green-red packing order");
     expect(chart->series[0].text == "Повтор" && chart->series[1].text == "Повтор" && chart->series[2].text.empty() && chart->points[0].text.empty(),
         "duplicate and empty Chart captions must survive the stream");
+    expect(chart->series[0].value == model::PropertyValue{std::string{"key"}} &&
+        chart->series[1].value == model::PropertyValue{model::DecimalValue{"-12.5"}} &&
+        chart->series[2].value == model::PropertyValue{true} &&
+        chart->series[3].value == model::PropertyValue{model::DateValue{"2026-10-28T12:30:00"}} &&
+        chart->series[4].value == model::PropertyValue{model::UndefinedValue{}},
+        "Chart series must preserve named typed keys");
+    expect(chart->points[0].value == model::PropertyValue{std::string{}} &&
+        chart->points[1].value == model::PropertyValue{false} &&
+        chart->points[2].value == model::PropertyValue{model::DateValue{"2024-01-02T03:04:05"}},
+        "Chart points must preserve named typed keys");
+    const auto keys_xml = source::serialize_form_xml(decoded.value());
+    expect(keys_xml.ok() && source::parse_form_xml(keys_xml.value()).ok(), "Chart typed keys must survive XML");
+    auto unknown_key = encoded.value();
+    find_chart_record(unknown_key)->items[3].items[14] = list_stream::parse(R"OOF({"X",42})OOF");
+    const auto unknown_result = form_stream::decode_document(unknown_key);
+    expect(!unknown_result.ok() || !unknown_result.value().reconstruction_complete(),
+        "unrecognized Chart key must not claim complete reconstruction");
     const auto* title = chart_control->properties().find(model::PropertyId::from_name("Title"));
     expect(title != nullptr && std::get<std::string>(title->value) == "Новая диаграмма", "Chart Title must use its property descriptor surface");
     const auto cell = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {

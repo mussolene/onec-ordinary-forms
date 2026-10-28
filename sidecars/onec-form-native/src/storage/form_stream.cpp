@@ -431,6 +431,25 @@ model::PropertyValue decoded_spreadsheet_cell_value(const LV& value, std::string
         "SpreadsheetDocumentField typed cell value kind is unsupported");
 }
 
+LV encoded_chart_key_value(const model::PropertyValue& value, std::string_view path) {
+    if (std::holds_alternative<model::UndefinedValue>(value)) return list({string_value("U")});
+    if (const auto* integer = std::get_if<std::int64_t>(&value)) return list({string_value("N"), raw(std::to_string(*integer))});
+    return encoded_spreadsheet_cell_value(value, path);
+}
+
+std::optional<model::PropertyValue> decoded_chart_key_value(const LV& value, std::string_view path) {
+    require_list(value, path);
+    if (value.items.empty()) fail("OOF1114", std::string(path), "typed Chart key", "empty", "Chart key is empty");
+    const auto kind = string_atom(value.items[0], child_path(path, 0));
+    if (kind == "U") {
+        require_arity(value, 1, path);
+        return model::PropertyValue{model::UndefinedValue{}};
+    }
+    if (kind == "S" || kind == "N" || kind == "B" || kind == "D")
+        return decoded_spreadsheet_cell_value(value, path);
+    return std::nullopt;
+}
+
 bool spreadsheet_cell_value_is_default(const model::SpreadsheetDocumentCellValue& typed) {
     if (typed.type.entries.size() != 1) return false;
     switch (typed.type.entries.front().term) {
@@ -6606,6 +6625,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         row[3] = encoded_localized(item.text);
         row[4] = raw("1");
         row[7] = raw(std::to_string(item.id.value()));
+        row[9] = encoded_chart_key_value(item.value, "$/Chart/Series/Value");
         rows.insert(rows.end(), row.begin(), row.end());
     }
     append(std::move(rows));
@@ -6632,7 +6652,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     for (std::size_t index = 0; index < point_count; ++index) {
         const auto& item = chart.points[index];
         const auto row = canonical_chart_series_defaults();
-        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_color_property(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], row[9], raw("0")});
+        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_color_property(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], encoded_chart_key_value(item.value, "$/Chart/Points/Value"), raw("0")});
     }
     auto middle = canonical_chart_middle_defaults();
     middle[2] = raw(std::to_string(chart_type));
@@ -6952,6 +6972,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         model::ChartSeries series;
         series.id = model::ObjectId{series_id};
         series.text = decoded_single_language_text(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
+        if (auto value = decoded_chart_key_value(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) series.value = std::move(*value);
         payload.series.push_back(std::move(series));
     }
     const auto points_start = points_count_offset + 1;
@@ -6961,6 +6982,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         model::ChartPoint point;
         point.id = model::ObjectId{point_id};
         point.text = decoded_single_language_text(at(info, row_offset, info_path), child_path(info_path, row_offset));
+        if (auto value = decoded_chart_key_value(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) point.value = std::move(*value);
         payload.points.push_back(std::move(point));
     }
     const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
@@ -7297,6 +7319,14 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             "Chart Tooltip text fragment differs from its named value");
     }
     auto shape_info = info;
+    for (std::size_t i = 0; i < series_count; ++i) {
+        const auto slot = std::size_t{5} + i * 11 + 9;
+        if (!decoded_chart_key_value(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
+    }
+    for (std::size_t i = 0; i < point_count; ++i) {
+        const auto slot = points_start + i * 11 + 9;
+        if (!decoded_chart_key_value(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
+    }
     for (const auto offset : {std::size_t{31}, std::size_t{32}, std::size_t{33}}) {
         const auto index = middle_start + offset;
         static_cast<void>(decode_control_font(at(info, index, info_path), child_path(info_path, index)));

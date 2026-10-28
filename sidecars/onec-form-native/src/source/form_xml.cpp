@@ -1829,6 +1829,7 @@ private:
                             if (field_name == "Text") series.text = node_text(field);
                             else if (field_name == "Color") series.color = parse_color(field);
                             else if (field_name == "Marker") series.marker = parse_enumeration(field);
+                            else if (field_name == "Value") series.value = parse_chart_key(field, id_text);
                             else fail("OOF2003", field, id_text, field_name, "Text, Color, or Marker", field_name, "Unknown ChartSeries field");
                         }
                         chart.series.push_back(std::move(series));
@@ -1839,6 +1840,7 @@ private:
                             const std::string field_name = node_name(field);
                             if (field_name == "Text") point.text = node_text(field);
                             else if (field_name == "Color") point.color = parse_color(field);
+                            else if (field_name == "Value") point.value = parse_chart_key(field, id_text);
                             else fail("OOF2003", field, id_text, field_name, "Text or Color", field_name, "Unknown ChartPoint field");
                         }
                         chart.points.push_back(std::move(point));
@@ -2162,6 +2164,19 @@ private:
         const model::ControlRef reference{id};
         objects_.controls.push_back(std::move(control));
         return reference;
+    }
+
+    model::PropertyValue parse_chart_key(xmlNodePtr node, std::string_view owner) {
+        const auto fields = element_children(node);
+        if (fields.size() != 1) fail("OOF2003", node, std::string(owner), "Value", "one typed value", std::to_string(fields.size()), "Chart key requires one typed value");
+        auto* field = fields.front();
+        const auto kind = node_name(field);
+        if (kind == "String") return node_text(field);
+        if (kind == "Number") return model::DecimalValue{canonical_decimal(node_text(field), field, kind, owner)};
+        if (kind == "Boolean") return parse_boolean(node_text(field), field, kind, owner);
+        if (kind == "Date") return parse_gantt_date(field, owner, kind);
+        if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
+        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date or Undefined", kind, "Unsupported Chart key type");
     }
 
     model::DateValue parse_gantt_date(xmlNodePtr node, std::string_view owner_id, std::string_view name) {
@@ -3970,12 +3985,24 @@ private:
                     write_enumeration("Marker", chart->summary_series.marker);
                 writer_.close("SummarySeries");
             }
+            const auto write_chart_key = [&](const model::PropertyValue& value, std::string_view owner) {
+                if (std::holds_alternative<model::UndefinedValue>(value)) return;
+                writer_.open("Value");
+                if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
+                else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
+                else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
+                else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
+                else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
+                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean or Date", "unsupported", "Unsupported Chart key type");
+                writer_.close("Value");
+            };
             writer_.open("Series");
             for (const auto& item : chart->series) {
                 writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
                 writer_.text("Text", item.text);
                 write_color("Color", item.color, object_id_text(item.id));
                 write_enumeration("Marker", item.marker);
+                write_chart_key(item.value, object_id_text(item.id));
                 writer_.close("ChartSeries");
             }
             writer_.close("Series");
@@ -3984,6 +4011,7 @@ private:
                 writer_.open("ChartPoint", {{"id", object_id_text(item.id)}});
                 writer_.text("Text", item.text);
                 write_color("Color", item.color, object_id_text(item.id));
+                write_chart_key(item.value, object_id_text(item.id));
                 writer_.close("ChartPoint");
             }
             writer_.close("Points");
