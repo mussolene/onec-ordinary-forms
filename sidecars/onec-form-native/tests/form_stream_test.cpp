@@ -19145,6 +19145,30 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
         "Auto is a named Marker value at any Series ordinal; its resolved row cache is derived");
 }
 
+void test_chart_automatic_collection_colors() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Auto"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="automatic"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="automatic"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>7</Number></ChartValue></Values></Chart></ChildItems></Form>)XML";
+    auto document = source::parse_form_xml(xml);
+    expect(document.ok(), "Chart with automatic Series and Point colors must parse");
+    auto encoded = form_stream::encode_document(document.value());
+    expect(encoded.ok(), "Chart with automatic Series and Point colors must encode");
+    auto observed = encoded.value();
+    auto* record = find_chart_record(observed);
+    expect(record != nullptr, "encoded document must contain Chart");
+    auto& info = record->items[3];
+    const std::size_t point_start = 5 + (1 + 1) * 11 + 2;
+    info.items[5] = list_stream::parse("{4,0,{7258719},0}");
+    info.items[point_start + 3] = list_stream::parse("{4,0,{7964671},0}");
+    auto decoded = form_stream::decode_document(observed);
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "platform-derived automatic color caches must decode completely");
+    const auto* control = decoded.value().find_control(model::ObjectId{2});
+    const auto& chart = std::get<model::ChartPayload>(control->payload);
+    expect(chart.series[0].color == model::ColorValue{} && chart.points[0].color == model::ColorValue{},
+        "automatic Series and Point colors must remain automatic");
+    auto malformed = observed;
+    find_chart_record(malformed)->items[3].items[5] = list_stream::parse("{4,4,{0},4}");
+    expect(!form_stream::decode_document(malformed).ok(), "automatic color cache must be a valid resolved RGB color");
+}
+
 void test_chart_summary_series_color_roundtrip_and_guards() {
     const auto make_xml = [](bool populated, bool absolute) {
         return std::string(R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Summary"><Position><Height>64</Height><Width>110</Width></Position>)XML") +
@@ -20493,6 +20517,7 @@ int main() {
         test_complex_control_named_events();
         test_chart_platform_type_values();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
+        test_chart_automatic_collection_colors();
         test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();
         test_platform_empty_document_fixture();

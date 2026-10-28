@@ -2625,8 +2625,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 }
                 const bool absolute_color = series.color.kind == ColorKind::absolute && series.color.alpha == 255 &&
                     std::holds_alternative<std::monostate>(series.color.style);
-                if (!absolute_color) {
-                    invalid_chart("Chart Series Color must be an absolute opaque RGB value");
+                const bool automatic_color = series.color == ColorValue{};
+                if (!absolute_color && !automatic_color) {
+                    invalid_chart("Chart Series Color must be automatic or an absolute opaque RGB value");
                 }
                 if (series.marker.type_name != "ChartMarkerType" ||
                     (series.marker.member != "Auto" && series.marker.member != "Alternation" &&
@@ -2642,8 +2643,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 }
                 const bool absolute_color = point.color.kind == ColorKind::absolute && point.color.alpha == 255 &&
                     std::holds_alternative<std::monostate>(point.color.style);
-                if (!absolute_color) {
-                    invalid_chart("Chart Point Color must be an absolute opaque RGB value");
+                const bool automatic_color = point.color == ColorValue{};
+                if (!absolute_color && !automatic_color) {
+                    invalid_chart("Chart Point Color must be automatic or an absolute opaque RGB value");
                 }
             }
             std::set<std::pair<ObjectId, ObjectId>> value_pairs;

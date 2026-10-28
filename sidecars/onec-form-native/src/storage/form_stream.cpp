@@ -6458,8 +6458,16 @@ std::uint32_t chart_color_rgb(const model::ColorValue& value, std::string_view p
 }
 
 LV encode_chart_color_property(const model::ColorValue& value, std::string_view path) {
-    (void)chart_color_rgb(value, path);
+    if (value.kind != model::ColorKind::automatic) (void)chart_color_rgb(value, path);
     return encode_control_color(value, path);
+}
+
+LV encode_chart_resolved_color(const model::ColorValue& value, std::string_view path) {
+    if (value.kind != model::ColorKind::automatic) return encode_chart_color_property(value, path);
+    (void)encode_control_color(value, path);
+    model::ColorValue resolved;
+    resolved.kind = model::ColorKind::absolute;
+    return encode_control_color(resolved, path);
 }
 
 model::ColorValue decode_chart_color_property(const LV& value, std::string_view path) {
@@ -6649,7 +6657,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     for (std::size_t index = 0; index < series_count; ++index) {
         const auto& item = chart.series[index];
         auto row = canonical_chart_series_defaults();
-        row[0] = encode_chart_color_property(item.color, "$/Chart/Series/Color");
+        row[0] = encode_chart_resolved_color(item.color, "$/Chart/Series/Color");
         row[2] = raw(std::to_string(chart_marker_cache(item.marker, "$/Chart/Series/Marker")));
         row[3] = encoded_localized(item.text);
         row[4] = raw("1");
@@ -6681,7 +6689,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     for (std::size_t index = 0; index < point_count; ++index) {
         const auto& item = chart.points[index];
         const auto row = canonical_chart_series_defaults();
-        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_color_property(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], encoded_chart_key_value(item.value, "$/Chart/Points/Value"), raw("0")});
+        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_resolved_color(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], encoded_chart_key_value(item.value, "$/Chart/Points/Value"), raw("0")});
     }
     auto middle = canonical_chart_middle_defaults();
     middle[2] = raw(std::to_string(chart_type));
@@ -7050,10 +7058,12 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const auto style_path = child_path(info_path, point_styles_start + point);
         const auto& point_style = at(info, point_styles_start + point, info_path);
         require_arity(point_style, 1, style_path);
-        auto color = decode_chart_color_property(point_style.items[0], child_path(style_path, 0));
+        auto color = decode_control_color(point_style.items[0], child_path(style_path, 0));
+        if (color.kind != model::ColorKind::automatic && color.kind != model::ColorKind::absolute)
+            fail("OOF1122", style_path, "automatic or absolute Chart Point Color", "unsupported ColorValue", "Chart Point Color is outside the supported profile");
         const auto row_offset = points_start + point * 11;
         const auto row_color = decode_chart_color_property(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
-        if (chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset + 3))) {
+        if (color.kind == model::ColorKind::absolute && chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset + 3))) {
             fail("OOF1115", style_path, "Point Color matching resolved RGB", "mismatch", "Chart Point Color differs from its resolved native RGB");
         }
         payload.points[point].color = color;
@@ -7062,12 +7072,14 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const auto style_path = child_path(info_path, series_styles_start + series);
         const auto& series_style = at(info, series_styles_start + series, info_path);
         require_arity(series_style, 10, style_path);
-        auto color = decode_chart_color_property(series_style.items[0], child_path(style_path, 0));
+        auto color = decode_control_color(series_style.items[0], child_path(style_path, 0));
+        if (color.kind != model::ColorKind::automatic && color.kind != model::ColorKind::absolute)
+            fail("OOF1122", style_path, "automatic or absolute Chart Series Color", "unsupported ColorValue", "Chart Series Color is outside the supported profile");
         const auto marker_id = integer_atom<std::uint32_t>(series_style.items[1], child_path(style_path, 1));
         const auto marker = decode_chart_marker(marker_id, child_path(style_path, 1));
         const auto row_offset = std::size_t{5} + series * 11;
         const auto row_color = decode_chart_color_property(at(info, row_offset, info_path), child_path(info_path, row_offset));
-        if (chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset))) {
+        if (color.kind == model::ColorKind::absolute && chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset))) {
             fail("OOF1115", style_path, "Series Color matching resolved RGB", "mismatch", "Chart Series Color differs from its resolved native RGB");
         }
         const auto marker_cache_path = child_path(info_path, row_offset + 2);
@@ -7321,6 +7333,18 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     if (active_series != 0) properties.set_explicit(model::PropertyId::from_name("ActiveSeries"), model::ChartSeriesRef{model::ObjectId{id}, payload.series[active_series].id});
     const auto expected_info = encode_chart_info(payload, title, properties, model::ObjectId{id});
     auto normalized_expected_info = expected_info;
+    for (std::size_t i = 0; i < series_count; ++i) {
+        if (payload.series[i].color.kind == model::ColorKind::automatic) {
+            const auto index = std::size_t{5} + i * 11;
+            normalized_expected_info.items[index] = info.items[index];
+        }
+    }
+    for (std::size_t i = 0; i < point_count; ++i) {
+        if (payload.points[i].color.kind == model::ColorKind::automatic) {
+            const auto index = points_start + i * 11 + 3;
+            normalized_expected_info.items[index] = info.items[index];
+        }
+    }
     for (const auto offset : {std::size_t{78}, std::size_t{80}}) {
         const auto index = middle_start + offset;
         const auto path = child_path(info_path, index);
