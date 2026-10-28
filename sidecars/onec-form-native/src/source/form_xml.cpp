@@ -2174,7 +2174,9 @@ private:
         if (kind == "Boolean") return parse_boolean(node_text(field), field, kind, owner);
         if (kind == "Date") return parse_gantt_date(field, owner, kind);
         if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
-        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date or Undefined", kind, "Unsupported Chart value type");
+        if (kind == "Null" && node_text(field).empty()) return model::NullValue{};
+        if (kind == "UUID") return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(field))))};
+        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", kind, "Unsupported Chart value type");
     }
 
     model::PropertyValue parse_chart_key(xmlNodePtr node, std::string_view owner) {
@@ -3991,12 +3993,14 @@ private:
             }
             const auto write_chart_scalar = [&](const model::PropertyValue& value, std::string_view owner) {
                 if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
+                else if (std::holds_alternative<model::NullValue>(value)) writer_.empty("Null");
+                else if (const auto* item = std::get_if<model::UuidValue>(&value)) writer_.text("UUID", canonical_uuid(item->canonical));
                 else if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
                 else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
                 else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
                 else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
                 else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
-                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean, Date or Undefined", "unsupported", "Unsupported Chart value type");
+                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", "unsupported", "Unsupported Chart value type");
             };
             const auto write_chart_key = [&](std::string_view name, const model::PropertyValue& value, std::string_view owner) {
                 if (std::holds_alternative<model::UndefinedValue>(value)) return;

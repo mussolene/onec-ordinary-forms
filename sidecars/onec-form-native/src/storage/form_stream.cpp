@@ -433,6 +433,11 @@ model::PropertyValue decoded_spreadsheet_cell_value(const LV& value, std::string
 
 LV encoded_chart_key_value(const model::PropertyValue& value, std::string_view path) {
     if (std::holds_alternative<model::UndefinedValue>(value)) return list({string_value("U")});
+    if (std::holds_alternative<model::NullValue>(value)) return list({string_value("L")});
+    if (const auto* uuid = std::get_if<model::UuidValue>(&value)) {
+        const auto canonical = uuid_atom(raw(uuid->canonical), path).canonical;
+        return list({string_value("#"), raw("fc01b5df-97fe-449b-83d4-218a090e681e"), raw(canonical)});
+    }
     if (const auto* integer = std::get_if<std::int64_t>(&value)) return list({string_value("N"), raw(std::to_string(*integer))});
     return encoded_spreadsheet_cell_value(value, path);
 }
@@ -444,6 +449,16 @@ std::optional<model::PropertyValue> decoded_chart_key_value(const LV& value, std
     if (kind == "U") {
         require_arity(value, 1, path);
         return model::PropertyValue{model::UndefinedValue{}};
+    }
+    if (kind == "L") {
+        require_arity(value, 1, path);
+        return model::PropertyValue{model::NullValue{}};
+    }
+    if (kind == "#") {
+        require_arity(value, 3, path);
+        const auto type = uuid_atom(value.items[1], child_path(path, 1)).canonical;
+        if (type != "fc01b5df-97fe-449b-83d4-218a090e681e") return std::nullopt;
+        return model::PropertyValue{uuid_atom(value.items[2], child_path(path, 2))};
     }
     if (kind == "S" || kind == "N" || kind == "B" || kind == "D")
         return decoded_spreadsheet_cell_value(value, path);

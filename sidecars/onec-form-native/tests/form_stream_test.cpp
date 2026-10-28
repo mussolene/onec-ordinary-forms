@@ -18910,7 +18910,7 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
             std::string(series_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
             std::to_string(40 + index * 30) + "\" green=\"" + std::to_string(90 + index * 20) +
             "\" blue=\"" + std::to_string(120 + index * 10) + "\"/><Marker type=\"ChartMarkerType\" member=\"" +
-            std::string(markers[index]) + "\"/>" + std::string(std::array<std::string_view, 5>{"<Value><String>key</String></Value>", "<Value><Number>-12.5</Number></Value>", "<Value><Boolean>true</Boolean></Value>", "<Value><Date>2026-10-28T12:30:00</Date></Value>", ""}[index]) + "</ChartSeries>";
+            std::string(markers[index]) + "\"/>" + std::string(std::array<std::string_view, 5>{"<Value><String>key</String></Value>", "<Value><Number>-12.5</Number></Value>", "<Value><Boolean>true</Boolean></Value>", "<Value><Date>2026-10-28T12:30:00</Date></Value>", "<Value><UUID>12345678-1234-1234-1234-123456789abc</UUID></Value>"}[index]) + "</ChartSeries>";
     }
     xml += "</Series><Points>";
     constexpr std::array<std::uint64_t, 3> point_ids{1, 7, 12};
@@ -18919,7 +18919,7 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
         xml += "<ChartPoint id=\"" + std::to_string(point_ids[index]) + "\"><Text>" +
             std::string(point_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
             std::to_string(20 + index * 50) + "\" green=\"" + std::to_string(30 + index * 40) +
-            "\" blue=\"" + std::to_string(40 + index * 30) + "\"/>" + std::string(std::array<std::string_view, 3>{"<Value><String></String></Value>", "<Value><Boolean>false</Boolean></Value>", "<Value><Date>2024-01-02T03:04:05</Date></Value>"}[index]) + "</ChartPoint>";
+            "\" blue=\"" + std::to_string(40 + index * 30) + "\"/>" + std::string(std::array<std::string_view, 3>{"<Value><String></String></Value>", "<Value><Null/></Value>", "<Value><Date>2024-01-02T03:04:05</Date></Value>"}[index]) + "</ChartPoint>";
     }
     xml += "</Points><Values>";
     for (std::size_t reverse_series = series_ids.size(); reverse_series > 0; --reverse_series) {
@@ -18934,6 +18934,7 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
             else if (series == 1 && point == 0) xml += "<String>Text</String><Details><Number>-23.5</Number></Details><ToolTip>Hint</ToolTip>";
             else if (series == 1 && point == 1) xml += "<Boolean>true</Boolean><Details><Boolean>false</Boolean></Details>";
             else if (series == 1 && point == 2) xml += "<Date>2026-10-28T12:30:00</Date><Details><Date>2024-01-02T03:04:05</Date></Details>";
+            else if (series == 2 && point == 0) xml += "<Null/><Details><UUID>12345678-1234-1234-1234-123456789abc</UUID></Details>";
             else xml += "<Number>" + std::to_string(series * 3 + point + 1) + ".125</Number>";
             xml += "</ChartValue>";
         }
@@ -18961,6 +18962,10 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
            list_stream::dump_compact(platform_layout_info[string_cell + 1]) == R"OOF({"N",-23.5})OOF" &&
            platform_layout_info[string_cell + 2].atom == "Hint",
            "Chart cell Value, Details and ToolTip must use observed consecutive platform slots");
+    const auto null_cell = data_start + 2 * point_ids.size() * 3;
+    expect(list_stream::dump_compact(platform_layout_info[null_cell]) == R"OOF({"L"})OOF" &&
+           list_stream::dump_compact(platform_layout_info[null_cell + 1]) == R"OOF({"#",fc01b5df-97fe-449b-83d4-218a090e681e,12345678-1234-1234-1234-123456789abc})OOF",
+           "Chart Null and UUID must use platform-observed cell slots");
     auto decoded = form_stream::decode_document(encoded.value());
     expect(decoded.ok(), "named dense Chart must decode from a full document");
     const auto* chart_control = decoded.value().find_control(model::ObjectId{2});
@@ -18977,10 +18982,10 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
         chart->series[1].value == model::PropertyValue{model::DecimalValue{"-12.5"}} &&
         chart->series[2].value == model::PropertyValue{true} &&
         chart->series[3].value == model::PropertyValue{model::DateValue{"2026-10-28T12:30:00"}} &&
-        chart->series[4].value == model::PropertyValue{model::UndefinedValue{}},
+        chart->series[4].value == model::PropertyValue{model::UuidValue{"12345678-1234-1234-1234-123456789abc"}},
         "Chart series must preserve named typed keys");
     expect(chart->points[0].value == model::PropertyValue{std::string{}} &&
-        chart->points[1].value == model::PropertyValue{false} &&
+        chart->points[1].value == model::PropertyValue{model::NullValue{}} &&
         chart->points[2].value == model::PropertyValue{model::DateValue{"2024-01-02T03:04:05"}},
         "Chart points must preserve named typed keys");
     const auto keys_xml = source::serialize_form_xml(decoded.value());
@@ -18998,6 +19003,10 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
            "Chart typed cell, details and tooltip must retain their named values");
     auto unknown_cell = encoded.value();
     find_chart_record(unknown_cell)->items[3].items[string_cell] = list_stream::parse(R"OOF({"X",42})OOF");
+    auto unknown_uuid_type = encoded.value();
+    find_chart_record(unknown_uuid_type)->items[3].items[string_cell] = list_stream::parse(R"OOF({"#",00000000-0000-0000-0000-000000000000,12345678-1234-1234-1234-123456789abc})OOF");
+    const auto unknown_uuid_result = form_stream::decode_document(unknown_uuid_type);
+    expect(!unknown_uuid_result.ok() || !unknown_uuid_result.value().reconstruction_complete(), "unknown typed UUID must not claim complete reconstruction");
     const auto unknown_cell_result = form_stream::decode_document(unknown_cell);
     expect(!unknown_cell_result.ok() || !unknown_cell_result.value().reconstruction_complete(),
            "unrecognized Chart cell value must not claim complete reconstruction");
