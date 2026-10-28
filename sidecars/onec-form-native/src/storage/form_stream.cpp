@@ -6561,7 +6561,7 @@ constexpr std::array chart_boolean_properties{
 };
 
 LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValue& title,
-    const model::PropertySet& properties = {}) {
+    const model::PropertySet& properties = {}, model::ObjectId owner = {}) {
     int chart_type = 4;
     if (const auto* entry = properties.find(model::PropertyId::from_name("ChartType"))) {
         const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
@@ -6674,6 +6674,15 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     append(canonical_chart_tail_defaults());
     if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
     const auto middle_start = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+    if (const auto* entry = properties.find(model::PropertyId::from_name("ActiveSeries"))) {
+        const auto* reference = std::get_if<model::ChartSeriesRef>(&entry->value);
+        if (!reference || reference->owner != owner)
+            fail("OOF1122", "$/Chart/ActiveSeries", "series owned by Chart", "invalid owner or type", "Invalid active series reference");
+        const auto found = std::ranges::find(chart.series, reference->series, &model::ChartSeries::id);
+        if (found == chart.series.end())
+            fail("OOF1122", "$/Chart/ActiveSeries", "existing Chart series", "missing", "Active series does not exist");
+        info.at(middle_start + 52) = raw(std::to_string(std::distance(chart.series.begin(), found)));
+    }
     for (const auto& spec : model::detail::chart_enum_specs) {
         auto ordinal = spec.default_ordinal;
         if (const auto* entry = properties.find(model::PropertyId::from_name(spec.property))) {
@@ -6888,11 +6897,11 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
-        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue", "MaxValue", "MinValue",
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue", "MaxValue", "MinValue", "ActiveSeries",
         "AutoSeriesSeparation", "LabelType", "MaxSeries", "Orientation", "GaugeChartValueRepresentation", "LabelLocation", "GaugeChartValuesScaleLabelsLocation", "SpaceMode"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     const auto title = explicit_localized_text(control.properties(), "Title", "$/Chart/TitleArea");
-    auto info = encode_chart_info(*chart, title, control.properties());
+    auto info = encode_chart_info(*chart, title, control.properties(), control.id);
     if (!control.events.empty()) {
         auto event_table = encode_control_event_collection(document, control, "$/Chart/Events");
         const auto middle = std::size_t{5} + 11 * (chart->series.size() + 1) + 2 + 11 * chart->points.size();
@@ -6955,6 +6964,10 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         payload.points.push_back(std::move(point));
     }
     const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
+    const auto active_series_path = child_path(info_path, middle_start + 52);
+    const auto active_series = integer_atom<std::size_t>(at(info, middle_start + 52, info_path), active_series_path);
+    if ((!payload.series.empty() && active_series >= payload.series.size()) || (payload.series.empty() && active_series != 0))
+        fail("OOF1115", active_series_path, "valid active series position", std::to_string(active_series), "Active series position is outside the Chart");
     const auto title_offset = middle_start + 11;
     const auto title = decoded_localized_text(at(info, title_offset, info_path), child_path(info_path, title_offset));
     const auto middle_defaults = canonical_chart_middle_defaults();
@@ -7257,7 +7270,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         area_defaults(model::ChartAreaKind::legend), "$/Chart/LegendArea");
     payload.title_area = read_area(14, 23, model::metamodel::chart_area_placements(model::ChartAreaKind::title),
         area_defaults(model::ChartAreaKind::title), "$/Chart/TitleArea");
-    const auto expected_info = encode_chart_info(payload, title, properties);
+    if (active_series != 0) properties.set_explicit(model::PropertyId::from_name("ActiveSeries"), model::ChartSeriesRef{model::ObjectId{id}, payload.series[active_series].id});
+    const auto expected_info = encode_chart_info(payload, title, properties, model::ObjectId{id});
     auto normalized_expected_info = expected_info;
     for (const auto offset : {std::size_t{78}, std::size_t{80}}) {
         const auto index = middle_start + offset;

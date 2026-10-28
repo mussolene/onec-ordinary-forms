@@ -2339,7 +2339,7 @@
       <xs:element name="AutoTransposition" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoSeriesText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoPointText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ActiveSeries" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActiveSeries" type="ObjectIdType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ActivePoint" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BaseValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>

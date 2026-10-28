@@ -119,6 +119,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "PictureReferenceValueType";
         case ValueCodec::context_menu_reference:
             return "ContextMenuReferenceValueType";
+        case ValueCodec::chart_series_reference:
+            return "ObjectIdType";
         case ValueCodec::action_source_reference:
             return "ActionSourceReferenceValueType";
         case ValueCodec::control_reference:

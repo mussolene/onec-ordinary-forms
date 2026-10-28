@@ -1052,6 +1052,9 @@ model::PropertyValue parse_property_value(
             return parse_shortcut(node);
         case mm::ValueCodec::picture:
             return parse_picture_reference(node, property, object_id);
+        case mm::ValueCodec::chart_series_reference:
+            return model::ChartSeriesRef{parse_object_id(object_id, node, property, object_id),
+                parse_object_id(node_text(node), node, property, object_id)};
         case mm::ValueCodec::context_menu_reference: {
             const auto control_id = optional_attribute(node, "controlId");
             const auto children = element_children(node);
@@ -3295,6 +3298,17 @@ private:
             {
                 const auto& reference = require_value<model::PictureRef>(value, object_id, name, "picture reference");
                 write_picture_reference(name, reference, object_id);
+                return;
+            }
+            case mm::ValueCodec::chart_series_reference: {
+                const auto& reference = require_value<model::ChartSeriesRef>(value, object_id, name, "Chart series reference");
+                if (object_id_text(reference.owner) != object_id)
+                    serialization_fail(std::string(object_id), std::string(name), "series owned by Chart", "different owner", "Chart series reference has a different owner");
+                const auto* control = document_.find_control(reference.owner);
+                const auto* chart = control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
+                if (!chart || std::ranges::none_of(chart->series, [&](const auto& series) { return series.id == reference.series; }))
+                    serialization_fail(std::string(object_id), std::string(name), "existing Chart series", "missing", "Chart series reference does not exist");
+                writer_.text(name, object_id_text(reference.series));
                 return;
             }
             case mm::ValueCodec::context_menu_reference:

@@ -183,6 +183,12 @@ struct ChartAreaRef {
     friend bool operator==(const ChartAreaRef&, const ChartAreaRef&) = default;
 };
 
+struct ChartSeriesRef {
+    ObjectId owner{};
+    ObjectId series{};
+    friend bool operator==(const ChartSeriesRef&, const ChartSeriesRef&) = default;
+};
+
 struct UndefinedValue {
     friend bool operator==(UndefinedValue, UndefinedValue) = default;
 };
@@ -489,6 +495,7 @@ using PropertyValue = std::variant<
     AttributeRef,
     CommandRef,
     ChartAreaRef,
+    ChartSeriesRef,
     CommandBarButtonRef>;
 
 struct PropertyEntry {

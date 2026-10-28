@@ -560,6 +560,21 @@ void test_chart_computed_counts() {
     }
     for (std::uint64_t i = 0; i < 12; ++i) {
         const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        const auto active = PropertyId::from_name("ActiveSeries");
+        if (i % 3 == 0) {
+            expect(document.get_prop_val(owner, active).value == PropertyValue{UndefinedValue{}},
+                "empty chart active-series value must be undefined");
+        } else {
+            expect(document.get_prop_val(owner, active).value == PropertyValue{ChartSeriesRef{ObjectId{100 + i}, ObjectId{1}}},
+                "first chart series must be active by default");
+            const ChartSeriesRef selected{ObjectId{100 + i}, ObjectId{i % 3}};
+            expect(document.set_prop_val(owner, active, selected) == PropertyMutationStatus::applied &&
+                document.get_prop_val(owner, active).value == PropertyValue{selected}, "active series must retain its owner and identity");
+            expect(document.set_prop_val(owner, active, ChartSeriesRef{ObjectId{999}, ObjectId{1}}) == PropertyMutationStatus::invalid_reference &&
+                document.set_prop_val(owner, active, ChartSeriesRef{ObjectId{100 + i}, ObjectId{999}}) == PropertyMutationStatus::invalid_reference &&
+                document.set_prop_val(owner, active, UndefinedValue{}) == PropertyMutationStatus::invalid_value,
+                "foreign, missing and undefined series must be rejected");
+        }
         for (const auto& [name, expected] : {std::pair{"SeriesCount", i % 3}, std::pair{"PointCount", i % 4}}) {
             const auto property = PropertyId::from_name(name);
             const auto result = document.get_prop_val(owner, property);

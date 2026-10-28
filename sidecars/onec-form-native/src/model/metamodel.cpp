@@ -732,6 +732,8 @@ void apply_proven_storage_overrides(
     classify_property(chart_properties, "BaseValue", StorageCodec::control_info, DefaultKind::decimal, "0");
     for (const auto name : {"MaxValue", "MinValue"})
         classify_property(chart_properties, name, StorageCodec::control_info, DefaultKind::decimal, "0");
+    classify_property(chart_properties, "ActiveSeries", StorageCodec::control_info, DefaultKind::none, "");
+    std::ranges::find(chart_properties, "ActiveSeries", &PropertyDescriptor::api_name)->value_codec = ValueCodec::chart_series_reference;
     classify_property(chart_properties, "ChartType", StorageCodec::control_info, DefaultKind::enumeration, "ChartType.Column");
     std::ranges::find(chart_properties, "ChartType", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     for (const auto& spec : detail::chart_enum_specs) {
@@ -2447,6 +2449,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "action-source-reference";
         case ValueCodec::context_menu_reference:
             return "context-menu-reference";
+        case ValueCodec::chart_series_reference:
+            return "chart-series-reference";
         case ValueCodec::control_reference:
             return "control-reference";
         case ValueCodec::form_reference:

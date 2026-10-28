@@ -358,7 +358,7 @@
               <Property name="AutoTransposition" apiName="AutoTransposition" russianName="АвтоТранспонирование" russianType="Булево" valueCodec="boolean"/>
               <Property name="AutoSeriesText" apiName="AutoSeriesText" russianName="АвтоУстановкаТекстаСерий" russianType="Булево" valueCodec="boolean"/>
               <Property name="AutoPointText" apiName="AutoPointText" russianName="АвтоУстановкаТекстаТочек" russianType="Булево" valueCodec="boolean"/>
-              <Property name="ActiveSeries" apiName="ActiveSeries" russianName="АктивнаяСерия" russianType="СерияДиаграммы" valueCodec="unclassified"/>
+              <Property name="ActiveSeries" apiName="ActiveSeries" russianName="АктивнаяСерия" russianType="СерияДиаграммы" valueCodec="chart-series-reference"/>
               <Property name="ActivePoint" apiName="ActivePoint" russianName="АктивнаяТочка" russianType="ТочкаДиаграммы" valueCodec="unclassified"/>
               <Property name="BaseValue" apiName="BaseValue" russianName="БазовоеЗначение" russianType="Число" valueCodec="decimal"/>
               <Property name="LabelType" apiName="LabelType" russianName="ВидПодписей" russianType="ВидПодписейКДиаграмме" valueCodec="enumeration"/>

@@ -17949,6 +17949,8 @@ void test_chart_named_integer_and_delimiter_properties() {
         for (const auto& series : payload.series) for (const auto& point : payload.points)
             payload.values.push_back({series.id, point.id, model::DecimalValue{"-1.25"}});
         model::ControlNode chart{model::ObjectId{2}, "Chart", std::move(payload)};
+        if (series_count == 2)
+            chart.properties().set_explicit(model::PropertyId::from_name("ActiveSeries"), model::ChartSeriesRef{model::ObjectId{2}, model::ObjectId{11}});
         const std::array values{std::pair{"MaxSeriesCount", std::int64_t{-2147483648LL}},
             std::pair{"MaxSeriesPercent", std::int64_t{2147483647LL}}, std::pair{"BeginGaugeAngle", std::int64_t{360}},
             std::pair{"EndGaugeAngle", std::int64_t{0}}, std::pair{"GaugeThickness", std::int64_t{1}},
@@ -17965,6 +17967,7 @@ void test_chart_named_integer_and_delimiter_properties() {
         expect(encoded.ok(), "Chart integer and delimiter properties must encode with events and data");
         const auto middle = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
         const auto& info = find_chart_record(encoded.value())->items[3];
+        if (series_count == 2) expect(info.items[middle + 52].atom == "1", "active series must encode its position");
         const std::array offsets{46U, 47U, 70U, 71U, 72U, 75U};
         for (std::size_t i = 0; i < values.size(); ++i)
             expect(info.items[middle + offsets[i]].atom == std::to_string(values[i].second), "Chart integer offset must match platform");
@@ -17976,6 +17979,13 @@ void test_chart_named_integer_and_delimiter_properties() {
             model::LocalizedStringValue{{{"ru", "Процент %"}}}), "Chart percent format must encode plain text");
         auto decoded = form_stream::decode_document(encoded.value());
         expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart properties must decode completely");
+        if (series_count == 2) {
+            expect(decoded.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}}, model::PropertyId::from_name("ActiveSeries")).value ==
+                model::PropertyValue{model::ChartSeriesRef{model::ObjectId{2}, model::ObjectId{11}}}, "active series must resolve to its named identity");
+            auto invalid_active = encoded.value();
+            find_chart_record(invalid_active)->items[3].items[middle + 52] = list_stream::ListValue::raw_atom("2");
+            expect(!form_stream::decode_document(invalid_active).ok(), "out-of-range active series must fail");
+        }
         const auto xml = source::serialize_form_xml(decoded.value());
         expect(xml.ok(), "Chart properties must serialize to named XML");
         expect(xml.value().find("ValueLabelFormat") != std::string::npos &&

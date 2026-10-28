@@ -267,6 +267,8 @@ bool property_value_matches(
                        expected == metamodel::ValueCodec::context_menu_reference;
             } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
                 return expected == metamodel::ValueCodec::context_menu_reference;
+            } else if constexpr (std::is_same_v<Value, ChartSeriesRef>) {
+                return expected == metamodel::ValueCodec::chart_series_reference;
             } else if constexpr (std::is_same_v<Value, FormRef>) {
                 return expected == metamodel::ValueCodec::action_source_reference || expected == metamodel::ValueCodec::form_reference;
             } else if constexpr (std::is_same_v<Value, AttributeRef>) {
@@ -1055,6 +1057,12 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             return {PropertyReadStatus::computed_value, PropertyValue{static_cast<std::int64_t>(count)}};
         }
+        if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActiveSeries")) {
+            if (const auto* entry = control.properties().find(property)) return {PropertyReadStatus::explicit_value, entry->value};
+            const auto& chart = std::get<ChartPayload>(control.payload);
+            if (chart.series.empty()) return {PropertyReadStatus::computed_value, PropertyValue{UndefinedValue{}}};
+            return {PropertyReadStatus::computed_value, PropertyValue{ChartSeriesRef{control.id, chart.series.front().id}}};
+        }
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("PlotArea") || property == PropertyId::from_name("LegendArea") || property == PropertyId::from_name("TitleArea"))) {
             const auto kind = property == PropertyId::from_name("PlotArea") ? ChartAreaKind::plot : property == PropertyId::from_name("TitleArea") ? ChartAreaKind::title : ChartAreaKind::legend;
@@ -1333,6 +1341,15 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount")))
             return PropertyMutationStatus::unsupported_surface;
+        if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActiveSeries")) {
+            const auto* ref = std::get_if<ChartSeriesRef>(&value);
+            if (!ref) return PropertyMutationStatus::invalid_value;
+            const auto& chart = std::get<ChartPayload>(control.payload);
+            if (ref->owner != control.id || std::ranges::none_of(chart.series, [&](const auto& series) { return series.id == ref->series; }))
+                return PropertyMutationStatus::invalid_reference;
+            control.properties().set_explicit(property, value);
+            return PropertyMutationStatus::applied;
+        }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
