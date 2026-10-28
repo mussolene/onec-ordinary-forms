@@ -31,6 +31,21 @@ struct HelpControlName {
     std::u8string_view russian_name;
 };
 
+constexpr std::array<PlatformValueTypeDescriptor, 12> platform_value_types{{
+    {"String", "9b6abf8b-0173-48e5-b0a0-83b21fcf63c5"},
+    {"Number", "b0be78f2-0ee6-4d31-a3bb-77dd32ba5bec"},
+    {"Boolean", "5d4125ad-f6e7-4313-be32-f71d0ab60915"},
+    {"Date", "aae38c48-a877-411c-a6d3-fbaa1f83c4bd"},
+    {"UUID", "fc01b5df-97fe-449b-83d4-218a090e681e"},
+    {"Array", "51e7a0d2-530b-11d4-b98a-008048da3034"},
+    {"Structure", "4238019d-7e49-4fc9-91db-b6b951d5cf8e"},
+    {"Map", "3d48feae-a9c6-4c5a-a099-9eb6477630c6"},
+    {"ValueTable", "acf6192e-81ca-46ef-93a6-5a6968b78663"},
+    {"Color", "9cd510c7-abfc-11d4-9434-004095e12fc7"},
+    {"Font", "9cd510c8-abfc-11d4-9434-004095e12fc7"},
+    {"Type", "d47d59f8-73f0-481c-8b5e-f6384c0a4804"},
+}};
+
 constexpr auto all_versions = VersionMask::all_supported;
 
 constexpr std::array<ShortcutKeyDescriptor, 80> shortcut_keys{{
@@ -2064,6 +2079,10 @@ const EventDescriptor* Metamodel::form_event(std::string_view name) const noexce
 
 const MetamodelCoverage& Metamodel::coverage() const noexcept {
     return impl_->coverage;
+}
+
+std::span<const PlatformValueTypeDescriptor> platform_value_type_descriptors() noexcept {
+    return platform_value_types;
 }
 
 std::span<const ControlDescriptor> control_descriptors() noexcept {

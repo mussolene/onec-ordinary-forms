@@ -244,6 +244,12 @@ struct EnumerationValue {
     friend bool operator==(const EnumerationValue&, const EnumerationValue&) = default;
 };
 
+struct PlatformTypeValue {
+    std::string name;
+
+    friend bool operator==(const PlatformTypeValue&, const PlatformTypeValue&) = default;
+};
+
 struct CompositeIdValue {
     std::int64_t object_id = 0;
     UuidValue uuid;
@@ -481,6 +487,7 @@ using PropertyValue = std::variant<
     FormattedStringValue,
     DateValue,
     UuidValue,
+    PlatformTypeValue,
     CompositeIdValue,
     TypeDomainPatternValue,
     EnumerationValue,

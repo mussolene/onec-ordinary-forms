@@ -434,6 +434,12 @@ model::PropertyValue decoded_spreadsheet_cell_value(const LV& value, std::string
 LV encoded_chart_key_value(const model::PropertyValue& value, std::string_view path) {
     if (std::holds_alternative<model::UndefinedValue>(value)) return list({string_value("U")});
     if (std::holds_alternative<model::NullValue>(value)) return list({string_value("L")});
+    if (const auto* type = std::get_if<model::PlatformTypeValue>(&value)) {
+        const auto descriptors = model::metamodel::platform_value_type_descriptors();
+        const auto it = std::ranges::find(descriptors, type->name, &model::metamodel::PlatformValueTypeDescriptor::name);
+        if (it == descriptors.end()) fail("OOF1122", std::string(path), "known platform type", type->name, "Unknown platform type value");
+        return list({string_value("T"), raw(std::string(it->guid))});
+    }
     if (const auto* uuid = std::get_if<model::UuidValue>(&value)) {
         const auto canonical = uuid_atom(raw(uuid->canonical), path).canonical;
         return list({string_value("#"), raw("fc01b5df-97fe-449b-83d4-218a090e681e"), raw(canonical)});
@@ -453,6 +459,14 @@ std::optional<model::PropertyValue> decoded_chart_key_value(const LV& value, std
     if (kind == "L") {
         require_arity(value, 1, path);
         return model::PropertyValue{model::NullValue{}};
+    }
+    if (kind == "T") {
+        require_arity(value, 2, path);
+        const auto guid = uuid_atom(value.items[1], child_path(path, 1)).canonical;
+        const auto descriptors = model::metamodel::platform_value_type_descriptors();
+        const auto it = std::ranges::find(descriptors, guid, &model::metamodel::PlatformValueTypeDescriptor::guid);
+        if (it == descriptors.end()) return std::nullopt;
+        return model::PropertyValue{model::PlatformTypeValue{std::string(it->name)}};
     }
     if (kind == "#") {
         require_arity(value, 3, path);

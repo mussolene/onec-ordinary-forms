@@ -2176,6 +2176,14 @@ private:
         if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
         if (kind == "Null" && node_text(field).empty()) return model::NullValue{};
         if (kind == "UUID") return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(field))))};
+        if (kind == "Type") {
+            const auto name = std::string(trim_ascii(node_text(field)));
+            const auto descriptors = mm::platform_value_type_descriptors();
+            if (std::ranges::find(descriptors, name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
+                fail("OOF2003", field, std::string(owner), "Type", "known platform type", name, "Unsupported platform type value");
+            return model::PlatformTypeValue{name};
+        }
+
         fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", kind, "Unsupported Chart value type");
     }
 
@@ -3995,6 +4003,12 @@ private:
                 if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
                 else if (std::holds_alternative<model::NullValue>(value)) writer_.empty("Null");
                 else if (const auto* item = std::get_if<model::UuidValue>(&value)) writer_.text("UUID", canonical_uuid(item->canonical));
+                else if (const auto* item = std::get_if<model::PlatformTypeValue>(&value)) {
+                    const auto descriptors = mm::platform_value_type_descriptors();
+                    if (std::ranges::find(descriptors, item->name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
+                        serialization_fail(std::string(owner), "Type", "known platform type", item->name, "Unsupported platform type value");
+                    writer_.text("Type", item->name);
+                }
                 else if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
                 else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
                 else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));

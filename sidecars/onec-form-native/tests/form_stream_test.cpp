@@ -18899,6 +18899,47 @@ void test_chart_named_events() {
     }
 }
 
+void test_chart_platform_type_values() {
+    const auto descriptors = model::metamodel::platform_value_type_descriptors();
+    expect(descriptors.size() == 12, "platform type evidence must cover twelve named types");
+    for (const auto& descriptor : descriptors) {
+        const std::string name{descriptor.name};
+        const std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Chart"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="1"/><Marker type="ChartMarkerType" member="Auto"/><Value><Type>)XML" + name + R"XML(</Type></Value></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" red="2"/><Value><Type>)XML" + name + R"XML(</Type></Value></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Type>)XML" + name + R"XML(</Type><Details><Type>)XML" + name + R"XML(</Type></Details></ChartValue></Values></Chart></ChildItems></Form>)XML";
+        const auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "named platform Type XML must parse");
+        auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), "named platform Type must encode");
+        const auto* record = find_chart_record(encoded.value());
+        expect(record != nullptr, "Chart must be present");
+        const auto& info = record->items[3].items;
+        const auto expected = list_stream::parse("{\"T\"," + std::string(descriptor.guid) + "}");
+        const auto compact = list_stream::dump_compact(expected);
+        expect(list_stream::dump_compact(info[14]) == compact &&
+               list_stream::dump_compact(info[38]) == compact &&
+               list_stream::dump_compact(info[140]) == compact &&
+               list_stream::dump_compact(info[141]) == compact,
+            "all four Chart values must use platform-observed typed slots");
+        const auto decoded = form_stream::decode_document(encoded.value());
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "named platform Type must decode completely");
+        const auto* control = decoded.value().find_control(model::ObjectId{2});
+        const auto* chart = control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
+        const model::PropertyValue wanted{model::PlatformTypeValue{name}};
+        expect(chart && chart->series[0].value == wanted && chart->points[0].value == wanted &&
+               chart->values[0].value == wanted && chart->values[0].details == wanted,
+            "all four Chart values must retain named platform Type");
+        const auto serialized = source::serialize_form_xml(decoded.value());
+        expect(serialized.ok() && serialized.value().find("<Type>" + name + "</Type>") != std::string::npos &&
+               serialized.value().find(std::string(descriptor.guid)) == std::string::npos,
+            "XML must expose platform type name rather than storage UUID");
+        expect(source::parse_form_xml(serialized.value()).ok(), "named platform Type XML must round trip");
+        auto unknown = encoded.value();
+        find_chart_record(unknown)->items[3].items[140] = list_stream::parse(R"OOF({"T",00000000-0000-0000-0000-000000000001})OOF");
+        const auto unsupported = form_stream::decode_document(unknown);
+        expect(!unsupported.ok() || !unsupported.value().reconstruction_complete(),
+            "unknown platform Type must not claim complete reconstruction");
+    }
+}
+
 void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
       <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><TitleArea><Text>Новая диаграмма</Text><Placement>Auto</Placement><Left>0.83</Left><Top>0</Top><Right>1</Right><Bottom>0.08</Bottom></TitleArea><Series>)XML";
@@ -20450,6 +20491,7 @@ int main() {
         test_common_extension_metadata_for_all_control_types();
         test_gantt_and_dendrogram_extension_metadata();
         test_complex_control_named_events();
+        test_chart_platform_type_values();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();

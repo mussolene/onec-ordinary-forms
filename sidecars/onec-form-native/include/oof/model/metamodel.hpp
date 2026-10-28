@@ -308,6 +308,13 @@ struct EventDescriptor {
     std::optional<std::uint32_t> storage_event_id{};
 };
 
+struct PlatformValueTypeDescriptor {
+    std::string_view name;
+    std::string_view guid;
+};
+
+[[nodiscard]] std::span<const PlatformValueTypeDescriptor> platform_value_type_descriptors() noexcept;
+
 struct StandardPictureDescriptor {
     std::string_view runtime_name;
     std::u8string_view russian_name;
