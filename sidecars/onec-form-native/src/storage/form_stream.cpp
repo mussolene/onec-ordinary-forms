@@ -6751,7 +6751,11 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     if (middle.size() <= 11) fail("OOF1122", "$/Chart/Title", "canonical Chart title slot", std::to_string(middle.size()), "Chart defaults do not contain the title slot");
     middle[11] = encoded_localized_text(title, "$/Chart/TitleArea/Text");
     append(std::move(middle));
-    append({string_value(""), raw("0"), raw(chart.series.empty() || chart.points.empty() ? "1" : "0")});
+    const auto default_mode = chart.series.empty() || chart.points.empty() ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
+    const auto data_mode = chart.data_mode.value_or(default_mode);
+    if (data_mode != model::ChartDataMode::sample && data_mode != model::ChartDataMode::explicit_values)
+        fail("OOF1122", "$/Chart/Values", "Sample or Explicit dataMode", {}, "Chart data mode is invalid");
+    append({string_value(""), raw("0"), raw(data_mode == model::ChartDataMode::sample ? "1" : "0")});
     for (const auto& series : chart.series) {
         for (const auto& point : chart.points) {
             const auto found = value_index.find(ChartValueKey{series.id.value(), point.id.value()});
@@ -7101,6 +7105,10 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     const auto title = decoded_localized_text(at(info, title_offset, info_path), child_path(info_path, title_offset));
     const auto middle_defaults = canonical_chart_middle_defaults();
     const auto data_start = middle_start + middle_defaults.size() + 3;
+    const bool sample = bool_atom(at(info, data_start - 1, info_path), child_path(info_path, data_start - 1));
+    const auto actual_mode = sample ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
+    const auto default_mode = payload.series.empty() || payload.points.empty() ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
+    if (actual_mode != default_mode) payload.data_mode = actual_mode;
     for (std::size_t series = 0; series < series_count; ++series) {
         for (std::size_t point = 0; point < point_count; ++point) {
             const auto cell_offset = data_start + (series * point_count + point) * 3;

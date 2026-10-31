@@ -788,11 +788,14 @@ struct ChartArea {
     friend bool operator==(const ChartArea&, const ChartArea&) = default;
 };
 
+enum class ChartDataMode : std::uint8_t { sample, explicit_values };
+
 struct ChartPayload final : TypedControlPayload<ControlKind::chart> {
     std::optional<ChartArea> plot_area;
     std::optional<ChartArea> legend_area;
     std::optional<ChartArea> title_area;
     ChartSummarySeries summary_series;
+    std::optional<ChartDataMode> data_mode;
     std::optional<std::uint64_t> last_series_id;
     std::optional<std::uint64_t> last_point_id;
     std::vector<ChartSeries> series;

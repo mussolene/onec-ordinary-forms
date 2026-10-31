@@ -1858,6 +1858,13 @@ private:
             } else if (descriptor->kind == model::ControlKind::chart &&
                        (name == "Series" || name == "Points" || name == "Values")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
+                if (name == "Values") {
+                    if (const auto mode = optional_attribute(child, "dataMode")) {
+                        if (*mode == "Sample") chart.data_mode = model::ChartDataMode::sample;
+                        else if (*mode == "Explicit") chart.data_mode = model::ChartDataMode::explicit_values;
+                        else fail("OOF2003", child, id_text, "dataMode", "Sample or Explicit", *mode, "Invalid Chart data mode");
+                    }
+                }
                 if (name == "Series" || name == "Points") {
                     if (const auto last = optional_attribute(child, "lastAssignedId")) {
                         const auto id = parse_integer<std::uint64_t>(*last, child, "lastAssignedId", id_text);
@@ -4086,7 +4093,12 @@ private:
                 writer_.close("ChartPoint");
             }
             writer_.close("Points");
-            writer_.open("Values");
+            const auto default_mode = chart->series.empty() || chart->points.empty() ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
+            if (chart->data_mode && *chart->data_mode != model::ChartDataMode::sample && *chart->data_mode != model::ChartDataMode::explicit_values)
+                serialization_fail(id, "dataMode", "Sample or Explicit", "invalid enum", "Invalid Chart data mode");
+            if (chart->data_mode && *chart->data_mode != default_mode)
+                writer_.open("Values", {{"dataMode", *chart->data_mode == model::ChartDataMode::sample ? "Sample" : "Explicit"}});
+            else writer_.open("Values");
             for (const auto& item : chart->values) {
                 writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
                 write_typed_scalar(item.value, object_id_text(item.series_ref));

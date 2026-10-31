@@ -2731,6 +2731,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
             } else if (chart->values.size() != chart->series.size() * chart->points.size()) {
                 invalid_chart("Chart Values must be a dense Series by Point matrix");
             }
+            if (chart->data_mode && *chart->data_mode != ChartDataMode::sample && *chart->data_mode != ChartDataMode::explicit_values)
+                invalid_chart("Chart Values dataMode is invalid");
             const auto& summary_marker = chart->summary_series.marker;
             if (summary_marker.type_name != "ChartMarkerType" ||
                 (summary_marker.member != "Auto" && summary_marker.member != "Rhomb")) {

@@ -2319,6 +2319,61 @@ void test_geographical_schema_runtime_scale() {
     expect(!source::parse_form_xml(mode_xml).ok(), "runtime mode cannot appear in XML");
 }
 
+void test_chart_data_mode() {
+    for (std::size_t i = 0; i < 12; ++i) {
+        const auto make = [&](model::ChartDataMode mode) {
+            model::Form form; form.id = model::ObjectId{1}; form.name = "DataMode";
+            form.children = {model::ControlRef{model::ObjectId{2}}};
+            model::OrdinaryFormDocument document(std::move(form));
+            model::ChartPayload chart; chart.data_mode = mode;
+            if (i % 3 != 0) {
+                model::ChartSeries series; series.id = model::ObjectId{2}; series.marker = {"ChartMarkerType", "Auto"};
+                chart.series.push_back(series);
+                if (i % 3 == 2) {
+                    model::ChartPoint point; point.id = model::ObjectId{1}; chart.points.push_back(point);
+                    chart.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+                }
+            }
+            document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+            return document;
+        };
+        auto sample_document = make(model::ChartDataMode::sample);
+        auto explicit_document = make(model::ChartDataMode::explicit_values);
+        const auto sample = form_stream::encode_document(sample_document);
+        const auto explicit_values = form_stream::encode_document(explicit_document);
+        expect(sample.ok() && explicit_values.ok(), "both Chart data modes must encode");
+        const auto& sample_info = sample.value().items[1].items[2].items[2].items[1].items[3];
+        const auto& explicit_info = explicit_values.value().items[1].items[2].items[2].items[1].items[3];
+        std::size_t changed = sample_info.items.size(); std::size_t differences = 0;
+        for (std::size_t index = 0; index < sample_info.items.size(); ++index)
+            if (list_stream::dump_compact(sample_info.items[index]) != list_stream::dump_compact(explicit_info.items[index])) { changed = index; ++differences; }
+        expect(differences == 1 && sample_info.items[changed].atom == "1" && explicit_info.items[changed].atom == "0", "only the data mode flag may differ");
+        for (const auto& [encoded, mode] : {std::pair{&sample, model::ChartDataMode::sample}, std::pair{&explicit_values, model::ChartDataMode::explicit_values}}) {
+            const auto decoded = form_stream::decode_document(encoded->value(), "DataMode");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart mode must decode completely");
+            const auto& chart = std::get<model::ChartPayload>(decoded.value().find_control(model::ObjectId{2})->payload);
+            const auto default_mode = i % 3 == 2 ? model::ChartDataMode::explicit_values : model::ChartDataMode::sample;
+            expect(chart.data_mode.value_or(default_mode) == mode, "Chart data mode must survive");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok() && ((xml.value().find("dataMode=") != std::string::npos) == (mode != default_mode)), "XML must emit only nondefault mode");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "Chart data mode XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded->value()), "Chart mode XML/BIN must roundtrip");
+        }
+        auto corrupt = sample.value();
+        corrupt.items[1].items[2].items[2].items[1].items[3].items[changed] = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(corrupt, "DataMode").ok(), "unknown Chart mode flag must fail");
+    }
+    constexpr std::string_view invalid = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Chart"><Position/><Series/><Points/><Values dataMode="Unknown"/></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(invalid).ok(), "unknown Chart XML data mode must fail");
+    model::Form form; form.id = model::ObjectId{1}; form.name = "InvalidMode"; form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ChartPayload chart; chart.data_mode = static_cast<model::ChartDataMode>(99);
+    document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+    expect(!document.validate().ok() && !source::serialize_form_xml(document).ok() && !form_stream::encode_document(document).ok(), "invalid Chart enum must fail");
+}
+
 void test_chart_allocator_history() {
     for (std::size_t i = 0; i < 12; ++i) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "ChartHistory";
@@ -20811,6 +20866,7 @@ int main() {
         test_geographical_schema_runtime_scale();
         test_gantt_periodic_properties();
         test_chart_allocator_history();
+        test_chart_data_mode();
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
