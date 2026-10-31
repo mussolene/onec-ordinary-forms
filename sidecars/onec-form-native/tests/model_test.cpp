@@ -580,9 +580,7 @@ void test_chart_computed_counts() {
             const auto result = document.get_prop_val(owner, property);
             expect(result.status == PropertyReadStatus::computed_value && result.value == PropertyValue{static_cast<std::int64_t>(expected)},
                 "chart counts must reflect named series and points");
-            expect(document.set_prop_val(owner, property, std::int64_t{2}) == PropertyMutationStatus::unsupported_surface &&
-                document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface &&
-                document.get_prop_val(owner, property).value == result.value, "unmodeled resizing must not mutate or report success");
+
         }
     }
 }

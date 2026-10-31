@@ -941,6 +941,7 @@ void test_control_surfaces_and_property_order(
             std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
             properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
                 return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries" ||
+                    property.api_name == "SeriesCount" || property.api_name == "PointCount" ||
                     property.api_name == "PlotArea" || property.api_name == "LegendArea" || property.api_name == "TitleArea" || property.xml_name == "Title";
             }), properties.end());
             cursor = expect_property_sequence(properties, elements, cursor, true);

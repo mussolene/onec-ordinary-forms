@@ -2349,8 +2349,6 @@
       <xs:element name="LabelType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Gradient" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DataSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="SeriesCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="PointCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EndGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MaxSeries" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>

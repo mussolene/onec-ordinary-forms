@@ -364,8 +364,8 @@
               <Property name="LabelType" apiName="LabelType" russianName="ВидПодписей" russianType="ВидПодписейКДиаграмме" valueCodec="enumeration"/>
               <Property name="Gradient" apiName="Gradient" russianName="Градиент" russianType="Булево" valueCodec="boolean"/>
               <Property name="DataSource" apiName="DataSource" russianName="ИсточникДанных" russianType="ТаблицаЗначений ; ОбластьЯчеекТабличногоДокумента" valueCodec="unclassified"/>
-              <Property name="SeriesCount" apiName="SeriesCount" russianName="КоличествоСерий" russianType="Число" valueCodec="decimal"/>
-              <Property name="PointCount" apiName="PointCount" russianName="КоличествоТочек" russianType="Число" valueCodec="decimal"/>
+              <Property name="SeriesCount" apiName="SeriesCount" russianName="КоличествоСерий" russianType="Число" valueCodec="integer"/>
+              <Property name="PointCount" apiName="PointCount" russianName="КоличествоТочек" russianType="Число" valueCodec="integer"/>
               <Property name="EndGaugeAngle" apiName="EndGaugeAngle" russianName="КонечныйУголИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
               <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="decimal"/>
               <Property name="MaxSeries" apiName="MaxSeries" russianName="МаксимумСерий" russianType="МаксимумСерий" valueCodec="enumeration"/>

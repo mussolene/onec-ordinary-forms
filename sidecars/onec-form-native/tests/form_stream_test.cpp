@@ -2319,6 +2319,123 @@ void test_geographical_schema_runtime_scale() {
     expect(!source::parse_form_xml(mode_xml).ok(), "runtime mode cannot appear in XML");
 }
 
+void test_chart_count_mutation() {
+    for (std::size_t i = 0; i < 12; ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "CountMutation";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload chart; chart.data_mode = i % 2 ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
+        model::ChartSeries series; series.id = model::ObjectId{4}; series.text = "old series"; series.marker = {"ChartMarkerType", "Auto"};
+        model::ChartPoint point; point.id = model::ObjectId{3}; point.text = "old point";
+        chart.series.push_back(series); chart.points.push_back(point);
+        chart.values.push_back({series.id, point.id, model::DecimalValue{"7.25"}, "tip", std::string{"detail"}});
+        chart.last_series_id = 4; chart.last_point_id = 3;
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+        const auto series_count = model::PropertyId::from_name("SeriesCount");
+        const auto point_count = model::PropertyId::from_name("PointCount");
+        expect(document.set_prop_val(owner, series_count, std::string{" +002,9 "}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            document.set_prop_val(owner, point_count, model::DecimalValue{"2.9"}) == model::PropertyMutationStatus::applied_unclassified_storage, "count coercion must truncate");
+        const auto& grown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
+        expect(grown.series.size() == 2 && grown.points.size() == 2 && grown.series[1].id.value() == 5 && grown.points[1].id.value() == 4 &&
+            grown.series[1].text == "Серия 2" && grown.points[1].text == "Точка 2" && grown.values.size() == 4, "growth must preserve history and generate labels");
+        expect(grown.values[0].value == model::PropertyValue{model::DecimalValue{"7.25"}} && grown.values[0].tooltip == "tip" &&
+            grown.values[0].details == model::PropertyValue{std::string{"detail"}}, "intersection values and metadata must survive");
+        if (i % 2 == 0) expect(std::holds_alternative<model::UndefinedValue>(grown.values[1].value), "explicit new cells are Undefined");
+        else expect(std::holds_alternative<model::DecimalValue>(grown.values[1].value), "sample new cells are numeric");
+        const auto before = source::serialize_form_xml(document);
+        expect(before.ok(), "grown chart must serialize XML");
+        expect(document.set_prop_val(owner, point_count, std::int64_t{2}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            source::serialize_form_xml(document).value() == before.value(), "assigning same count must be a no-op");
+        for (const model::PropertyValue& invalid : {model::PropertyValue{model::DecimalValue{"-0.5"}}, model::PropertyValue{std::string{"1 000"}}, model::PropertyValue{model::UndefinedValue{}}})
+            expect(document.set_prop_val(owner, series_count, invalid) == model::PropertyMutationStatus::invalid_value, "invalid counts must fail");
+        expect(document.set_prop_val(owner, series_count, std::int64_t{1000001}) == model::PropertyMutationStatus::resource_limit &&
+            source::serialize_form_xml(document).value() == before.value(), "resource failure is atomic");
+        expect(document.reset_prop_val(owner, series_count) == model::PropertyMutationStatus::reset_unclassified_storage &&
+            document.set_prop_val(owner, series_count, true) == model::PropertyMutationStatus::applied_unclassified_storage, "reset then bool regrowth");
+        const auto& regrown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
+        expect(regrown.series.size() == 1 && regrown.series[0].id.value() == 6 && regrown.points.size() == 2 &&
+            regrown.data_mode == (i % 2 ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values), "regrowth retains allocator and mode");
+        expect(form_stream::encode_document(document).ok(), "resized chart must encode");
+    }
+    model::Form form; form.id = model::ObjectId{1}; form.name = "Selection";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ChartPayload chart; chart.data_mode = model::ChartDataMode::explicit_values;
+    chart.properties.set_explicit(model::PropertyId::from_name("AutoSeriesText"), false);
+    chart.properties.set_explicit(model::PropertyId::from_name("AutoPointText"), false);
+    for (std::uint64_t id : {2, 3}) { model::ChartSeries series; series.id = model::ObjectId{id}; series.marker = {"ChartMarkerType", "Auto"}; chart.series.push_back(series); }
+    model::ChartPoint point; point.id = model::ObjectId{1}; chart.points.push_back(point);
+    for (const auto& series : chart.series) chart.values.push_back({series.id, point.id, model::DecimalValue{"2"}});
+    chart.properties.set_explicit(model::PropertyId::from_name("ActiveSeries"), model::ChartSeriesRef{model::ObjectId{2}, model::ObjectId{3}});
+    document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+    const auto series_count = model::PropertyId::from_name("SeriesCount"), point_count = model::PropertyId::from_name("PointCount");
+    expect(document.set_prop_val(owner, series_count, std::int64_t{1}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+        document.get_prop_val(owner, model::PropertyId::from_name("ActiveSeries")).value == model::PropertyValue{model::ChartSeriesRef{model::ObjectId{2}, model::ObjectId{2}}}, "shrink must clamp active series");
+    expect(document.set_prop_val(owner, series_count, std::int64_t{2}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+        document.reset_prop_val(owner, point_count) == model::PropertyMutationStatus::reset_unclassified_storage &&
+        document.set_prop_val(owner, point_count, std::int64_t{1}) == model::PropertyMutationStatus::applied_unclassified_storage, "regrowth must succeed");
+    const auto& regrown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
+    expect(regrown.series.back().id.value() == 4 && regrown.points.back().id.value() == 2 && regrown.series.back().text.empty() && regrown.points.back().text.empty() &&
+        std::holds_alternative<model::UndefinedValue>(regrown.values.back().value), "regrowth respects counters and disabled labels");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "selected resized chart must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "Selection");
+    expect(decoded.ok() && source::serialize_form_xml(decoded.value()).ok(), "selected resized chart must decode and serialize");
+    constexpr std::string_view invalid_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Chart"><Position/><SeriesCount>1</SeriesCount><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(invalid_xml).ok(), "Chart count scalar must not enter source XML");
+    model::Form invalid_form; invalid_form.id = model::ObjectId{1}; invalid_form.name = "InvalidCountBag";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument invalid(std::move(invalid_form));
+    model::ChartPayload invalid_chart;
+    invalid_chart.properties.set_explicit(series_count, std::int64_t{1});
+    invalid.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(invalid_chart)});
+    expect(!invalid.validate().ok() && !form_stream::encode_document(invalid).ok(), "direct count property bag must be rejected");
+    model::Form exhausted_form; exhausted_form.id = model::ObjectId{1}; exhausted_form.name = "Exhausted";
+    exhausted_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument exhausted(std::move(exhausted_form));
+    model::ChartPayload exhausted_chart; exhausted_chart.last_series_id = 9223372036854775807ULL;
+    exhausted.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(exhausted_chart)});
+    const auto exhausted_before = source::serialize_form_xml(exhausted);
+    expect(exhausted_before.ok() && exhausted.set_prop_val(owner, series_count, std::int64_t{1}) == model::PropertyMutationStatus::resource_limit &&
+        source::serialize_form_xml(exhausted).value() == exhausted_before.value(), "allocator exhaustion must be atomic");
+}
+
+void test_chart_count_document_budget() {
+    {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "SharedBudget";
+        form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload first;
+        for (std::uint64_t id = 1; id <= 500; ++id) { model::ChartPoint point; point.id = model::ObjectId{id}; first.points.push_back(point); }
+        document.add_control(model::ControlNode{model::ObjectId{2}, "First", std::move(first)});
+        document.add_control(model::ControlNode{model::ObjectId{3}, "Second", model::ChartPayload{}});
+        const auto before = source::serialize_form_xml(document);
+        expect(before.ok(), "shared budget fixture must serialize");
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{3}};
+        expect(document.set_prop_val(owner, model::PropertyId::from_name("SeriesCount"), std::int64_t{999501}) == model::PropertyMutationStatus::resource_limit &&
+            source::serialize_form_xml(document).value() == before.value(), "total budget across charts must reject atomically");
+    }
+    {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "MatrixBudget";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload chart;
+        model::ChartSeries series; series.id = model::ObjectId{2}; series.marker = {"ChartMarkerType", "Auto"}; chart.series.push_back(series);
+        for (std::uint64_t id = 1; id <= 1000; ++id) {
+            model::ChartPoint point; point.id = model::ObjectId{id}; chart.points.push_back(point);
+            chart.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
+        }
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+        const auto before = source::serialize_form_xml(document);
+        expect(before.ok(), "matrix budget fixture must serialize");
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+        expect(document.set_prop_val(owner, model::PropertyId::from_name("SeriesCount"), std::int64_t{1001}) == model::PropertyMutationStatus::resource_limit &&
+            source::serialize_form_xml(document).value() == before.value(), "matrix product budget must reject atomically");
+    }
+}
+
 void test_chart_data_mode() {
     for (std::size_t i = 0; i < 12; ++i) {
         const auto make = [&](model::ChartDataMode mode) {
@@ -20867,6 +20984,8 @@ int main() {
         test_gantt_periodic_properties();
         test_chart_allocator_history();
         test_chart_data_mode();
+        test_chart_count_mutation();
+        test_chart_count_document_budget();
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();

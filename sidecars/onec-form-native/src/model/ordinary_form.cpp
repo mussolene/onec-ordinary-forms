@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <map>
+#include <random>
 #include <set>
 #include <stdexcept>
 #include <type_traits>
@@ -1419,7 +1421,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         property_control = &control;
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount")))
-            return PropertyMutationStatus::unsupported_surface;
+            return resize_chart(owner.id, property, value);
         if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActiveSeries")) {
             const auto* ref = std::get_if<ChartSeriesRef>(&value);
             if (!ref) return PropertyMutationStatus::invalid_value;
@@ -1796,8 +1798,10 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         auto& control = collections_.controls[location->index];
         property_control = &control;
         if (control.kind() == ControlKind::chart &&
-            (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount")))
-            return PropertyMutationStatus::unsupported_surface;
+            (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount"))) {
+            const auto status = resize_chart(owner.id, property, std::int64_t{0});
+            return status == PropertyMutationStatus::applied_unclassified_storage ? PropertyMutationStatus::reset_unclassified_storage : status;
+        }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage")
@@ -2722,6 +2726,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
             const auto invalid_chart = [&](std::string reason) {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
+            if (control.properties().contains(PropertyId::from_name("SeriesCount")) ||
+                control.properties().contains(PropertyId::from_name("PointCount")))
+                invalid_chart("Chart counts are derived from collections and cannot be stored as properties");
             if (control.kind() != ControlKind::chart) {
                 invalid_chart("Chart payload is attached to a non-Chart control");
             }
@@ -2918,6 +2925,114 @@ void OrdinaryFormDocument::validate_or_throw() const {
     if (!report.ok()) {
         throw InvariantError(std::move(report));
     }
+}
+
+PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyId property, const PropertyValue& value) {
+    try {
+        std::string text;
+        if (const auto* number = std::get_if<std::int64_t>(&value)) text = std::to_string(*number);
+        else if (const auto* number = std::get_if<DecimalValue>(&value)) text = number->canonical;
+        else if (const auto* boolean = std::get_if<bool>(&value)) text = *boolean ? "1" : "0";
+        else if (const auto* string = std::get_if<std::string>(&value)) { text = *string; std::replace(text.begin(), text.end(), ',', '.'); }
+        else return PropertyMutationStatus::invalid_value;
+        std::string canonical;
+        try { canonical = storage::value_codec::canonical_decimal(text); }
+        catch (const std::exception&) { return PropertyMutationStatus::invalid_value; }
+        if (!canonical.empty() && canonical.front() == '-') return PropertyMutationStatus::invalid_value;
+        const auto dot = canonical.find('.');
+        const auto integral = std::string_view(canonical).substr(0, dot);
+        std::uint64_t requested = 0;
+        const auto parsed = std::from_chars(integral.data(), integral.data() + integral.size(), requested);
+        if (parsed.ec == std::errc::result_out_of_range) return PropertyMutationStatus::resource_limit;
+        if (parsed.ec != std::errc{} || parsed.ptr != integral.data() + integral.size()) return PropertyMutationStatus::invalid_value;
+        if (requested > max_chart_collection_items) return PropertyMutationStatus::resource_limit;
+        const auto location = find_location(ObjectCategory::control, id);
+        if (!location || !reconstruction_complete_) return PropertyMutationStatus::unsupported_surface;
+        auto& control = collections_.controls[location->index];
+        auto* chart = std::get_if<ChartPayload>(&control.payload);
+        if (!chart || control.data_path || control.properties().contains(PropertyId::from_name("DataSource")))
+            return PropertyMutationStatus::unsupported_surface;
+        const bool series_axis = property == PropertyId::from_name("SeriesCount");
+        const auto new_series_count = series_axis ? static_cast<std::size_t>(requested) : chart->series.size();
+        const auto new_point_count = series_axis ? chart->points.size() : static_cast<std::size_t>(requested);
+        std::size_t budget = 0;
+        for (const auto& candidate : collections_.controls) {
+            const auto* other = std::get_if<ChartPayload>(&candidate.payload);
+            if (!other) continue;
+            const auto series = candidate.id == id ? new_series_count : other->series.size();
+            const auto points = candidate.id == id ? new_point_count : other->points.size();
+            if (series > max_chart_collection_items || points > max_chart_collection_items ||
+                (points && series > max_chart_collection_items / points)) return PropertyMutationStatus::resource_limit;
+            const auto cells = series * points;
+            if (series > max_chart_collection_items - budget || points > max_chart_collection_items - budget - series ||
+                cells > max_chart_collection_items - budget - series - points) return PropertyMutationStatus::resource_limit;
+            budget += series + points + cells;
+        }
+        const auto report = validate();
+        if (std::ranges::any_of(report.violations, [id](const InvariantViolation& violation) { return violation.source == id; }))
+            return PropertyMutationStatus::unsupported_surface;
+        const auto old_count = series_axis ? chart->series.size() : chart->points.size();
+        if (requested == old_count) return PropertyMutationStatus::applied_unclassified_storage;
+        std::uint64_t last_series = chart->last_series_id.value_or(1);
+        std::uint64_t last_point = chart->last_point_id.value_or(0);
+        for (const auto& series : chart->series) last_series = std::max(last_series, series.id.value());
+        for (const auto& point : chart->points) last_point = std::max(last_point, point.id.value());
+        const auto added = requested > old_count ? requested - old_count : 0;
+        const auto last = series_axis ? last_series : last_point;
+        const auto max_id = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+        if (last > max_id || added > max_id - last) return PropertyMutationStatus::resource_limit;
+        const auto effective_mode = chart->data_mode.value_or(chart->series.empty() || chart->points.empty() ? ChartDataMode::sample : ChartDataMode::explicit_values);
+        const auto selected = get_prop_val({ObjectCategory::control, id}, PropertyId::from_name("ActiveSeries"));
+        ChartPayload result = *chart;
+        result.data_mode = effective_mode;
+        const auto auto_text = [&](std::string_view name) {
+            const auto* entry = result.properties.find(PropertyId::from_name(name));
+            return entry == nullptr || (std::get_if<bool>(&entry->value) && std::get<bool>(entry->value));
+        };
+        if (series_axis) {
+            result.series.resize(std::min<std::size_t>(result.series.size(), new_series_count));
+            while (result.series.size() < new_series_count) {
+                ChartSeries series; series.id = ObjectId{++last_series}; series.marker = {"ChartMarkerType", "Auto"};
+                if (auto_text("AutoSeriesText")) series.text = "Серия " + std::to_string(result.series.size() + 1);
+                result.series.push_back(std::move(series));
+            }
+            result.last_series_id = last_series;
+            if (result.series.empty()) result.properties.unset(PropertyId::from_name("ActiveSeries"));
+            else if (selected.value) {
+                if (const auto* ref = std::get_if<ChartSeriesRef>(&*selected.value);
+                    ref && std::ranges::none_of(result.series, [&](const auto& series) { return series.id == ref->series; }))
+                    result.properties.set_explicit(PropertyId::from_name("ActiveSeries"), ChartSeriesRef{id, result.series.back().id});
+            }
+        } else {
+            result.points.resize(std::min<std::size_t>(result.points.size(), new_point_count));
+            while (result.points.size() < new_point_count) {
+                ChartPoint point; point.id = ObjectId{++last_point};
+                if (auto_text("AutoPointText")) point.text = "Точка " + std::to_string(result.points.size() + 1);
+                result.points.push_back(std::move(point));
+            }
+            result.last_point_id = last_point;
+        }
+        std::map<std::pair<std::uint64_t, std::uint64_t>, ChartValue> previous;
+        for (const auto& cell : chart->values) previous.emplace(std::pair{cell.series_ref.value(), cell.point_ref.value()}, cell);
+        result.values.clear(); result.values.reserve(new_series_count * new_point_count);
+        for (const auto& series : result.series) for (const auto& point : result.points) {
+            const auto found = previous.find({series.id.value(), point.id.value()});
+            if (found != previous.end()) result.values.push_back(found->second);
+            else {
+                ChartValue cell; cell.series_ref = series.id; cell.point_ref = point.id;
+                if (effective_mode == ChartDataMode::explicit_values) cell.value = UndefinedValue{};
+                else {
+                    thread_local std::mt19937 engine(std::random_device{}());
+                    const auto amount = std::uniform_int_distribution<unsigned>{0, 2000}(engine);
+                    cell.value = DecimalValue{storage::value_codec::canonical_decimal(std::to_string(amount / 100) + "." + std::to_string(100 + amount % 100).substr(1))};
+                }
+                result.values.push_back(std::move(cell));
+            }
+        }
+        *chart = std::move(result);
+        return PropertyMutationStatus::applied_unclassified_storage;
+    } catch (const std::bad_alloc&) { return PropertyMutationStatus::resource_limit; }
+      catch (const std::length_error&) { return PropertyMutationStatus::resource_limit; }
 }
 
 void OrdinaryFormDocument::remove_unreferenced_caption_asset(ObjectId id) {

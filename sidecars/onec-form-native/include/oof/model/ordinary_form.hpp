@@ -211,6 +211,7 @@ struct LocalizedStringItem {
 };
 
 inline constexpr std::size_t max_localized_text_items = 65536;
+inline constexpr std::size_t max_chart_collection_items = 1000000;
 
 struct LocalizedStringValue {
     std::vector<LocalizedStringItem> items;
@@ -568,6 +569,7 @@ enum class PropertyMutationStatus : std::uint8_t {
     unknown_access,
     invalid_value,
     invalid_reference,
+    resource_limit,
     forbidden_after_opening_started,
     window_state_disallowed_after_assignment,
     window_join_disallowed_after_assignment,
@@ -1168,6 +1170,7 @@ private:
         std::size_t index = 0;
     };
 
+    [[nodiscard]] PropertyMutationStatus resize_chart(ObjectId id, PropertyId property, const PropertyValue& value);
     void remove_unreferenced_caption_asset(ObjectId id);
     void rebuild_index();
     void index_first(ObjectId id, ObjectCategory category, std::size_t index);

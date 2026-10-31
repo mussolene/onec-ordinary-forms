@@ -1245,6 +1245,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             std::vector<model::metamodel::PropertyDescriptor> chart_properties;
             for (const auto& property : metamodel.properties_for(control.kind)) {
                 if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries" &&
+                    property.api_name != "SeriesCount" && property.api_name != "PointCount" &&
                     property.api_name != "PlotArea" && property.api_name != "LegendArea" && property.api_name != "TitleArea" && property.xml_name != "Title") chart_properties.push_back(property);
             }
             append_property_elements(output, chart_properties, "      ", false);

@@ -736,6 +736,13 @@ void apply_proven_storage_overrides(
     classify_property(gantt_properties, "PeriodicVariantRepetition", StorageCodec::control_info, DefaultKind::decimal, "1");
 
     auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+    for (const auto name : {"SeriesCount", "PointCount"}) {
+        auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
+        if (property == chart_properties.end()) throw std::logic_error("missing Chart count descriptor");
+        property->value_codec = ValueCodec::integer;
+        property->storage_codec = StorageCodec::collection_record;
+        property->default_value = {DefaultKind::integer, "0"};
+    }
     if (const auto refresh = std::ranges::find(chart_properties, "RefreshEnabled", &PropertyDescriptor::api_name);
         refresh != chart_properties.end()) {
         refresh->persistence = PersistenceClass::runtime_only;
