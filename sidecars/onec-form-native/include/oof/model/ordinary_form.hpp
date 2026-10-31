@@ -767,6 +767,8 @@ struct ChartValue {
 };
 
 struct ChartSummarySeries {
+    std::optional<PropertyValue> text;
+    PropertyValue value{UndefinedValue{}};
     ColorValue color;
     EnumerationValue marker{"ChartMarkerType", "Auto"};
 };

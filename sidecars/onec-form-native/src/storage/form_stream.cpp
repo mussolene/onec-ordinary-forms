@@ -6727,6 +6727,11 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
             "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
     }
     auto summary_row = canonical_chart_series_defaults();
+    if (chart.summary_series.text) {
+        summary_row[3] = encoded_localized_text(*chart.summary_series.text, "$/Chart/SummarySeries/Text");
+        summary_row[4] = raw("1");
+    }
+    summary_row[9] = encoded_typed_scalar(chart.summary_series.value, "$/Chart/SummarySeries/Value");
     constexpr std::array line_color_types{0, 1, 14, 15, 26, 33, 35, 43, 44};
     if (std::ranges::find(line_color_types, chart_type) != line_color_types.end()) {
         summary_row[0].items[2].items[0] = raw("8874375");
@@ -7198,6 +7203,15 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         summary_marker.member == "Auto" ? "1" : "3", summary_marker_cache_path);
     payload.summary_series.marker = summary_marker;
     payload.summary_series.color = summary_color;
+    const auto summary_offset = std::size_t{5} + series_size * 11;
+    const auto summary_text = decoded_localized_text(at(info, summary_offset + 3, info_path), child_path(info_path, summary_offset + 3));
+    const bool explicit_summary_text = bool_atom(at(info, summary_offset + 4, info_path), child_path(info_path, summary_offset + 4));
+    if (explicit_summary_text) payload.summary_series.text = summary_text;
+    else require_exact(at(info, summary_offset + 3, info_path), canonical_chart_series_defaults()[3],
+        child_path(info_path, summary_offset + 3), "Implicit SummarySeries Text must match the native default");
+    const auto summary_value = decoded_typed_scalar(at(info, summary_offset + 9, info_path), child_path(info_path, summary_offset + 9));
+    if (!summary_value) fail("OOF1122", child_path(info_path, summary_offset + 9), "supported SummarySeries Value", "unsupported", "SummarySeries Value type is unsupported");
+    payload.summary_series.value = *summary_value;
     model::PropertySet properties;
     const auto type_path = child_path(info_path, middle_start + 2);
     const auto type_ordinal = integer_atom<int>(at(info, middle_start + 2, info_path), type_path);

@@ -2436,6 +2436,42 @@ void test_chart_count_document_budget() {
     }
 }
 
+void test_chart_summary_text_value() {
+    const std::array<model::PropertyValue, 9> values{model::UndefinedValue{}, std::string{"key"}, model::DecimalValue{"1.25"}, true,
+        model::DateValue{"2024-02-29T00:00:00"}, model::NullValue{}, model::UuidValue{"514cd709-d736-4801-9061-13350de142ee"}, model::PlatformTypeValue{"Number"}, std::int64_t{17}};
+    for (std::size_t i = 0; i < 12; ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "Summary"; form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form)); model::ChartPayload chart;
+        if (i % 2) { model::ChartSeries series; series.id = model::ObjectId{2}; series.marker = {"ChartMarkerType", "Auto"}; chart.series.push_back(series); }
+        if (i % 3 == 0) chart.summary_series.text = std::string{};
+        else if (i % 3 == 1) chart.summary_series.text = std::string{"Сводная"};
+        else chart.summary_series.text = model::LocalizedStringValue{{{"ru", "Итого"}, {"en", "Total"}}};
+        chart.summary_series.value = values[i % values.size()];
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+        const auto encoded = form_stream::encode_document(document); expect(encoded.ok(), "summary text and value must encode");
+        const auto& info = encoded.value().items[1].items[2].items[2].items[1].items[3];
+        const auto offset = std::size_t{5} + (i % 2) * 11;
+        expect(info.items[offset + 4].atom == "1", "summary text presence must set explicit flag");
+        const auto decoded = form_stream::decode_document(encoded.value(), "Summary");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "summary text and value must decode completely");
+        const auto& summary = std::get<model::ChartPayload>(decoded.value().find_control(model::ObjectId{2})->payload).summary_series;
+        const auto expected_value = i % values.size() == 8 ? model::PropertyValue{model::DecimalValue{"17"}} : values[i % values.size()];
+        expect(summary.text.has_value() && summary.value == expected_value, "summary explicit text and typed value must survive");
+        const auto xml = source::serialize_form_xml(decoded.value()); expect(xml.ok() && xml.value().find("<Text") != std::string::npos, "summary explicit text must remain in XML");
+        const auto parsed = source::parse_form_xml(xml.value()); expect(parsed.ok(), "summary XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "summary XML/BIN must roundtrip");
+        auto bad = encoded.value(); bad.items[1].items[2].items[2].items[1].items[3].items[offset + 4] = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(bad, "Summary").ok(), "invalid summary explicit flag must fail");
+        if (i % 3 == 2) {
+            bad = encoded.value(); bad.items[1].items[2].items[2].items[1].items[3].items[offset + 4] = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(bad, "Summary").ok(), "implicit flag with nondefault summary text must fail");
+        }
+        bad = encoded.value(); bad.items[1].items[2].items[2].items[1].items[3].items[offset + 9] = list_stream::parse(R"VALUE({"#",00000000-0000-0000-0000-000000000001,0})VALUE");
+        expect(!form_stream::decode_document(bad, "Summary").ok(), "unknown summary typed value must fail");
+    }
+}
+
 void test_chart_data_mode() {
     for (std::size_t i = 0; i < 12; ++i) {
         const auto make = [&](model::ChartDataMode mode) {
@@ -20984,6 +21020,7 @@ int main() {
         test_gantt_periodic_properties();
         test_chart_allocator_history();
         test_chart_data_mode();
+        test_chart_summary_text_value();
         test_chart_count_mutation();
         test_chart_count_document_budget();
         test_gantt_chart_named_storage_round_trip();

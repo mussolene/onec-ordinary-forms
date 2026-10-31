@@ -1849,8 +1849,16 @@ private:
                 auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
                 bool color_seen = false;
                 bool marker_seen = false;
+                bool text_seen = false;
+                bool value_seen = false;
                 for (xmlNodePtr field : element_children(child)) {
-                    if (node_name(field) == "Color" && !color_seen) {
+                    if (node_name(field) == "Text" && !text_seen) {
+                        text_seen = true;
+                        summary.text = parse_property_value(field, mm::ValueCodec::localized_text, id_text);
+                    } else if (node_name(field) == "Value" && !value_seen) {
+                        value_seen = true;
+                        summary.value = parse_typed_value(field, id_text);
+                    } else if (node_name(field) == "Color" && !color_seen) {
                         color_seen = true;
                         summary.color = parse_color(field);
                     } else if (node_name(field) == "Marker" && !marker_seen) {
@@ -4049,9 +4057,21 @@ private:
                 title_area = std::move(defaults);
             }
             write_area("TitleArea", title_area);
-            if (chart->summary_series.color != model::ColorValue{} ||
+            if (chart->summary_series.text || !std::holds_alternative<model::UndefinedValue>(chart->summary_series.value) ||
+                chart->summary_series.color != model::ColorValue{} ||
                 chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
                 writer_.open("SummarySeries");
+                if (chart->summary_series.text) {
+                    mm::PropertyDescriptor property;
+                    property.xml_name = "Text";
+                    property.value_codec = mm::ValueCodec::localized_text;
+                    write_property(property, *chart->summary_series.text, id);
+                }
+                if (!std::holds_alternative<model::UndefinedValue>(chart->summary_series.value)) {
+                    writer_.open("Value");
+                    write_typed_scalar(chart->summary_series.value, id);
+                    writer_.close("Value");
+                }
                 if (chart->summary_series.color != model::ColorValue{}) write_color("Color", chart->summary_series.color, id);
                 if (chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"})
                     write_enumeration("Marker", chart->summary_series.marker);

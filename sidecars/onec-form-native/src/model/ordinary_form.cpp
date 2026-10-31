@@ -2750,6 +2750,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
             }
             if (chart->data_mode && *chart->data_mode != ChartDataMode::sample && *chart->data_mode != ChartDataMode::explicit_values)
                 invalid_chart("Chart Values dataMode is invalid");
+            if (chart->summary_series.text && !std::holds_alternative<std::string>(*chart->summary_series.text) &&
+                !(std::holds_alternative<LocalizedStringValue>(*chart->summary_series.text) && valid_localized_string(std::get<LocalizedStringValue>(*chart->summary_series.text))))
+                invalid_chart("Chart SummarySeries Text must be plain or localized text");
+            metamodel::PropertyDescriptor scalar_descriptor;
+            scalar_descriptor.value_codec = metamodel::ValueCodec::typed_scalar;
+            if (!property_value_matches(scalar_descriptor, chart->summary_series.value))
+                invalid_chart("Chart SummarySeries Value must be a supported typed scalar");
             const auto& summary_marker = chart->summary_series.marker;
             if (summary_marker.type_name != "ChartMarkerType" ||
                 (summary_marker.member != "Auto" && summary_marker.member != "Rhomb")) {
