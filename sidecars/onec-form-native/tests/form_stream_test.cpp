@@ -13463,11 +13463,6 @@ void test_button_label_input_field_round_trip() {
         "InputField type must match its linked Attribute");
 
     expect_failure(
-        form_stream::encode_document(make_input_document(10, true, true)),
-        "OOF1122",
-        "$/InputField/DataPath",
-        "non-string InputField attribute types must remain unsupported");
-    expect_failure(
         form_stream::encode_document(make_input_document(10, true, false, true)),
         "OOF1122",
         "$/InputField/DataPath",
@@ -13587,14 +13582,13 @@ void test_input_field_date_only_type_domain_round_trip() {
     std::vector<model::TypeDomainPatternValue> unsupported_types{
         make_type(model::TypeDomainTerm::date, {true, true}),
         make_type(model::TypeDomainTerm::date, {false, true}),
-        make_type(model::TypeDomainTerm::numeric),
         model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::date,
             .date = {true, false}}, model::TypeDomainEntry{.term = model::TypeDomainTerm::string,
             .string = {10, true}}}},
     };
     for (const auto& unsupported_type : unsupported_types) {
         expect_failure(form_stream::encode_document(make_document(unsupported_type)), "OOF1122",
-            "$/InputField/DataPath", "InputField must reject DateTime, time-only, numeric, and mixed domains");
+            "$/InputField/DataPath", "InputField must reject DateTime, time-only, and mixed domains");
 
         auto unsupported_stream = encoded.value();
         const auto serialized_type = list_stream::parse(value_codec::encode_type_domain(unsupported_type));
@@ -13613,6 +13607,88 @@ void test_input_field_date_only_type_domain_round_trip() {
         list_stream::parse(value_codec::encode_type_domain(model::TypeDomainPatternValue{{string_entry}}));
     expect_failure(form_stream::decode_document(mismatched_attribute, "DateInput"), "OOF1122",
         "$/1/2/2/1/2/1", "Date-only InputField TypeDomain must still match its linked Attribute");
+}
+
+void test_input_field_numeric_type_domain_round_trip() {
+    constexpr std::array<model::NumericQualifiers, 18> samples{{
+        {0, 0, false},
+        {1, 0, false}, {1, 0, true}, {1, 1, false}, {1, 1, true},
+        {15, 2, false}, {15, 2, true}, {10, 0, false}, {10, 0, true},
+        {38, 0, false}, {38, 38, true}, {38, 2, false}, {38, 38, false},
+        {39, 0, false}, {40, 0, true}, {64, 0, false}, {64, 64, false}, {64, 64, true},
+    }};
+    for (const auto qualifiers : samples) {
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::numeric;
+        entry.numeric = qualifiers;
+        const model::TypeDomainPatternValue type{{entry}};
+        model::Form form;
+        form.id = model::ObjectId{1}; form.name = "NumericInput";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Number", type});
+        model::ControlNode input{model::ObjectId{2}, "NumericField", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        input.properties().set_explicit(model::PropertyId::from_name("Wrap"), qualifiers.non_negative);
+        document.add_control(std::move(input));
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "numeric InputField must encode");
+        const auto& info = encoded.value().items[1].items[2].items[2].items[1].items[2];
+        expect(info.items[2].items[0].items[14].atom == std::to_string(qualifiers.length) &&
+            info.items[2].items[0].items[15].atom == std::to_string(qualifiers.length == 0 ? 0 : qualifiers.precision),
+            "numeric InputField cached qualifiers must match its type");
+        const auto decoded = form_stream::decode_document(encoded.value(), "NumericInput");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "numeric InputField must decode completely");
+        const auto* attribute = decoded.value().find_attribute(model::ObjectId{3});
+        const auto* field = decoded.value().find_control(model::ObjectId{2});
+        expect(attribute && attribute->type == type && field && field->data_path &&
+            field->data_path->attribute.id() == model::ObjectId{3}, "numeric type and DataPath must survive");
+        const auto* wrap = field->properties().find(model::PropertyId::from_name("Wrap"));
+        expect((wrap ? std::get<bool>(wrap->value) : true) == qualifiers.non_negative,
+            "numeric InputField must preserve Wrap independently of type");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "numeric InputField XML must serialize");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "numeric InputField XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "numeric InputField XML and stream must round-trip");
+        for (const auto slot : {14, 15}) {
+            auto corrupt = encoded.value();
+            corrupt.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[slot] =
+                list_stream::ListValue::raw_atom("99");
+            expect(!form_stream::decode_document(corrupt, "NumericInput").ok(),
+                "numeric InputField must reject inconsistent cached qualifiers");
+        }
+    }
+    model::Form invalid_form;
+    invalid_form.id = model::ObjectId{1}; invalid_form.name = "InvalidNumeric";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+    model::TypeDomainEntry invalid_entry;
+    invalid_entry.term = model::TypeDomainTerm::numeric;
+    invalid_entry.numeric = {65, 0, false};
+    invalid_document.add_attribute(model::Attribute{model::ObjectId{3}, "Number", model::TypeDomainPatternValue{{invalid_entry}}});
+    model::ControlNode invalid_input{model::ObjectId{2}, "NumericField", model::InputFieldPayload{}};
+    invalid_input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+    invalid_document.add_control(std::move(invalid_input));
+    expect(!form_stream::encode_document(invalid_document).ok(), "InputField must reject numeric length greater than 64");
+    constexpr std::string_view xml = R"XML(<Form id="1" name="NumericInput" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Number"><TypeDomain><Entry term="numeric" length="0" precision="65"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="NumericField"><DataPath attributeId="3"/><Position/></InputField></ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "XML must accept numeric zero length with precision");
+    const auto* attribute = parsed.value().find_attribute(model::ObjectId{3});
+    expect(attribute && attribute->type.entries.front().numeric.precision == 0,
+        "XML numeric zero length must normalize precision to zero");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("precision=\"65\"") == std::string::npos &&
+        form_stream::encode_document(parsed.value()).ok(), "normalized XML and stream must agree");
+    model::Form noncanonical_form;
+    noncanonical_form.id = model::ObjectId{1}; noncanonical_form.name = "Noncanonical";
+    model::OrdinaryFormDocument noncanonical(std::move(noncanonical_form));
+    invalid_entry.numeric = {0, 65, false};
+    noncanonical.add_attribute(model::Attribute{model::ObjectId{3}, "Number", model::TypeDomainPatternValue{{invalid_entry}}});
+    expect(!noncanonical.validate().ok() && !source::serialize_form_xml(noncanonical).ok() &&
+        !form_stream::encode_document(noncanonical).ok(), "direct noncanonical numeric type must be rejected");
 }
 
 void test_input_field_text_edit_round_trip() {
@@ -20583,6 +20659,7 @@ int main() {
         test_calendar_track_bar_optional_data_path_links();
         test_button_label_input_field_round_trip();
         test_input_field_date_only_type_domain_round_trip();
+        test_input_field_numeric_type_domain_round_trip();
         test_input_field_shortcut_round_trip();
         test_input_field_text_edit_round_trip();
         test_input_field_tooltip_and_format_round_trip();

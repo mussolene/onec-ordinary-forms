@@ -283,6 +283,12 @@ void test_type_domain() {
 
     const std::string encoded = codec::encode_type_domain(value);
     expect(codec::decode_type_domain(encoded) == value, "type-domain qualifiers must round-trip");
+    expect_rejected([] { static_cast<void>(codec::decode_type_domain("{\"Pattern\",{\"N\",0,65,0}}")); },
+        "numeric type-domain binary reader must reject nonzero precision at zero length");
+    model::TypeDomainEntry zero_numeric;
+    zero_numeric.term = model::TypeDomainTerm::numeric;
+    expect(codec::decode_type_domain("{\"Pattern\",{\"N\",0,0,0}}") == model::TypeDomainPatternValue{{zero_numeric}},
+        "numeric type-domain binary reader must accept zero length with zero precision");
     expect(codec::encode_type_domain(codec::decode_type_domain(encoded)) == encoded,
            "type-domain output must be deterministic");
 

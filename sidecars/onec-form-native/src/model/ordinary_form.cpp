@@ -111,6 +111,12 @@ bool is_positive_int32_property(const metamodel::PropertyDescriptor& descriptor)
         (descriptor.control_kind == ControlKind::geographical_schema_field && descriptor.api_name == "Scale");
 }
 
+bool type_domain_numeric_precision_normalized(const TypeDomainPatternValue& type) {
+    return std::ranges::none_of(type.entries, [](const auto& entry) {
+        return entry.term == TypeDomainTerm::numeric && entry.numeric.length == 0 && entry.numeric.precision != 0;
+    });
+}
+
 bool property_value_matches(
     const metamodel::PropertyDescriptor& descriptor,
     const PropertyValue& value
@@ -159,7 +165,7 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, CompositeIdValue>) {
                 return expected == metamodel::ValueCodec::composite_id;
             } else if constexpr (std::is_same_v<Value, TypeDomainPatternValue>) {
-                return expected == metamodel::ValueCodec::type_domain;
+                return expected == metamodel::ValueCodec::type_domain && type_domain_numeric_precision_normalized(typed_value);
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 if (expected != metamodel::ValueCodec::enumeration) return false;
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "EnterKeyBehavior")
@@ -1852,6 +1858,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
     for (const auto& attribute : collections_.attributes) {
         record_id(attribute.id, ObjectCategory::attribute);
+        if (!type_domain_numeric_precision_normalized(attribute.type))
+            add_violation(report, InvariantCode::invalid_property, attribute.id, attribute.id,
+                "numeric type-domain precision must be zero when length is zero");
     }
     for (const auto& command : collections_.commands) {
         record_id(command.id, ObjectCategory::command);

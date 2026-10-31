@@ -627,6 +627,7 @@ model::TypeDomainPatternValue parse_type_domain(xmlNodePtr node) {
                 entry.numeric.non_negative =
                     parse_boolean(*non_negative, entry_node, "nonNegative");
             }
+            if (entry.numeric.length == 0) entry.numeric.precision = 0;
             if (entry.numeric.precision > entry.numeric.length && entry.numeric.length != 0) {
                 fail(
                     "OOF2003",
@@ -3071,6 +3072,9 @@ private:
                 case model::TypeDomainTerm::boolean:
                     break;
                 case model::TypeDomainTerm::numeric:
+                    if (entry.numeric.length == 0 && entry.numeric.precision != 0) {
+                        serialization_fail(std::string(object_id), std::string(name), "zero precision for zero length", std::to_string(entry.numeric.precision), "Numeric type-domain precision is not normalized");
+                    }
                     if (entry.numeric.precision > entry.numeric.length && entry.numeric.length != 0) {
                         serialization_fail(std::string(object_id), std::string(name), "precision <= length", std::to_string(entry.numeric.precision), "Numeric type-domain precision exceeds length");
                     }

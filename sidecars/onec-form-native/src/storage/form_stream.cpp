@@ -1927,6 +1927,16 @@ using InputFieldFlagValues = std::array<bool, input_field_flag_mappings.size()>;
 
 enum class InputFieldPairMode { payload_only, require_matching_pair };
 
+bool is_single_numeric_type_domain(const model::TypeDomainPatternValue& value) {
+    return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::numeric;
+}
+
+bool is_supported_input_numeric_type_domain(const model::TypeDomainPatternValue& value) {
+    if (!is_single_numeric_type_domain(value)) return false;
+    const auto& numeric = value.entries.front().numeric;
+    return numeric.length <= 64 && (numeric.length == 0 || numeric.precision <= numeric.length);
+}
+
 bool is_single_date_only_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::date &&
         value.entries.front().date == model::DateQualifiers{true, false};
@@ -2024,10 +2034,13 @@ LV canonical_input_field_info(
         value.items[2].items[0].items[14] = raw("0");
     } else if (type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::string) {
         value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
+    } else if (is_supported_input_numeric_type_domain(type)) {
+        value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().numeric.length));
+        value.items[2].items[0].items[15] = raw(std::to_string(type.entries.front().numeric.length == 0 ? 0 : type.entries.front().numeric.precision));
     } else if (is_single_date_only_type_domain(type)) {
         value.items[2].items[0].items[14] = raw("0");
     } else {
-        throw std::logic_error("canonical InputField profile only supports empty, single-string, or Date-only TypeDomain");
+        throw std::logic_error("canonical InputField profile only supports empty, single-string, single-numeric, or Date-only TypeDomain");
     }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -2768,10 +2781,6 @@ void require_incoming_graph(
 
 bool is_single_string_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::string;
-}
-
-bool is_single_numeric_type_domain(const model::TypeDomainPatternValue& value) {
-    return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::numeric;
 }
 
 bool decimal_fits_numeric_qualifiers(
@@ -9096,13 +9105,13 @@ DecodedControl decode_input_field(
     require_arity(info, 10, info_path);
     require_raw_constant(info.items[0], "9", child_path(info_path, 0));
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
-    const bool supported_type = is_single_string_type_domain(control_type) ||
+    const bool supported_type = is_single_string_type_domain(control_type) || is_supported_input_numeric_type_domain(control_type) ||
         is_single_date_only_type_domain(control_type);
     if (!supported_type || control_type != linked_attribute.type) {
         fail(
             "OOF1122",
             child_path(info_path, 1),
-            "single-string or Date-only InputField TypeDomainPattern matching linked Attribute",
+            "single-string, single-numeric, or Date-only InputField TypeDomainPattern matching linked Attribute",
             describe(info.items[1]),
             "InputField type must match its linked attribute");
     }
@@ -9126,6 +9135,13 @@ DecodedControl decode_input_field(
     if (is_single_date_only_type_domain(control_type) && stored_length != 0) {
         fail("OOF1114", child_path(payload_path, 14), "zero Date-only InputField payload value",
             std::to_string(stored_length), "Date-only InputField payload slot must be zero");
+    }
+    if (is_single_numeric_type_domain(control_type)) {
+        const auto stored_precision = integer_atom<std::uint32_t>(payload.items[15], child_path(payload_path, 15));
+        const auto& numeric = control_type.entries.front().numeric;
+        if (stored_length != numeric.length || stored_precision != (numeric.length == 0 ? 0 : numeric.precision))
+            fail("OOF1114", payload_path, "numeric length and precision matching the named ValueType", {},
+                "InputField numeric payload qualifiers differ from its named Numeric type");
     }
     const auto common = decode_common_control_base(
         base_info, base_info_path, CommonControlBaseCapabilities{true, true, model::ControlKind::input_field,
@@ -10788,9 +10804,9 @@ LV encode_input_field(
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
     }
-    if (!is_single_string_type_domain(attribute->type) &&
+    if (!is_single_string_type_domain(attribute->type) && !is_supported_input_numeric_type_domain(attribute->type) &&
         !is_single_date_only_type_domain(attribute->type)) {
-        fail("OOF1122", "$/InputField/DataPath", "linked single-string or Date-only Attribute",
+        fail("OOF1122", "$/InputField/DataPath", "linked single-string, single-numeric, or Date-only Attribute",
             attribute->name, "InputField type is outside the supported profile");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);

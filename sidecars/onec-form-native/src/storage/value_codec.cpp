@@ -478,6 +478,8 @@ void write_type_domain(
                 out.write_guid(std::string(value_tree_type_uuid));
                 break;
             case model::TypeDomainTerm::numeric:
+                if (entry.numeric.length == 0 && entry.numeric.precision != 0)
+                    throw std::runtime_error("Numeric type-domain precision must be zero when length is zero");
                 if (entry.numeric.length != 0 || entry.numeric.precision != 0 ||
                     entry.numeric.non_negative) {
                     out.write_uint32(entry.numeric.length);
@@ -560,6 +562,8 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
                     entry.numeric.length = in.read_uint32();
                     entry.numeric.precision = in.read_uint32();
                     entry.numeric.non_negative = in.read_bool();
+                    if (entry.numeric.length == 0 && entry.numeric.precision != 0)
+                        throw std::runtime_error("Numeric type-domain precision must be zero when length is zero");
                 }
                 break;
             case model::TypeDomainTerm::string:
