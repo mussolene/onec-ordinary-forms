@@ -793,6 +793,8 @@ struct ChartPayload final : TypedControlPayload<ControlKind::chart> {
     std::optional<ChartArea> legend_area;
     std::optional<ChartArea> title_area;
     ChartSummarySeries summary_series;
+    std::optional<std::uint64_t> last_series_id;
+    std::optional<std::uint64_t> last_point_id;
     std::vector<ChartSeries> series;
     std::vector<ChartPoint> points;
     std::vector<ChartValue> values;

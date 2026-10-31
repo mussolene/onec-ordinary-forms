@@ -2773,6 +2773,19 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     invalid_chart("Chart Point Color must be automatic or an absolute opaque RGB value");
                 }
             }
+            std::uint64_t max_series_id = 1;
+            for (const auto& series : chart->series) max_series_id = std::max(max_series_id, series.id.value());
+            std::uint64_t max_point_id = 0;
+            for (const auto& point : chart->points) max_point_id = std::max(max_point_id, point.id.value());
+            constexpr auto chart_id_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+            if (max_series_id > chart_id_limit || max_point_id > chart_id_limit ||
+                (chart->last_series_id && *chart->last_series_id > chart_id_limit) ||
+                (chart->last_point_id && *chart->last_point_id > chart_id_limit))
+                invalid_chart("Chart allocated IDs must fit in signed 64-bit storage");
+            if (chart->last_series_id && *chart->last_series_id < max_series_id)
+                invalid_chart("Chart Series lastAssignedId must cover all series and reserved summary ID");
+            if (chart->last_point_id && *chart->last_point_id < max_point_id)
+                invalid_chart("Chart Points lastAssignedId must cover all points");
             std::set<std::pair<ObjectId, ObjectId>> value_pairs;
             for (const auto& value : chart->values) {
                 if (!series_ids.contains(value.series_ref) || !point_ids.contains(value.point_ref)) {

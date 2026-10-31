@@ -2319,6 +2319,86 @@ void test_geographical_schema_runtime_scale() {
     expect(!source::parse_form_xml(mode_xml).ok(), "runtime mode cannot appear in XML");
 }
 
+void test_chart_allocator_history() {
+    for (std::size_t i = 0; i < 12; ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "ChartHistory";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload chart;
+        if (i % 2) {
+            model::ChartSeries series; series.id = model::ObjectId{2 + i}; series.marker = {"ChartMarkerType", "Auto"};
+            model::ChartPoint point; point.id = model::ObjectId{1 + i};
+            chart.series.push_back(series); chart.points.push_back(point);
+            chart.values.push_back({series.id, point.id, model::DecimalValue{"1"}});
+        }
+        const auto series_last = static_cast<std::uint64_t>(4 + i);
+        const auto point_last = static_cast<std::uint64_t>(3 + i);
+        chart.last_series_id = series_last; chart.last_point_id = point_last;
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+        const auto stream = form_stream::encode_document(document);
+        expect(stream.ok(), "Chart with allocator history must encode");
+        const auto& info = stream.value().items[1].items[2].items[2].items[1].items[3];
+        expect(info.items[1].atom == std::to_string(series_last) && info.items[2].atom == std::to_string(point_last), "allocator IDs must occupy native counter slots");
+        const auto decoded = form_stream::decode_document(stream.value(), "ChartHistory");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart history must decode completely");
+        const auto* node = decoded.value().find_control(model::ObjectId{2});
+        const auto& restored = std::get<model::ChartPayload>(node->payload);
+        expect(restored.last_series_id == series_last && restored.last_point_id == point_last, "allocator history must survive");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("lastAssignedId=\"" + std::to_string(series_last) + "\"") != std::string::npos, "XML must expose named series history");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "Chart allocator history XML must parse");
+        if (i == 0) {
+            auto invalid_xml = xml.value();
+            const auto position = invalid_xml.find("lastAssignedId=\"4\"");
+            expect(position != std::string::npos, "series counter must be present");
+            invalid_xml.replace(position, std::string("lastAssignedId=\"4\"").size(), "lastAssignedId=\"0\"");
+            expect(!source::parse_form_xml(invalid_xml).ok(), "XML counter below reserved series ID must fail");
+        }
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(stream.value()), "Chart history XML/BIN must roundtrip");
+        auto invalid = stream.value();
+        invalid.items[1].items[2].items[2].items[1].items[3].items[1] = list_stream::ListValue::raw_atom("0");
+        expect(!form_stream::decode_document(invalid, "ChartHistory").ok(), "series counter below reserved ID must fail");
+        if (i == 0) {
+            invalid = stream.value(); invalid.items[1].items[2].items[2].items[1].items[3].items[1] = list_stream::ListValue::raw_atom("9223372036854775808");
+            expect(!form_stream::decode_document(invalid, "ChartHistory").ok(), "native counter above signed range must fail");
+            invalid = stream.value(); invalid.items[1].items[2].items[2].items[1].items[3].items[1] = list_stream::ListValue::raw_atom("18446744073709551616");
+            expect(!form_stream::decode_document(invalid, "ChartHistory").ok(), "overflowing native counter must fail");
+        }
+        if (i % 2) {
+            invalid = stream.value(); invalid.items[1].items[2].items[2].items[1].items[3].items[2] = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(invalid, "ChartHistory").ok(), "point counter below live ID must fail");
+        }
+    }
+    model::Form empty; empty.id = model::ObjectId{1}; empty.name = "DefaultCounters";
+    empty.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument default_document(std::move(empty));
+    default_document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", model::ChartPayload{}});
+    const auto default_stream = form_stream::encode_document(default_document);
+    expect(default_stream.ok() && default_stream.value().items[1].items[2].items[2].items[1].items[3].items[1].atom == "1" &&
+        default_stream.value().items[1].items[2].items[2].items[1].items[3].items[2].atom == "0", "implicit counters use reserved defaults");
+    const auto default_xml = source::serialize_form_xml(default_document);
+    expect(default_xml.ok() && default_xml.value().find("lastAssignedId") == std::string::npos, "implicit counters are omitted from XML");
+    constexpr std::string_view max_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Chart"><Position/><Series lastAssignedId="9223372036854775807"/><Points lastAssignedId="9223372036854775807"/><Values/></Chart></ChildItems></Form>)XML";
+    const auto max_document = source::parse_form_xml(max_xml);
+    expect(max_document.ok() && form_stream::encode_document(max_document.value()).ok(), "maximum signed counter must be accepted");
+    std::string overflow_xml{max_xml};
+    const auto counter = overflow_xml.find("9223372036854775807");
+    overflow_xml.replace(counter, 19, "9223372036854775808");
+    expect(!source::parse_form_xml(overflow_xml).ok(), "XML counter above signed range must be rejected");
+    for (bool explicit_history : {false, true}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "OverflowChart";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ChartPayload chart;
+        if (explicit_history) chart.last_series_id = std::uint64_t{9223372036854775808ULL};
+        else { model::ChartSeries series; series.id = model::ObjectId{9223372036854775808ULL}; series.marker = {"ChartMarkerType", "Auto"}; chart.series.push_back(series); }
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
+        expect(!document.validate().ok() && !source::serialize_form_xml(document).ok() && !form_stream::encode_document(document).ok(), "explicit or implicit oversized Chart ID must fail");
+    }
+}
+
 void test_gantt_periodic_properties() {
     constexpr std::array<std::pair<std::string_view, int>, 8> units{{
         {"Second", 5}, {"Minute", 10}, {"Hour", 20}, {"Day", 30},
@@ -20730,6 +20810,7 @@ int main() {
         test_usual_group_named_record_round_trip_and_rejections();
         test_geographical_schema_runtime_scale();
         test_gantt_periodic_properties();
+        test_chart_allocator_history();
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();

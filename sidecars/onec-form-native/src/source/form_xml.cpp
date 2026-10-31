@@ -1858,6 +1858,13 @@ private:
             } else if (descriptor->kind == model::ControlKind::chart &&
                        (name == "Series" || name == "Points" || name == "Values")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
+                if (name == "Series" || name == "Points") {
+                    if (const auto last = optional_attribute(child, "lastAssignedId")) {
+                        const auto id = parse_integer<std::uint64_t>(*last, child, "lastAssignedId", id_text);
+                        if (name == "Series") chart.last_series_id = id;
+                        else chart.last_point_id = id;
+                    }
+                }
                 for (xmlNodePtr item : element_children(child)) {
                     if (name == "Series" && node_name(item) == "ChartSeries") {
                         model::ChartSeries series;
@@ -4043,7 +4050,22 @@ private:
                 write_typed_scalar(value, owner);
                 writer_.close(name);
             };
-            writer_.open("Series");
+            std::uint64_t max_series_id = 1;
+            for (const auto& item : chart->series) max_series_id = std::max(max_series_id, item.id.value());
+            std::uint64_t max_point_id = 0;
+            for (const auto& item : chart->points) max_point_id = std::max(max_point_id, item.id.value());
+            constexpr auto chart_id_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+            if (max_series_id > chart_id_limit || max_point_id > chart_id_limit ||
+                (chart->last_series_id && *chart->last_series_id > chart_id_limit) ||
+                (chart->last_point_id && *chart->last_point_id > chart_id_limit))
+                serialization_fail(id, "lastAssignedId", "signed 64-bit allocator IDs", "out of range", "Invalid Chart allocator history");
+            if (chart->last_series_id && *chart->last_series_id < max_series_id)
+                serialization_fail(id, "Series", "lastAssignedId at least the largest series ID", std::to_string(*chart->last_series_id), "Invalid Chart allocator history");
+            if (chart->last_point_id && *chart->last_point_id < max_point_id)
+                serialization_fail(id, "Points", "lastAssignedId at least the largest point ID", std::to_string(*chart->last_point_id), "Invalid Chart allocator history");
+            if (chart->last_series_id && *chart->last_series_id != max_series_id)
+                writer_.open("Series", {{"lastAssignedId", std::to_string(*chart->last_series_id)}});
+            else writer_.open("Series");
             for (const auto& item : chart->series) {
                 writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
                 writer_.text("Text", item.text);
@@ -4053,7 +4075,9 @@ private:
                 writer_.close("ChartSeries");
             }
             writer_.close("Series");
-            writer_.open("Points");
+            if (chart->last_point_id && *chart->last_point_id != max_point_id)
+                writer_.open("Points", {{"lastAssignedId", std::to_string(*chart->last_point_id)}});
+            else writer_.open("Points");
             for (const auto& item : chart->points) {
                 writer_.open("ChartPoint", {{"id", object_id_text(item.id)}});
                 writer_.text("Text", item.text);

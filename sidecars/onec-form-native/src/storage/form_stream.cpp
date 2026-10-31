@@ -6694,8 +6694,16 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         std::max_element(chart.series.begin(), chart.series.end(), [](const auto& left, const auto& right) { return left.id.value() < right.id.value(); })->id.value();
     const auto max_point_id = chart.points.empty() ? std::uint64_t{0} :
         std::max_element(chart.points.begin(), chart.points.end(), [](const auto& left, const auto& right) { return left.id.value() < right.id.value(); })->id.value();
-    std::vector<LV> info{raw("75"), raw(std::to_string(max_series_id)),
-        raw(std::to_string(max_point_id)), raw("1"), raw(std::to_string(series_count))};
+    constexpr auto chart_id_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    if (max_series_id > chart_id_limit || max_point_id > chart_id_limit ||
+        (chart.last_series_id && *chart.last_series_id > chart_id_limit) ||
+        (chart.last_point_id && *chart.last_point_id > chart_id_limit))
+        fail("OOF1122", "$/Chart", "signed 64-bit allocator IDs", {}, "Chart allocated ID exceeds the platform range");
+    if ((chart.last_series_id && *chart.last_series_id < max_series_id) ||
+        (chart.last_point_id && *chart.last_point_id < max_point_id))
+        fail("OOF1122", "$/Chart", "last assigned IDs not below live IDs", {}, "Chart allocator history is inconsistent");
+    std::vector<LV> info{raw("75"), raw(std::to_string(chart.last_series_id.value_or(max_series_id))),
+        raw(std::to_string(chart.last_point_id.value_or(max_point_id))), raw("1"), raw(std::to_string(series_count))};
     const auto append = [&](std::vector<LV> values) {
         info.insert(info.end(), std::make_move_iterator(values.begin()), std::make_move_iterator(values.end()));
     };
@@ -7051,6 +7059,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         info.items[event_flag_index] = raw("0");
     }
     model::ChartPayload payload;
+    const auto last_series_id = integer_atom<std::uint64_t>(at(info, 1, info_path), child_path(info_path, 1));
+    const auto last_point_id = integer_atom<std::uint64_t>(at(info, 2, info_path), child_path(info_path, 2));
     for (std::size_t index = 0; index < series_count; ++index) {
         const auto row_offset = std::size_t{5} + index * 11;
         const auto series_id = integer_atom<std::uint64_t>(at(info, row_offset + 7, info_path), child_path(info_path, row_offset + 7));
@@ -7070,6 +7080,18 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         if (auto value = decoded_typed_scalar(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) point.value = std::move(*value);
         payload.points.push_back(std::move(point));
     }
+    std::uint64_t max_series_id = 1;
+    for (const auto& series : payload.series) max_series_id = std::max(max_series_id, series.id.value());
+    std::uint64_t max_point_id = 0;
+    for (const auto& point : payload.points) max_point_id = std::max(max_point_id, point.id.value());
+    constexpr auto chart_id_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    if (last_series_id > chart_id_limit || last_point_id > chart_id_limit ||
+        max_series_id > chart_id_limit || max_point_id > chart_id_limit)
+        fail("OOF1114", info_path, "signed 64-bit allocator IDs", {}, "Chart allocated ID exceeds the platform range");
+    if (last_series_id < max_series_id || last_point_id < max_point_id)
+        fail("OOF1114", info_path, "last assigned IDs covering all live IDs", {}, "Chart allocator history is inconsistent");
+    if (last_series_id != max_series_id) payload.last_series_id = last_series_id;
+    if (last_point_id != max_point_id) payload.last_point_id = last_point_id;
     const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
     const auto active_series_path = child_path(info_path, middle_start + 52);
     const auto active_series = integer_atom<std::size_t>(at(info, middle_start + 52, info_path), active_series_path);
