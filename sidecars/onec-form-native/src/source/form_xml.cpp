@@ -984,6 +984,33 @@ model::PictureRef parse_picture_reference(
         parse_object_id(node_text(node), node, property, object_id)}, std::nullopt};
 }
 
+model::PropertyValue parse_typed_scalar(xmlNodePtr field, std::string_view owner) {
+        const auto kind = node_name(field);
+        if (kind == "String") return node_text(field);
+        if (kind == "Number") return model::DecimalValue{canonical_decimal(node_text(field), field, kind, owner)};
+        if (kind == "Boolean") return parse_boolean(node_text(field), field, kind, owner);
+        if (kind == "Date") { const auto text = std::string(trim_ascii(node_text(field))); (void)storage::value_codec::date_to_platform(text); return model::DateValue{text}; }
+        if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
+        if (kind == "Null" && node_text(field).empty()) return model::NullValue{};
+        if (kind == "UUID") return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(field))))};
+        if (kind == "Type") {
+            const auto name = std::string(trim_ascii(node_text(field)));
+            const auto descriptors = mm::platform_value_type_descriptors();
+            if (std::ranges::find(descriptors, name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
+                fail("OOF2003", field, std::string(owner), "Type", "known platform type", name, "Unsupported platform type value");
+            return model::PlatformTypeValue{name};
+        }
+
+        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", kind, "Unsupported Chart value type");
+    }
+
+model::PropertyValue parse_typed_value(xmlNodePtr node, std::string_view owner) {
+        const auto fields = element_children(node);
+        if (fields.size() != 1) fail("OOF2003", node, std::string(owner), "Value", "one typed value", std::to_string(fields.size()), "Chart key requires one typed value");
+        return parse_typed_scalar(fields.front(), owner);
+    }
+
+
 model::PropertyValue parse_property_value(
     xmlNodePtr node,
     mm::ValueCodec codec,
@@ -993,6 +1020,8 @@ model::PropertyValue parse_property_value(
     switch (codec) {
         case mm::ValueCodec::owned_panel:
             fail("OOF2003", node, std::string(object_id), property, "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
+        case mm::ValueCodec::typed_scalar:
+            return parse_typed_value(node, object_id);
         case mm::ValueCodec::unclassified:
             fail("OOF2003", node, std::string(object_id), property, "classified value codec", "unclassified", "Unclassified properties are not admitted to the product model");
         case mm::ValueCodec::boolean:
@@ -1830,7 +1859,7 @@ private:
                             if (field_name == "Text") series.text = node_text(field);
                             else if (field_name == "Color") series.color = parse_color(field);
                             else if (field_name == "Marker") series.marker = parse_enumeration(field);
-                            else if (field_name == "Value") series.value = parse_chart_key(field, id_text);
+                            else if (field_name == "Value") series.value = parse_typed_value(field, id_text);
                             else fail("OOF2003", field, id_text, field_name, "Text, Color, or Marker", field_name, "Unknown ChartSeries field");
                         }
                         chart.series.push_back(std::move(series));
@@ -1841,7 +1870,7 @@ private:
                             const std::string field_name = node_name(field);
                             if (field_name == "Text") point.text = node_text(field);
                             else if (field_name == "Color") point.color = parse_color(field);
-                            else if (field_name == "Value") point.value = parse_chart_key(field, id_text);
+                            else if (field_name == "Value") point.value = parse_typed_value(field, id_text);
                             else fail("OOF2003", field, id_text, field_name, "Text or Color", field_name, "Unknown ChartPoint field");
                         }
                         chart.points.push_back(std::move(point));
@@ -1852,10 +1881,10 @@ private:
                         const auto fields = element_children(item);
                         if (fields.empty())
                             fail("OOF2003", item, id_text, "ChartValue", "typed value", "empty", "ChartValue requires a typed value");
-                        value.value = parse_chart_scalar(fields.front(), id_text);
+                        value.value = parse_typed_scalar(fields.front(), id_text);
                         for (std::size_t i = 1; i < fields.size(); ++i) {
                             const auto field_name = node_name(fields[i]);
-                            if (field_name == "Details") value.details = parse_chart_key(fields[i], id_text);
+                            if (field_name == "Details") value.details = parse_typed_value(fields[i], id_text);
                             else if (field_name == "ToolTip") value.tooltip = node_text(fields[i]);
                             else fail("OOF2003", fields[i], id_text, field_name, "Details or ToolTip", field_name, "Unknown ChartValue field");
                         }
@@ -2166,32 +2195,6 @@ private:
         const model::ControlRef reference{id};
         objects_.controls.push_back(std::move(control));
         return reference;
-    }
-
-    model::PropertyValue parse_chart_scalar(xmlNodePtr field, std::string_view owner) {
-        const auto kind = node_name(field);
-        if (kind == "String") return node_text(field);
-        if (kind == "Number") return model::DecimalValue{canonical_decimal(node_text(field), field, kind, owner)};
-        if (kind == "Boolean") return parse_boolean(node_text(field), field, kind, owner);
-        if (kind == "Date") return parse_gantt_date(field, owner, kind);
-        if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
-        if (kind == "Null" && node_text(field).empty()) return model::NullValue{};
-        if (kind == "UUID") return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(field))))};
-        if (kind == "Type") {
-            const auto name = std::string(trim_ascii(node_text(field)));
-            const auto descriptors = mm::platform_value_type_descriptors();
-            if (std::ranges::find(descriptors, name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
-                fail("OOF2003", field, std::string(owner), "Type", "known platform type", name, "Unsupported platform type value");
-            return model::PlatformTypeValue{name};
-        }
-
-        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", kind, "Unsupported Chart value type");
-    }
-
-    model::PropertyValue parse_chart_key(xmlNodePtr node, std::string_view owner) {
-        const auto fields = element_children(node);
-        if (fields.size() != 1) fail("OOF2003", node, std::string(owner), "Value", "one typed value", std::to_string(fields.size()), "Chart key requires one typed value");
-        return parse_chart_scalar(fields.front(), owner);
     }
 
     model::DateValue parse_gantt_date(xmlNodePtr node, std::string_view owner_id, std::string_view name) {
@@ -3217,6 +3220,24 @@ private:
         writer_.text(element_name, object_id_text(reference.asset.id()));
     }
 
+    void write_typed_scalar(const model::PropertyValue& value, std::string_view owner) {
+                if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
+                else if (std::holds_alternative<model::NullValue>(value)) writer_.empty("Null");
+                else if (const auto* item = std::get_if<model::UuidValue>(&value)) writer_.text("UUID", canonical_uuid(item->canonical));
+                else if (const auto* item = std::get_if<model::PlatformTypeValue>(&value)) {
+                    const auto descriptors = mm::platform_value_type_descriptors();
+                    if (std::ranges::find(descriptors, item->name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
+                        serialization_fail(std::string(owner), "Type", "known platform type", item->name, "Unsupported platform type value");
+                    writer_.text("Type", item->name);
+                }
+                else if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
+                else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
+                else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
+                else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
+                else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
+                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", "unsupported", "Unsupported Chart value type");
+    }
+
     void write_property(
         const mm::PropertyDescriptor& descriptor,
         const model::PropertyValue& value,
@@ -3226,6 +3247,11 @@ private:
         switch (descriptor.value_codec) {
             case mm::ValueCodec::owned_panel:
                 serialization_fail(std::string(object_id), std::string(name), "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
+            case mm::ValueCodec::typed_scalar:
+                writer_.open(name);
+                write_typed_scalar(value, object_id);
+                writer_.close(name);
+                return;
             case mm::ValueCodec::unclassified:
                 serialization_fail(std::string(object_id), std::string(name), "classified codec", "unclassified", "Unclassified property cannot be serialized");
             case mm::ValueCodec::boolean:
@@ -4003,27 +4029,10 @@ private:
                     write_enumeration("Marker", chart->summary_series.marker);
                 writer_.close("SummarySeries");
             }
-            const auto write_chart_scalar = [&](const model::PropertyValue& value, std::string_view owner) {
-                if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
-                else if (std::holds_alternative<model::NullValue>(value)) writer_.empty("Null");
-                else if (const auto* item = std::get_if<model::UuidValue>(&value)) writer_.text("UUID", canonical_uuid(item->canonical));
-                else if (const auto* item = std::get_if<model::PlatformTypeValue>(&value)) {
-                    const auto descriptors = mm::platform_value_type_descriptors();
-                    if (std::ranges::find(descriptors, item->name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
-                        serialization_fail(std::string(owner), "Type", "known platform type", item->name, "Unsupported platform type value");
-                    writer_.text("Type", item->name);
-                }
-                else if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
-                else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
-                else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
-                else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
-                else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
-                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", "unsupported", "Unsupported Chart value type");
-            };
             const auto write_chart_key = [&](std::string_view name, const model::PropertyValue& value, std::string_view owner) {
                 if (std::holds_alternative<model::UndefinedValue>(value)) return;
                 writer_.open(name);
-                write_chart_scalar(value, owner);
+                write_typed_scalar(value, owner);
                 writer_.close(name);
             };
             writer_.open("Series");
@@ -4048,7 +4057,7 @@ private:
             writer_.open("Values");
             for (const auto& item : chart->values) {
                 writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
-                write_chart_scalar(item.value, object_id_text(item.series_ref));
+                write_typed_scalar(item.value, object_id_text(item.series_ref));
                 write_chart_key("Details", item.details, object_id_text(item.series_ref));
                 if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
                 writer_.close("ChartValue");

@@ -431,7 +431,7 @@ model::PropertyValue decoded_spreadsheet_cell_value(const LV& value, std::string
         "SpreadsheetDocumentField typed cell value kind is unsupported");
 }
 
-LV encoded_chart_key_value(const model::PropertyValue& value, std::string_view path) {
+LV encoded_typed_scalar(const model::PropertyValue& value, std::string_view path) {
     if (std::holds_alternative<model::UndefinedValue>(value)) return list({string_value("U")});
     if (std::holds_alternative<model::NullValue>(value)) return list({string_value("L")});
     if (const auto* type = std::get_if<model::PlatformTypeValue>(&value)) {
@@ -448,7 +448,7 @@ LV encoded_chart_key_value(const model::PropertyValue& value, std::string_view p
     return encoded_spreadsheet_cell_value(value, path);
 }
 
-std::optional<model::PropertyValue> decoded_chart_key_value(const LV& value, std::string_view path) {
+std::optional<model::PropertyValue> decoded_typed_scalar(const LV& value, std::string_view path) {
     require_list(value, path);
     if (value.items.empty()) fail("OOF1114", std::string(path), "typed Chart key", "empty", "Chart key is empty");
     const auto kind = string_atom(value.items[0], child_path(path, 0));
@@ -6709,7 +6709,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         row[3] = encoded_localized(item.text);
         row[4] = raw("1");
         row[7] = raw(std::to_string(item.id.value()));
-        row[9] = encoded_chart_key_value(item.value, "$/Chart/Series/Value");
+        row[9] = encoded_typed_scalar(item.value, "$/Chart/Series/Value");
         rows.insert(rows.end(), row.begin(), row.end());
     }
     append(std::move(rows));
@@ -6736,7 +6736,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     for (std::size_t index = 0; index < point_count; ++index) {
         const auto& item = chart.points[index];
         const auto row = canonical_chart_series_defaults();
-        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_resolved_color(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], encoded_chart_key_value(item.value, "$/Chart/Points/Value"), raw("0")});
+        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_resolved_color(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], encoded_typed_scalar(item.value, "$/Chart/Points/Value"), raw("0")});
     }
     auto middle = canonical_chart_middle_defaults();
     middle[2] = raw(std::to_string(chart_type));
@@ -6748,8 +6748,8 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         for (const auto& point : chart.points) {
             const auto found = value_index.find(ChartValueKey{series.id.value(), point.id.value()});
             if (found == value_index.end()) fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", "missing pair", "Chart matrix contains a missing pair");
-            append({encoded_chart_key_value(found->second->value, "$/Chart/Values/Value"),
-                encoded_chart_key_value(found->second->details, "$/Chart/Values/Details"),
+            append({encoded_typed_scalar(found->second->value, "$/Chart/Values/Value"),
+                encoded_typed_scalar(found->second->details, "$/Chart/Values/Details"),
                 string_value(found->second->tooltip)});
         }
     }
@@ -7057,7 +7057,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         model::ChartSeries series;
         series.id = model::ObjectId{series_id};
         series.text = decoded_single_language_text(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
-        if (auto value = decoded_chart_key_value(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) series.value = std::move(*value);
+        if (auto value = decoded_typed_scalar(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) series.value = std::move(*value);
         payload.series.push_back(std::move(series));
     }
     const auto points_start = points_count_offset + 1;
@@ -7067,7 +7067,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         model::ChartPoint point;
         point.id = model::ObjectId{point_id};
         point.text = decoded_single_language_text(at(info, row_offset, info_path), child_path(info_path, row_offset));
-        if (auto value = decoded_chart_key_value(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) point.value = std::move(*value);
+        if (auto value = decoded_typed_scalar(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) point.value = std::move(*value);
         payload.points.push_back(std::move(point));
     }
     const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
@@ -7086,8 +7086,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             value.tooltip = string_atom(at(info, cell_offset + 2, info_path), child_path(info_path, cell_offset + 2));
             value.series_ref = payload.series[series].id;
             value.point_ref = payload.points[point].id;
-            const auto cell_value = decoded_chart_key_value(at(info, cell_offset, info_path), child_path(info_path, cell_offset));
-            const auto details = decoded_chart_key_value(at(info, cell_offset + 1, info_path), child_path(info_path, cell_offset + 1));
+            const auto cell_value = decoded_typed_scalar(at(info, cell_offset, info_path), child_path(info_path, cell_offset));
+            const auto details = decoded_typed_scalar(at(info, cell_offset + 1, info_path), child_path(info_path, cell_offset + 1));
             value.value = cell_value.value_or(model::PropertyValue{model::UndefinedValue{}});
             value.details = details.value_or(model::PropertyValue{model::UndefinedValue{}});
             payload.values.push_back(std::move(value));
@@ -7419,17 +7419,17 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
         for (const auto offset : {std::size_t{0}, std::size_t{1}}) {
             const auto slot = data_start + cell * 3 + offset;
-            if (!decoded_chart_key_value(info.items[slot], child_path(info_path, slot)))
+            if (!decoded_typed_scalar(info.items[slot], child_path(info_path, slot)))
                 shape_info.items[slot] = normalized_expected_info.items[slot];
         }
     }
     for (std::size_t i = 0; i < series_count; ++i) {
         const auto slot = std::size_t{5} + i * 11 + 9;
-        if (!decoded_chart_key_value(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
+        if (!decoded_typed_scalar(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
     }
     for (std::size_t i = 0; i < point_count; ++i) {
         const auto slot = points_start + i * 11 + 9;
-        if (!decoded_chart_key_value(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
+        if (!decoded_typed_scalar(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
     }
     for (const auto offset : {std::size_t{31}, std::size_t{32}, std::size_t{33}}) {
         const auto index = middle_start + offset;
@@ -9186,8 +9186,28 @@ DecodedControl decode_input_field(
         incomplete_choice_mode};
     auto named_events = decode_control_event_collection(info.items[4], child_path(info_path, 4),
         model::ControlKind::input_field);
+    std::array<std::optional<model::PropertyValue>, 2> input_bounds;
+    if (is_supported_input_numeric_type_domain(control_type) && !list_choice_mode) {
+        const auto& pair = at(at(info.items[3], 1, child_path(info_path, 3)), 1, child_path(child_path(info_path, 3), 1));
+        for (std::size_t index = 0; index < input_bounds.size(); ++index) {
+            const auto& primary = at(payload, 19 + index, payload_path);
+            const auto& secondary = at(pair, 1 + index, child_path(child_path(child_path(info_path, 3), 1), 1));
+            if (list_stream::dump_compact(primary) != list_stream::dump_compact(secondary))
+                fail("OOF1114", info_path, "matching InputField bound copies", {}, "InputField bound copies differ");
+            input_bounds[index] = decoded_typed_scalar(primary, info_path);
+            if (!input_bounds[index])
+                fail("OOF1122", info_path, "supported named InputField bound", {}, "Unsupported InputField bound value");
+        }
+    }
     LV normalized_info = info;
     normalized_info.items[4] = list({raw("0")});
+    if (is_supported_input_numeric_type_domain(control_type) && !list_choice_mode) {
+        auto& pair = normalized_info.items[3].items[1].items[1];
+        for (std::size_t index = 0; index < input_bounds.size(); ++index) {
+            normalized_info.items[2].items[0].items[19 + index] = list({string_value("U")});
+            pair.items[1 + index] = list({string_value("U")});
+        }
+    }
     normalized_info.items[2].items[0].items[28] = canonical_button_picture();
     normalized_info.items[2].items[0].items[29] = canonical_button_picture();
     normalize_named_control_colors(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
@@ -9215,6 +9235,10 @@ DecodedControl decode_input_field(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
     decode_control_metadata(metadata, metadata_path, control);
     apply_common_control_base(control.properties(), common);
+    for (std::size_t index = 0; index < input_bounds.size(); ++index) {
+        if (input_bounds[index] && !std::holds_alternative<model::UndefinedValue>(*input_bounds[index]))
+            control.properties().set_explicit(model::PropertyId::from_name(index == 0 ? "MinValue" : "MaxValue"), *input_bounds[index]);
+    }
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     if (shortcut != model::ShortcutValue{}) control.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
     if (!format.empty()) control.properties().set_explicit(model::PropertyId::from_name("Format"), format);
@@ -10799,7 +10823,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -10836,6 +10860,16 @@ LV encode_input_field(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     auto input_info = canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags,
         text_values, layout_values, &font, &border_color, shortcut);
+    for (std::size_t index = 0; index < 2; ++index) {
+        const auto name = index == 0 ? "MinValue" : "MaxValue";
+        const auto* bound = control.properties().find(model::PropertyId::from_name(name));
+        if (bound == nullptr) continue;
+        if (!is_supported_input_numeric_type_domain(attribute->type) || explicit_bool(control.properties(), "ListChoiceMode", false))
+            fail("OOF1122", "$/InputField/" + std::string(name), "numeric InputField with paired bounds", {}, "InputField bound is outside supported profile");
+        const auto value = encoded_typed_scalar(bound->value, "$/InputField/" + std::string(name));
+        input_info.items[2].items[0].items[19 + index] = value;
+        input_info.items[3].items[1].items[1].items[1 + index] = value;
+    }
     input_info.items.at(4) = encode_control_event_collection(document, control, "$/InputField/Events");
     encode_named_control_colors(input_info.items[2].items[0].items[0], model::ControlKind::input_field,
         control.properties(), "$/InputField");

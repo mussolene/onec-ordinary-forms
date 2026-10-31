@@ -13609,6 +13609,71 @@ void test_input_field_date_only_type_domain_round_trip() {
         "$/1/2/2/1/2/1", "Date-only InputField TypeDomain must still match its linked Attribute");
 }
 
+void test_input_field_typed_bounds() {
+    const std::array<model::PropertyValue, 8> values{model::DecimalValue{"-10.25"}, std::string{"abc"}, true,
+        model::DateValue{"2024-02-29T00:00:00"}, model::NullValue{}, model::UndefinedValue{},
+        model::UuidValue{"514cd709-d736-4801-9061-13350de142ee"}, model::PlatformTypeValue{"Number"}};
+    for (std::size_t i = 0; i < 12; ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "Bounds";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainEntry type; type.term = model::TypeDomainTerm::numeric; type.numeric = {15, 2, false};
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Number", model::TypeDomainPatternValue{{type}}});
+        model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        document.add_control(std::move(input));
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+        const auto min = model::PropertyId::from_name("MinValue");
+        const auto max = model::PropertyId::from_name("MaxValue");
+        expect(document.get_prop_val(owner, min).value == model::PropertyValue{model::UndefinedValue{}}, "default input minimum is Undefined");
+        expect(document.set_prop_val(owner, min, values[i % values.size()]) == model::PropertyMutationStatus::applied_unclassified_storage &&
+               document.set_prop_val(owner, max, model::DecimalValue{"25.5"}) == model::PropertyMutationStatus::applied_unclassified_storage, "input bounds are partial typed scalars");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "numeric input bounds must encode");
+        const auto decoded = form_stream::decode_document(encoded.value(), "Bounds");
+        expect(decoded.ok() && decoded.value().reconstruction_complete() && decoded.value().get_prop_val(owner, min).value == values[i % values.size()] &&
+            decoded.value().get_prop_val(owner, max).value == model::PropertyValue{model::DecimalValue{"25.5"}}, "numeric input bounds must roundtrip");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && source::parse_form_xml(xml.value()).ok(), "numeric input bounds XML must roundtrip");
+        auto bad = encoded.value();
+        bad.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[20] = list_stream::ListValue::list({list_stream::ListValue::string_atom("U")});
+        expect(!form_stream::decode_document(bad, "Bounds").ok(), "different bound copies must fail");
+        if (i == 0) {
+            for (const auto token : {R"VALUE({"T",00000000-0000-0000-0000-000000000001})VALUE",
+                    R"VALUE({"#",00000000-0000-0000-0000-000000000001,0})VALUE"}) {
+                auto unknown = encoded.value();
+                const auto parsed_unknown = list_stream::parse(token);
+                auto& record = unknown.items[1].items[2].items[2].items[1].items[2];
+                record.items[2].items[0].items[19] = parsed_unknown;
+                record.items[3].items[1].items[1].items[1] = parsed_unknown;
+                expect(!form_stream::decode_document(unknown, "Bounds").ok(), "unknown scalar must be rejected even when copies match");
+            }
+        }
+        expect(document.set_prop_val(owner, min, model::FontValue{}) == model::PropertyMutationStatus::invalid_value &&
+            document.get_prop_val(owner, min).value == values[i % values.size()], "unsupported value must preserve prior bound");
+        expect(document.reset_prop_val(owner, min) == model::PropertyMutationStatus::reset_unclassified_storage &&
+            document.get_prop_val(owner, min).value == model::PropertyValue{model::UndefinedValue{}}, "supported bound reset restores Undefined");
+    }
+    for (const auto context : {0, 1, 2, 3}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "UnsupportedBounds";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainEntry type; type.term = context == 2 ? model::TypeDomainTerm::string : model::TypeDomainTerm::numeric;
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Number", model::TypeDomainPatternValue{{type}}});
+        model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, context == 1 ? std::vector<std::string>{"Member"} : std::vector<std::string>{}};
+        if (context == 3) input.data_path.reset();
+        if (context == 0) input.properties().set_explicit(model::PropertyId::from_name("ListChoiceMode"), true);
+        document.add_control(std::move(input));
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+        const auto bound = model::PropertyId::from_name("MinValue");
+        expect(document.get_prop_val(owner, bound).status == model::PropertyReadStatus::unsupported_surface &&
+            document.set_prop_val(owner, bound, model::DecimalValue{"1"}) == model::PropertyMutationStatus::unsupported_surface &&
+            document.reset_prop_val(owner, bound) == model::PropertyMutationStatus::unsupported_surface,
+            "nested paths, nonnumeric or absent binding and ListChoiceMode must reject get, set and reset");
+    }
+}
+
 void test_input_field_numeric_type_domain_round_trip() {
     constexpr std::array<model::NumericQualifiers, 18> samples{{
         {0, 0, false},
@@ -13632,7 +13697,7 @@ void test_input_field_numeric_type_domain_round_trip() {
         input.properties().set_explicit(model::PropertyId::from_name("Wrap"), qualifiers.non_negative);
         document.add_control(std::move(input));
         const auto encoded = form_stream::encode_document(document);
-        expect(encoded.ok(), "numeric InputField must encode");
+        expect(encoded.ok(), "numeric InputField must encode: " + (encoded.diagnostics().empty() ? std::string{} : encoded.diagnostics().front().message));
         const auto& info = encoded.value().items[1].items[2].items[2].items[1].items[2];
         expect(info.items[2].items[0].items[14].atom == std::to_string(qualifiers.length) &&
             info.items[2].items[0].items[15].atom == std::to_string(qualifiers.length == 0 ? 0 : qualifiers.precision),
@@ -20660,6 +20725,7 @@ int main() {
         test_button_label_input_field_round_trip();
         test_input_field_date_only_type_domain_round_trip();
         test_input_field_numeric_type_domain_round_trip();
+        test_input_field_typed_bounds();
         test_input_field_shortcut_round_trip();
         test_input_field_text_edit_round_trip();
         test_input_field_tooltip_and_format_round_trip();

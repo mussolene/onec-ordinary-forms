@@ -125,6 +125,31 @@ bool property_value_matches(
         [&descriptor](const auto& typed_value) {
             const auto expected = descriptor.value_codec;
             using Value = std::remove_cvref_t<decltype(typed_value)>;
+            if (expected == metamodel::ValueCodec::typed_scalar) {
+                if constexpr (std::is_same_v<Value, UndefinedValue> || std::is_same_v<Value, NullValue> ||
+                    std::is_same_v<Value, bool> || std::is_same_v<Value, std::int64_t> ||
+                    std::is_same_v<Value, std::string>) return true;
+                else if constexpr (std::is_same_v<Value, UuidValue>) {
+                    if (typed_value.canonical.size() != 36) return false;
+                    for (std::size_t i = 0; i < 36; ++i) {
+                        const char c = typed_value.canonical[i];
+                        if (i == 8 || i == 13 || i == 18 || i == 23) { if (c != '-') return false; }
+                        else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+                    }
+                    return true;
+                }
+                else if constexpr (std::is_same_v<Value, DecimalValue>) {
+                    try { return storage::value_codec::canonical_decimal(typed_value.canonical) == typed_value.canonical; }
+                    catch (const std::exception&) { return false; }
+                } else if constexpr (std::is_same_v<Value, DateValue>) {
+                    try { (void)storage::value_codec::date_to_platform(typed_value.canonical); return true; }
+                    catch (const std::exception&) { return false; }
+                }
+                else if constexpr (std::is_same_v<Value, PlatformTypeValue>) {
+                    const auto types = metamodel::platform_value_type_descriptors();
+                    return std::ranges::find(types, typed_value.name, &metamodel::PlatformValueTypeDescriptor::name) != types.end();
+                } else return false;
+            }
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
                 return expected == metamodel::ValueCodec::date ||
                        expected == metamodel::ValueCodec::action_source_reference ||
@@ -1114,6 +1139,14 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (descriptor->value_codec == metamodel::ValueCodec::typed_scalar) {
+            const auto* attribute = control.data_path ? find_attribute(control.data_path->attribute.id()) : nullptr;
+            const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
+            if (attribute == nullptr || !control.data_path->members.empty() || attribute->type.entries.size() != 1 ||
+                attribute->type.entries.front().term != TypeDomainTerm::numeric ||
+                (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
+                return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
             const auto& selected = std::get<PanelPayload>(control.payload).current_page;
             for (const auto& child : control.children) {
@@ -1527,6 +1560,14 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         descriptor->persistence == metamodel::PersistenceClass::version_specific) {
         return PropertyMutationStatus::unsupported_surface;
     }
+    if (descriptor->value_codec == metamodel::ValueCodec::typed_scalar && property_control != nullptr) {
+        const auto* attribute = property_control->data_path ? find_attribute(property_control->data_path->attribute.id()) : nullptr;
+        const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
+        if (attribute == nullptr || !property_control->data_path->members.empty() || attribute->type.entries.size() != 1 ||
+            attribute->type.entries.front().term != TypeDomainTerm::numeric ||
+            (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
+            return PropertyMutationStatus::unsupported_surface;
+    }
     if (is_positive_int32_property(*descriptor)) {
         std::optional<std::int32_t> normalized;
         if (const auto* integer = std::get_if<std::int64_t>(&value)) normalized = normalize_positive_int32(std::to_string(*integer));
@@ -1782,6 +1823,15 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
         descriptor->persistence == metamodel::PersistenceClass::version_specific) {
         return PropertyMutationStatus::unsupported_surface;
+    }
+
+    if (descriptor->value_codec == metamodel::ValueCodec::typed_scalar && property_control != nullptr) {
+        const auto* attribute = property_control->data_path ? find_attribute(property_control->data_path->attribute.id()) : nullptr;
+        const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
+        if (attribute == nullptr || !property_control->data_path->members.empty() || attribute->type.entries.size() != 1 ||
+            attribute->type.entries.front().term != TypeDomainTerm::numeric ||
+            (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
+            return PropertyMutationStatus::unsupported_surface;
     }
 
     if (position_control != nullptr) {

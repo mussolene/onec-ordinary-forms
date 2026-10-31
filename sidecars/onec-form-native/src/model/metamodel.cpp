@@ -1284,6 +1284,13 @@ void apply_proven_storage_overrides(
     }
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
+    for (const auto name : {"MinValue", "MaxValue"}) {
+        auto property = std::ranges::find(input_field, name, &PropertyDescriptor::api_name);
+        if (property == input_field.end()) throw std::logic_error("missing InputField bound");
+        property->value_codec = ValueCodec::typed_scalar;
+        property->storage_codec = StorageCodec::control_info;
+        property->default_value = {DefaultKind::undefined, "undefined"};
+    }
     classify_property(input_field, "TextEdit", StorageCodec::control_info, DefaultKind::boolean, "true");
     if (const auto choice_list = std::ranges::find(input_field, "ChoiceList", &PropertyDescriptor::api_name);
         choice_list != input_field.end()) {
@@ -2455,6 +2462,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "integer32";
         case ValueCodec::decimal:
             return "decimal";
+        case ValueCodec::typed_scalar:
+            return "typed-scalar";
         case ValueCodec::string:
             return "string";
         case ValueCodec::localized_text:

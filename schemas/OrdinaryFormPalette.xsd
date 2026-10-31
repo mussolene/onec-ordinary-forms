@@ -284,9 +284,9 @@
               <Property name="ClearButton" apiName="ClearButton" russianName="КнопкаОчистки" russianType="Булево" valueCodec="boolean"/>
               <Property name="SpinButton" apiName="SpinButton" russianName="КнопкаРегулирования" russianType="Булево" valueCodec="boolean"/>
               <Property name="ChoiceListButton" apiName="ChoiceListButton" russianName="КнопкаСпискаВыбора" russianType="Булево" valueCodec="boolean"/>
-              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Произвольный" valueCodec="unclassified"/>
+              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Произвольный" valueCodec="typed-scalar"/>
               <Property name="Mask" apiName="Mask" russianName="Маска" russianType="Строка" valueCodec="string"/>
-              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Произвольный" valueCodec="unclassified"/>
+              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Произвольный" valueCodec="typed-scalar"/>
               <Property name="MultiLine" apiName="MultiLine" russianName="МногострочныйРежим" russianType="Булево" valueCodec="boolean"/>
               <Property name="TypeRestriction" apiName="TypeRestriction" russianName="ОграничениеТипа" russianType="ОписаниеТипов" valueCodec="type-domain"/>
               <Property name="MarkIncomplete" apiName="MarkIncomplete" russianName="ОтметкаНезаполненного" russianType="Булево" valueCodec="boolean"/>
