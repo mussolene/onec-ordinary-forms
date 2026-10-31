@@ -4744,6 +4744,11 @@ LV gantt_next_table() {
         list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), raw("0")});
 }
 
+constexpr std::array<std::pair<std::string_view, std::int32_t>, 8> gantt_periodic_units{{
+    {"Second", 5}, {"Minute", 10}, {"Hour", 20}, {"Day", 30},
+    {"Week", 40}, {"Month", 50}, {"Quarter", 60}, {"Year", 70},
+}};
+
 LV encode_gantt_chart_info(const model::ControlNode& control) {
     const auto* data = std::get_if<model::GanttChartPayload>(&control.payload);
     if (!data) fail("OOF1122", "$/GanttChart", "GanttChartPayload", "different payload", "Gantt payload is invalid");
@@ -4793,6 +4798,30 @@ LV encode_gantt_chart_info(const model::ControlNode& control) {
     items.insert(items.end(), base.items.begin() + 8, base.items.end());
     LV info = list(std::move(items));
     const std::size_t shift = 2 * n + 2 * u;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("PeriodicVariantUnit"))) {
+        const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
+        if (!value || value->type_name != "TimeScaleUnitType")
+            fail("OOF1122", "$/GanttChart/PeriodicVariantUnit", "TimeScaleUnitType", "different type", "Invalid Gantt periodic unit");
+        const auto found = std::ranges::find_if(gantt_periodic_units, [&](const auto& item) { return item.first == value->member; });
+        if (found == gantt_periodic_units.end()) fail("OOF1122", "$/GanttChart/PeriodicVariantUnit", "known unit", value->member, "Unsupported Gantt periodic unit");
+        info.items.at(9 + shift) = raw(std::to_string(found->second));
+    }
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("PeriodicVariantRepetition"))) {
+        std::string canonical;
+        if (const auto* integer = std::get_if<std::int64_t>(&entry->value)) canonical = std::to_string(*integer);
+        else if (const auto* decimal = std::get_if<model::DecimalValue>(&entry->value)) {
+            try { canonical = value_codec::canonical_decimal(decimal->canonical); }
+            catch (const std::exception& error) { fail("OOF1122", "$/GanttChart/PeriodicVariantRepetition", "positive decimal", decimal->canonical, error.what()); }
+        } else fail("OOF1122", "$/GanttChart/PeriodicVariantRepetition", "number", "different type", "Invalid Gantt repetition");
+        const auto dot = canonical.find('.');
+        const std::string_view integral(canonical.data(), dot == std::string::npos ? canonical.size() : dot);
+        std::int64_t normalized = 0;
+        const auto parsed = std::from_chars(integral.data(), integral.data() + integral.size(), normalized);
+        if (parsed.ec != std::errc{} || parsed.ptr != integral.data() + integral.size() || normalized < 1 ||
+            normalized > std::numeric_limits<std::int32_t>::max() || canonical != std::to_string(normalized))
+            fail("OOF1122", "$/GanttChart/PeriodicVariantRepetition", "positive integral int32", canonical, "Gantt repetition must be normalized");
+        info.items.at(10 + shift) = raw(std::to_string(normalized));
+    }
     bool auto_full = true;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("AutoFullInterval"))) {
         const auto* value = std::get_if<bool>(&entry->value);
@@ -5074,6 +5103,15 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     auto embedded = extract_embedded_chart_events(event_normalized.items[1], child_path(info_path, 1),
         model::ControlKind::gantt_chart);
     auto named_events = std::move(embedded.events);
+    const auto unit_path = child_path(info_path, 9 + shift);
+    const auto unit_code = integer_atom<std::int32_t>(info.items[9 + shift], unit_path);
+    const auto unit = std::ranges::find_if(gantt_periodic_units, [&](const auto& item) { return item.second == unit_code; });
+    if (unit == gantt_periodic_units.end()) fail("OOF1114", unit_path, "known TimeScaleUnitType", std::to_string(unit_code), "Unsupported Gantt periodic unit");
+    if (unit->first != "Month") control.properties().set_explicit(model::PropertyId::from_name("PeriodicVariantUnit"), model::EnumerationValue{"TimeScaleUnitType", std::string(unit->first)});
+    const auto repetition_path = child_path(info_path, 10 + shift);
+    const auto repetition = integer_atom<std::int32_t>(info.items[10 + shift], repetition_path);
+    if (repetition < 1) fail("OOF1114", repetition_path, "positive int32", std::to_string(repetition), "Invalid Gantt periodic repetition");
+    if (repetition != 1) control.properties().set_explicit(model::PropertyId::from_name("PeriodicVariantRepetition"), model::DecimalValue{std::to_string(repetition)});
     const auto back_color = decode_chart_back_color(event_normalized.items[1].items[2], embedded.back_first, embedded.back_second, child_path(child_path(info_path, 1), 2));
     if (back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     if (!auto_full) control.properties().set_explicit(model::PropertyId::from_name("AutoFullInterval"), false);
@@ -12449,7 +12487,7 @@ Result<list_stream::ListValue> encode_document(
                         control->position.collapse.is_explicit() || !control->position.bindings.dimensions.empty())
                         fail("OOF1122", child_path(path, ordinal), "childless GanttChart with basic Position", control->name,
                             "GanttChart uses an unsupported storage concept");
-                    require_allowed_properties(control->properties(), {"AutoFullInterval", "FullIntervalBegin", "FullIntervalEnd", "BackColor"},
+                    require_allowed_properties(control->properties(), {"AutoFullInterval", "FullIntervalBegin", "FullIntervalEnd", "BackColor", "PeriodicVariantUnit", "PeriodicVariantRepetition"},
                         child_path(path, ordinal) + "/GanttChart");
                     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
                     auto gantt_info = encode_gantt_chart_info(*control);

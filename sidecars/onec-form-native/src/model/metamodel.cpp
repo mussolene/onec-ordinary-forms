@@ -731,6 +731,10 @@ void apply_proven_storage_overrides(
     classify_property(spreadsheet_properties, "ShowSelection", StorageCodec::control_info, DefaultKind::enumeration,
         "SpreadsheetDocumentSelectionShowModeType.WhenActive");
 
+    auto& gantt_properties = properties[static_cast<std::size_t>(ControlKind::gantt_chart)];
+    classify_property(gantt_properties, "PeriodicVariantUnit", StorageCodec::control_info, DefaultKind::enumeration, "TimeScaleUnitType.Month");
+    classify_property(gantt_properties, "PeriodicVariantRepetition", StorageCodec::control_info, DefaultKind::decimal, "1");
+
     auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
     if (const auto refresh = std::ranges::find(chart_properties, "RefreshEnabled", &PropertyDescriptor::api_name);
         refresh != chart_properties.end()) {

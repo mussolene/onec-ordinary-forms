@@ -2281,6 +2281,82 @@ void test_usual_group_named_record_round_trip_and_rejections() {
         "UsualGroup IDs above int64 range must be rejected by the control encoder");
 }
 
+void test_gantt_periodic_properties() {
+    constexpr std::array<std::pair<std::string_view, int>, 8> units{{
+        {"Second", 5}, {"Minute", 10}, {"Hour", 20}, {"Day", 30},
+        {"Week", 40}, {"Month", 50}, {"Quarter", 60}, {"Year", 70},
+    }};
+    const auto find_gantt = [&](auto&& self, list_stream::ListValue& node) -> list_stream::ListValue* {
+        if (!node.is_list) return nullptr;
+        if (node.items.size() == 6 && !node.items[0].is_list &&
+            node.items[0].atom == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) return &node;
+        for (auto& child : node.items) if (auto* result = self(self, child)) return result;
+        return nullptr;
+    };
+    for (std::size_t i = 0; i < 12; ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "Main";
+        form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument document(std::move(form));
+        model::GanttChartPayload payload;
+        if (i % 2 != 0) {
+            payload.series.push_back({model::ObjectId{71}, "S", "Series", std::nullopt});
+            payload.points.push_back({model::ObjectId{83}, "P", "Point", std::nullopt});
+            payload.intervals.push_back({model::ObjectId{83}, model::ObjectId{71}, model::DateValue{"2027-01-01T00:00:00"}, model::DateValue{"2027-01-02T00:00:00"}, "Interval"});
+        }
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Gantt", std::move(payload)});
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+        const auto unit_id = model::PropertyId::from_name("PeriodicVariantUnit");
+        const auto repeat_id = model::PropertyId::from_name("PeriodicVariantRepetition");
+        expect(document.get_prop_val(owner, unit_id).value == model::PropertyValue{model::EnumerationValue{"TimeScaleUnitType", "Month"}}, "default periodic unit must be Month");
+        expect(document.get_prop_val(owner, repeat_id).value == model::PropertyValue{model::DecimalValue{"1"}}, "default periodic repetition must be one");
+        const auto [name, code] = units[i % units.size()];
+        expect(document.set_prop_val(owner, unit_id, model::EnumerationValue{"TimeScaleUnitType", std::string(name)}) == model::PropertyMutationStatus::applied, "periodic unit must accept platform member");
+        expect(document.set_prop_val(owner, repeat_id, model::DecimalValue{"2.5"}) == model::PropertyMutationStatus::applied &&
+            document.get_prop_val(owner, repeat_id).value == model::PropertyValue{model::DecimalValue{"2"}}, "periodic repetition truncates decimals");
+        expect(document.set_prop_val(owner, unit_id, model::EnumerationValue{"WrongType", std::string(name)}) == model::PropertyMutationStatus::invalid_value &&
+            document.set_prop_val(owner, unit_id, model::EnumerationValue{"TimeScaleUnitType", "Other"}) == model::PropertyMutationStatus::invalid_value,
+            "periodic unit rejects unknown type and member");
+        for (const std::string_view invalid : {"-1", "0", "0.5", "2147483648"})
+            expect(document.set_prop_val(owner, repeat_id, model::DecimalValue{std::string(invalid)}) == model::PropertyMutationStatus::invalid_value,
+                "periodic repetition rejects out-of-range numeric values");
+        expect(document.get_prop_val(owner, repeat_id).value == model::PropertyValue{model::DecimalValue{"2"}},
+            "invalid setter must preserve the last accepted repetition");
+        expect(document.set_prop_val(owner, repeat_id, model::DecimalValue{"2147483647.5"}) == model::PropertyMutationStatus::applied &&
+            document.get_prop_val(owner, repeat_id).value == model::PropertyValue{model::DecimalValue{"2147483647"}},
+            "repetition must truncate before checking int32 bounds");
+        expect(document.set_prop_val(owner, repeat_id, model::DecimalValue{"2.5"}) == model::PropertyMutationStatus::applied,
+            "repetition must accept fractional setter again");
+        auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "Gantt periodic properties must encode");
+        auto* gantt = find_gantt(find_gantt, encoded.value());
+        expect(gantt != nullptr, "Gantt record must exist");
+        const auto shift = i % 2 == 0 ? 0u : 4u;
+        expect(gantt->items[2].items[9 + shift].atom == std::to_string(code) && gantt->items[2].items[10 + shift].atom == "2",
+            "Gantt period slots must include interval and pair shifts: sample=" + std::to_string(i) + " unit=" + gantt->items[2].items[9 + shift].atom + " repetition=" + gantt->items[2].items[10 + shift].atom);
+        const auto decoded = form_stream::decode_document(encoded.value());
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "Gantt periodic properties must decode");
+        expect(decoded.value().get_prop_val(owner, unit_id).value == model::PropertyValue{model::EnumerationValue{"TimeScaleUnitType", std::string(name)}} &&
+            decoded.value().get_prop_val(owner, repeat_id).value == model::PropertyValue{model::DecimalValue{"2"}}, "Gantt periodic values must survive native roundtrip");
+        auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && source::parse_form_xml(xml.value()).ok(), "Gantt period XML must parse");
+    }
+    model::Form invalid_form; invalid_form.id = model::ObjectId{1}; invalid_form.name = "Main";
+    invalid_form.children.push_back(model::ControlRef{model::ObjectId{2}});
+    model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+    model::GanttChartPayload invalid_payload;
+    invalid_payload.properties.set_explicit(model::PropertyId::from_name("PeriodicVariantRepetition"), model::DecimalValue{"2.5"});
+    invalid_document.add_control(model::ControlNode{model::ObjectId{2}, "Gantt", std::move(invalid_payload)});
+    expect(!invalid_document.validate().ok() && !form_stream::encode_document(invalid_document).ok(),
+        "direct model bags must reject nonintegral persisted repetition");
+    constexpr std::string_view invalid_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><GanttChart id="2" name="Gantt"><Position/><PeriodicVariantRepetition>2.5</PeriodicVariantRepetition></GanttChart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(invalid_xml).ok(), "XML must reject nonintegral persisted repetition");
+    std::string valid_xml{invalid_xml};
+    const auto fraction = valid_xml.find(">2.5</PeriodicVariantRepetition>");
+    expect(fraction != std::string::npos, "fractional fixture must contain its target value");
+    valid_xml.replace(fraction + 1, 3, "2");
+    expect(source::parse_form_xml(valid_xml).ok(), "the same XML with integral repetition must be accepted");
+}
+
 void test_gantt_chart_named_storage_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -20361,6 +20437,7 @@ int main() {
         test_empty_attributes_allocator_header();
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
+        test_gantt_periodic_properties();
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
