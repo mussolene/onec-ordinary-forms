@@ -1008,6 +1008,31 @@ bool chart_area_visible(const ChartPayload& chart, ChartAreaKind kind) {
     return entry == nullptr || (std::get_if<bool>(&entry->value) && std::get<bool>(entry->value));
 }
 
+bool valid_chart_scale_style(const metamodel::ChartScalePropertyDescriptor& field, const PropertyValue& value) {
+    try {
+        if (field.value_codec == metamodel::ValueCodec::line) {
+            if (std::holds_alternative<UndefinedValue>(value)) return true;
+            const auto* line = std::get_if<LineValue>(&value);
+            if (!line) return false;
+            (void)storage::value_codec::encode_line(*line);
+            return true;
+        }
+        if (field.value_codec == metamodel::ValueCodec::font) {
+            const auto* font = std::get_if<FontValue>(&value);
+            if (!font) return false;
+            (void)storage::value_codec::encode_font(*font);
+            return true;
+        }
+        const auto* color = std::get_if<ColorValue>(&value);
+        if (!color || color->alpha != 255) return false;
+        const bool no_channels = color->red == 0 && color->green == 0 && color->blue == 0;
+        if (color->kind == ColorKind::absolute) return std::holds_alternative<std::monostate>(color->style);
+        if (color->kind == ColorKind::automatic) return no_channels && std::holds_alternative<std::monostate>(color->style);
+        const auto* name = std::get_if<QualifiedName>(&color->style);
+        return color->kind == ColorKind::style_reference && no_channels && name && metamodel::find_named_color(name->value);
+    } catch (const std::exception&) { return false; }
+}
+
 const DecimalValue* chart_area_coordinate(const ChartArea& area, PropertyId property) {
     const auto* descriptor = metamodel::find_chart_area_property(property);
     return descriptor && descriptor->coordinate ? &(area.*(descriptor->coordinate)) : nullptr;
@@ -1024,9 +1049,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         for (const auto& field : metamodel::chart_scale_property_descriptors()) if (field.id == property) {
             const auto* value = plot ? metamodel::chart_scale_property_value((*plot).*(scale_owner->member), field) : nullptr;
             return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
-                value ? *value : (field.value_codec == metamodel::ValueCodec::enumeration
-                    ? PropertyValue{EnumerationValue{std::string(field.enumeration_type), std::string(field.members[field.default_ordinal])}}
-                    : field.value_codec == metamodel::ValueCodec::decimal ? PropertyValue{DecimalValue{"0"}} : PropertyValue{std::string{}})};
+                value ? *value : metamodel::chart_scale_property_default(field)};
         }
         return {PropertyReadStatus::unknown_property, std::nullopt};
     }
@@ -1307,6 +1330,8 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 if (!enumeration || enumeration->type_name != field.enumeration_type ||
                     std::ranges::find(field.members, enumeration->member) == field.members.end())
                     return PropertyMutationStatus::invalid_value;
+            } else if (field.value_codec == metamodel::ValueCodec::line || field.value_codec == metamodel::ValueCodec::color || field.value_codec == metamodel::ValueCodec::font) {
+                if (!valid_chart_scale_style(field, value)) return PropertyMutationStatus::invalid_value;
             } else if (!std::holds_alternative<std::string>(value) &&
                 !(std::holds_alternative<LocalizedStringValue>(value) && valid_localized_string(std::get<LocalizedStringValue>(value))))
                 return PropertyMutationStatus::invalid_value;
@@ -2855,6 +2880,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                             if (!enumeration || enumeration->type_name != field.enumeration_type ||
                                 std::ranges::find(field.members, enumeration->member) == field.members.end())
                                 invalid_chart("Chart scale enumeration type or member is invalid");
+                        } else if (field.value_codec == metamodel::ValueCodec::line || field.value_codec == metamodel::ValueCodec::color || field.value_codec == metamodel::ValueCodec::font) {
+                            if (!valid_chart_scale_style(field, *value)) invalid_chart("Invalid Chart scale style value");
                         } else if (!std::holds_alternative<std::string>(*value) && !(std::holds_alternative<LocalizedStringValue>(*value) && valid_localized_string(std::get<LocalizedStringValue>(*value)))) invalid_chart("Chart scale text must be plain or localized text");
                     }
                 }

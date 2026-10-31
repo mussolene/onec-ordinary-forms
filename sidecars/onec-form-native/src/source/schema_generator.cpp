@@ -773,13 +773,15 @@ void append_value_types(std::string& output) {
     }
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
     output += "  <xs:simpleType name=\"ChartScaleStepType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/></xs:restriction></xs:simpleType>\n";
+    output += "  <xs:complexType name=\"NullableLineValueType\"><xs:choice><xs:element name=\"Line\" type=\"LineValueType\"/><xs:element name=\"Undefined\" type=\"UndefinedValueType\"/></xs:choice></xs:complexType>\n";
     output += "  <xs:complexType name=\"ChartScaleType\"><xs:sequence>";
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
         output += "<xs:element";
         append_attribute(output, "name", field.name);
         append_attribute(output, "type", field.value_codec == model::metamodel::ValueCodec::enumeration
             ? std::string(field.enumeration_type) + "ValueType"
-            : field.value_codec == model::metamodel::ValueCodec::decimal ? "ChartScaleStepType" : "LocalizedTextValueType");
+            : field.value_codec == model::metamodel::ValueCodec::decimal ? "ChartScaleStepType" :
+            field.value_codec == model::metamodel::ValueCodec::line ? "NullableLineValueType" : std::string(xsd_type(field.value_codec)));
         append_attribute(output, "minOccurs", "0");
         append_attribute(output, "maxOccurs", "1");
         output += "/>";
@@ -1482,6 +1484,14 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         output += "/>\n";
     }
     output += "        </StandardPictures>\n";
+    output += "        <NamedColors>\n";
+    for (const auto& color : model::metamodel::named_colors()) {
+        output += "          <Color";
+        append_attribute(output, "name", color.name);
+        append_attribute(output, "russianName", as_utf8(color.russian_name));
+        output += "/>\n";
+    }
+    output += "        </NamedColors>\n";
     output += "        <NamedConcept name=\"Line\" russianName=\"Линия\" evidenceRefs=\"ev_d45a32e3b4cc4df1a1d06be5612b9233\"><Properties>\n";
     output += "          <Property name=\"LineType\" apiName=\"LineType\" russianName=\"ТипЛинии\" russianType=\"Перечисление\"/>\n";
     output += "          <Property name=\"Width\" apiName=\"Width\" russianName=\"Толщина\" russianType=\"Число\"/>\n";
@@ -1505,7 +1515,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         }
     }
     output += "        </Properties></NamedConcept>\n";
-    output += "        <NamedConcept name=\"ChartScale\" russianName=\"ШкалаДиаграммы\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e ev_fdaf734b79924b48b1c6745d881c8b1a\"><Properties>";
+    output += "        <NamedConcept name=\"ChartScale\" russianName=\"ШкалаДиаграммы\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e ev_fdaf734b79924b48b1c6745d881c8b1a ev_8acb08b31fe04c098e2f7fc1cfb2359c ev_5a399212306c4804804215808cc216eb ev_afbdbf8284434954a3e84bf3bcd4a80c\"><Properties>";
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
         output += "<Property";
         append_attribute(output, "name", field.name);

@@ -992,7 +992,7 @@ void test_control_surfaces_and_property_order(
                     expect(scale_fields.size() == oof::model::metamodel::chart_scale_property_descriptors().size(), "shared named scale field schema");
                     std::size_t scale_index = 0;
                     for (const auto& field : oof::model::metamodel::chart_scale_property_descriptors())
-                        expect_element_shape(scale_fields[scale_index++], field.name, field.value_codec == ValueCodec::enumeration ? std::string(field.enumeration_type) + "ValueType" : field.value_codec == ValueCodec::decimal ? "ChartScaleStepType" : "LocalizedTextValueType", "0", "1");
+                        expect_element_shape(scale_fields[scale_index++], field.name, field.value_codec == ValueCodec::enumeration ? std::string(field.enumeration_type) + "ValueType" : field.value_codec == ValueCodec::decimal ? "ChartScaleStepType" : field.value_codec == ValueCodec::line ? "NullableLineValueType" : field.value_codec == ValueCodec::color ? "ColorValueType" : field.value_codec == ValueCodec::font ? "FontValueType" : "LocalizedTextValueType", "0", "1");
                 }
             }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");

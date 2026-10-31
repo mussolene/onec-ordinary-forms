@@ -920,20 +920,12 @@ LV encode_control_color(const model::ColorValue& color, std::string_view path) {
         fail("OOF1122", std::string(path), "known QualifiedName style reference", "non-named style",
             "Control colors support named style references only");
     }
-    std::int32_t style_id = 0;
-    if (name->value == "StyleColors.FormBackColor") style_id = -1;
-    else if (name->value == "StyleColors.FormTextColor") style_id = -3;
-    else if (name->value == "StyleColors.ButtonTextColor") style_id = -21;
-    else if (name->value == "StyleColors.ButtonBackColor") style_id = -7;
-    else if (name->value == "StyleColors.ButtonBorderColor") style_id = -34;
-    else if (name->value == "StyleColors.BorderColor") style_id = -22;
-    else if (name->value == "StyleColors.SpecialTextColor") style_id = -16;
-    else if (name->value == "StyleColors.FieldSelectionBackColor") style_id = -14;
-    else if (name->value == "StyleColors.FieldSelectedTextColor") style_id = -15;
-    else if (name->value == "StyleColors.FieldAlternativeBackColor") style_id = -13;
-    else fail("OOF1122", std::string(path), "known control StyleColors property", name->value,
-        "Control color style reference is unsupported");
-    return list({raw("4"), raw("3"), list({raw(std::to_string(style_id))}), raw("3")});
+    const auto* descriptor = model::metamodel::find_named_color(name->value);
+    if (!descriptor)
+        fail("OOF1122", std::string(path), "known named platform color", name->value,
+            "Control named color reference is unsupported");
+    return list({raw("4"), raw(std::to_string(descriptor->native_kind)),
+        list({raw(std::to_string(descriptor->native_id))}), raw(std::to_string(descriptor->native_kind))});
 }
 
 model::ColorValue decode_control_color(const LV& value, std::string_view path) {
@@ -960,29 +952,20 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
         color.blue = static_cast<std::uint8_t>((packed >> 16) & 0xff);
         return color;
     }
-    if (kind == 3) {
-        require_raw_constant(value.items[3], "3", child_path(path, 3));
+    if (kind >= 1 && kind <= 3) {
+        require_raw_constant(value.items[3], std::to_string(kind), child_path(path, 3));
         require_arity(value.items[2], 1, child_path(path, 2));
-        const auto style_id = integer_atom<std::int32_t>(value.items[2].items[0], child_path(path, 2) + "/0");
-        std::string_view style_name;
-        if (style_id == -1) style_name = "StyleColors.FormBackColor";
-        else if (style_id == -3) style_name = "StyleColors.FormTextColor";
-        else if (style_id == -21) style_name = "StyleColors.ButtonTextColor";
-        else if (style_id == -7) style_name = "StyleColors.ButtonBackColor";
-        else if (style_id == -34) style_name = "StyleColors.ButtonBorderColor";
-        else if (style_id == -22) style_name = "StyleColors.BorderColor";
-        else if (style_id == -16) style_name = "StyleColors.SpecialTextColor";
-        else if (style_id == -14) style_name = "StyleColors.FieldSelectionBackColor";
-        else if (style_id == -15) style_name = "StyleColors.FieldSelectedTextColor";
-        else if (style_id == -13) style_name = "StyleColors.FieldAlternativeBackColor";
-        else fail("OOF1114", child_path(path, 2) + "/0", "known control StyleColors ID",
-            std::to_string(style_id), "Control color style identifier is unsupported");
+        const auto native_id = integer_atom<std::int32_t>(value.items[2].items[0], child_path(path, 2) + "/0");
+        const auto* descriptor = model::metamodel::find_named_color(kind, native_id);
+        if (!descriptor)
+            fail("OOF1114", child_path(path, 2) + "/0", "known named platform color ID",
+                std::to_string(native_id), "Control named color identifier is unsupported");
         model::ColorValue color;
         color.kind = model::ColorKind::style_reference;
-        color.style = model::QualifiedName{std::string(style_name)};
+        color.style = model::QualifiedName{std::string(descriptor->name)};
         return color;
     }
-    fail("OOF1114", child_path(path, 1), "Control color kind 0, 3, or 4", std::to_string(kind),
+    fail("OOF1114", child_path(path, 1), "Control color kind 0..4", std::to_string(kind),
         "Control color storage kind is unsupported");
 }
 
@@ -6410,6 +6393,33 @@ ls::ListValue::raw_atom("0"),
 ls::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"),
 ls::ListValue::raw_atom("0"),
 };}
+struct ChartScaleLayout {
+    bool grid_line = false;
+    bool scale_line = false;
+    std::size_t index(std::size_t logical) const noexcept {
+        return logical + (grid_line && logical >= 9 ? 1 : 0) + (scale_line && logical >= 15 ? 1 : 0);
+    }
+};
+ChartScaleLayout chart_scale_layout(const LV& record, std::string_view path) {
+    require_list(record, path);
+    const auto grid = integer_atom<std::uint32_t>(at(record, 8, path), child_path(path, 8));
+    if (grid > 1) fail("OOF1115", std::string(path), "GridLine presence 0 or 1", std::to_string(grid), "Invalid Chart scale Line flag");
+    const auto scale_index = std::size_t{14} + grid;
+    const auto scale = integer_atom<std::uint32_t>(at(record, scale_index, path), child_path(path, scale_index));
+    if (scale > 1) fail("OOF1115", std::string(path), "ScaleLine presence 0 or 1", std::to_string(scale), "Invalid Chart scale Line flag");
+    require_arity(record, 22 + grid + scale, path);
+    return {grid != 0, scale != 0};
+}
+LV chart_scale_without_line_values(const LV& record, std::string_view path) {
+    const auto layout = chart_scale_layout(record, path);
+    auto normalized = record;
+    if (layout.scale_line) normalized.items.erase(normalized.items.begin() + static_cast<std::ptrdiff_t>(15 + layout.grid_line));
+    if (layout.grid_line) normalized.items.erase(normalized.items.begin() + 9);
+    normalized.items[8] = raw("0");
+    normalized.items[14] = raw("0");
+    return normalized;
+}
+
 static ls::ListValue default_chart_scale_record() { return ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}); }
 static std::vector<ls::ListValue> canonical_chart_style_defaults(){return {
 ls::ListValue::raw_atom("0"),
@@ -6803,6 +6813,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     if (chart.plot_area) for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
         auto& record = info.at((owner.tail ? scale_tail_start : style_defaults_start) + owner.record_offset);
         const auto& scale = (*chart.plot_area).*(owner.member);
+        std::array<std::optional<LV>, 2> lines;
         for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
             const auto* value = model::metamodel::chart_scale_property_value(scale, field);
             if (!value) continue;
@@ -6819,9 +6830,26 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
                 const auto member = std::ranges::find(field.members, enumeration->member);
                 if (member == field.members.end()) fail("OOF1122", path, "supported Chart scale enumeration", enumeration->member, "Invalid Chart scale enumeration member");
                 record.items.at(field.record_offset) = raw(std::to_string(std::distance(field.members.begin(), member)));
+            } else if (field.value_codec == model::metamodel::ValueCodec::line) {
+                if (!std::holds_alternative<model::UndefinedValue>(*value)) {
+                    const auto* line = std::get_if<model::LineValue>(value);
+                    if (!line) fail("OOF1122", path, "Line or Undefined", {}, "Invalid Chart scale Line");
+                    lines[field.record_offset == 8 ? 0 : 1] = list_stream::parse(value_codec::encode_line(*line));
+                    record.items.at(field.record_offset) = raw("1");
+                }
+            } else if (field.value_codec == model::metamodel::ValueCodec::color) {
+                const auto* color = std::get_if<model::ColorValue>(value);
+                if (!color) fail("OOF1122", path, "Color", {}, "Invalid Chart scale Color");
+                record.items.at(field.record_offset) = encode_control_color(*color, path);
+            } else if (field.value_codec == model::metamodel::ValueCodec::font) {
+                const auto* font = std::get_if<model::FontValue>(value);
+                if (!font) fail("OOF1122", path, "Font", {}, "Invalid Chart scale Font");
+                record.items.at(field.record_offset) = encode_control_font(*font, path);
             } else record.items.at(field.record_offset) = encoded_localized_text(*value, path, false);
         }
         if (owner.kind == model::ChartScaleKind::values) info.at(middle_start + 39) = record.items.at(13);
+        if (lines[1]) record.items.insert(record.items.begin() + 15, std::move(*lines[1]));
+        if (lines[0]) record.items.insert(record.items.begin() + 9, std::move(*lines[0]));
     }
     for (const auto& companion : model::metamodel::chart_scale_companion_descriptors()) {
         const auto owners = model::metamodel::chart_scale_owner_descriptors();
@@ -6829,7 +6857,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         const auto fields = model::metamodel::chart_scale_property_descriptors();
         const auto field = std::ranges::find(fields, companion.property, &model::metamodel::ChartScalePropertyDescriptor::id);
         const auto& record = info.at((owner->tail ? scale_tail_start : style_defaults_start) + owner->record_offset);
-        const auto ordinal = integer_atom<std::size_t>(record.items.at(field->record_offset), "$/Chart/PlotArea");
+        const auto ordinal = integer_atom<std::size_t>(record.items.at(chart_scale_layout(record, "$/Chart/PlotArea").index(field->record_offset)), "$/Chart/PlotArea");
         const auto value = companion.value == model::metamodel::ChartScaleCompanionValue::ordinal ? ordinal :
             companion.value == model::metamodel::ChartScaleCompanionValue::equals ? static_cast<std::size_t>(ordinal == companion.compared_ordinal) :
             static_cast<std::size_t>(ordinal != companion.compared_ordinal);
@@ -7471,16 +7499,19 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     payload.title_area = read_area(14, 23, model::metamodel::chart_area_placements(model::ChartAreaKind::title),
         area_defaults(model::ChartAreaKind::title), "$/Chart/TitleArea");
     if (active_series != 0) properties.set_explicit(model::PropertyId::from_name("ActiveSeries"), model::ChartSeriesRef{model::ObjectId{id}, payload.series[active_series].id});
+    auto scale_normalized_info = info;
     const auto scale_tail_start = render_start + canonical_chart_render_defaults().size() + payload.values.size();
     for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
         const auto index = (owner.tail ? scale_tail_start : style_defaults_start) + owner.record_offset;
         const auto& record = at(info, index, info_path);
         const auto defaults = owner.tail ? canonical_chart_tail_defaults()[owner.record_offset] : style_defaults[owner.record_offset];
-        require_arity(record, defaults.items.size(), child_path(info_path, index));
+        const auto layout = chart_scale_layout(record, child_path(info_path, index));
+        scale_normalized_info.items[index] = chart_scale_without_line_values(record, child_path(info_path, index));
         model::ChartScale scale;
         bool explicit_scale = false;
         for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
-            const auto& stored = record.items.at(field.record_offset);
+            const auto physical = layout.index(field.record_offset);
+            const auto& stored = record.items.at(physical);
             const auto path = child_path(child_path(info_path, index), field.record_offset);
             model::PropertyValue value;
             if (field.value_codec == model::metamodel::ValueCodec::decimal) {
@@ -7492,25 +7523,35 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
                 const auto ordinal = integer_atom<std::size_t>(stored, path);
                 if (ordinal >= field.members.size()) fail("OOF1115", path, "supported Chart scale enumeration ordinal", std::to_string(ordinal), "Invalid Chart scale enumeration ordinal");
                 value = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[ordinal])};
-            } else value = decoded_localized_text(stored, path, false);
-            if (list_stream::dump_compact(stored) != list_stream::dump_compact(defaults.items.at(field.record_offset))) {
+            } else if (field.value_codec == model::metamodel::ValueCodec::line) {
+                value = raw_atom(stored, path) == "0" ? model::PropertyValue{model::UndefinedValue{}} :
+                    model::PropertyValue{value_codec::decode_line(list_stream::dump_compact(record.items.at(physical + 1)))};
+            } else if (field.value_codec == model::metamodel::ValueCodec::color) value = decode_control_color(stored, path);
+            else if (field.value_codec == model::metamodel::ValueCodec::font) value = decode_control_font(stored, path);
+            else value = decoded_localized_text(stored, path, false);
+            if (field.value_codec == model::metamodel::ValueCodec::line ? !std::holds_alternative<model::UndefinedValue>(value) :
+                list_stream::dump_compact(stored) != list_stream::dump_compact(defaults.items.at(field.record_offset))) {
                 model::metamodel::set_chart_scale_property_value(scale, field, std::move(value));
                 explicit_scale = true;
             }
         }
         if (owner.kind == model::ChartScaleKind::values)
-            require_exact(record.items.at(13), at(info, middle_start + 39, info_path), child_path(info_path, index), "ValuesScale LabelFormat differs from its mirror");
+            require_exact(record.items.at(layout.index(13)), at(info, middle_start + 39, info_path), child_path(info_path, index), "ValuesScale LabelFormat differs from its mirror");
         if (explicit_scale) {
             if (!payload.plot_area) payload.plot_area = area_defaults(model::ChartAreaKind::plot);
             (*payload.plot_area).*(owner.member) = std::move(scale);
         }
     }
-    const auto expected_info = encode_chart_info(payload, title, properties, model::ObjectId{id});
+    auto expected_info = encode_chart_info(payload, title, properties, model::ObjectId{id});
     for (const auto& companion : model::metamodel::chart_scale_companion_descriptors()) {
         const auto base = companion.base == model::metamodel::ChartScaleCompanionBase::middle ? middle_start : cells_end;
         const auto index = base + companion.offset;
         require_exact(at(info, index, info_path), at(expected_info, index, info_path), child_path(info_path, index),
             "Chart scale companion differs from its named enumeration");
+    }
+    for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+        const auto index = (owner.tail ? scale_tail_start : style_defaults_start) + owner.record_offset;
+        expected_info.items[index] = chart_scale_without_line_values(expected_info.items[index], child_path(info_path, index));
     }
     auto normalized_expected_info = expected_info;
     for (std::size_t i = 0; i < series_count; ++i) {
@@ -7548,7 +7589,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         require_exact(at(info, index, info_path), at(expected_info, index, info_path), child_path(info_path, index),
             "Chart Tooltip text fragment differs from its named value");
     }
-    auto shape_info = info;
+    auto shape_info = scale_normalized_info;
     for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
         for (const auto offset : {std::size_t{0}, std::size_t{1}}) {
             const auto slot = data_start + cell * 3 + offset;
@@ -7571,7 +7612,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     }
     require_list_stream_shape(shape_info, normalized_expected_info, info_path,
         "Chart profile with valid record arity and atom types");
-    if (list_stream::dump_compact(info) != list_stream::dump_compact(normalized_expected_info)) {
+    if (list_stream::dump_compact(scale_normalized_info) != list_stream::dump_compact(normalized_expected_info)) {
         warn_incomplete_profile(warnings, reconstruction_complete, id, info_path, "Chart");
     }
     return {std::move(payload), title, std::move(properties), std::move(chart_events)};

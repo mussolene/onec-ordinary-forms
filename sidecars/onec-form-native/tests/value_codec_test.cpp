@@ -443,9 +443,8 @@ void test_font() {
     expect(codec::encode_font(automatic_bold_true) == "{8,3,4,700,1,100}" &&
                codec::decode_font(codec::encode_font(automatic_bold_true)) == automatic_bold_true,
         "automatic Font must preserve an explicitly enabled bold setting");
-    expect_rejected(
-        [] { static_cast<void>(codec::decode_font("{8,3,8,0,1,100}")); },
-        "automatic Font non-bold presence flags must be rejected");
+    expect(codec::decode_font("{8,3,8,0,1,100}").italic == false,
+        "automatic Font preserves explicit false italic");
     expect_rejected(
         [] { static_cast<void>(codec::decode_font("{8,3,4,500,1,100}")); },
         "automatic Font unobserved bold weights must be rejected");
@@ -454,8 +453,8 @@ void test_font() {
         "Font must reject trailing values outside its own record");
     model::FontValue automatic_italic = automatic;
     automatic_italic.italic = false;
-    expect_rejected([&] { static_cast<void>(codec::encode_font(automatic_italic)); },
-        "automatic Font must reject unobserved italic overrides");
+    expect(codec::decode_font(codec::encode_font(automatic_italic)) == automatic_italic,
+        "automatic Font preserves italic overrides");
 
     model::FontValue family_only;
     family_only.kind = model::FontKind::absolute;
@@ -533,8 +532,39 @@ void test_font() {
         "observed explicit zero Font scale must remain distinguishable from absence");
     model::FontValue style_override = style;
     style_override.bold = false;
-    expect_rejected([&] { static_cast<void>(codec::encode_font(style_override)); },
-        "unobserved style font overrides must be rejected");
+    expect(codec::decode_font(codec::encode_font(style_override)) == style_override,
+        "style Font preserves explicit false bold");
+
+    for (const auto& [base, prefix] : std::array{
+             std::pair{automatic, std::string{"{8,3,"}},
+             std::pair{style, std::string{"{8,2,"}},
+             std::pair{[] { model::FontValue f; f.kind = model::FontKind::windows_font; f.windows_font = model::WindowsFont::default_gui; return f; }(), std::string{"{8,1,"}},
+             std::pair{[] { model::FontValue f; f.kind = model::FontKind::windows_font; f.windows_font = model::WindowsFont::system; return f; }(), std::string{"{8,1,"}}}) {
+        const std::string selector = base.kind == model::FontKind::windows_font ? ",{" + std::to_string(static_cast<unsigned>(*base.windows_font)) + "}" :
+            base.kind == model::FontKind::style_reference ? ",{-20}" : "";
+        const auto check = [&](const model::FontValue& value, std::string_view suffix) {
+            const auto expected = prefix + std::string(suffix.substr(0, suffix.find(','))) + selector + std::string(suffix.substr(suffix.find(',')));
+            expect(codec::encode_font(value) == expected && codec::decode_font(expected) == value,
+                "nonabsolute Font named presence fields must match platform tuple");
+        };
+        check(base, "0,1,100}");
+        auto height = base; height.height = 0; check(height, "2,0,1,100}");
+        height.height = 11; check(height, "2,110,1,100}");
+        auto fields = base; fields.height = 0; fields.bold = false; fields.italic = false;
+        fields.underline = false; fields.strikeout = false; check(fields, "62,0,400,0,0,0,1,100}");
+        fields.face_name = "Arial"; check(fields, "63,0,400,0,0,0,\"Arial\",1,100}");
+        fields.height = 11; fields.bold = true; fields.italic = true; fields.underline = true;
+        fields.strikeout = true; fields.scale = 120;
+        check(fields, "63,110,700,1,1,1,\"Arial\",1,120}");
+        fields.scale_override = true;
+        check(fields, "575,110,700,1,1,1,\"Arial\",1,120}");
+        auto scale = base; scale.scale_override = true; scale.scale = 125; check(scale, "512,1,125}");
+        auto direct = base; direct.scale = 125; check(direct, "0,1,125}");
+    }
+    for (const auto* invalid : {"{8,3,1024,1,100}", "{8,1,0,{0,1},1,100}",
+             "{8,2,0,{-20},2,100}", "{8,3,2,2147483648,1,100}",
+             "{8,3,8,2,1,100}", "{8,3,0,1,2147483648}", "{8,3,0,1,100,0}"})
+        expect_rejected([&] { (void)codec::decode_font(invalid); }, "invalid compact Font record rejected");
 }
 
 void test_shortcut() {

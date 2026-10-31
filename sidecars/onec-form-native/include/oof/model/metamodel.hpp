@@ -249,6 +249,7 @@ struct ChartScalePropertyDescriptor {
 [[nodiscard]] std::span<const ChartScaleOwnerDescriptor> chart_scale_owner_descriptors() noexcept;
 [[nodiscard]] std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors() noexcept;
 
+[[nodiscard]] PropertyValue chart_scale_property_default(const ChartScalePropertyDescriptor& field);
 [[nodiscard]] const PropertyValue* chart_scale_property_value(const ChartScale& scale, const ChartScalePropertyDescriptor& field) noexcept;
 void set_chart_scale_property_value(ChartScale& scale, const ChartScalePropertyDescriptor& field, PropertyValue value);
 void reset_chart_scale_property_value(ChartScale& scale, const ChartScalePropertyDescriptor& field);
@@ -484,5 +485,16 @@ private:
 [[nodiscard]] std::string_view value_codec_name(ValueCodec codec) noexcept;
 [[nodiscard]] std::span<const ShortcutKeyDescriptor> shortcut_key_descriptors() noexcept;
 [[nodiscard]] const ShortcutKeyDescriptor* find_shortcut_key(std::string_view name) noexcept;
+
+struct NamedColorDescriptor {
+    std::string_view name;
+    std::u8string_view russian_name;
+    std::int32_t native_kind;
+    std::int32_t native_id;
+};
+
+[[nodiscard]] std::span<const NamedColorDescriptor> named_colors() noexcept;
+[[nodiscard]] const NamedColorDescriptor* find_named_color(std::string_view name) noexcept;
+[[nodiscard]] const NamedColorDescriptor* find_named_color(std::int32_t native_kind, std::int32_t native_id) noexcept;
 
 }  // namespace oof::model::metamodel

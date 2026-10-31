@@ -1103,15 +1103,15 @@ void test_check_box_font_xml_round_trip() {
 
     model::FontValue automatic_italic;
     automatic_italic.italic = false;
-    expect(!source::serialize_form_xml(make_document(automatic_italic)).ok(),
-        "automatic Font must reject unobserved XML italic overrides during serialization");
+    const auto italic_serialized = source::serialize_form_xml(make_document(automatic_italic));
+    expect(italic_serialized.ok(), "automatic Font must serialize native italic overrides");
     std::string unsupported_automatic_xml = false_serialized.value();
     const auto bold_attribute = unsupported_automatic_xml.find("bold=\"false\"");
     expect(bold_attribute != std::string::npos, "automatic false bold test XML must contain its named attribute");
     unsupported_automatic_xml.replace(bold_attribute, std::string("bold=\"false\"").size(),
         "bold=\"false\" italic=\"false\"");
-    expect_code(source::parse_form_xml(unsupported_automatic_xml), "OOF2003",
-        "automatic Font must reject unobserved XML italic attributes");
+    expect(source::parse_form_xml(unsupported_automatic_xml).ok(),
+        "automatic Font must accept native explicit false italic attributes");
 
     model::FontValue font;
     font.kind = model::FontKind::absolute;

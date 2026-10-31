@@ -4365,6 +4365,39 @@ void test_radio_input_list_common_font_border_color_round_trip() {
     }
 }
 
+void test_named_platform_colors_registry_round_trip() {
+    const auto descriptors = model::metamodel::named_colors();
+    expect(descriptors.size() == 181, "observed named platform colors and existing style colors are registered");
+    expect(!model::metamodel::find_named_color("WebColors.Unknown") &&
+        !model::metamodel::find_named_color(2, 10000), "unknown named colors must not acquire a synthetic name");
+    model::Form form; form.id = model::ObjectId{1}; form.name = "NamedColors";
+    for (std::size_t n = 0; n < descriptors.size(); ++n)
+        form.children.push_back(model::ControlRef{model::ObjectId{100 + n}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t n = 0; n < descriptors.size(); ++n) {
+        const auto& descriptor = descriptors[n];
+        expect(model::metamodel::find_named_color(descriptor.name) == &descriptor &&
+            model::metamodel::find_named_color(descriptor.native_kind, descriptor.native_id) == &descriptor &&
+            !descriptor.russian_name.empty(), "named color registry is bilingual and unambiguous in both directions");
+        model::ControlNode control{model::ObjectId{100 + n}, "Color" + std::to_string(n), model::ButtonPayload{}};
+        model::ColorValue color; color.kind = model::ColorKind::style_reference;
+        color.style = model::QualifiedName{std::string(descriptor.name)};
+        control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), color);
+        document.add_control(std::move(control));
+    }
+    const auto binary = oof::save_form_bin(document);
+    expect(binary.ok(), "all observed named platform colors must build");
+    const auto decoded = oof::load_form_bin(binary.value(), "NamedColors");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "all observed named platform colors must decode");
+    for (std::size_t n = 0; n < descriptors.size(); ++n) {
+        const auto* control = decoded.value().find_control(model::ObjectId{100 + n});
+        const auto* entry = control ? control->properties().find(model::PropertyId::from_name("BorderColor")) : nullptr;
+        const auto* color = entry ? std::get_if<model::ColorValue>(&entry->value) : nullptr;
+        const auto* name = color ? std::get_if<model::QualifiedName>(&color->style) : nullptr;
+        expect(name && name->value == descriptors[n].name, "named colors preserve their reference rather than flattening to RGB");
+    }
+}
+
 void test_button_colors_round_trip_and_validation() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -4554,12 +4587,17 @@ void test_button_colors_round_trip_and_validation() {
     override_form.children = {model::ControlRef{model::ObjectId{2}}};
     model::OrdinaryFormDocument font_override(std::move(override_form));
     model::ControlNode style_override{model::ObjectId{2}, "Text", model::ButtonPayload{}};
-    auto unsupported_style = text_font;
-    unsupported_style.underline = false;
-    style_override.properties().set_explicit(model::PropertyId::from_name("Font"), unsupported_style);
+    auto changed_style = text_font;
+    changed_style.underline = false;
+    style_override.properties().set_explicit(model::PropertyId::from_name("Font"), changed_style);
     font_override.add_control(std::move(style_override));
-    expect_failure(form_stream::encode_document(font_override), "OOF1122", "$/Button/Font",
-        "unobserved style-font overrides must be rejected rather than discarded");
+    const auto changed_stream = form_stream::encode_document(font_override);
+    expect(changed_stream.ok(), "observed style-font overrides must encode");
+    const auto changed_document = form_stream::decode_document(changed_stream.value(), "FontOverride");
+    expect(changed_document.ok() && changed_document.value().reconstruction_complete(), "style-font overrides must decode");
+    const auto* changed_font = changed_document.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("Font"));
+    expect(changed_font && std::get<model::FontValue>(changed_font->value) == changed_style,
+        "explicit false style-font override must survive storage");
 }
 
 void test_button_picture_enums_round_trip_and_validation() {
@@ -17298,7 +17336,7 @@ void test_embedded_chart_typed_variants_and_guards() {
         for (const auto mutation : {0, 1, 2}) {
             auto invalid = encoded.value();
             auto& chart = find_record(find_record, invalid, kind)->items[2].items[1].items[2];
-            if (mutation == 0) chart.items[49] = list_stream::parse("{8,2,0,{-20},1,99}");
+            if (mutation == 0) chart.items[49] = list_stream::parse("{8,2,0,{-20},2,99}");
             else if (mutation == 1) chart.items[4] = list_stream::ListValue::raw_atom("1");
             else chart.items[0] = list_stream::ListValue::raw_atom("76");
             expect(!form_stream::decode_document(invalid, "Main"), "malformed embedded Chart Font, count or header must remain an error");
@@ -18369,7 +18407,7 @@ void test_chart_area_border_font_round_trip() {
     auto malformed = encoded.value();
     auto* malformed_chart = find_chart_record(malformed);
     expect(malformed_chart != nullptr, "Chart record must exist for malformed style check");
-    malformed_chart->items.at(3).items.at(18 + 32) = list_stream::parse("{8,2,0,{-20},1,99}");
+    malformed_chart->items.at(3).items.at(18 + 32) = list_stream::parse("{8,2,0,{-20},2,99}");
     expect(!form_stream::decode_document(malformed), "malformed Chart area font must fail typed validation");
     auto rounded_document = document;
     model::BorderValue rounded;
@@ -18618,9 +18656,9 @@ void test_chart_scales_round_trip() {
         "ChartScale must store new fields sparsely rather than enlarging every ControlNode");
     model::ChartScale sparse_left, sparse_right;
     const auto enum_fields = model::metamodel::chart_scale_property_descriptors();
-    for (const auto& field : enum_fields) if (!field.member)
+    for (const auto& field : enum_fields) if (field.value_codec == model::metamodel::ValueCodec::enumeration)
         model::metamodel::set_chart_scale_property_value(sparse_left, field, model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[0])});
-    for (auto field = enum_fields.rbegin(); field != enum_fields.rend(); ++field) if (!field->member)
+    for (auto field = enum_fields.rbegin(); field != enum_fields.rend(); ++field) if (field->value_codec == model::metamodel::ValueCodec::enumeration)
         model::metamodel::set_chart_scale_property_value(sparse_right, *field, model::EnumerationValue{std::string(field->enumeration_type), std::string(field->members[0])});
     expect(sparse_left == sparse_right, "ChartScale value equality is independent of sparse insertion order");
     sparse_right.properties.set_explicit(model::PropertyId::from_name("UnknownScaleProperty"), false);
@@ -18703,6 +18741,29 @@ void test_chart_scales_round_trip() {
                 const model::PropertyValue selected = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[(i + static_cast<std::size_t>(owner.kind)) % field.members.size()])};
                 expect(document.set_prop_val(key, field.id, selected) == model::PropertyMutationStatus::applied_unclassified_storage, "select scale enums across empty and populated controls");
             }
+            for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+                if (field.value_codec != model::metamodel::ValueCodec::line && field.value_codec != model::metamodel::ValueCodec::color && field.value_codec != model::metamodel::ValueCodec::font) continue;
+                expect(document.get_prop_val(key, field.id).value == model::metamodel::chart_scale_property_default(field), "native scale style default");
+                model::PropertyValue selected = model::metamodel::chart_scale_property_default(field);
+                if (field.value_codec == model::metamodel::ValueCodec::line) {
+                    if ((i % 4 & (field.record_offset == 8 ? 1 : 2)) != 0) selected = model::LineValue{{"ChartLineType", "Dashed"}, 2, false};
+                } else if (field.value_codec == model::metamodel::ValueCodec::color) {
+                    model::ColorValue color;
+                    if (i % 3 == 1) { color.kind = model::ColorKind::absolute; color.red = 23; color.green = 67; color.blue = 101; }
+                    if (i % 3 == 2) { color.kind = model::ColorKind::style_reference; color.style = model::QualifiedName{"WindowsColors.WindowBackground"}; }
+                    selected = color;
+                } else {
+                    model::FontValue font;
+                    if (i % 4 == 1) { font.kind = model::FontKind::absolute; font.face_name = "Arial"; font.height = 12; }
+                    if (i % 4 == 2) { font.kind = model::FontKind::style_reference; font.style = model::QualifiedName{"StyleFonts.TextFont"}; font.bold = true; font.italic = false; }
+                    if (i % 4 == 3) { font.kind = model::FontKind::windows_font; font.windows_font = model::WindowsFont::default_gui; font.bold = true; font.height = 13; }
+                    selected = font;
+                }
+                expect(document.set_prop_val(key, field.id, selected) == model::PropertyMutationStatus::applied_unclassified_storage, "sparse scale style setter");
+                expect(document.set_prop_val(key, field.id, std::string{"invalid"}) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, field.id).value == selected, "scale style wrong type rejects atomically");
+                expect(document.reset_prop_val(key, field.id) == model::PropertyMutationStatus::reset_unclassified_storage && document.get_prop_val(key, field.id).value == model::metamodel::chart_scale_property_default(field), "scale style reset default");
+                expect(document.set_prop_val(key, field.id, selected) == model::PropertyMutationStatus::applied_unclassified_storage, "restore scale style");
+            }
             const auto before = document.get_prop_val(key, step).value;
             for (const model::PropertyValue& bad : std::vector<model::PropertyValue>{std::string{}, std::string{"1e2"}, std::string{"1 2"}, std::string{"++1"}, model::UndefinedValue{}, model::NullValue{}})
                 expect(document.set_prop_val(key, step, bad) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, step).value == before, "invalid scale assignment is atomic");
@@ -18755,8 +18816,30 @@ void test_chart_scales_round_trip() {
         auto& info = record->items.at(3).items;
         const auto cells_end = std::size_t{18 + 11 * (2 + 3) + 100 + 3 * 2 * 3};
         const auto scale_base = owner.tail ? info.size() - 19 : cells_end + 24 + (2 + 1);
-        info.at(scale_base + owner.record_offset).items.at(field.record_offset).atom = std::to_string(field.members.size());
+        auto& scale_record = info.at(scale_base + owner.record_offset).items;
+        const auto grid = scale_record.at(8).atom == "1";
+        const auto scale = scale_record.at(14 + grid).atom == "1";
+        const auto physical = field.record_offset + (grid && field.record_offset >= 9) + (scale && field.record_offset >= 15);
+        scale_record.at(physical).atom = std::to_string(field.members.size());
         expect(!form_stream::decode_document(malformed, "ChartScales"), "out of range scale enum ordinal rejected on every owner");
+    }
+    for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) for (const auto flag : {std::size_t{8}, std::size_t{14}}) {
+        auto malformed = encoded.value();
+        auto& records = malformed.items.at(1).items.at(2).items.at(2).items;
+        const auto record = std::ranges::find(records, std::string{"107"}, [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        auto& info = record->items.at(3).items;
+        const auto cells_end = std::size_t{18 + 11 * (1 + 1) + 100 + 3 * 1 * 1};
+        const auto scale_base = owner.tail ? info.size() - 19 : cells_end + 24 + (1 + 1);
+        auto& scale = info.at(scale_base + owner.record_offset).items;
+        expect(scale.size() == 24, "malformed scale fixture has both optional Lines and no event shift");
+        const auto physical = flag + (flag == 14 && scale.at(8).atom == "1");
+        scale.at(physical).atom = "2";
+        expect(!form_stream::decode_document(malformed, "ChartScales"), "invalid scale Line presence flag rejected");
+        scale.at(physical).atom = "1";
+        scale.at(physical + 1) = list_stream::parse("{0}");
+        expect(!form_stream::decode_document(malformed, "ChartScales"), "malformed scale Line value rejected");
     }
     const auto decoded = form_stream::decode_document(encoded.value(), "ChartScales");
     expect(decoded.ok() && decoded.value().reconstruction_complete(), "named scale fields decode completely");
@@ -18773,6 +18856,15 @@ void test_chart_scales_round_trip() {
             malformed.replace(begin, end - begin, "Invalid");
             expect(!source::parse_form_xml(malformed), "invalid scale enum type or member rejected in source");
         }
+    }
+    for (const auto& replacement : {std::string{"<Undefined>wrong</Undefined>"},
+            std::string{"<Undefined>undefined</Undefined><Undefined>undefined</Undefined>"},
+            std::string{"<Line type=\"ChartLineType\" member=\"Unknown\" width=\"1\" gap=\"false\"/>"}}) {
+        auto malformed = xml.value();
+        const auto begin = malformed.find("<GridLine>") + std::string("<GridLine>").size();
+        const auto end = malformed.find("</GridLine>", begin);
+        malformed.replace(begin, end - begin, replacement);
+        expect(!source::parse_form_xml(malformed), "nullable scale Line XML rejects malformed choices and values");
     }
     const auto parsed = source::parse_form_xml(xml.value());
     expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
@@ -19676,7 +19768,7 @@ void test_chart_named_events() {
                 expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
                     "Chart LabelFont XML/native roundtrip must preserve the stream");
                 auto malformed = encoded.value();
-                find_chart_record(malformed)->items[3].items[font_index] = list_stream::parse("{8,2,0,{-20},1,99}");
+                find_chart_record(malformed)->items[3].items[font_index] = list_stream::parse("{8,2,0,{-20},2,99}");
                 expect(!form_stream::decode_document(malformed), "malformed Chart LabelFont must fail typed validation");
             }
         }
@@ -20151,7 +20243,7 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
         form_stream::encode_document(fonts_xml_document.value()).ok(), "Chart area fonts must survive XML reconstruction");
     for (const auto index : {std::size_t{49}, std::size_t{50}, std::size_t{51}}) {
         auto malformed_font = encoded.value();
-        find_chart_record(malformed_font)->items[3].items[index] = list_stream::parse("{8,2,0,{-20},1,99}");
+        find_chart_record(malformed_font)->items[3].items[index] = list_stream::parse("{8,2,0,{-20},2,99}");
         expect(!form_stream::decode_document(malformed_font, "Main"), "malformed unrepresented Chart Font must fail typed validation");
     }
     auto malformed_collection = encoded.value();
@@ -21267,6 +21359,7 @@ int main() {
         test_check_box_border_color_round_trip_and_validation();
         test_choice_and_command_bar_font_round_trip_and_validation();
         test_radio_input_list_common_font_border_color_round_trip();
+        test_named_platform_colors_registry_round_trip();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();

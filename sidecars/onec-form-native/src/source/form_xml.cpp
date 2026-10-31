@@ -917,20 +917,14 @@ model::FontValue parse_font(xmlNodePtr node) {
     const bool has_style = !std::holds_alternative<std::monostate>(value.style);
     if ((value.kind == model::FontKind::windows_font) != value.windows_font.has_value())
         fail("OOF2003", node, {}, "windowsFont", "selector required only for Windows font", "invalid selector", "Windows font selector is inconsistent");
-    if (value.kind == model::FontKind::windows_font &&
-        (value.face_name || value.height || value.bold || value.italic || value.underline || value.strikeout || value.scale != 100.0 || value.scale_override))
-        fail("OOF2003", node, {}, "windowsFont", "unmodified Windows font", "explicit font fields", "Windows font overrides are not supported");
     if (value.kind == model::FontKind::style_reference && !has_style) {
         fail("OOF2003", node, {}, "kind", "style reference", "missing", "Style font must carry a style reference");
     }
     if (value.kind != model::FontKind::style_reference && has_style) {
         fail("OOF2003", node, {}, "kind", "font without style reference", "style", "Only a style font may carry a style reference");
     }
-    if (value.kind == model::FontKind::automatic &&
-        (value.face_name || value.height || value.italic ||
-         value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)) {
-        fail("OOF2003", node, {}, "kind", "automatic font defaults or bold override", "unsupported explicit font fields", "Automatic font only supports the observed bold override");
-    }
+    try { (void)storage::value_codec::encode_font(value); }
+    catch (const std::exception& error) { fail("OOF2003", node, {}, "Font", "supported Font", {}, error.what()); }
     return value;
 }
 
@@ -1836,7 +1830,14 @@ private:
                             const auto definition = std::ranges::find(fields, value_name, &mm::ChartScalePropertyDescriptor::name);
                             if (definition == fields.end() || !scale_seen.insert(value_name).second)
                                 fail("OOF2003", value_node, id_text, value_name, "unique named scale field", value_name, "Invalid Chart scale field");
-                            auto value = parse_property_value(value_node, definition->value_codec, id_text);
+                            model::PropertyValue value;
+                            if (definition->value_codec == mm::ValueCodec::line) {
+                                const auto children = element_children(value_node);
+                                if (children.size() != 1) fail("OOF2003", value_node, id_text, value_name, "one Line or Undefined", {}, "Invalid nullable Line");
+                                if (node_name(children[0]) == "Line") value = parse_line(children[0]);
+                                else if (node_name(children[0]) == "Undefined" && node_text(children[0]) == "undefined") value = model::UndefinedValue{};
+                                else fail("OOF2003", value_node, id_text, value_name, "Line or Undefined", {}, "Invalid nullable Line");
+                            } else value = parse_property_value(value_node, definition->value_codec, id_text);
                             if (const auto* n = std::get_if<model::DecimalValue>(&value); n && n->canonical.starts_with('-'))
                                 fail("OOF2003", value_node, id_text, value_name, "nonnegative decimal", n->canonical, "Negative ScaleStep");
                             if (definition->value_codec == mm::ValueCodec::enumeration) {
@@ -3255,15 +3256,12 @@ private:
             serialization_fail(std::string(object_id), std::string(name), "selector required only for Windows font", "invalid selector", "Windows font selector is inconsistent");
         if (value.windows_font) {
             const auto index = static_cast<std::size_t>(*value.windows_font);
-            if (index >= windows_font_names.size() || value.face_name || value.height || value.bold || value.italic || value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)
+            if (index >= windows_font_names.size())
                 serialization_fail(std::string(object_id), std::string(name), "unmodified Windows font", "unsupported font data", "Windows font is invalid");
             attributes.emplace_back("windowsFont", std::string(windows_font_names[index]));
         }
-        if (value.kind == model::FontKind::automatic &&
-            (value.face_name || value.height || value.italic ||
-             value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)) {
-            serialization_fail(std::string(object_id), std::string(name), "automatic font defaults or bold override", "unsupported explicit font data", "Automatic font only supports the observed bold override");
-        }
+        try { (void)storage::value_codec::encode_font(value); }
+        catch (const std::exception& error) { serialization_fail(std::string(object_id), std::string(name), "supported Font", {}, error.what()); }
         if (value.face_name) attributes.emplace_back("faceName", *value.face_name);
         if (value.height) {
             if (!std::isfinite(*value.height)) {
@@ -4110,7 +4108,12 @@ private:
                         mm::PropertyDescriptor property;
                         property.xml_name = field.name;
                         property.value_codec = field.value_codec;
-                        write_property(property, *value, id);
+                        if (field.value_codec == mm::ValueCodec::line) {
+                            writer_.open(field.name);
+                            if (std::holds_alternative<model::UndefinedValue>(*value)) writer_.text("Undefined", "undefined");
+                            else write_line("Line", require_value<model::LineValue>(*value, id, field.name, "Line or Undefined"), id);
+                            writer_.close(field.name);
+                        } else write_property(property, *value, id);
                     }
                     writer_.close(owner.name);
                 }
