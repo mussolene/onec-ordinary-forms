@@ -2281,6 +2281,44 @@ void test_usual_group_named_record_round_trip_and_rejections() {
         "UsualGroup IDs above int64 range must be rejected by the control encoder");
 }
 
+void test_geographical_schema_runtime_scale() {
+    constexpr std::array<std::string_view, 3> modes{"AllData", "ScaleDefined", "SpecifiedArea"};
+    for (std::size_t i = 0; i < 12; ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "Main";
+        form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Geo", model::GeographicalSchemaFieldPayload{}});
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+        const auto scale = model::PropertyId::from_name("Scale");
+        const auto mode = model::PropertyId::from_name("ScaleKeeping");
+        expect(document.get_prop_val(owner, scale).value == model::PropertyValue{model::DecimalValue{"1"}} &&
+            document.get_prop_val(owner, mode).value == model::PropertyValue{model::EnumerationValue{"GeographicalSchemaShowMode", "AllData"}}, "geographical defaults");
+        expect(source::serialize_form_xml(document).ok() && form_stream::encode_document(document).ok(), "geographical form without runtime state must serialize");
+        expect(document.set_prop_val(owner, scale, model::DecimalValue{"2.5"}) == model::PropertyMutationStatus::applied_runtime_only &&
+            document.get_prop_val(owner, scale).value == model::PropertyValue{model::DecimalValue{"2"}}, "scale truncates and is runtime-only");
+        for (const auto invalid : {"-1", "0", "0.5", "2147483648"})
+            expect(document.set_prop_val(owner, scale, model::DecimalValue{invalid}) == model::PropertyMutationStatus::invalid_value, "invalid scale must fail");
+        expect(document.get_prop_val(owner, scale).value == model::PropertyValue{model::DecimalValue{"2"}}, "invalid scale must preserve state");
+        expect(document.set_prop_val(owner, scale, model::DecimalValue{"2147483647.5"}) == model::PropertyMutationStatus::applied_runtime_only &&
+            document.get_prop_val(owner, scale).value == model::PropertyValue{model::DecimalValue{"2147483647"}}, "scale truncates before range check");
+        expect(!source::serialize_form_xml(document).ok() && !form_stream::encode_document(document).ok(), "explicit runtime scale cannot be serialized");
+        expect(document.reset_prop_val(owner, scale) == model::PropertyMutationStatus::reset_runtime_only &&
+            document.get_prop_val(owner, scale).value == model::PropertyValue{model::DecimalValue{"1"}}, "scale reset restores default");
+        const model::EnumerationValue selected{"GeographicalSchemaShowMode", std::string(modes[i % modes.size()])};
+        expect(document.set_prop_val(owner, mode, selected) == model::PropertyMutationStatus::applied_runtime_only, "mode is runtime-only");
+        expect(document.set_prop_val(owner, mode, model::EnumerationValue{"Wrong", selected.member}) == model::PropertyMutationStatus::invalid_value &&
+            document.set_prop_val(owner, mode, model::EnumerationValue{"GeographicalSchemaShowMode", "Wrong"}) == model::PropertyMutationStatus::invalid_value &&
+            document.get_prop_val(owner, mode).value == model::PropertyValue{selected}, "invalid mode must preserve state");
+        expect(!source::serialize_form_xml(document).ok() && !form_stream::encode_document(document).ok(), "explicit runtime mode cannot be serialized");
+        expect(document.reset_prop_val(owner, mode) == model::PropertyMutationStatus::reset_runtime_only &&
+            source::serialize_form_xml(document).ok() && form_stream::encode_document(document).ok(), "reset removes runtime state");
+    }
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><GeographicalSchemaField id="2" name="Geo"><Position/><Scale>2</Scale></GeographicalSchemaField></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(xml).ok(), "runtime scale cannot appear in XML");
+    constexpr std::string_view mode_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><GeographicalSchemaField id="2" name="Geo"><Position/><ScaleKeeping type="GeographicalSchemaShowMode" member="ScaleDefined"/></GeographicalSchemaField></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(mode_xml).ok(), "runtime mode cannot appear in XML");
+}
+
 void test_gantt_periodic_properties() {
     constexpr std::array<std::pair<std::string_view, int>, 8> units{{
         {"Second", 5}, {"Minute", 10}, {"Hour", 20}, {"Day", 30},
@@ -20437,6 +20475,7 @@ int main() {
         test_empty_attributes_allocator_header();
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
+        test_geographical_schema_runtime_scale();
         test_gantt_periodic_properties();
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();

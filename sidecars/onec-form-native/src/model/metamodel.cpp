@@ -1016,6 +1016,21 @@ void apply_proven_storage_overrides(
         std::ranges::find(control_properties, "Output", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     }
 
+    auto& geographical_schema = properties[static_cast<std::size_t>(ControlKind::geographical_schema_field)];
+    for (const auto name : {"Scale", "ScaleKeeping"}) {
+        auto property = std::ranges::find(geographical_schema, name, &PropertyDescriptor::api_name);
+        if (property == geographical_schema.end()) throw std::logic_error("missing geographical schema property");
+        property->persistence = PersistenceClass::runtime_only;
+        property->storage_codec = StorageCodec::none;
+        if (name == std::string_view{"Scale"}) {
+            property->value_codec = ValueCodec::decimal;
+            property->default_value = {DefaultKind::decimal, "1"};
+        } else {
+            property->value_codec = ValueCodec::enumeration;
+            property->default_value = {DefaultKind::enumeration, "GeographicalSchemaShowMode.AllData"};
+        }
+    }
+
     auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
     classify_property(
         picture_decoration,

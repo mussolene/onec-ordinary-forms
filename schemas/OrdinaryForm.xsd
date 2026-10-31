@@ -2656,9 +2656,7 @@
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Scale" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowedArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ScaleKeeping" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="GeographicalSchemaFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>

@@ -93,7 +93,7 @@ void add_violation(
     report.violations.push_back({code, source, target, std::move(message)});
 }
 
-std::optional<std::int32_t> normalize_gantt_periodic_repetition(std::string_view text) noexcept {
+std::optional<std::int32_t> normalize_positive_int32(std::string_view text) noexcept {
     try {
         const auto canonical = storage::value_codec::canonical_decimal(text);
         const auto dot = canonical.find('.');
@@ -104,6 +104,11 @@ std::optional<std::int32_t> normalize_gantt_periodic_repetition(std::string_view
             result < 1 || result > std::numeric_limits<std::int32_t>::max()) return std::nullopt;
         return static_cast<std::int32_t>(result);
     } catch (const std::exception&) { return std::nullopt; }
+}
+
+bool is_positive_int32_property(const metamodel::PropertyDescriptor& descriptor) noexcept {
+    return (descriptor.control_kind == ControlKind::gantt_chart && descriptor.api_name == "PeriodicVariantRepetition") ||
+        (descriptor.control_kind == ControlKind::geographical_schema_field && descriptor.api_name == "Scale");
 }
 
 bool property_value_matches(
@@ -123,7 +128,7 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, bool>) {
                 return expected == metamodel::ValueCodec::boolean;
             } else if constexpr (std::is_same_v<Value, std::int64_t>) {
-                if (descriptor.control_kind == ControlKind::gantt_chart && descriptor.api_name == "PeriodicVariantRepetition")
+                if (is_positive_int32_property(descriptor))
                     return typed_value >= 1 && typed_value <= std::numeric_limits<std::int32_t>::max();
                 return expected == metamodel::ValueCodec::integer ||
                        (expected == metamodel::ValueCodec::integer32 &&
@@ -131,8 +136,8 @@ bool property_value_matches(
                         typed_value <= std::numeric_limits<std::int32_t>::max()) ||
                        expected == metamodel::ValueCodec::decimal;
             } else if constexpr (std::is_same_v<Value, DecimalValue>) {
-                if (descriptor.control_kind == ControlKind::gantt_chart && descriptor.api_name == "PeriodicVariantRepetition") {
-                    const auto normalized = normalize_gantt_periodic_repetition(typed_value.canonical);
+                if (is_positive_int32_property(descriptor)) {
+                    const auto normalized = normalize_positive_int32(typed_value.canonical);
                     if (!normalized) return false;
                     try { return storage::value_codec::canonical_decimal(typed_value.canonical) == std::to_string(*normalized); }
                     catch (const std::exception&) { return false; }
@@ -178,6 +183,9 @@ bool property_value_matches(
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowDockLocation")
                     return typed_value.type_name == "WindowDockVariant" &&
                         (typed_value.member == "Left" || typed_value.member == "Right" || typed_value.member == "Top" || typed_value.member == "Bottom");
+                if (descriptor.control_kind == ControlKind::geographical_schema_field && descriptor.api_name == "ScaleKeeping")
+                    return typed_value.type_name == "GeographicalSchemaShowMode" &&
+                        (typed_value.member == "AllData" || typed_value.member == "ScaleDefined" || typed_value.member == "SpecifiedArea");
                 if (descriptor.control_kind == ControlKind::gantt_chart && descriptor.api_name == "PeriodicVariantUnit") {
                     constexpr std::array<std::string_view, 8> members{"Second", "Minute", "Hour", "Day", "Week", "Month", "Quarter", "Year"};
                     return typed_value.type_name == "TimeScaleUnitType" &&
@@ -325,6 +333,8 @@ bool property_api_enumeration_matches(
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowAppearanceMode")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "WindowDockLocation")
+        return property_value_matches(descriptor, PropertyValue{value});
+    if (descriptor.control_kind == ControlKind::geographical_schema_field && descriptor.api_name == "ScaleKeeping")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.control_kind == ControlKind::gantt_chart && descriptor.api_name == "PeriodicVariantUnit")
         return property_value_matches(descriptor, PropertyValue{value});
@@ -1511,10 +1521,10 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         descriptor->persistence == metamodel::PersistenceClass::version_specific) {
         return PropertyMutationStatus::unsupported_surface;
     }
-    if (descriptor->control_kind == ControlKind::gantt_chart && descriptor->api_name == "PeriodicVariantRepetition") {
+    if (is_positive_int32_property(*descriptor)) {
         std::optional<std::int32_t> normalized;
-        if (const auto* integer = std::get_if<std::int64_t>(&value)) normalized = normalize_gantt_periodic_repetition(std::to_string(*integer));
-        else if (const auto* decimal = std::get_if<DecimalValue>(&value)) normalized = normalize_gantt_periodic_repetition(decimal->canonical);
+        if (const auto* integer = std::get_if<std::int64_t>(&value)) normalized = normalize_positive_int32(std::to_string(*integer));
+        else if (const auto* decimal = std::get_if<DecimalValue>(&value)) normalized = normalize_positive_int32(decimal->canonical);
         if (!normalized) return PropertyMutationStatus::invalid_value;
         value = DecimalValue{std::to_string(*normalized)};
     }
