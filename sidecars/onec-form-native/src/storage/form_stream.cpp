@@ -11614,7 +11614,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         const bool dont_change_size = bool_atom(payload.items[10], "$/10");
         require_list(payload.items[11], "$/11");
         require_exact(payload.items[12], list({raw("0")}), "$/12", "Unsupported root table");
-        require_exact(payload.items[13], canonical_style_record(10), "$/13", "Unsupported page-style record");
+        const auto& root_style = payload.items[13];
+        require_arity(root_style, 11, "$/13");
+        const auto caption_picture = decode_button_picture(root_style.items[2], "$/13/2");
+        auto normalized_root_style = root_style;
+        normalized_root_style.items[2] = canonical_button_picture();
+        require_exact(normalized_root_style, canonical_style_record(10), "$/13", "Unsupported page-style record");
         const auto appearance_mode = integer_atom<std::int32_t>(payload.items[14], "$/14");
         if (appearance_mode < 0 || appearance_mode > 2)
             fail("OOF1114", "$/14", "WindowAppearanceModeVariant ordinal 0..2", std::to_string(appearance_mode), "Unsupported window appearance mode");
@@ -11712,6 +11717,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (caption_picture && caption_picture->standard_name) form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"),
+            model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*caption_picture->standard_name}});
         if (appearance_mode != 1) form.properties.set_explicit(model::PropertyId::from_name("WindowAppearanceMode"),
             model::EnumerationValue{"WindowAppearanceModeVariant", appearance_mode == 0 ? "Minimized" : "Maximized"});
         if (connectable_window) form.properties.set_explicit(model::PropertyId::from_name("ConnectableWindow"), true);
@@ -12188,6 +12195,15 @@ Result<model::OrdinaryFormDocument> decode_document(
         std::uint64_t synthetic_event_offset = 0;
         const std::uint64_t event_id_base = std::max(actual_max_id, next_page_id - 1);
         std::vector<model::PictureAsset> decoded_picture_assets;
+        if (caption_picture && !caption_picture->standard_name) {
+            if (synthetic_event_offset >= std::numeric_limits<std::uint64_t>::max() - event_id_base)
+                fail("OOF1120", "$/13/2", "allocatable caption picture ID", "uint64 max", "Caption picture ID overflows");
+            const model::ObjectId asset_id{event_id_base + ++synthetic_event_offset};
+            decoded_picture_assets.push_back(model::PictureAsset{asset_id,
+                "CaptionPicture." + std::string(picture_format_extension(caption_picture->format)),
+                caption_picture->format, caption_picture->bytes, caption_picture->transparent});
+            form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"), model::PictureRef{model::PictureAssetRef{asset_id}});
+        }
         for (const auto& named_event : form_named_events) {
             if (synthetic_event_offset >= std::numeric_limits<std::uint64_t>::max() - event_id_base)
                 fail("OOF1120", "$/4", "allocatable Form event ID", "uint64 max", "Synthetic event ID overflows");
@@ -12386,6 +12402,11 @@ Result<list_stream::ListValue> encode_document(
         }
         validate_form_extension_context(document, "$/MainAttribute");
         std::unordered_set<std::uint64_t> referenced_picture_ids;
+        if (const auto* entry = document.form().properties.find(model::PropertyId::from_name("CaptionPicture"))) {
+            const auto* picture = std::get_if<model::PictureRef>(&entry->value);
+            if (picture != nullptr && !picture->standard_name && picture->asset.id())
+                referenced_picture_ids.insert(picture->asset.id().value());
+        }
         for (const auto& control : document.collections().controls) {
             for (const auto property_name : {std::string_view("Picture"), std::string_view("ChoiceButtonPicture")}) {
                 const auto* picture = control.properties().find(model::PropertyId::from_name(property_name));
@@ -12427,7 +12448,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
+            {"Caption", "CaptionPicture", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -12898,6 +12919,22 @@ Result<list_stream::ListValue> encode_document(
         for (const auto& control : document.collections().controls)
             append_context_row(control.extension_properties, control.id.value());
         context_rows[0] = raw(std::to_string(context_count));
+        auto root_style = canonical_style_record(10);
+        if (const auto* entry = document.form().properties.find(model::PropertyId::from_name("CaptionPicture"))) {
+            const auto* picture = std::get_if<model::PictureRef>(&entry->value);
+            if (picture == nullptr)
+                fail("OOF1122", "$/Form/CaptionPicture", "picture reference", "invalid type", "Form CaptionPicture has the wrong value type");
+            if (picture->standard_name) {
+                if (picture->asset.id()) fail("OOF1122", "$/Form/CaptionPicture", "one picture target", "conflicting targets", "Form CaptionPicture is invalid");
+                const auto* standard = model::metamodel::find_standard_picture(picture->standard_name->value);
+                if (standard == nullptr) fail("OOF1122", "$/Form/CaptionPicture", "known PictureLib picture", picture->standard_name->value, "Form CaptionPicture is unsupported");
+                root_style.items[2] = encode_standard_button_picture(*standard);
+            } else {
+                const auto* asset = document.find_asset(picture->asset.id());
+                if (asset == nullptr) fail("OOF1123", "$/Form/CaptionPicture", "existing picture asset", "missing", "Form CaptionPicture asset is unavailable");
+                root_style.items[2] = encode_button_picture(*asset, "$/Form/CaptionPicture");
+            }
+        }
         const auto encoded = list({
             raw("27"),
             form_section,
@@ -12912,7 +12949,7 @@ Result<list_stream::ListValue> encode_document(
             raw(std::to_string(size_change)),
             list(std::move(context_rows)),
             list({raw("0")}),
-            canonical_style_record(10),
+            std::move(root_style),
             raw(std::to_string(appearance_mode)),
             raw(std::to_string(window_appearance_change)),
             raw(window_location == 2 ? "1" : "0"),

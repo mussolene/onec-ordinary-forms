@@ -5834,6 +5834,118 @@ void test_choice_and_input_field_picture_properties_round_trip() {
         "malformed ChoiceButtonPicture data must fail closed");
 }
 
+void test_caption_picture_asset_lifecycle() {
+    for (const bool shared : {false, true}) for (int action = 0; action < 3; ++action) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "CaptionLifecycle";
+        form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"), model::PictureRef{model::PictureAssetRef{model::ObjectId{20}}});
+        if (shared) form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        form.children.push_back(model::ControlRef{model::ObjectId{3}});
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_asset(model::PictureAsset{model::ObjectId{20}, "CaptionPicture.gif", model::PictureFormat::gif,
+            {'G','I','F','8','9','a',0,1,2}, false});
+        if (shared) {
+            model::ControlNode button{model::ObjectId{2}, "Button", model::ButtonPayload{}};
+            button.properties().set_explicit(model::PropertyId::from_name("Picture"), model::PictureRef{model::PictureAssetRef{model::ObjectId{20}}});
+            document.add_control(std::move(button));
+        }
+        document.add_asset(model::PictureAsset{model::ObjectId{21}, "Items/Other/Picture.gif", model::PictureFormat::gif,
+            {'G','I','F','8','9','a',0,1,3}, true});
+        model::ControlNode other{model::ObjectId{3}, "Other", model::ButtonPayload{}};
+        other.properties().set_explicit(model::PropertyId::from_name("Picture"), model::PictureRef{model::PictureAssetRef{model::ObjectId{21}}});
+        document.add_control(std::move(other));
+        const auto before = form_stream::encode_document(document);
+        expect(before.ok(), "caption asset lifecycle source must encode");
+        if (!shared) {
+            auto decoded = form_stream::decode_document(before.value(), "CaptionLifecycle");
+            expect(decoded.ok(), "caption asset source must decode before mutation");
+            document = decoded.take_value();
+        }
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+        const auto id = model::PropertyId::from_name("CaptionPicture");
+        const auto old_picture = document.get_prop_val(owner, id);
+        const auto old_id = std::get<model::PictureRef>(*old_picture.value).asset.id();
+        expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{old_id}}) == model::PropertyMutationStatus::invalid_value &&
+            document.find_asset(old_id) != nullptr, "rejected caption asset assignment must preserve source asset");
+        if (action == 0) expect(document.reset_prop_val(owner, id) == model::PropertyMutationStatus::reset_unclassified_storage, "caption reset");
+        else if (action == 1) expect(document.set_prop_val(owner, id, model::PictureRef{}) == model::PropertyMutationStatus::applied_unclassified_storage, "caption empty assignment");
+        else expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.AccountingRegister"}}) == model::PropertyMutationStatus::applied_unclassified_storage, "caption library assignment");
+        expect((document.find_asset(old_id) != nullptr) == shared, "only unshared caption asset may be removed");
+        const auto* other_picture = document.find_control(model::ObjectId{3})->properties().find(model::PropertyId::from_name("Picture"));
+        const auto* other_asset = document.find_asset(std::get<model::PictureRef>(other_picture->value).asset.id());
+        expect(other_asset != nullptr && other_asset->relative_path == "Items/Other/Picture.gif" && other_asset->transparent,
+            "removing a caption asset must preserve another resource and its indexed lookup");
+        expect(form_stream::encode_document(document).ok(), "caption change must leave an encodable document");
+    }
+}
+
+void test_form_caption_picture_assets() {
+    const std::array<model::PictureFormat, 4> formats{model::PictureFormat::gif, model::PictureFormat::png,
+        model::PictureFormat::jpeg, model::PictureFormat::bmp};
+    const std::array<std::vector<std::uint8_t>, 4> bytes{{
+        {'G','I','F','8','9','a',0,1,2}, {137,80,78,71,13,10,26,10,9}, {0xff,0xd8,0xff,1,2}, {'B','M',1,2,3}}};
+    const std::array<std::string_view, 4> names{"CaptionPicture.gif", "CaptionPicture.png", "CaptionPicture.jpeg", "CaptionPicture.bmp"};
+    for (std::size_t i = 0; i < formats.size(); ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "CaptionAsset";
+        form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"), model::PictureRef{model::PictureAssetRef{model::ObjectId{20}}});
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_asset(model::PictureAsset{model::ObjectId{20}, std::string(names[i]), formats[i], bytes[i], i % 2 != 0});
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "form caption picture asset must encode");
+        const auto decoded = form_stream::decode_document(encoded.value(), "CaptionAsset");
+        expect(decoded.ok() && decoded.value().assets().size() == 1 && decoded.value().assets()[0].bytes == bytes[i] &&
+            decoded.value().assets()[0].transparent == (i % 2 != 0), "form caption picture asset must decode");
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+        const auto id = model::PropertyId::from_name("CaptionPicture");
+        const auto caption = decoded.value().get_prop_val(owner, id);
+        expect(caption.value && std::holds_alternative<model::PictureRef>(*caption.value), "caption asset getter must return picture reference");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && source::parse_form_xml(xml.value()).ok(), "caption asset must serialize to safe XML");
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "caption asset binary must roundtrip");
+    }
+}
+
+void test_form_caption_picture() {
+    const auto descriptors = model::metamodel::standard_picture_descriptors();
+    std::vector<const model::metamodel::StandardPictureDescriptor*> samples;
+    for (bool guid : {false, true}) {
+        for (const auto& descriptor : descriptors) {
+            if (descriptor.guid.empty() == !guid) samples.push_back(&descriptor);
+            if (samples.size() == (guid ? 12U : 6U)) break;
+        }
+    }
+    expect(samples.size() == 12, "caption pictures need six numeric and six GUID library identities");
+    for (const auto* descriptor : samples) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "CaptionPicture";
+        model::OrdinaryFormDocument document(std::move(form));
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+        const auto id = model::PropertyId::from_name("CaptionPicture");
+        expect(document.get_prop_val(owner, id).value == model::PropertyValue{model::PictureRef{}}, "caption picture default is empty");
+        const model::PictureRef picture{model::PictureAssetRef{}, model::QualifiedName{std::string(descriptor->runtime_name)}};
+        expect(document.set_prop_val(owner, id, picture) == model::PropertyMutationStatus::applied_unclassified_storage, "library caption picture accepted");
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "caption picture must encode");
+        const auto decoded = form_stream::decode_document(encoded.value(), "CaptionPicture");
+        expect(decoded.ok() && decoded.value().get_prop_val(owner, id).value == model::PropertyValue{picture}, "caption picture must decode");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && source::parse_form_xml(xml.value()).ok(), "caption picture XML must roundtrip");
+        auto malformed = encoded.value(); malformed.items[13].items[2].items[4] = list_stream::ListValue::raw_atom("0");
+        expect(!form_stream::decode_document(malformed, "CaptionPicture").ok(), "malformed caption picture must fail");
+        expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{model::ObjectId{44}}}) == model::PropertyMutationStatus::invalid_value &&
+            document.get_prop_val(owner, id).value == model::PropertyValue{picture}, "asset caption picture is rejected atomically");
+        expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Unknown"}}) == model::PropertyMutationStatus::invalid_reference &&
+            document.get_prop_val(owner, id).value == model::PropertyValue{picture}, "unknown library caption picture is rejected atomically");
+        auto unknown = encoded.value();
+        unknown.items[13].items[2].items[2] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000001")});
+        expect(!form_stream::decode_document(unknown, "CaptionPicture").ok(), "unknown library identity must fail");
+        expect(document.set_prop_val(owner, id, model::PictureRef{}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            document.get_prop_val(owner, id).value == model::PropertyValue{model::PictureRef{}}, "empty assignment restores caption default");
+        expect(document.set_prop_val(owner, id, picture) == model::PropertyMutationStatus::applied_unclassified_storage &&
+            document.reset_prop_val(owner, id) == model::PropertyMutationStatus::reset_unclassified_storage &&
+            document.get_prop_val(owner, id).value == model::PropertyValue{model::PictureRef{}}, "caption reset restores default");
+    }
+}
+
 void test_all_standard_button_pictures_round_trip_without_assets() {
     const auto descriptors = model::metamodel::standard_picture_descriptors();
     expect(descriptors.size() == 294, "the complete sanitized standard picture catalog must be present");
@@ -20660,6 +20772,9 @@ int main() {
         test_named_button_menu_round_trip_and_invalid_references();
         test_button_menu_client_interface_variant_round_trip_and_validation();
         test_automatic_button_text_without_explicit_text_round_trip();
+        test_form_caption_picture();
+        test_form_caption_picture_assets();
+        test_caption_picture_asset_lifecycle();
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_choice_and_input_field_picture_properties_round_trip();

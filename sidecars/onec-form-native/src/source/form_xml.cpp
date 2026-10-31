@@ -1350,6 +1350,14 @@ bool valid_picture_path(std::string_view path, model::PictureFormat format) {
         if (separator == std::string_view::npos) break;
         begin = separator + 1;
     }
+    if (parts.size() == 1) {
+        switch (format) {
+            case model::PictureFormat::gif: return path == "CaptionPicture.gif";
+            case model::PictureFormat::png: return path == "CaptionPicture.png";
+            case model::PictureFormat::jpeg: return path == "CaptionPicture.jpg" || path == "CaptionPicture.jpeg";
+            case model::PictureFormat::bmp: return path == "CaptionPicture.bmp";
+        }
+    }
     if (parts.size() < 3 || parts.size() % 2 == 0 || parts[0] != "Items") return false;
     for (std::size_t index = 2; index + 1 < parts.size(); index += 2) {
         if (parts[index] != "Buttons") return false;
@@ -1601,7 +1609,7 @@ private:
                     asset_node,
                     id,
                     "relativePath",
-                    "Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>",
+                    "CaptionPicture.<matching format> or Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>",
                     asset.relative_path,
                     "Picture asset path is outside the ordinary-form source package contract");
             }
@@ -3565,7 +3573,7 @@ private:
         for (const auto& asset : document_.assets()) {
             const std::string id = object_id_text(asset.id);
             if (!valid_picture_path(asset.relative_path, asset.format)) {
-                serialization_fail(id, "relativePath", "Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>", asset.relative_path, "Picture asset path is outside the source package contract");
+                serialization_fail(id, "relativePath", "CaptionPicture.<matching format> or Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>", asset.relative_path, "Picture asset path is outside the source package contract");
             }
             writer_.empty("PictureAsset", {
                 {"id", id},

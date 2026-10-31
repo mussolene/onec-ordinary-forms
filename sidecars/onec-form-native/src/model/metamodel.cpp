@@ -1434,6 +1434,11 @@ void apply_proven_storage_overrides(
             (name == std::string_view{"WindowOptionsName"} || name == std::string_view{"WindowOptionsKey"})
                 ? DefaultValue{DefaultKind::string, ""} : DefaultValue{DefaultKind::none, {}};
     }
+    if (auto property = std::ranges::find(form_properties, "CaptionPicture", &PropertyDescriptor::api_name);
+        property != form_properties.end()) {
+        property->storage_codec = StorageCodec::root_record;
+        property->default_value = {DefaultKind::none, {}};
+    }
     classify_property(form_properties, "EnterKeyBehavior", StorageCodec::root_record,
         DefaultKind::enumeration, "EnterKeyBehaviorType.ControlNavigation");
     std::ranges::find(form_properties, "EnterKeyBehavior", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;

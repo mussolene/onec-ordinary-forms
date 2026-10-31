@@ -1229,6 +1229,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             return {PropertyReadStatus::computed_value, PropertyValue{UndefinedValue{}}};
         }
     }
+    if (descriptor->owner == metamodel::DescriptorOwner::form && descriptor->api_name == "CaptionPicture")
+        return {PropertyReadStatus::proven_default, PropertyValue{PictureRef{}}};
     if (descriptor->default_value.kind == metamodel::DefaultKind::none) {
         return {PropertyReadStatus::no_default, std::nullopt};
     }
@@ -1586,6 +1588,19 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         enumeration != nullptr && !property_api_enumeration_matches(*descriptor, *enumeration)) {
         return PropertyMutationStatus::invalid_value;
     }
+    if (descriptor->owner == metamodel::DescriptorOwner::form && descriptor->api_name == "CaptionPicture") {
+        const auto& picture = std::get<PictureRef>(value);
+        if (picture.asset.id()) return PropertyMutationStatus::invalid_value;
+        if (picture.standard_name && !property_value_references_resolve(*this, value))
+            return PropertyMutationStatus::invalid_reference;
+        ObjectId old_asset{};
+        if (const auto* old = properties->find(descriptor->id))
+            if (const auto* old_picture = std::get_if<PictureRef>(&old->value)) old_asset = old_picture->asset.id();
+        if (picture.standard_name) properties->set_explicit(descriptor->id, std::move(value));
+        else properties->unset(descriptor->id);
+        remove_unreferenced_caption_asset(old_asset);
+        return PropertyMutationStatus::applied_unclassified_storage;
+    }
     if (!property_value_references_resolve(*this, value)) {
         return PropertyMutationStatus::invalid_reference;
     }
@@ -1856,7 +1871,13 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             chart.title_area->explicit_geometry[0] = false;
         }
     }
+    ObjectId old_caption_asset{};
+    if (descriptor->owner == metamodel::DescriptorOwner::form && descriptor->api_name == "CaptionPicture") {
+        if (const auto* old = properties->find(descriptor->id))
+            if (const auto* picture = std::get_if<PictureRef>(&old->value)) old_caption_asset = picture->asset.id();
+    }
     properties->unset(descriptor->id);
+    remove_unreferenced_caption_asset(old_caption_asset);
     if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
         return PropertyMutationStatus::reset_runtime_only;
     }
@@ -2881,6 +2902,37 @@ void OrdinaryFormDocument::validate_or_throw() const {
     ValidationReport report = validate();
     if (!report.ok()) {
         throw InvariantError(std::move(report));
+    }
+}
+
+void OrdinaryFormDocument::remove_unreferenced_caption_asset(ObjectId id) {
+    if (!id) return;
+    const auto matches = [id](const PictureRef& picture) { return picture.asset.id() == id; };
+    const auto has_picture = [&](const PropertySet& properties) {
+        bool found = false;
+        properties.for_each_explicit([&](const PropertyEntry& entry) {
+            if (const auto* picture = std::get_if<PictureRef>(&entry.value); picture && matches(*picture)) found = true;
+        });
+        return found;
+    };
+    if (has_picture(form_.properties) || has_picture(form_.panel.properties) ||
+        has_picture(window_permissions_) || has_picture(runtime_form_values_)) return;
+    for (const auto& command : collections_.commands)
+        if (command.picture.value() && matches(*command.picture.value())) return;
+    const auto menu_has_picture = [&](const auto& self, const std::vector<CommandBarButton>& buttons) -> bool {
+        for (const auto& button : buttons)
+            if ((button.picture && matches(*button.picture)) || self(self, button.buttons)) return true;
+        return false;
+    };
+    for (const auto& control : collections_.controls) {
+        if (has_picture(control.properties()) || has_picture(control.extension_properties)) return;
+        if (const auto* button = std::get_if<ButtonPayload>(&control.payload); button && menu_has_picture(menu_has_picture, button->buttons)) return;
+        if (const auto* bar = std::get_if<CommandBarPayload>(&control.payload); bar && menu_has_picture(menu_has_picture, bar->buttons)) return;
+    }
+    const auto asset = std::ranges::find(assets_, id, &PictureAsset::id);
+    if (asset != assets_.end()) {
+        assets_.erase(asset);
+        rebuild_index();
     }
 }
 

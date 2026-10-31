@@ -1163,6 +1163,7 @@ private:
         std::size_t index = 0;
     };
 
+    void remove_unreferenced_caption_asset(ObjectId id);
     void rebuild_index();
     void index_first(ObjectId id, ObjectCategory category, std::size_t index);
     [[nodiscard]] std::optional<ObjectLocation> find_location(

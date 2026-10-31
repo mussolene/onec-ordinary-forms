@@ -1861,6 +1861,17 @@ void test_strict_rejections() {
             "<Form id=\"1\" name=\"&xxe;\" ordinaryFormVersion=\"2.1\"/>"),
         "OOF2001",
         "external entities must be rejected before expansion");
+    for (const auto& [path, format] : {std::pair{"CaptionPicture.gif", "gif"}, std::pair{"CaptionPicture.png", "png"},
+            std::pair{"CaptionPicture.jpeg", "jpeg"}, std::pair{"CaptionPicture.bmp", "bmp"}}) {
+        const std::string xml = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><CaptionPicture>2</CaptionPicture><PictureAssets><PictureAsset id=\"2\" relativePath=\"" +
+            std::string(path) + "\" format=\"" + format + "\"/></PictureAssets></Form>";
+        expect(source::parse_form_xml(xml).ok(), "form caption picture path must be accepted");
+    }
+    for (const auto path : {"Other.gif", "../CaptionPicture.gif", "CaptionPicture.png"}) {
+        const std::string xml = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><CaptionPicture>2</CaptionPicture><PictureAssets><PictureAsset id=\"2\" relativePath=\"" +
+            std::string(path) + "\" format=\"gif\"/></PictureAssets></Form>";
+        expect_code(source::parse_form_xml(xml), "OOF2003", "invalid form picture path must be rejected");
+    }
     expect_code(
         source::parse_form_xml(
             "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><PictureAssets>"
