@@ -1139,6 +1139,9 @@ model::PropertyValue parse_property_value(
             if (control_id) return model::ControlRef{parse_object_id(*control_id, node, property, object_id)};
             return model::UndefinedValue{};
         }
+        case mm::ValueCodec::chart_series_collection:
+        case mm::ValueCodec::chart_points_collection:
+            fail("OOF2003", node, std::string(object_id), property, "owned Chart collection", "scalar", "Chart collection is not a scalar property");
         case mm::ValueCodec::command_bar_buttons:
             fail("OOF2003", node, std::string(object_id), property, "owned Buttons collection", "scalar", "Buttons is not a scalar property");
         case mm::ValueCodec::dendrogram_items:
@@ -3422,6 +3425,9 @@ private:
                 return;
             case mm::ValueCodec::command_bar_buttons:
                 serialization_fail(std::string(object_id), std::string(name), "owned Buttons collection", "scalar", "Buttons is not a scalar property");
+            case mm::ValueCodec::chart_series_collection:
+            case mm::ValueCodec::chart_points_collection:
+                serialization_fail(std::string(object_id), std::string(name), "owned Chart collection", "scalar", "Chart collection cannot be serialized as a scalar property");
             case mm::ValueCodec::dendrogram_items:
                 serialization_fail(std::string(object_id), std::string(name), "owned Items collection", "scalar", "Dendrogram Items is not a scalar property");
             case mm::ValueCodec::dendrogram_links:

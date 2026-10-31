@@ -396,12 +396,12 @@
               <Property name="SpaceMode" apiName="SpaceMode" russianName="РежимПробелов" russianType="РежимПробеловДиаграммы" valueCodec="enumeration"/>
               <Property name="Light" apiName="Light" russianName="Свет" russianType="Булево" valueCodec="boolean"/>
               <Property name="SummarySeries" apiName="SummarySeries" russianName="СводнаяСерия" russianType="СерияДиаграммы" valueCodec="unclassified"/>
-              <Property name="Series" apiName="Series" russianName="Серии" russianType="СерииДиаграммы" valueCodec="unclassified"/>
+              <Property name="Series" apiName="Series" russianName="Серии" russianType="СерииДиаграммы" valueCodec="chart-series-collection"/>
               <Property name="SeriesInRows" apiName="SeriesInRows" russianName="СерииВСтроках" russianType="Булево" valueCodec="boolean"/>
               <Property name="ChartType" apiName="ChartType" russianName="ТипДиаграммы" russianType="ТипДиаграммы" valueCodec="enumeration"/>
               <Property name="GaugeBushThickness" apiName="GaugeBushThickness" russianName="ТолщинаВтулкиИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
               <Property name="GaugeThickness" apiName="GaugeThickness" russianName="ТолщинаШкалыИзмерительнойДиаграммы" russianType="Число" valueCodec="integer32"/>
-              <Property name="Points" apiName="Points" russianName="Точки" russianType="ТочкиДиаграммы" valueCodec="unclassified"/>
+              <Property name="Points" apiName="Points" russianName="Точки" russianType="ТочкиДиаграммы" valueCodec="chart-points-collection"/>
               <Property name="ValueLabelFormat" apiName="ValueLabelFormat" russianName="ФорматЗначенийВПодписях" russianType="Строка" valueCodec="localized-text"/>
               <Property name="PercentLabelFormat" apiName="PercentLabelFormat" russianName="ФорматПроцентовВПодписях" russianType="Строка" valueCodec="localized-text"/>
               <Property name="GaugeBushColor" apiName="GaugeBushColor" russianName="ЦветВтулкиИзмерительнойДиаграммы" russianType="Цвет" valueCodec="color"/>

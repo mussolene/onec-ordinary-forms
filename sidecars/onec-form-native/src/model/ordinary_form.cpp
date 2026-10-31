@@ -334,6 +334,9 @@ bool property_value_matches(
                        expected == metamodel::ValueCodec::context_menu_reference;
             } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
                 return expected == metamodel::ValueCodec::context_menu_reference;
+            } else if constexpr (std::is_same_v<Value, ChartCollectionRef>) {
+                return (expected == metamodel::ValueCodec::chart_series_collection && typed_value.kind == ChartCollectionKind::series) ||
+                    (expected == metamodel::ValueCodec::chart_points_collection && typed_value.kind == ChartCollectionKind::points);
             } else if constexpr (std::is_same_v<Value, ChartSeriesRef>) {
                 return expected == metamodel::ValueCodec::chart_series_reference;
             } else if constexpr (std::is_same_v<Value, FormRef>) {
@@ -1128,6 +1131,10 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             return {PropertyReadStatus::computed_value, PropertyValue{static_cast<std::int64_t>(count)}};
         }
+        if (control.kind() == ControlKind::chart &&
+            (property == PropertyId::from_name("Series") || property == PropertyId::from_name("Points")))
+            return {PropertyReadStatus::computed_value, PropertyValue{ChartCollectionRef{control.id,
+                property == PropertyId::from_name("Series") ? ChartCollectionKind::series : ChartCollectionKind::points}}};
         if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActiveSeries")) {
             if (const auto* entry = control.properties().find(property)) return {PropertyReadStatus::explicit_value, entry->value};
             const auto& chart = std::get<ChartPayload>(control.payload);
@@ -1537,7 +1544,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
-            return PropertyMutationStatus::unsupported_surface;
+            return (descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection) ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
             position_control = &control;
@@ -1816,7 +1823,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
-            return PropertyMutationStatus::unsupported_surface;
+            return (descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection) ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
             position_control = &control;
@@ -2726,6 +2733,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
             const auto invalid_chart = [&](std::string reason) {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
+            if (control.properties().contains(PropertyId::from_name("Series")) ||
+                control.properties().contains(PropertyId::from_name("Points")))
+                invalid_chart("Chart collections are owned objects and cannot be stored as properties");
             if (control.properties().contains(PropertyId::from_name("SeriesCount")) ||
                 control.properties().contains(PropertyId::from_name("PointCount")))
                 invalid_chart("Chart counts are derived from collections and cannot be stored as properties");

@@ -183,6 +183,14 @@ struct ChartAreaRef {
     friend bool operator==(const ChartAreaRef&, const ChartAreaRef&) = default;
 };
 
+enum class ChartCollectionKind : std::uint8_t { series, points };
+
+struct ChartCollectionRef {
+    ObjectId owner{};
+    ChartCollectionKind kind = ChartCollectionKind::series;
+    friend bool operator==(const ChartCollectionRef&, const ChartCollectionRef&) = default;
+};
+
 struct ChartSeriesRef {
     ObjectId owner{};
     ObjectId series{};
@@ -504,6 +512,7 @@ using PropertyValue = std::variant<
     CommandRef,
     ChartAreaRef,
     ChartSeriesRef,
+    ChartCollectionRef,
     CommandBarButtonRef>;
 
 struct PropertyEntry {

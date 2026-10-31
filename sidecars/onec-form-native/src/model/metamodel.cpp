@@ -736,6 +736,15 @@ void apply_proven_storage_overrides(
     classify_property(gantt_properties, "PeriodicVariantRepetition", StorageCodec::control_info, DefaultKind::decimal, "1");
 
     auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+    for (const auto name : {"Series", "Points"}) {
+        auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
+        if (property == chart_properties.end()) throw std::logic_error("missing Chart collection descriptor");
+        property->api_access = ApiAccess::read_only;
+        property->persistence = PersistenceClass::persisted_readonly;
+        property->storage_codec = StorageCodec::collection_record;
+        property->value_codec = name == std::string_view{"Series"} ? ValueCodec::chart_series_collection : ValueCodec::chart_points_collection;
+        property->default_value = {DefaultKind::none, {}};
+    }
     for (const auto name : {"SeriesCount", "PointCount"}) {
         auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
         if (property == chart_properties.end()) throw std::logic_error("missing Chart count descriptor");
@@ -2510,6 +2519,10 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "context-menu-reference";
         case ValueCodec::chart_series_reference:
             return "chart-series-reference";
+        case ValueCodec::chart_series_collection:
+            return "chart-series-collection";
+        case ValueCodec::chart_points_collection:
+            return "chart-points-collection";
         case ValueCodec::control_reference:
             return "control-reference";
         case ValueCodec::form_reference:

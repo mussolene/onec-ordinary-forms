@@ -549,6 +549,46 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_chart_owned_collections() {
+    using namespace oof::model::metamodel;
+    for (const auto& [name, codec] : {std::pair{"Series", ValueCodec::chart_series_collection}, std::pair{"Points", ValueCodec::chart_points_collection}}) {
+        const auto* descriptor = find_property(ControlKind::chart, name);
+        expect(descriptor && descriptor->api_access == ApiAccess::read_only && descriptor->persistence == PersistenceClass::persisted_readonly &&
+            descriptor->storage_codec == StorageCodec::collection_record && descriptor->value_codec == codec && descriptor->default_value.kind == DefaultKind::none,
+            "Chart collection descriptor must expose its owned collection");
+    }
+    Form form; form.id = ObjectId{1}; form.name = "OwnedCollections";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) document.add_control(ControlNode{ObjectId{100 + i}, "Chart" + std::to_string(i), ChartPayload{}});
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        const auto series_id = PropertyId::from_name("Series"), points_id = PropertyId::from_name("Points");
+        const auto series = document.get_prop_val(owner, series_id), points = document.get_prop_val(owner, points_id);
+        expect(series.status == PropertyReadStatus::computed_value && series.value == PropertyValue{ChartCollectionRef{owner.id, ChartCollectionKind::series}} &&
+            points.status == PropertyReadStatus::computed_value && points.value == PropertyValue{ChartCollectionRef{owner.id, ChartCollectionKind::points}}, "owned Chart collection references must name owner and kind");
+        expect(document.set_prop_val(owner, series_id, *series.value) == PropertyMutationStatus::read_only &&
+            document.set_prop_val(owner, points_id, ChartCollectionRef{ObjectId{999}, ChartCollectionKind::points}) == PropertyMutationStatus::read_only &&
+            document.reset_prop_val(owner, points_id) == PropertyMutationStatus::read_only, "collection assignment and reset must be readonly");
+        for (const auto& [series_count, point_count] : {std::pair{3, 4}, std::pair{0, 0}, std::pair{2, 3}}) {
+            expect(document.set_prop_val(owner, PropertyId::from_name("SeriesCount"), std::int64_t{series_count}) == PropertyMutationStatus::applied_unclassified_storage &&
+                document.set_prop_val(owner, PropertyId::from_name("PointCount"), std::int64_t{point_count}) == PropertyMutationStatus::applied_unclassified_storage, "collection resize must succeed");
+            expect(document.get_prop_val(owner, series_id).value == series.value && document.get_prop_val(owner, points_id).value == points.value, "saved collection references must remain stable");
+            const auto* node = document.find_control(std::get<ChartCollectionRef>(*series.value).owner);
+            const auto& chart = std::get<ChartPayload>(node->payload);
+            expect(chart.series.size() == static_cast<std::size_t>(series_count) && chart.points.size() == static_cast<std::size_t>(point_count), "saved references resolve current collections");
+        }
+    }
+    expect(document.get_prop_val({ObjectCategory::control, ObjectId{999}}, PropertyId::from_name("Series")).status == PropertyReadStatus::unknown_owner,
+        "missing Chart owner must fail");
+    Form bad; bad.id = ObjectId{1}; bad.name = "BadCollection"; bad.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument invalid(std::move(bad));
+    ControlNode control{ObjectId{2}, "Chart", ChartPayload{}};
+    control.properties().set_explicit(PropertyId::from_name("Series"), ChartCollectionRef{ObjectId{999}, ChartCollectionKind::series});
+    invalid.add_control(std::move(control));
+    expect(!invalid.validate().ok(), "direct collection property bag must fail");
+}
+
 void test_chart_computed_counts() {
     Form form; form.id = ObjectId{1}; form.name = "ChartCounts";
     OrdinaryFormDocument document(std::move(form));
@@ -3963,6 +4003,7 @@ int main() {
         test_data_api_preserves_binding_until_supported();
         test_form_runtime_state_properties();
         test_chart_computed_counts();
+        test_chart_owned_collections();
         test_form_runtime_variant_values();
         test_window_options_aliases();
         test_form_runtime_boolean_values();
