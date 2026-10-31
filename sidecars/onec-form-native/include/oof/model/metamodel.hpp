@@ -101,6 +101,9 @@ enum class ValueCodec : std::uint8_t {
     chart_series_reference,
     chart_series_collection,
     chart_points_collection,
+    chart_plot_area,
+    chart_title_area,
+    chart_legend_area,
     control_reference,
     form_reference,
     attribute_reference,
@@ -234,6 +237,7 @@ struct ChartScaleOwnerDescriptor {
     bool tail;
     std::size_t record_offset;
 };
+enum class ChartScaleNumericPolicy : std::uint8_t { none, nonnegative_decimal, signed_decimal, rounded_wrapped_int32, unit_decimal };
 struct ChartScalePropertyDescriptor {
     PropertyId id;
     std::string_view name;
@@ -245,10 +249,13 @@ struct ChartScalePropertyDescriptor {
     std::span<const std::string_view> members;
     std::size_t default_ordinal = 0;
     std::u8string_view russian_type;
+    ChartScaleNumericPolicy numeric_policy = ChartScaleNumericPolicy::none;
+    std::optional<PropertyValue> native_default = std::nullopt;
 };
 [[nodiscard]] std::span<const ChartScaleOwnerDescriptor> chart_scale_owner_descriptors() noexcept;
 [[nodiscard]] std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors() noexcept;
 
+[[nodiscard]] std::span<const ChartScalePropertyDescriptor> chart_label_area_property_descriptors() noexcept;
 [[nodiscard]] PropertyValue chart_scale_property_default(const ChartScalePropertyDescriptor& field);
 [[nodiscard]] const PropertyValue* chart_scale_property_value(const ChartScale& scale, const ChartScalePropertyDescriptor& field) noexcept;
 void set_chart_scale_property_value(ChartScale& scale, const ChartScalePropertyDescriptor& field, PropertyValue value);

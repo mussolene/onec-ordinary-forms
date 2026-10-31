@@ -1153,6 +1153,9 @@ model::PropertyValue parse_property_value(
             if (control_id) return model::ControlRef{parse_object_id(*control_id, node, property, object_id)};
             return model::UndefinedValue{};
         }
+        case mm::ValueCodec::chart_plot_area:
+        case mm::ValueCodec::chart_title_area:
+        case mm::ValueCodec::chart_legend_area:
         case mm::ValueCodec::chart_series_collection:
         case mm::ValueCodec::chart_points_collection:
             fail("OOF2003", node, std::string(object_id), property, "owned Chart collection", "scalar", "Chart collection is not a scalar property");
@@ -1826,6 +1829,21 @@ private:
                         std::set<std::string> scale_seen;
                         for (xmlNodePtr value_node : element_children(field)) {
                             const auto value_name = node_name(value_node);
+                            if (value_name == "TitleArea") {
+                                if (!scale_seen.insert(value_name).second) fail("OOF2003", value_node, id_text, value_name, "one owned TitleArea", {}, "Duplicate ChartScale TitleArea");
+                                std::set<std::string> title_seen;
+                                for (xmlNodePtr title_node : element_children(value_node)) {
+                                    const auto title_name = node_name(title_node);
+                                    const auto fields = mm::chart_label_area_property_descriptors();
+                                    const auto definition = std::ranges::find(fields, title_name, &mm::ChartScalePropertyDescriptor::name);
+                                    if (definition == fields.end() || !title_seen.insert(title_name).second)
+                                        fail("OOF2003", title_node, id_text, title_name, "unique named ChartLabelArea property", {}, "Invalid ChartLabelArea property");
+                                    auto value = parse_property_value(title_node, definition->value_codec, id_text);
+                                    mm::set_chart_scale_property_value(scale, *definition, std::move(value));
+                                }
+                                continue;
+                            }
+
                             const auto fields = mm::chart_scale_property_descriptors();
                             const auto definition = std::ranges::find(fields, value_name, &mm::ChartScalePropertyDescriptor::name);
                             if (definition == fields.end() || !scale_seen.insert(value_name).second)
@@ -1838,7 +1856,7 @@ private:
                                 else if (node_name(children[0]) == "Undefined" && node_text(children[0]) == "undefined") value = model::UndefinedValue{};
                                 else fail("OOF2003", value_node, id_text, value_name, "Line or Undefined", {}, "Invalid nullable Line");
                             } else value = parse_property_value(value_node, definition->value_codec, id_text);
-                            if (const auto* n = std::get_if<model::DecimalValue>(&value); n && n->canonical.starts_with('-'))
+                            if (const auto* n = std::get_if<model::DecimalValue>(&value); n && definition->numeric_policy == mm::ChartScaleNumericPolicy::nonnegative_decimal && n->canonical.starts_with('-'))
                                 fail("OOF2003", value_node, id_text, value_name, "nonnegative decimal", n->canonical, "Negative ScaleStep");
                             if (definition->value_codec == mm::ValueCodec::enumeration) {
                                 const auto* enumeration = std::get_if<model::EnumerationValue>(&value);
@@ -3488,6 +3506,9 @@ private:
                 return;
             case mm::ValueCodec::command_bar_buttons:
                 serialization_fail(std::string(object_id), std::string(name), "owned Buttons collection", "scalar", "Buttons is not a scalar property");
+            case mm::ValueCodec::chart_plot_area:
+            case mm::ValueCodec::chart_title_area:
+            case mm::ValueCodec::chart_legend_area:
             case mm::ValueCodec::chart_series_collection:
             case mm::ValueCodec::chart_points_collection:
                 serialization_fail(std::string(object_id), std::string(name), "owned Chart collection", "scalar", "Chart collection cannot be serialized as a scalar property");
@@ -4102,6 +4123,7 @@ private:
                     const auto& scale = (*area).*(owner.member);
                     bool present = false;
                     for (const auto& field : mm::chart_scale_property_descriptors()) present = present || mm::chart_scale_property_value(scale, field) != nullptr;
+                    for (const auto& field : mm::chart_label_area_property_descriptors()) present = present || mm::chart_scale_property_value(scale, field) != nullptr;
                     if (!present) continue;
                     writer_.open(owner.name);
                     for (const auto& field : mm::chart_scale_property_descriptors()) if (const auto* value = mm::chart_scale_property_value(scale, field)) {
@@ -4114,6 +4136,18 @@ private:
                             else write_line("Line", require_value<model::LineValue>(*value, id, field.name, "Line or Undefined"), id);
                             writer_.close(field.name);
                         } else write_property(property, *value, id);
+                    }
+                    bool title_present = false;
+                    for (const auto& field : mm::chart_label_area_property_descriptors()) title_present = title_present || mm::chart_scale_property_value(scale, field) != nullptr;
+                    if (title_present) {
+                        writer_.open("TitleArea");
+                        for (const auto& field : mm::chart_label_area_property_descriptors()) if (const auto* value = mm::chart_scale_property_value(scale, field)) {
+                            mm::PropertyDescriptor property;
+                            property.xml_name = field.name;
+                            property.value_codec = field.value_codec;
+                            write_property(property, *value, id);
+                        }
+                        writer_.close("TitleArea");
                     }
                     writer_.close(owner.name);
                 }

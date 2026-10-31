@@ -187,6 +187,7 @@ enum class ChartAreaKind : std::uint8_t { none, plot, legend, title };
 struct ChartAreaRef {
     ObjectId owner{};
     ChartAreaKind kind = ChartAreaKind::none;
+    ChartScaleKind chart_scale = ChartScaleKind::none;
     friend bool operator==(const ChartAreaRef&, const ChartAreaRef&) = default;
 };
 

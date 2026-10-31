@@ -18654,6 +18654,7 @@ void test_chart_plot_area_formats_round_trip() {
 void test_chart_scales_round_trip() {
     static_assert(sizeof(model::ChartScale) <= 3 * sizeof(std::optional<model::PropertyValue>) + sizeof(model::PropertySet) + alignof(model::ChartScale),
         "ChartScale must store new fields sparsely rather than enlarging every ControlNode");
+    static_assert(sizeof(model::ChartAreaRef) == sizeof(model::ChartScaleRef), "nested title discriminator must fit existing reference padding");
     model::ChartScale sparse_left, sparse_right;
     const auto enum_fields = model::metamodel::chart_scale_property_descriptors();
     for (const auto& field : enum_fields) if (field.value_codec == model::metamodel::ValueCodec::enumeration)
@@ -18710,6 +18711,26 @@ void test_chart_scales_round_trip() {
     const auto format = model::PropertyId::from_name("LabelFormat");
     const model::PropertyValue text = model::LocalizedStringValue{{{"ru", "Шкала"}, {"en", "Scale"}}};
     for (std::uint64_t i = 0; i < 12; ++i) {
+        for (const auto kind : {model::ChartAreaKind::plot, model::ChartAreaKind::title, model::ChartAreaKind::legend}) {
+            const model::OrdinaryFormDocument::ObjectKey area_key{model::ObjectCategory::control, model::ObjectId{100 + i}, kind};
+            const auto font_id = model::PropertyId::from_name("Font");
+            model::FontValue font; font.italic = false;
+            expect(document.set_prop_val(area_key, font_id, font) == model::PropertyMutationStatus::applied_unclassified_storage, "root Chart areas accept common inherited Font modifiers");
+            std::array<model::FontValue, 3> invalid_fonts;
+            invalid_fonts[0].kind = model::FontKind::style_reference; invalid_fonts[0].style = model::QualifiedName{"StyleFonts.Unknown"};
+            invalid_fonts[1].windows_font = model::WindowsFont::system;
+            invalid_fonts[2].scale = 100.5;
+            for (const auto& invalid : invalid_fonts)
+                expect(document.set_prop_val(area_key, font_id, invalid) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(area_key, font_id).value == model::PropertyValue{font}, "root Chart Font invalid assignments are atomic");
+            const auto color_id = model::PropertyId::from_name("BackColor");
+            const auto previous_color = document.get_prop_val(area_key, color_id).value;
+            std::array<model::ColorValue, 3> invalid_colors;
+            invalid_colors[0].red = 1;
+            invalid_colors[1].kind = model::ColorKind::absolute; invalid_colors[1].alpha = 128;
+            invalid_colors[2].kind = model::ColorKind::style_reference; invalid_colors[2].style = model::QualifiedName{"StyleColors.Unknown"};
+            for (const auto& invalid : invalid_colors)
+                expect(document.set_prop_val(area_key, color_id, invalid) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(area_key, color_id).value == previous_color, "root Chart Color invalid assignments are atomic");
+        }
         const model::OrdinaryFormDocument::ObjectKey plot{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot};
         for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
             const auto ref = document.get_prop_val(plot, owner.id);
@@ -18717,6 +18738,23 @@ void test_chart_scales_round_trip() {
             expect(document.set_prop_val(plot, owner.id, model::UndefinedValue{}) == model::PropertyMutationStatus::read_only && document.reset_prop_val(plot, owner.id) == model::PropertyMutationStatus::read_only, "scale ownership is readonly");
             const model::OrdinaryFormDocument::ObjectKey key{plot.category, plot.id, plot.chart_area, owner.kind};
             expect(document.get_prop_val(key, step).value == model::PropertyValue{model::DecimalValue{"0"}}, "computed scale step default");
+            const auto angle = model::PropertyId::from_name("LabelAngle");
+            const auto rows = model::PropertyId::from_name("MaxLabelRows");
+            expect(document.get_prop_val(key, angle).value == model::PropertyValue{model::DecimalValue{"0"}} && document.get_prop_val(key, rows).value == model::PropertyValue{std::int64_t{0}}, "numeric scale defaults");
+            for (const auto& [input, result] : std::array{
+                    std::pair{"-2.5", std::int64_t{-3}}, std::pair{"-.5", std::int64_t{-1}},
+                    std::pair{"2.4999", std::int64_t{2}}, std::pair{"2147483647.5", std::int64_t{-2147483648LL}},
+                    std::pair{"-2147483648.5", std::int64_t{2147483647}}, std::pair{"4294967296", std::int64_t{0}},
+                    std::pair{"-4294967297", std::int64_t{-1}}, std::pair{"1000000000000000000", std::int64_t{-1486618624}},
+                    std::pair{"-1000000000000000000", std::int64_t{1486618624}}}) {
+                expect(document.set_prop_val(key, rows, std::string{input}) == model::PropertyMutationStatus::applied_unclassified_storage && document.get_prop_val(key, rows).value == model::PropertyValue{result}, "row count rounds and wraps exactly");
+            }
+            const auto previous = document.get_prop_val(key, rows).value;
+            for (const model::PropertyValue& bad : std::vector<model::PropertyValue>{model::UndefinedValue{}, model::NullValue{}, model::DateValue{"2026-01-01"}, std::string{"1e2"}, std::string{"1 2"}, std::string{}})
+                expect(document.set_prop_val(key, rows, bad) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, rows).value == previous, "invalid numeric input leaves row count intact");
+            expect(document.set_prop_val(key, angle, std::string{"-0.1234567890123456789012345678"}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+                document.set_prop_val(key, rows, std::string{" -2,5 "}) == model::PropertyMutationStatus::applied_unclassified_storage, "exact signed angle and count survive storage");
+
             expect(document.set_prop_val(key, step, std::string{" +0,0000000000000000000000000001 "}) == model::PropertyMutationStatus::applied_unclassified_storage, "exact decimal API coercion");
             expect(document.set_prop_val(key, title, text) == model::PropertyMutationStatus::applied_unclassified_storage && document.set_prop_val(key, format, text) == model::PropertyMutationStatus::applied_unclassified_storage, "bilingual scale fields");
             for (const model::PropertyValue& input : std::vector<model::PropertyValue>{std::int64_t{3}, true, model::DecimalValue{"2.5"}, std::string{"-7"}})
@@ -18764,6 +18802,44 @@ void test_chart_scales_round_trip() {
                 expect(document.reset_prop_val(key, field.id) == model::PropertyMutationStatus::reset_unclassified_storage && document.get_prop_val(key, field.id).value == model::metamodel::chart_scale_property_default(field), "scale style reset default");
                 expect(document.set_prop_val(key, field.id, selected) == model::PropertyMutationStatus::applied_unclassified_storage, "restore scale style");
             }
+            const auto title_ref_id = model::PropertyId::from_name("TitleArea");
+            const auto title_ref = document.get_prop_val(key, title_ref_id);
+            expect(title_ref.value == model::PropertyValue{model::ChartAreaRef{key.id, model::ChartAreaKind::title, owner.kind}}, "stable readonly scale TitleArea reference");
+            expect(document.set_prop_val(key, title_ref_id, *title_ref.value) == model::PropertyMutationStatus::read_only && document.set_prop_val(key, title_ref_id, model::UndefinedValue{}) == model::PropertyMutationStatus::read_only && document.reset_prop_val(key, title_ref_id) == model::PropertyMutationStatus::read_only, "scale TitleArea cannot be replaced or reset");
+            const model::OrdinaryFormDocument::ObjectKey title_key{key.category, key.id, model::ChartAreaKind::title, owner.kind};
+            for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+                const auto default_value = model::metamodel::chart_scale_property_default(field);
+                expect(document.get_prop_val(title_key, field.id).value == default_value && document.get_prop_val(key, field.id).status == model::PropertyReadStatus::unknown_property, "TitleArea properties are scoped to the nested owner");
+                model::PropertyValue selected = default_value;
+                if (field.value_codec == model::metamodel::ValueCodec::enumeration) {
+                    for (const auto member : field.members) {
+                        const model::PropertyValue value = model::EnumerationValue{std::string(field.enumeration_type), std::string(member)};
+                        expect(document.set_prop_val(title_key, field.id, value) == model::PropertyMutationStatus::applied_unclassified_storage && document.get_prop_val(title_key, field.id).value == value, "all native TitleArea enum members");
+                    }
+                    expect(document.set_prop_val(title_key, field.id, model::EnumerationValue{"WrongType", std::string(field.members[0])}) == model::PropertyMutationStatus::invalid_value &&
+                        document.set_prop_val(title_key, field.id, model::EnumerationValue{std::string(field.enumeration_type), "Unknown"}) == model::PropertyMutationStatus::invalid_value, "TitleArea enum type and member reject");
+                    selected = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[i % field.members.size()])};
+                } else if (field.value_codec == model::metamodel::ValueCodec::decimal) {
+                    selected = model::DecimalValue{field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::unit_decimal ? "0.1234567890123456789012345678" : "-0.1234567890123456789012345678"};
+                    if (field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::unit_decimal) {
+                        expect(document.set_prop_val(title_key, field.id, std::string{"-2"}) == model::PropertyMutationStatus::applied_unclassified_storage && document.get_prop_val(title_key, field.id).value == model::PropertyValue{model::DecimalValue{"0"}}, "TitleArea coordinate lower clamp");
+                        expect(document.set_prop_val(title_key, field.id, true) == model::PropertyMutationStatus::applied_unclassified_storage && document.get_prop_val(title_key, field.id).value == model::PropertyValue{model::DecimalValue{"1"}}, "TitleArea coordinate boolean coercion");
+                        expect(document.set_prop_val(title_key, field.id, std::string{"0,25"}) == model::PropertyMutationStatus::applied_unclassified_storage && document.get_prop_val(title_key, field.id).value == model::PropertyValue{model::DecimalValue{"0.25"}}, "TitleArea coordinate decimal comma");
+                    }
+                } else if (field.value_codec == model::metamodel::ValueCodec::boolean) selected = false;
+                else if (field.value_codec == model::metamodel::ValueCodec::color) {
+                    model::ColorValue color; color.kind = model::ColorKind::style_reference; color.style = model::QualifiedName{i % 2 ? "WindowsColors.WindowBackground" : "WebColors.Red"}; selected = color;
+                } else if (field.value_codec == model::metamodel::ValueCodec::font) {
+                    model::FontValue font; font.kind = model::FontKind::style_reference; font.style = model::QualifiedName{"StyleFonts.TextFont"}; font.bold = i % 2 != 0; selected = font;
+                } else if (field.value_codec == model::metamodel::ValueCodec::border) {
+                    model::BorderValue border; border.width = i % 2; if (i % 4 == 2) { border.border_type = model::ControlBorderType::single; border.width = 1; } if (i % 4 == 3) { border.border_type = model::ControlBorderType::rounded; border.width = 1; } selected = border;
+                }
+                expect(document.set_prop_val(title_key, field.id, selected) == model::PropertyMutationStatus::applied_unclassified_storage, "all named TitleArea setters");
+                expect(document.set_prop_val(title_key, field.id, std::string{"invalid"}) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(title_key, field.id).value == selected, "invalid TitleArea setter is atomic");
+                expect(document.reset_prop_val(title_key, field.id) == model::PropertyMutationStatus::reset_unclassified_storage && document.get_prop_val(title_key, field.id).value == default_value, "TitleArea reset native default");
+                expect(document.set_prop_val(title_key, field.id, selected) == model::PropertyMutationStatus::applied_unclassified_storage, "restore TitleArea value");
+            }
+            expect(document.get_prop_val(title_key, step).status == model::PropertyReadStatus::unknown_property && document.get_prop_val({key.category, key.id, model::ChartAreaKind::legend, owner.kind}, title_ref_id).status == model::PropertyReadStatus::unknown_owner, "wrong nested TitleArea scope rejected");
             const auto before = document.get_prop_val(key, step).value;
             for (const model::PropertyValue& bad : std::vector<model::PropertyValue>{std::string{}, std::string{"1e2"}, std::string{"1 2"}, std::string{"++1"}, model::UndefinedValue{}, model::NullValue{}})
                 expect(document.set_prop_val(key, step, bad) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, step).value == before, "invalid scale assignment is atomic");
@@ -18841,10 +18917,36 @@ void test_chart_scales_round_trip() {
         scale.at(physical + 1) = list_stream::parse("{0}");
         expect(!form_stream::decode_document(malformed, "ChartScales"), "malformed scale Line value rejected");
     }
+    for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) for (const auto malformed_slot : {std::size_t{0}, std::size_t{1}, std::size_t{7}, std::size_t{13}}) {
+        auto malformed = encoded.value();
+        auto& records = malformed.items.at(1).items.at(2).items.at(2).items;
+        const auto record = std::ranges::find(records, std::string{"108"}, [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        auto& info = record->items.at(3).items;
+        const auto cells_end = std::size_t{18 + 11 * (2 + 3) + 100 + 3 * 2 * 3};
+        const auto scale_base = owner.tail ? info.size() - 19 : cells_end + 24 + (2 + 1);
+        auto& title = info.at(scale_base + owner.record_offset).items.at(5).items;
+        expect(title.size() == 13, "malformed TitleArea fixture has canonical size without an event shift");
+        if (malformed_slot == 13) title.push_back(list_stream::ListValue::raw_atom("0"));
+        else title.at(malformed_slot).atom = malformed_slot == 1 ? "11" : "2";
+        expect(!form_stream::decode_document(malformed, "ChartScales"), "TitleArea version, ordinal, boolean and unknown payload reject strictly");
+    }
     const auto decoded = form_stream::decode_document(encoded.value(), "ChartScales");
     expect(decoded.ok() && decoded.value().reconstruction_complete(), "named scale fields decode completely");
     const auto xml = source::serialize_form_xml(decoded.value());
     expect(xml.ok() && xml.value().find("<PointsScale>") != std::string::npos, "named scale XML");
+    for (const auto& [element, value] : {std::pair{"MaxLabelRows", "2147483648"}, std::pair{"MaxLabelRows", "1.5"}, std::pair{"LabelAngle", "1e2"}}) {
+        auto invalid = xml.value();
+        const auto open = "<" + std::string(element) + ">";
+        const auto close = "</" + std::string(element) + ">";
+        const auto begin = invalid.find(open);
+        expect(begin != std::string::npos, "numeric scale field exists in XML");
+        const auto from = begin + open.size();
+        invalid.replace(from, invalid.find(close, from) - from, value);
+        expect(!source::parse_form_xml(invalid), "numeric scale XML rejects invalid lexical or range value");
+    }
+
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
         if (field.value_codec != model::metamodel::ValueCodec::enumeration) continue;
         for (const auto* attribute : {"type", "member"}) {
@@ -18866,6 +18968,15 @@ void test_chart_scales_round_trip() {
         malformed.replace(begin, end - begin, replacement);
         expect(!source::parse_form_xml(malformed), "nullable scale Line XML rejects malformed choices and values");
     }
+    for (const auto& replacement : {std::string{"<Left>2</Left>"}, std::string{"<Placement>Auto</Placement>"},
+            std::string{"<Location type=\"ChartLabelLocation\" member=\"TopRight\"/>"}, std::string{"<Left>0</Left><Left>1</Left>"}}) {
+        auto malformed = xml.value();
+        const auto scale_begin = malformed.find("<PointsScale>");
+        const auto begin = malformed.find("<TitleArea>", scale_begin) + std::string("<TitleArea>").size();
+        const auto end = malformed.find("</TitleArea>", begin);
+        malformed.replace(begin, end - begin, replacement);
+        expect(!source::parse_form_xml(malformed), "TitleArea source rejects out of range coordinates, root area fields, invalid aliases and duplicates");
+    }
     const auto parsed = source::parse_form_xml(xml.value());
     expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
     const auto binary = oof::save_form_bin(parsed.value());
@@ -18876,6 +18987,9 @@ void test_chart_scales_round_trip() {
         const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot, owner.kind};
         for (const auto& field : model::metamodel::chart_scale_property_descriptors())
             expect(loaded.value().get_prop_val(key, field.id).value == document.get_prop_val(key, field.id).value, "all named scale fields survive XML and Form.bin");
+        const model::OrdinaryFormDocument::ObjectKey title_key{key.category, key.id, model::ChartAreaKind::title, owner.kind};
+        for (const auto& field : model::metamodel::chart_label_area_property_descriptors())
+            expect(loaded.value().get_prop_val(title_key, field.id).value == document.get_prop_val(title_key, field.id).value, "all 12 named TitleArea fields survive XML and Form.bin");
     }
     const auto rebuilt = form_stream::encode_document(loaded.value());
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "all scale records survive source and binary round trip");
@@ -18968,7 +19082,7 @@ void test_chart_named_integer_and_delimiter_properties() {
         for (const bool with_event : {false, true}) {
             for (const bool auto_max : {false, true}) for (const bool auto_min : {false, true}) {
                 for (const auto chart_type : {"Column", "Line"}) {
-                    for (const auto text : {"0", "123456789012345678901234567890123456789",
+                    for (const auto text : {"0", "1000000000000000001",
                              "0.00000000000000000000000000000000000001", "-123456789012345.12345678901234567890123"}) {
                         model::Form variant_form; variant_form.id = model::ObjectId{1}; variant_form.name = "ChartNumbers";
                         variant_form.children = {model::ControlRef{model::ObjectId{2}}};

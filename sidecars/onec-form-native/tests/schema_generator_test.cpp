@@ -989,10 +989,20 @@ void test_control_surfaces_and_property_order(
                     for (const auto& owner : oof::model::metamodel::chart_scale_owner_descriptors())
                         expect_element_shape(fields[boolean_index++], owner.name, "ChartScaleType", "0", "1");
                     const auto scale_fields = direct_children(sequence_for_type(schema, "ChartScaleType"), "element");
-                    expect(scale_fields.size() == oof::model::metamodel::chart_scale_property_descriptors().size(), "shared named scale field schema");
+                    expect(scale_fields.size() == oof::model::metamodel::chart_scale_property_descriptors().size() + 1, "shared named scale field schema");
                     std::size_t scale_index = 0;
                     for (const auto& field : oof::model::metamodel::chart_scale_property_descriptors())
-                        expect_element_shape(scale_fields[scale_index++], field.name, field.value_codec == ValueCodec::enumeration ? std::string(field.enumeration_type) + "ValueType" : field.value_codec == ValueCodec::decimal ? "ChartScaleStepType" : field.value_codec == ValueCodec::line ? "NullableLineValueType" : field.value_codec == ValueCodec::color ? "ColorValueType" : field.value_codec == ValueCodec::font ? "FontValueType" : "LocalizedTextValueType", "0", "1");
+                        expect_element_shape(scale_fields[scale_index++], field.name, field.value_codec == ValueCodec::enumeration ? std::string(field.enumeration_type) + "ValueType" : field.numeric_policy == oof::model::metamodel::ChartScaleNumericPolicy::nonnegative_decimal ? "ChartScaleStepType" : field.value_codec == ValueCodec::decimal ? "xs:decimal" : field.value_codec == ValueCodec::integer32 ? "xs:int" : field.value_codec == ValueCodec::line ? "NullableLineValueType" : field.value_codec == ValueCodec::color ? "ColorValueType" : field.value_codec == ValueCodec::font ? "FontValueType" : "LocalizedTextValueType", "0", "1");
+                    expect_element_shape(scale_fields[scale_index], "TitleArea", "ChartLabelAreaType", "0", "1");
+                    const auto title_fields = direct_children(sequence_for_type(schema, "ChartLabelAreaType"), "element");
+                    expect(title_fields.size() == 12, "ChartLabelArea exposes exactly its 12 native properties");
+                    std::size_t title_index = 0;
+                    for (const auto& field : oof::model::metamodel::chart_label_area_property_descriptors())
+                        expect_element_shape(title_fields[title_index++], field.name,
+                            field.value_codec == ValueCodec::enumeration ? std::string(field.enumeration_type) + "ValueType" :
+                            field.numeric_policy == oof::model::metamodel::ChartScaleNumericPolicy::unit_decimal ? "ChartAreaCoordinateType" :
+                            field.value_codec == ValueCodec::color ? "ColorValueType" : field.value_codec == ValueCodec::font ? "FontValueType" :
+                            field.value_codec == ValueCodec::border ? "BorderValueType" : field.value_codec == ValueCodec::boolean ? "xs:boolean" : "xs:decimal", "0", "1");
                 }
             }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");

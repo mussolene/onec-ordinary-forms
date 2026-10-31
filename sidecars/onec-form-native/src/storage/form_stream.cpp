@@ -6393,6 +6393,62 @@ ls::ListValue::raw_atom("0"),
 ls::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"),
 ls::ListValue::raw_atom("0"),
 };}
+LV encode_chart_label_area_property(const model::PropertyValue& value, const model::metamodel::ChartScalePropertyDescriptor& field, std::string_view path) {
+    switch (field.value_codec) {
+        case model::metamodel::ValueCodec::enumeration: {
+            const auto* enumeration = std::get_if<model::EnumerationValue>(&value);
+            if (!enumeration || enumeration->type_name != field.enumeration_type) fail("OOF1122", std::string(path), "typed ChartLabelArea enumeration", {}, "Invalid ChartLabelArea type");
+            const auto member = std::ranges::find(field.members, enumeration->member);
+            if (member == field.members.end()) fail("OOF1122", std::string(path), "known ChartLabelArea member", enumeration->member, "Invalid ChartLabelArea member");
+            return raw(std::to_string(std::distance(field.members.begin(), member)));
+        }
+        case model::metamodel::ValueCodec::decimal: {
+            const auto* number = std::get_if<model::DecimalValue>(&value);
+            if (!number || value_codec::canonical_decimal(number->canonical) != number->canonical ||
+                (field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::unit_decimal && number->canonical != "0" && number->canonical != "1" && !number->canonical.starts_with("0.")))
+                fail("OOF1122", std::string(path), "canonical ChartLabelArea decimal in range", {}, "Invalid ChartLabelArea decimal");
+            return raw(number->canonical);
+        }
+        case model::metamodel::ValueCodec::boolean:
+            if (const auto* boolean = std::get_if<bool>(&value)) return raw(*boolean ? "1" : "0");
+            break;
+        case model::metamodel::ValueCodec::color:
+            if (const auto* color = std::get_if<model::ColorValue>(&value)) return encode_control_color(*color, path);
+            break;
+        case model::metamodel::ValueCodec::font:
+            if (const auto* font = std::get_if<model::FontValue>(&value)) return encode_control_font(*font, path);
+            break;
+        case model::metamodel::ValueCodec::border:
+            if (const auto* border = std::get_if<model::BorderValue>(&value)) {
+                auto encoded = encode_control_border(*border, path, model::ControlKind::chart);
+                if (value == model::metamodel::chart_scale_property_default(field)) encoded.items[5] = raw("0");
+                return encoded;
+            }
+            break;
+        default: break;
+    }
+    fail("OOF1122", std::string(path), "typed ChartLabelArea property", {}, "Invalid ChartLabelArea value");
+}
+model::PropertyValue decode_chart_label_area_property(const LV& value, const model::metamodel::ChartScalePropertyDescriptor& field, std::string_view path) {
+    switch (field.value_codec) {
+        case model::metamodel::ValueCodec::enumeration: {
+            const auto ordinal = integer_atom<std::size_t>(value, path);
+            if (ordinal >= field.members.size()) fail("OOF1115", std::string(path), "known ChartLabelArea ordinal", std::to_string(ordinal), "Invalid ChartLabelArea ordinal");
+            return model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[ordinal])};
+        }
+        case model::metamodel::ValueCodec::decimal: return model::DecimalValue{value_codec::canonical_decimal(raw_atom(value, path))};
+        case model::metamodel::ValueCodec::boolean: {
+            const auto boolean = integer_atom<unsigned>(value, path);
+            if (boolean > 1) fail("OOF1115", std::string(path), "boolean 0 or 1", std::to_string(boolean), "Invalid ChartLabelArea boolean");
+            return boolean != 0;
+        }
+        case model::metamodel::ValueCodec::color: return decode_control_color(value, path);
+        case model::metamodel::ValueCodec::font: return decode_control_font(value, path);
+        case model::metamodel::ValueCodec::border: return decode_control_border(value, path, model::ControlKind::chart);
+        default: fail("OOF1115", std::string(path), "known ChartLabelArea codec", {}, "Unsupported ChartLabelArea property");
+    }
+}
+
 struct ChartScaleLayout {
     bool grid_line = false;
     bool scale_line = false;
@@ -6820,9 +6876,15 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
             const auto path = std::string("$/Chart/PlotArea/") + std::string(owner.name) + "/" + std::string(field.name);
             if (field.value_codec == model::metamodel::ValueCodec::decimal) {
                 const auto* decimal = std::get_if<model::DecimalValue>(&*value);
-                if (!decimal || value_codec::canonical_decimal(decimal->canonical) != decimal->canonical || decimal->canonical.starts_with('-'))
-                    fail("OOF1122", path, "canonical nonnegative decimal", {}, "Invalid Chart ScaleStep");
+                if (!decimal || value_codec::canonical_decimal(decimal->canonical) != decimal->canonical ||
+                    (field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::nonnegative_decimal && decimal->canonical.starts_with('-')))
+                    fail("OOF1122", path, "canonical Chart scale decimal", {}, "Invalid Chart scale decimal");
                 record.items.at(field.record_offset) = raw(decimal->canonical);
+            } else if (field.value_codec == model::metamodel::ValueCodec::integer32) {
+                const auto* number = std::get_if<std::int64_t>(value);
+                if (!number || *number < INT32_MIN || *number > INT32_MAX)
+                    fail("OOF1122", path, "signed 32-bit integer", {}, "Invalid Chart scale integer");
+                record.items.at(field.record_offset) = raw(std::to_string(*number));
             } else if (field.value_codec == model::metamodel::ValueCodec::enumeration) {
                 const auto* enumeration = std::get_if<model::EnumerationValue>(&*value);
                 if (!enumeration || enumeration->type_name != field.enumeration_type)
@@ -6846,6 +6908,12 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
                 if (!font) fail("OOF1122", path, "Font", {}, "Invalid Chart scale Font");
                 record.items.at(field.record_offset) = encode_control_font(*font, path);
             } else record.items.at(field.record_offset) = encoded_localized_text(*value, path, false);
+        }
+        auto& title_area = record.items.at(5);
+        for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+            const auto* value = model::metamodel::chart_scale_property_value(scale, field);
+            if (value) title_area.items.at(field.record_offset) = encode_chart_label_area_property(*value, field,
+                std::string("$/Chart/PlotArea/") + std::string(owner.name) + "/TitleArea/" + std::string(field.name));
         }
         if (owner.kind == model::ChartScaleKind::values) info.at(middle_start + 39) = record.items.at(13);
         if (lines[1]) record.items.insert(record.items.begin() + 15, std::move(*lines[1]));
@@ -7517,8 +7585,10 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             if (field.value_codec == model::metamodel::ValueCodec::decimal) {
                 const auto text = raw_atom(stored, path);
                 const auto canonical = value_codec::canonical_decimal(text);
-                if (text != canonical || canonical.starts_with('-')) fail("OOF1115", path, "canonical nonnegative decimal", text, "Invalid Chart ScaleStep");
+                if (text != canonical || (field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::nonnegative_decimal && canonical.starts_with('-'))) fail("OOF1115", path, "canonical Chart scale decimal", text, "Invalid Chart scale decimal");
                 value = model::DecimalValue{canonical};
+            } else if (field.value_codec == model::metamodel::ValueCodec::integer32) {
+                value = static_cast<std::int64_t>(integer_atom<std::int32_t>(stored, path));
             } else if (field.value_codec == model::metamodel::ValueCodec::enumeration) {
                 const auto ordinal = integer_atom<std::size_t>(stored, path);
                 if (ordinal >= field.members.size()) fail("OOF1115", path, "supported Chart scale enumeration ordinal", std::to_string(ordinal), "Invalid Chart scale enumeration ordinal");
@@ -7531,6 +7601,20 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             else value = decoded_localized_text(stored, path, false);
             if (field.value_codec == model::metamodel::ValueCodec::line ? !std::holds_alternative<model::UndefinedValue>(value) :
                 list_stream::dump_compact(stored) != list_stream::dump_compact(defaults.items.at(field.record_offset))) {
+                model::metamodel::set_chart_scale_property_value(scale, field, std::move(value));
+                explicit_scale = true;
+            }
+        }
+        const auto& title_area = record.items.at(5);
+        const auto title_path = child_path(child_path(info_path, index), 5);
+        require_arity(title_area, 13, title_path);
+        require_raw_constant(title_area.items[0], "1", child_path(title_path, 0));
+        for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+            const auto path = child_path(title_path, field.record_offset);
+            auto value = decode_chart_label_area_property(title_area.items.at(field.record_offset), field, path);
+            const auto encoded = encode_chart_label_area_property(value, field, path);
+            scale_normalized_info.items[index].items[5].items[field.record_offset] = encoded;
+            if (value != model::metamodel::chart_scale_property_default(field)) {
                 model::metamodel::set_chart_scale_property_value(scale, field, std::move(value));
                 explicit_scale = true;
             }

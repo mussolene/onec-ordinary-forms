@@ -745,6 +745,15 @@ void apply_proven_storage_overrides(
         property->value_codec = name == std::string_view{"Series"} ? ValueCodec::chart_series_collection : ValueCodec::chart_points_collection;
         property->default_value = {DefaultKind::none, {}};
     }
+    for (const auto& [name, codec] : {std::pair{"PlotArea", ValueCodec::chart_plot_area}, std::pair{"TitleArea", ValueCodec::chart_title_area}, std::pair{"LegendArea", ValueCodec::chart_legend_area}}) {
+        auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
+        if (property == chart_properties.end()) throw std::logic_error("missing owned Chart area descriptor");
+        property->api_access = ApiAccess::read_only;
+        property->persistence = PersistenceClass::persisted_readonly;
+        property->storage_codec = StorageCodec::control_info;
+        property->value_codec = codec;
+        property->default_value = {DefaultKind::none, {}};
+    }
     for (const auto name : {"SeriesCount", "PointCount"}) {
         auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
         if (property == chart_properties.end()) throw std::logic_error("missing Chart count descriptor");
@@ -2336,7 +2345,9 @@ std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors()
     static constexpr std::array<std::string_view, 3> title_placement{"WithAxis","PlotArea","SpecialArea"};
     static constexpr std::array<std::string_view, 3> show_in_chart{"Auto","Show","DontShow"};
     static const std::array descriptors{
-        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleStep"), "ScaleStep", u8"ШагШкалы", ValueCodec::decimal, &ChartScale::scale_step, 16, {}, {}, 0, u8"Число"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleStep"), "ScaleStep", u8"ШагШкалы", ValueCodec::decimal, &ChartScale::scale_step, 16, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::nonnegative_decimal},
+        ChartScalePropertyDescriptor{PropertyId::from_name("LabelAngle"), "LabelAngle", u8"УголНаклонаПодписей", ValueCodec::decimal, nullptr, 17, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::signed_decimal},
+        ChartScalePropertyDescriptor{PropertyId::from_name("MaxLabelRows"), "MaxLabelRows", u8"МаксимальноеКоличествоРядовПодписей", ValueCodec::integer32, nullptr, 19, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::rounded_wrapped_int32},
         ChartScalePropertyDescriptor{PropertyId::from_name("TitleText"), "TitleText", u8"ТекстЗаголовка", ValueCodec::localized_text, &ChartScale::title_text, 4, {}, {}, 0, u8"Строка"},
         ChartScalePropertyDescriptor{PropertyId::from_name("LabelFormat"), "LabelFormat", u8"ФорматПодписей", ValueCodec::localized_text, &ChartScale::label_format, 13, {}, {}, 0, u8"Строка"},
         ChartScalePropertyDescriptor{PropertyId::from_name("ScaleLocation"), "ScaleLocation", u8"ПоложениеШкалы", ValueCodec::enumeration, nullptr, 18, "ChartScaleLocation", scale_location, 0, u8"ПоложениеШкалыДиаграммы"},
@@ -2358,10 +2369,33 @@ std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors()
     return descriptors;
 }
 
+std::span<const ChartScalePropertyDescriptor> chart_label_area_property_descriptors() noexcept {
+    static constexpr std::array<std::string_view, 11> locations{"Edge", "Center", "EdgeInside", "EdgeAuto", "Auto", "LeftTop", "LeftBottom", "RightTop", "RightBottom", "LeftAndTopSpecified", "EmptySpace"};
+    static constexpr std::array<std::string_view, 6> markers{"None", "Rect", "Circle", "Rhomb", "Auto", "Alternation"};
+    static constexpr std::array<std::string_view, 4> orientations{"Horizontal", "Vertical", "Auto", "CustomAngle"};
+    static const std::array descriptors{
+        ChartScalePropertyDescriptor{PropertyId::from_name("Location"), "Location", u8"Положение", ValueCodec::enumeration, nullptr, 1, "ChartLabelLocation", locations, 4, u8"ПоложениеПодписейКДиаграмме"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Left"), "Left", u8"Лево", ValueCodec::decimal, nullptr, 2, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::unit_decimal, PropertyValue{DecimalValue{"0.5"}}},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Top"), "Top", u8"Верх", ValueCodec::decimal, nullptr, 3, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::unit_decimal, PropertyValue{DecimalValue{"0.5"}}},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ValueCodec::font, nullptr, 4, {}, {}, 0, u8"Шрифт"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("TextColor"), "TextColor", u8"ЦветТекста", ValueCodec::color, nullptr, 5, {}, {}, 0, u8"Цвет"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("BackColor"), "BackColor", u8"ЦветФона", ValueCodec::color, nullptr, 6, {}, {}, 0, u8"Цвет"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Transparent"), "Transparent", u8"ПрозрачныйФон", ValueCodec::boolean, nullptr, 7, {}, {}, 0, u8"Булево", ChartScaleNumericPolicy::none, PropertyValue{true}},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ValueCodec::border, nullptr, 8, {}, {}, 0, u8"Рамка", ChartScaleNumericPolicy::none, PropertyValue{BorderValue{BorderKind::absolute, ControlBorderType::without_border, 1, {}}}},
+        ChartScalePropertyDescriptor{PropertyId::from_name("BorderColor"), "BorderColor", u8"ЦветРамки", ValueCodec::color, nullptr, 9, {}, {}, 0, u8"Цвет"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Marker"), "Marker", u8"Маркер", ValueCodec::enumeration, nullptr, 10, "ChartMarkerType", markers, 4, u8"ТипМаркераДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Orientation"), "Orientation", u8"Ориентация", ValueCodec::enumeration, nullptr, 11, "ChartLabelsOrientation", orientations, 2, u8"ОриентацияПодписейДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Angle"), "Angle", u8"УголНаклона", ValueCodec::decimal, nullptr, 12, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::signed_decimal},
+    };
+    return descriptors;
+}
+
 PropertyValue chart_scale_property_default(const ChartScalePropertyDescriptor& field) {
+    if (field.native_default) return *field.native_default;
     switch (field.value_codec) {
         case ValueCodec::enumeration: return EnumerationValue{std::string(field.enumeration_type), std::string(field.members[field.default_ordinal])};
         case ValueCodec::decimal: return DecimalValue{"0"};
+        case ValueCodec::integer32: return std::int64_t{0};
         case ValueCodec::line: return UndefinedValue{};
         case ValueCodec::color: return ColorValue{};
         case ValueCodec::font: return FontValue{};
@@ -2622,6 +2656,9 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "chart-series-collection";
         case ValueCodec::chart_points_collection:
             return "chart-points-collection";
+        case ValueCodec::chart_plot_area: return "chart-plot-area";
+        case ValueCodec::chart_title_area: return "chart-title-area";
+        case ValueCodec::chart_legend_area: return "chart-legend-area";
         case ValueCodec::control_reference:
             return "control-reference";
         case ValueCodec::form_reference:

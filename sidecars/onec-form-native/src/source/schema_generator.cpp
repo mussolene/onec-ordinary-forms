@@ -125,6 +125,9 @@ std::string_view xsd_type(ValueCodec codec) {
             return "ContextMenuReferenceValueType";
         case ValueCodec::chart_series_reference:
             return "ObjectIdType";
+        case ValueCodec::chart_plot_area: return "ChartPlotAreaType";
+        case ValueCodec::chart_title_area: return "ChartTitleAreaType";
+        case ValueCodec::chart_legend_area: return "ChartLegendAreaType";
         case ValueCodec::chart_series_collection:
             return "ChartSeriesCollectionType";
         case ValueCodec::chart_points_collection:
@@ -757,8 +760,10 @@ void append_value_types(std::string& output) {
         }
         output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
     }
-    for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
-        if (field.value_codec != model::metamodel::ValueCodec::enumeration) continue;
+    std::set<std::string_view> scale_enum_types;
+    for (const auto fields : {model::metamodel::chart_scale_property_descriptors(), model::metamodel::chart_label_area_property_descriptors()})
+    for (const auto& field : fields) {
+        if (field.value_codec != model::metamodel::ValueCodec::enumeration || !scale_enum_types.insert(field.enumeration_type).second) continue;
         output += "  <xs:complexType";
         append_attribute(output, "name", std::string(field.enumeration_type) + "ValueType");
         output += "><xs:attribute name=\"type\" type=\"NonEmptyTokenType\" use=\"required\"";
@@ -774,18 +779,31 @@ void append_value_types(std::string& output) {
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
     output += "  <xs:simpleType name=\"ChartScaleStepType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/></xs:restriction></xs:simpleType>\n";
     output += "  <xs:complexType name=\"NullableLineValueType\"><xs:choice><xs:element name=\"Line\" type=\"LineValueType\"/><xs:element name=\"Undefined\" type=\"UndefinedValueType\"/></xs:choice></xs:complexType>\n";
+    output += "  <xs:complexType name=\"ChartLabelAreaType\"><xs:sequence>";
+    for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+        output += "<xs:element";
+        append_attribute(output, "name", field.name);
+        append_attribute(output, "type", field.value_codec == model::metamodel::ValueCodec::enumeration
+            ? std::string(field.enumeration_type) + "ValueType" : field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::unit_decimal
+            ? "ChartAreaCoordinateType" : std::string(xsd_type(field.value_codec)));
+        append_attribute(output, "minOccurs", "0");
+        append_attribute(output, "maxOccurs", "1");
+        output += "/>";
+    }
+    output += "</xs:sequence></xs:complexType>\n";
     output += "  <xs:complexType name=\"ChartScaleType\"><xs:sequence>";
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
         output += "<xs:element";
         append_attribute(output, "name", field.name);
         append_attribute(output, "type", field.value_codec == model::metamodel::ValueCodec::enumeration
             ? std::string(field.enumeration_type) + "ValueType"
-            : field.value_codec == model::metamodel::ValueCodec::decimal ? "ChartScaleStepType" :
+            : field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::nonnegative_decimal ? "ChartScaleStepType" :
             field.value_codec == model::metamodel::ValueCodec::line ? "NullableLineValueType" : std::string(xsd_type(field.value_codec)));
         append_attribute(output, "minOccurs", "0");
         append_attribute(output, "maxOccurs", "1");
         output += "/>";
     }
+    output += "<xs:element name=\"TitleArea\" type=\"ChartLabelAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>";
     output += "</xs:sequence></xs:complexType>\n";
     for (const auto& [type_name, placement_type, kind] : {
             std::tuple{"ChartPlotAreaType", "ChartPlotAreaPlacementType", model::ChartAreaKind::plot},
@@ -1517,6 +1535,16 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     output += "        </Properties></NamedConcept>\n";
     output += "        <NamedConcept name=\"ChartScale\" russianName=\"ШкалаДиаграммы\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e ev_fdaf734b79924b48b1c6745d881c8b1a ev_8acb08b31fe04c098e2f7fc1cfb2359c ev_5a399212306c4804804215808cc216eb ev_afbdbf8284434954a3e84bf3bcd4a80c\"><Properties>";
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+        output += "<Property";
+        append_attribute(output, "name", field.name);
+        append_attribute(output, "russianName", as_utf8(field.russian_name));
+        append_attribute(output, "russianType", as_utf8(field.russian_type));
+        output += "/>";
+    }
+    output += "<Property name=\"TitleArea\" russianName=\"ОбластьЗаголовка\" russianType=\"ОбластьПодписиДиаграммы\"/>";
+    output += "</Properties></NamedConcept>\n";
+    output += "        <NamedConcept name=\"ChartLabelArea\" russianName=\"ОбластьПодписиДиаграммы\" evidenceRefs=\"ev_06107dec37cd4359b5847f1cdd35f46b ev_9ed24409c9af4f2e8adc67afacdbc1ff\"><Properties>";
+    for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
         output += "<Property";
         append_attribute(output, "name", field.name);
         append_attribute(output, "russianName", as_utf8(field.russian_name));

@@ -582,6 +582,13 @@ void test_chart_scale_lines() {
 
 void test_chart_owned_collections() {
     using namespace oof::model::metamodel;
+    for (const auto& [name, codec] : {std::pair{"PlotArea", ValueCodec::chart_plot_area}, std::pair{"TitleArea", ValueCodec::chart_title_area}, std::pair{"LegendArea", ValueCodec::chart_legend_area}}) {
+        const auto* descriptor = find_property(ControlKind::chart, name);
+        expect(descriptor && descriptor->value_kind == ValueKind::object && descriptor->api_access == ApiAccess::read_only &&
+            descriptor->persistence == PersistenceClass::persisted_readonly && descriptor->storage_codec == StorageCodec::control_info &&
+            descriptor->value_codec == codec && descriptor->default_value.kind == DefaultKind::none,
+            "root Chart areas expose persisted readonly named object codecs");
+    }
     for (const auto& [name, codec] : {std::pair{"Series", ValueCodec::chart_series_collection}, std::pair{"Points", ValueCodec::chart_points_collection}}) {
         const auto* descriptor = find_property(ControlKind::chart, name);
         expect(descriptor && descriptor->api_access == ApiAccess::read_only && descriptor->persistence == PersistenceClass::persisted_readonly &&
@@ -594,6 +601,14 @@ void test_chart_owned_collections() {
     for (std::uint64_t i = 0; i < 12; ++i) document.add_control(ControlNode{ObjectId{100 + i}, "Chart" + std::to_string(i), ChartPayload{}});
     for (std::uint64_t i = 0; i < 12; ++i) {
         const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        for (const auto& [name, kind] : {std::pair{"PlotArea", ChartAreaKind::plot}, std::pair{"TitleArea", ChartAreaKind::title}, std::pair{"LegendArea", ChartAreaKind::legend}}) {
+            const auto id = PropertyId::from_name(name);
+            const auto reference = document.get_prop_val(owner, id);
+            expect(reference.status == PropertyReadStatus::computed_value && reference.value == PropertyValue{ChartAreaRef{owner.id, kind}}, "root Chart owned area reference is computed and stable");
+            expect(document.set_prop_val(owner, id, *reference.value) == PropertyMutationStatus::read_only &&
+                document.set_prop_val(owner, id, UndefinedValue{}) == PropertyMutationStatus::read_only && document.reset_prop_val(owner, id) == PropertyMutationStatus::read_only,
+                "root Chart owned areas cannot be replaced or reset");
+        }
         const auto series_id = PropertyId::from_name("Series"), points_id = PropertyId::from_name("Points");
         const auto series = document.get_prop_val(owner, series_id), points = document.get_prop_val(owner, points_id);
         expect(series.status == PropertyReadStatus::computed_value && series.value == PropertyValue{ChartCollectionRef{owner.id, ChartCollectionKind::series}} &&
@@ -618,6 +633,14 @@ void test_chart_owned_collections() {
     control.properties().set_explicit(PropertyId::from_name("Series"), ChartCollectionRef{ObjectId{999}, ChartCollectionKind::series});
     invalid.add_control(std::move(control));
     expect(!invalid.validate().ok(), "direct collection property bag must fail");
+    for (const auto name : {"PlotArea", "TitleArea", "LegendArea"}) {
+        Form bad_area; bad_area.id = ObjectId{1}; bad_area.name = "BadAreaReference"; bad_area.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument bad_document(std::move(bad_area));
+        ControlNode bad_control{ObjectId{2}, "Chart", ChartPayload{}};
+        bad_control.properties().set_explicit(PropertyId::from_name(name), ChartAreaRef{ObjectId{2}, ChartAreaKind::plot});
+        bad_document.add_control(std::move(bad_control));
+        expect(!bad_document.validate().ok(), "computed root Chart area references cannot be duplicated in scalar bags");
+    }
 }
 
 void test_chart_computed_counts() {
