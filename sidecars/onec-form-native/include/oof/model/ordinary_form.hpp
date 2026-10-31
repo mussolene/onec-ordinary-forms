@@ -175,6 +175,13 @@ using EventRef = Reference<Event>;
 using PictureAssetRef = Reference<PictureAsset>;
 using ChildItemRef = std::variant<ControlRef, PageRef>;
 
+enum class ChartScaleKind : std::uint8_t { none, points, values, additional_values, series };
+struct ChartScaleRef {
+    ObjectId owner{};
+    ChartScaleKind kind = ChartScaleKind::none;
+    friend bool operator==(const ChartScaleRef&, const ChartScaleRef&) = default;
+};
+
 enum class ChartAreaKind : std::uint8_t { none, plot, legend, title };
 
 struct ChartAreaRef {
@@ -519,6 +526,7 @@ using PropertyValue = std::variant<
     AttributeRef,
     CommandRef,
     ChartAreaRef,
+    ChartScaleRef,
     ChartSeriesRef,
     ChartCollectionRef,
     CommandBarButtonRef>;
@@ -781,7 +789,18 @@ struct ChartSummarySeries {
     EnumerationValue marker{"ChartMarkerType", "Auto"};
 };
 
+struct ChartScale {
+    std::optional<PropertyValue> scale_step;
+    std::optional<PropertyValue> title_text;
+    std::optional<PropertyValue> label_format;
+    friend bool operator==(const ChartScale&, const ChartScale&) = default;
+};
+
 struct ChartArea {
+    ChartScale points_scale;
+    ChartScale values_scale;
+    ChartScale additional_values_scale;
+    ChartScale series_scale;
     std::string placement{"Auto"};
     DecimalValue left{"0"};
     DecimalValue top{"0"};
@@ -1102,6 +1121,7 @@ public:
         ObjectCategory category = ObjectCategory::form;
         ObjectId id{};
         ChartAreaKind chart_area = ChartAreaKind::none;
+        ChartScaleKind chart_scale = ChartScaleKind::none;
 
         friend bool operator==(const ObjectKey&, const ObjectKey&) = default;
     };

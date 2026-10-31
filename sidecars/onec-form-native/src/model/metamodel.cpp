@@ -2316,6 +2316,24 @@ const ChartAreaBooleanDescriptor* find_chart_area_boolean(ChartAreaKind kind, Pr
     return found == descriptors.end() ? nullptr : &*found;
 }
 
+std::span<const ChartScaleOwnerDescriptor> chart_scale_owner_descriptors() noexcept {
+    static const std::array descriptors{
+        ChartScaleOwnerDescriptor{PropertyId::from_name("PointsScale"), "PointsScale", u8"ШкалаТочек", ChartScaleKind::points, &ChartArea::points_scale, false, 13},
+        ChartScaleOwnerDescriptor{PropertyId::from_name("ValuesScale"), "ValuesScale", u8"ШкалаЗначений", ChartScaleKind::values, &ChartArea::values_scale, false, 14},
+        ChartScaleOwnerDescriptor{PropertyId::from_name("AdditionalValuesScale"), "AdditionalValuesScale", u8"ДополнительнаяШкалаЗначений", ChartScaleKind::additional_values, &ChartArea::additional_values_scale, true, 2},
+        ChartScaleOwnerDescriptor{PropertyId::from_name("SeriesScale"), "SeriesScale", u8"ШкалаСерий", ChartScaleKind::series, &ChartArea::series_scale, false, 15},
+    };
+    return descriptors;
+}
+std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors() noexcept {
+    static const std::array descriptors{
+        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleStep"), "ScaleStep", u8"ШагШкалы", ValueCodec::decimal, &ChartScale::scale_step, 16},
+        ChartScalePropertyDescriptor{PropertyId::from_name("TitleText"), "TitleText", u8"ТекстЗаголовка", ValueCodec::localized_text, &ChartScale::title_text, 4},
+        ChartScalePropertyDescriptor{PropertyId::from_name("LabelFormat"), "LabelFormat", u8"ФорматПодписей", ValueCodec::localized_text, &ChartScale::label_format, 13},
+    };
+    return descriptors;
+}
+
 std::span<const ChartAreaPropertyDescriptor> chart_area_property_descriptors() noexcept {
     static constexpr std::array descriptors{
         ChartAreaPropertyDescriptor{PropertyId::from_name("Placement"), "Placement", u8"Расположение", ValueCodec::enumeration, nullptr, 0, "Auto", "Auto", "Auto"},

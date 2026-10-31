@@ -758,6 +758,17 @@ void append_value_types(std::string& output) {
         output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
     }
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
+    output += "  <xs:simpleType name=\"ChartScaleStepType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/></xs:restriction></xs:simpleType>\n";
+    output += "  <xs:complexType name=\"ChartScaleType\"><xs:sequence>";
+    for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+        output += "<xs:element";
+        append_attribute(output, "name", field.name);
+        append_attribute(output, "type", field.value_codec == model::metamodel::ValueCodec::decimal ? "ChartScaleStepType" : "LocalizedTextValueType");
+        append_attribute(output, "minOccurs", "0");
+        append_attribute(output, "maxOccurs", "1");
+        output += "/>";
+    }
+    output += "</xs:sequence></xs:complexType>\n";
     for (const auto& [type_name, placement_type, kind] : {
             std::tuple{"ChartPlotAreaType", "ChartPlotAreaPlacementType", model::ChartAreaKind::plot},
             std::tuple{"ChartLegendAreaType", "ChartLegendAreaPlacementType", model::ChartAreaKind::legend},
@@ -813,6 +824,14 @@ void append_value_types(std::string& output) {
                 append_attribute(output, "maxOccurs", "1");
                 output += "/>";
             }
+        }
+        if (kind == model::ChartAreaKind::plot) for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+            output += "<xs:element";
+            append_attribute(output, "name", owner.name);
+            append_attribute(output, "type", "ChartScaleType");
+            append_attribute(output, "minOccurs", "0");
+            append_attribute(output, "maxOccurs", "1");
+            output += "/>";
         }
         output += "</xs:sequence></xs:complexType>\n";
     }
@@ -1470,6 +1489,24 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         }
     }
     output += "        </Properties></NamedConcept>\n";
+    output += "        <NamedConcept name=\"ChartScale\" russianName=\"ШкалаДиаграммы\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e\"><Properties>";
+    for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+        output += "<Property";
+        append_attribute(output, "name", field.name);
+        append_attribute(output, "russianName", as_utf8(field.russian_name));
+        append_attribute(output, "russianType", field.value_codec == model::metamodel::ValueCodec::decimal ? "Число" : "Строка");
+        output += "/>";
+    }
+    output += "</Properties></NamedConcept>\n";
+    output += "        <NamedConcept name=\"ChartPlotAreaScales\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e\"><Properties>";
+    for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+        output += "<Property";
+        append_attribute(output, "name", owner.name);
+        append_attribute(output, "russianName", as_utf8(owner.russian_name));
+        append_attribute(output, "russianType", "ШкалаДиаграммы");
+        output += "/>";
+    }
+    output += "</Properties></NamedConcept>\n";
     output +=
         "        <NamedConcept name=\"WindowsFonts\" russianName=\"WindowsШрифты\" evidenceRefs=\"ev_9d8015b7a8b246ffb91ce498507abd5f\"><Properties>\n"
         "          <Property name=\"DefaultGUIFont\" russianName=\"ШрифтДиалоговИМеню\" russianType=\"Шрифт\"/><Property name=\"OEMFixedFont\" russianName=\"OEMШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIFixedFont\" russianName=\"ANSIШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIVariableFont\" russianName=\"ANSIШрифтПропорциональный\" russianType=\"Шрифт\"/><Property name=\"SystemFont\" russianName=\"СистемныйШрифт\" russianType=\"Шрифт\"/>\n"

@@ -225,6 +225,26 @@ struct PropertyDescriptor {
     DefaultValue default_value{};
 };
 
+struct ChartScaleOwnerDescriptor {
+    PropertyId id;
+    std::string_view name;
+    std::u8string_view russian_name;
+    ChartScaleKind kind;
+    ChartScale ChartArea::*member;
+    bool tail;
+    std::size_t record_offset;
+};
+struct ChartScalePropertyDescriptor {
+    PropertyId id;
+    std::string_view name;
+    std::u8string_view russian_name;
+    ValueCodec value_codec;
+    std::optional<PropertyValue> ChartScale::*member;
+    std::size_t record_offset;
+};
+[[nodiscard]] std::span<const ChartScaleOwnerDescriptor> chart_scale_owner_descriptors() noexcept;
+[[nodiscard]] std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors() noexcept;
+
 struct ChartAreaPropertyDescriptor {
     PropertyId id{};
     std::string_view name;

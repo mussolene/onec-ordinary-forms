@@ -18613,6 +18613,103 @@ void test_chart_plot_area_formats_round_trip() {
         "PlotArea formats must survive a full native round trip");
 }
 
+void test_chart_scales_round_trip() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "ChartScales";
+    for (std::uint64_t i = 0; i < 12; ++i)
+        form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::ChartPayload payload;
+        const std::size_t series_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 2;
+        const std::size_t point_count = i / 4 == 0 ? 0 : i / 4 == 1 ? 1 : 3;
+        for (std::size_t n = 0; n < series_count; ++n) {
+            model::ChartSeries series; series.id = model::ObjectId{1000 + i * 10 + n};
+            series.text = "Series"; series.color.kind = model::ColorKind::absolute;
+            series.marker = {"ChartMarkerType", "Auto"}; payload.series.push_back(std::move(series));
+        }
+        for (std::size_t n = 0; n < point_count; ++n) {
+            model::ChartPoint point; point.id = model::ObjectId{2000 + i * 10 + n};
+            point.text = "Point"; point.color.kind = model::ColorKind::absolute;
+            payload.points.push_back(std::move(point));
+        }
+        for (const auto& series : payload.series) for (const auto& point : payload.points)
+            payload.values.push_back({series.id, point.id, model::DecimalValue{"1.25"}});
+        model::ControlNode chart{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(payload)};
+        chart.position.width.set(160); chart.position.height.set(120);
+        if (i == 11) {
+            chart.events.push_back(model::EventRef{model::ObjectId{3000}});
+            document.add_event(model::Event{model::ObjectId{3000}, "Selection", "OnSelection", model::ControlRef{chart.id}});
+        }
+        document.add_control(std::move(chart));
+    }
+    const auto step = model::PropertyId::from_name("ScaleStep");
+    const auto title = model::PropertyId::from_name("TitleText");
+    const auto format = model::PropertyId::from_name("LabelFormat");
+    const model::PropertyValue text = model::LocalizedStringValue{{{"ru", "Шкала"}, {"en", "Scale"}}};
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const model::OrdinaryFormDocument::ObjectKey plot{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot};
+        for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+            const auto ref = document.get_prop_val(plot, owner.id);
+            expect(ref.value && std::get<model::ChartScaleRef>(*ref.value) == model::ChartScaleRef{plot.id, owner.kind}, "four stable owner references");
+            expect(document.set_prop_val(plot, owner.id, model::UndefinedValue{}) == model::PropertyMutationStatus::read_only && document.reset_prop_val(plot, owner.id) == model::PropertyMutationStatus::read_only, "scale ownership is readonly");
+            const model::OrdinaryFormDocument::ObjectKey key{plot.category, plot.id, plot.chart_area, owner.kind};
+            expect(document.get_prop_val(key, step).value == model::PropertyValue{model::DecimalValue{"0"}}, "computed scale step default");
+            expect(document.set_prop_val(key, step, std::string{" +0,0000000000000000000000000001 "}) == model::PropertyMutationStatus::applied_unclassified_storage, "exact decimal API coercion");
+            expect(document.set_prop_val(key, title, text) == model::PropertyMutationStatus::applied_unclassified_storage && document.set_prop_val(key, format, text) == model::PropertyMutationStatus::applied_unclassified_storage, "bilingual scale fields");
+            for (const model::PropertyValue& input : std::vector<model::PropertyValue>{std::int64_t{3}, true, model::DecimalValue{"2.5"}, std::string{"-7"}})
+                expect(document.set_prop_val(key, step, input) == model::PropertyMutationStatus::applied_unclassified_storage, "supported ScaleStep assignment types");
+            expect(document.get_prop_val(key, step).value == model::PropertyValue{model::DecimalValue{"0"}}, "negative step clamps to zero");
+            expect(document.set_prop_val(key, step, std::string{"0.0000000000000000000000000001"}) == model::PropertyMutationStatus::applied_unclassified_storage, "restore exact step");
+            expect(document.get_prop_val({plot.category, model::ObjectId{99999}, plot.chart_area, owner.kind}, step).status == model::PropertyReadStatus::unknown_owner &&
+                document.get_prop_val({plot.category, plot.id, plot.chart_area, static_cast<model::ChartScaleKind>(99)}, step).status == model::PropertyReadStatus::unknown_owner &&
+                document.get_prop_val({plot.category, plot.id, model::ChartAreaKind::none, owner.kind}, step).status == model::PropertyReadStatus::unknown_owner, "wrong owner, kind and ambiguous key rejected");
+            const auto before = document.get_prop_val(key, step).value;
+            for (const model::PropertyValue& bad : std::vector<model::PropertyValue>{std::string{}, std::string{"1e2"}, std::string{"1 2"}, std::string{"++1"}, model::UndefinedValue{}, model::NullValue{}})
+                expect(document.set_prop_val(key, step, bad) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, step).value == before, "invalid scale assignment is atomic");
+            expect(document.get_prop_val({plot.category, plot.id, model::ChartAreaKind::legend, owner.kind}, step).status == model::PropertyReadStatus::unknown_owner, "invalid scale area rejected");
+        }
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded.ok() ? "" : encoded.diagnostics().front().message);
+    auto bad_mirror = encoded.value();
+    auto& bad_records = bad_mirror.items.at(1).items.at(2).items.at(2).items;
+    const auto bad_chart = std::ranges::find(bad_records, std::string{"100"}, [](const auto& item) {
+        return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+    });
+    expect(bad_chart != bad_records.end(), "scale mirror fixture Chart exists");
+    bad_chart->items.at(3).items.at(18 + 39) = list_stream::parse("{1,0}");
+    expect(!form_stream::decode_document(bad_mirror, "ChartScales"), "ValuesScale LabelFormat mirror mismatch rejected");
+    for (const auto name : {"ScaleStep", "PointsScale"}) {
+        model::ChartPayload invalid_payload;
+        invalid_payload.properties.set_explicit(model::PropertyId::from_name(name), model::DecimalValue{"1"});
+        model::Form invalid_form; invalid_form.id = model::ObjectId{1}; invalid_form.name = "InvalidScaleBag";
+        invalid_form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument invalid(std::move(invalid_form));
+        model::ControlNode invalid_control{model::ObjectId{2}, "Chart", std::move(invalid_payload)};
+        bool rejected = false;
+        try { invalid.add_control(std::move(invalid_control)); rejected = !invalid.validate().ok(); }
+        catch (const model::InvariantError&) { rejected = true; }
+        expect(rejected, "duplicate direct scale bags rejected");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChartScales");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "named scale fields decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<PointsScale>") != std::string::npos, "named scale XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), "scale Form.bin build");
+    const auto loaded = oof::load_form_bin(binary.value(), "ChartScales");
+    expect(loaded.ok() && loaded.value().reconstruction_complete(), "scale Form.bin load");
+    const auto rebuilt = form_stream::encode_document(loaded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "all scale records survive source and binary round trip");
+    auto reset = loaded.value();
+    for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{100}, model::ChartAreaKind::plot, owner.kind};
+        for (const auto& field : model::metamodel::chart_scale_property_descriptors()) expect(reset.reset_prop_val(key, field.id) == model::PropertyMutationStatus::reset_unclassified_storage && reset.get_prop_val(key, field.id).status == model::PropertyReadStatus::proven_default, "reset restores scale defaults");
+    }
+}
+
 void test_chart_named_integer_and_delimiter_properties() {
     for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "ChartNumbers";
@@ -21200,6 +21297,7 @@ int main() {
         test_chart_area_color_properties_round_trip();
         test_chart_area_border_font_round_trip();
         test_chart_plot_area_formats_round_trip();
+        test_chart_scales_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

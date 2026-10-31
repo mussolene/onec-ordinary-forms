@@ -960,7 +960,7 @@ void test_control_surfaces_and_property_order(
                 const auto format_count = kind == oof::model::ChartAreaKind::plot ? oof::model::metamodel::chart_plot_format_descriptors().size() : 0;
                 const std::size_t base = kind == oof::model::ChartAreaKind::title ? 1 : 0;
                 if (base) expect_element_shape(fields[0], "Text", "LocalizedTextValueType", "0", "1");
-                expect(fields.size() == base + 5 + static_cast<std::size_t>(bool_count + color_count + style_count) + format_count && attribute(fields[base], "name") == "Placement" &&
+                expect(fields.size() == base + 5 + static_cast<std::size_t>(bool_count + color_count + style_count) + format_count + (kind == oof::model::ChartAreaKind::plot ? 4 : 0) && attribute(fields[base], "name") == "Placement" &&
                     attribute(fields[base + 1], "name") == "Left" && attribute(fields[base + 2], "name") == "Top" &&
                     attribute(fields[base + 3], "name") == "Right" && attribute(fields[base + 4], "name") == "Bottom" &&
                     attribute(fields[base + 1], "type") == "ChartAreaCoordinateType", "Chart area schema must expose placement and bounded coordinates");
@@ -986,6 +986,13 @@ void test_control_surfaces_and_property_order(
                             std::string(descriptor.enumeration_type) + "ValueType";
                         expect_element_shape(fields[boolean_index++], descriptor.name, type, "0", "1");
                     }
+                    for (const auto& owner : oof::model::metamodel::chart_scale_owner_descriptors())
+                        expect_element_shape(fields[boolean_index++], owner.name, "ChartScaleType", "0", "1");
+                    const auto scale_fields = direct_children(sequence_for_type(schema, "ChartScaleType"), "element");
+                    expect(scale_fields.size() == 3, "shared named scale field schema");
+                    std::size_t scale_index = 0;
+                    for (const auto& field : oof::model::metamodel::chart_scale_property_descriptors())
+                        expect_element_shape(scale_fields[scale_index++], field.name, field.value_codec == ValueCodec::decimal ? "ChartScaleStepType" : "LocalizedTextValueType", "0", "1");
                 }
             }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");

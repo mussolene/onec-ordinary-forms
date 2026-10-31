@@ -6410,6 +6410,7 @@ ls::ListValue::raw_atom("0"),
 ls::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"),
 ls::ListValue::raw_atom("0"),
 };}
+static ls::ListValue default_chart_scale_record() { return ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}); }
 static std::vector<ls::ListValue> canonical_chart_style_defaults(){return {
 ls::ListValue::raw_atom("0"),
 ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
@@ -6424,9 +6425,9 @@ ls::ListValue::raw_atom("1"),
 ls::ListValue::raw_atom("20"),
 ls::ListValue::raw_atom("0"),
 ls::ListValue::raw_atom("0"),
-ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
-ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
-ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+default_chart_scale_record(),
+default_chart_scale_record(),
+default_chart_scale_record(),
 ls::ListValue::raw_atom("0"),
 ls::ListValue::raw_atom("0"),
 ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
@@ -6476,7 +6477,7 @@ ls::ListValue::raw_atom("0"),
 static std::vector<ls::ListValue> canonical_chart_tail_defaults(){return {
 ls::ListValue::raw_atom(""),
 ls::ListValue::raw_atom("60"),
-ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+default_chart_scale_record(),
 ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
 ls::ListValue::raw_atom("0"),
 ls::ListValue::raw_atom("0"),
@@ -6773,6 +6774,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     append(canonical_chart_data_defaults());
     const auto companion = list({raw("0"), raw("0")});
     for (std::size_t index = 0; index <= series_count; ++index) append({companion});
+    const auto style_defaults_start = info.size();
     append(canonical_chart_style_defaults());
     const auto no_text = list({raw("1"), raw("0")});
     for (const auto& point : chart.points) append({list({encode_chart_color_property(point.color, "$/Chart/Points/Color")})});
@@ -6793,9 +6795,26 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
             append({list({list({raw("1"), text, raw("0")}), raw("0")})});
         }
     }
+    const auto scale_tail_start = info.size();
     append(canonical_chart_tail_defaults());
     if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
     const auto middle_start = std::size_t{5} + 11 * (series_count + 1) + 2 + 11 * point_count;
+    if (chart.plot_area) for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+        auto& record = info.at((owner.tail ? scale_tail_start : style_defaults_start) + owner.record_offset);
+        const auto& scale = (*chart.plot_area).*(owner.member);
+        for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+            const auto& value = scale.*(field.member);
+            if (!value) continue;
+            const auto path = std::string("$/Chart/PlotArea/") + std::string(owner.name) + "/" + std::string(field.name);
+            if (field.value_codec == model::metamodel::ValueCodec::decimal) {
+                const auto* decimal = std::get_if<model::DecimalValue>(&*value);
+                if (!decimal || value_codec::canonical_decimal(decimal->canonical) != decimal->canonical || decimal->canonical.starts_with('-'))
+                    fail("OOF1122", path, "canonical nonnegative decimal", {}, "Invalid Chart ScaleStep");
+                record.items.at(field.record_offset) = raw(decimal->canonical);
+            } else record.items.at(field.record_offset) = encoded_localized_text(*value, path, false);
+        }
+        if (owner.kind == model::ChartScaleKind::values) info.at(middle_start + 39) = record.items.at(13);
+    }
     if (const auto* entry = properties.find(model::PropertyId::from_name("ActiveSeries"))) {
         const auto* reference = std::get_if<model::ChartSeriesRef>(&entry->value);
         if (!reference || reference->owner != owner)
@@ -7430,6 +7449,36 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     payload.title_area = read_area(14, 23, model::metamodel::chart_area_placements(model::ChartAreaKind::title),
         area_defaults(model::ChartAreaKind::title), "$/Chart/TitleArea");
     if (active_series != 0) properties.set_explicit(model::PropertyId::from_name("ActiveSeries"), model::ChartSeriesRef{model::ObjectId{id}, payload.series[active_series].id});
+    const auto scale_tail_start = render_start + canonical_chart_render_defaults().size() + payload.values.size();
+    for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+        const auto index = (owner.tail ? scale_tail_start : style_defaults_start) + owner.record_offset;
+        const auto& record = at(info, index, info_path);
+        const auto defaults = owner.tail ? canonical_chart_tail_defaults()[owner.record_offset] : style_defaults[owner.record_offset];
+        require_arity(record, defaults.items.size(), child_path(info_path, index));
+        model::ChartScale scale;
+        bool explicit_scale = false;
+        for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+            const auto& stored = record.items.at(field.record_offset);
+            const auto path = child_path(child_path(info_path, index), field.record_offset);
+            model::PropertyValue value;
+            if (field.value_codec == model::metamodel::ValueCodec::decimal) {
+                const auto text = raw_atom(stored, path);
+                const auto canonical = value_codec::canonical_decimal(text);
+                if (text != canonical || canonical.starts_with('-')) fail("OOF1115", path, "canonical nonnegative decimal", text, "Invalid Chart ScaleStep");
+                value = model::DecimalValue{canonical};
+            } else value = decoded_localized_text(stored, path, false);
+            if (list_stream::dump_compact(stored) != list_stream::dump_compact(defaults.items.at(field.record_offset))) {
+                scale.*(field.member) = std::move(value);
+                explicit_scale = true;
+            }
+        }
+        if (owner.kind == model::ChartScaleKind::values)
+            require_exact(record.items.at(13), at(info, middle_start + 39, info_path), child_path(info_path, index), "ValuesScale LabelFormat differs from its mirror");
+        if (explicit_scale) {
+            if (!payload.plot_area) payload.plot_area = area_defaults(model::ChartAreaKind::plot);
+            (*payload.plot_area).*(owner.member) = std::move(scale);
+        }
+    }
     const auto expected_info = encode_chart_info(payload, title, properties, model::ObjectId{id});
     auto normalized_expected_info = expected_info;
     for (std::size_t i = 0; i < series_count; ++i) {

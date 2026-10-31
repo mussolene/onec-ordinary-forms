@@ -1825,7 +1825,23 @@ private:
                     const auto field_name = node_name(field);
                     if (!seen.insert(field_name).second)
                         fail("OOF2003", field, id_text, field_name, "one area property", field_name, "Duplicate Chart area property");
-                    if (kind == model::ChartAreaKind::title && field_name == "Text") {
+                    const auto owners = mm::chart_scale_owner_descriptors();
+                    const auto scale_owner = std::ranges::find(owners, field_name, &mm::ChartScaleOwnerDescriptor::name);
+                    if (kind == model::ChartAreaKind::plot && scale_owner != owners.end()) {
+                        auto& scale = parsed.*(scale_owner->member);
+                        std::set<std::string> scale_seen;
+                        for (xmlNodePtr value_node : element_children(field)) {
+                            const auto value_name = node_name(value_node);
+                            const auto fields = mm::chart_scale_property_descriptors();
+                            const auto definition = std::ranges::find(fields, value_name, &mm::ChartScalePropertyDescriptor::name);
+                            if (definition == fields.end() || !scale_seen.insert(value_name).second)
+                                fail("OOF2003", value_node, id_text, value_name, "unique named scale field", value_name, "Invalid Chart scale field");
+                            auto value = parse_property_value(value_node, definition->value_codec, id_text);
+                            if (const auto* n = std::get_if<model::DecimalValue>(&value); n && n->canonical.starts_with('-'))
+                                fail("OOF2003", value_node, id_text, value_name, "nonnegative decimal", n->canonical, "Negative ScaleStep");
+                            scale.*(definition->member) = std::move(value);
+                        }
+                    } else if (kind == model::ChartAreaKind::title && field_name == "Text") {
                         auto text = parse_property_value(field, mm::ValueCodec::localized_text, id_text);
                         control.properties().set_explicit(model::PropertyId::from_name("Title"), std::move(text));
                     } else if (field_name == "Placement") {
@@ -4077,6 +4093,20 @@ private:
                             serialization_fail(id, std::string(name), "valid PlotArea enumeration", value->member, "Invalid PlotArea enumeration");
                         write_enumeration(descriptor.name, *value);
                     }
+                }
+                if (name == "PlotArea") for (const auto& owner : mm::chart_scale_owner_descriptors()) {
+                    const auto& scale = (*area).*(owner.member);
+                    bool present = false;
+                    for (const auto& field : mm::chart_scale_property_descriptors()) present = present || (scale.*(field.member)).has_value();
+                    if (!present) continue;
+                    writer_.open(owner.name);
+                    for (const auto& field : mm::chart_scale_property_descriptors()) if (const auto& value = scale.*(field.member)) {
+                        mm::PropertyDescriptor property;
+                        property.xml_name = field.name;
+                        property.value_codec = field.value_codec;
+                        write_property(property, *value, id);
+                    }
+                    writer_.close(owner.name);
                 }
                 writer_.close(name);
             };
