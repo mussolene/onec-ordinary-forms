@@ -2326,10 +2326,57 @@ std::span<const ChartScaleOwnerDescriptor> chart_scale_owner_descriptors() noexc
     return descriptors;
 }
 std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors() noexcept {
+    static constexpr std::array<std::string_view, 3> scale_location{"Auto","BaseValue","Edge"};
+    static constexpr std::array<std::string_view, 5> scale_mark_location{"Auto","Outside","Inside","Center","None"};
+    static constexpr std::array<std::string_view, 3> show_title{"Auto","DontShow","Show"};
+    static constexpr std::array<std::string_view, 3> title_text_mode{"Auto","UseText","AutoText"};
+    static constexpr std::array<std::string_view, 4> scale_label_location{"Auto","None","Inside","Outside"};
+    static constexpr std::array<std::string_view, 4> label_orientation{"Horizontal","Vertical","Auto","CustomAngle"};
+    static constexpr std::array<std::string_view, 3> grid_lines_show_mode{"Show","DontShow","Auto"};
+    static constexpr std::array<std::string_view, 3> title_placement{"WithAxis","PlotArea","SpecialArea"};
+    static constexpr std::array<std::string_view, 3> show_in_chart{"Auto","Show","DontShow"};
     static const std::array descriptors{
-        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleStep"), "ScaleStep", u8"ШагШкалы", ValueCodec::decimal, &ChartScale::scale_step, 16},
-        ChartScalePropertyDescriptor{PropertyId::from_name("TitleText"), "TitleText", u8"ТекстЗаголовка", ValueCodec::localized_text, &ChartScale::title_text, 4},
-        ChartScalePropertyDescriptor{PropertyId::from_name("LabelFormat"), "LabelFormat", u8"ФорматПодписей", ValueCodec::localized_text, &ChartScale::label_format, 13},
+        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleStep"), "ScaleStep", u8"ШагШкалы", ValueCodec::decimal, &ChartScale::scale_step, 16, {}, {}, 0, u8"Число"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("TitleText"), "TitleText", u8"ТекстЗаголовка", ValueCodec::localized_text, &ChartScale::title_text, 4, {}, {}, 0, u8"Строка"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("LabelFormat"), "LabelFormat", u8"ФорматПодписей", ValueCodec::localized_text, &ChartScale::label_format, 13, {}, {}, 0, u8"Строка"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleLocation"), "ScaleLocation", u8"ПоложениеШкалы", ValueCodec::enumeration, nullptr, 18, "ChartScaleLocation", scale_location, 0, u8"ПоложениеШкалыДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleMarkLocation"), "ScaleMarkLocation", u8"ПоложениеОтметокШкалы", ValueCodec::enumeration, nullptr, 20, "ChartScaleMarkLocation", scale_mark_location, 0, u8"ПоложениеОтметокШкалыДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("ShowTitle"), "ShowTitle", u8"ОтображениеЗаголовка", ValueCodec::enumeration, nullptr, 1, "ShowChartScaleTitle", show_title, 0, u8"ОтображениеЗаголовкаШкалыДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("TitleTextMode"), "TitleTextMode", u8"СпособЗаполненияТекстаЗаголовка", ValueCodec::enumeration, nullptr, 2, "ChartScaleTitleTextSource", title_text_mode, 0, u8"СпособЗаполненияТекстаЗаголовкаШкалыДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("ScaleLabelLocation"), "ScaleLabelLocation", u8"ПоложениеПодписейШкалы", ValueCodec::enumeration, nullptr, 7, "ChartScaleLabelLocation", scale_label_location, 0, u8"ПоложениеПодписейШкалыДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("LabelOrientation"), "LabelOrientation", u8"ОриентацияПодписей", ValueCodec::enumeration, nullptr, 12, "ChartLabelsOrientation", label_orientation, 2, u8"ОриентацияПодписейДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("GridLinesShowMode"), "GridLinesShowMode", u8"ОтображениеЛинийСетки", ValueCodec::enumeration, nullptr, 6, "ChartGridLinesShowMode", grid_lines_show_mode, 2, u8"ОтображениеЛинийСеткиДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("TitlePlacement"), "TitlePlacement", u8"РасположениеЗаголовка", ValueCodec::enumeration, nullptr, 3, "ChartScaleTitlePlacement", title_placement, 2, u8"РасположениеЗаголовкаШкалыДиаграммы"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("ShowInChart"), "ShowInChart", u8"Отображение", ValueCodec::enumeration, nullptr, 21, "ShowInChart", show_in_chart, 0, u8"ОтображениеВДиаграмме"},
+    };
+    return descriptors;
+}
+
+const PropertyValue* chart_scale_property_value(const ChartScale& scale, const ChartScalePropertyDescriptor& field) noexcept {
+    if (field.member) {
+        const auto& value = scale.*(field.member);
+        return value ? &*value : nullptr;
+    }
+    const auto* entry = scale.properties.find(field.id);
+    return entry ? &entry->value : nullptr;
+}
+void set_chart_scale_property_value(ChartScale& scale, const ChartScalePropertyDescriptor& field, PropertyValue value) {
+    if (field.member) scale.*(field.member) = std::move(value);
+    else scale.properties.set_explicit(field.id, std::move(value));
+}
+void reset_chart_scale_property_value(ChartScale& scale, const ChartScalePropertyDescriptor& field) {
+    if (field.member) (scale.*(field.member)).reset();
+    else scale.properties.unset(field.id);
+}
+
+std::span<const ChartScaleCompanionDescriptor> chart_scale_companion_descriptors() noexcept {
+    static const std::array descriptors{
+        ChartScaleCompanionDescriptor{ChartScaleKind::points, PropertyId::from_name("ScaleLabelLocation"), ChartScaleCompanionBase::middle, 37, ChartScaleCompanionValue::differs, 1},
+        ChartScaleCompanionDescriptor{ChartScaleKind::values, PropertyId::from_name("ScaleLabelLocation"), ChartScaleCompanionBase::middle, 38, ChartScaleCompanionValue::differs, 1},
+        ChartScaleCompanionDescriptor{ChartScaleKind::series, PropertyId::from_name("ScaleLabelLocation"), ChartScaleCompanionBase::middle, 36, ChartScaleCompanionValue::differs, 1},
+        ChartScaleCompanionDescriptor{ChartScaleKind::points, PropertyId::from_name("LabelOrientation"), ChartScaleCompanionBase::middle, 40, ChartScaleCompanionValue::equals, 1},
+        ChartScaleCompanionDescriptor{ChartScaleKind::points, PropertyId::from_name("LabelOrientation"), ChartScaleCompanionBase::cells_end, 1, ChartScaleCompanionValue::ordinal, 0},
+        ChartScaleCompanionDescriptor{ChartScaleKind::values, PropertyId::from_name("GridLinesShowMode"), ChartScaleCompanionBase::middle, 35, ChartScaleCompanionValue::differs, 1},
     };
     return descriptors;
 }

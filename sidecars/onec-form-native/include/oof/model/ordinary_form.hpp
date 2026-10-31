@@ -793,7 +793,17 @@ struct ChartScale {
     std::optional<PropertyValue> scale_step;
     std::optional<PropertyValue> title_text;
     std::optional<PropertyValue> label_format;
-    friend bool operator==(const ChartScale&, const ChartScale&) = default;
+    PropertySet properties;
+    friend bool operator==(const ChartScale& left, const ChartScale& right) {
+        if (left.scale_step != right.scale_step || left.title_text != right.title_text ||
+            left.label_format != right.label_format || left.properties.size() != right.properties.size()) return false;
+        bool equal = true;
+        left.properties.for_each_explicit([&](const PropertyEntry& entry) {
+            const auto* other = right.properties.find(entry.id);
+            if (!other || entry.value != other->value) equal = false;
+        });
+        return equal;
+    }
 };
 
 struct ChartArea {

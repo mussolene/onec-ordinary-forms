@@ -6771,6 +6771,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
                 string_value(found->second->tooltip)});
         }
     }
+    const auto cells_end = info.size();
     append(canonical_chart_data_defaults());
     const auto companion = list({raw("0"), raw("0")});
     for (std::size_t index = 0; index <= series_count; ++index) append({companion});
@@ -6803,7 +6804,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         auto& record = info.at((owner.tail ? scale_tail_start : style_defaults_start) + owner.record_offset);
         const auto& scale = (*chart.plot_area).*(owner.member);
         for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
-            const auto& value = scale.*(field.member);
+            const auto* value = model::metamodel::chart_scale_property_value(scale, field);
             if (!value) continue;
             const auto path = std::string("$/Chart/PlotArea/") + std::string(owner.name) + "/" + std::string(field.name);
             if (field.value_codec == model::metamodel::ValueCodec::decimal) {
@@ -6811,9 +6812,30 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
                 if (!decimal || value_codec::canonical_decimal(decimal->canonical) != decimal->canonical || decimal->canonical.starts_with('-'))
                     fail("OOF1122", path, "canonical nonnegative decimal", {}, "Invalid Chart ScaleStep");
                 record.items.at(field.record_offset) = raw(decimal->canonical);
+            } else if (field.value_codec == model::metamodel::ValueCodec::enumeration) {
+                const auto* enumeration = std::get_if<model::EnumerationValue>(&*value);
+                if (!enumeration || enumeration->type_name != field.enumeration_type)
+                    fail("OOF1122", path, "typed Chart scale enumeration", {}, "Invalid Chart scale enumeration type");
+                const auto member = std::ranges::find(field.members, enumeration->member);
+                if (member == field.members.end()) fail("OOF1122", path, "supported Chart scale enumeration", enumeration->member, "Invalid Chart scale enumeration member");
+                record.items.at(field.record_offset) = raw(std::to_string(std::distance(field.members.begin(), member)));
             } else record.items.at(field.record_offset) = encoded_localized_text(*value, path, false);
         }
         if (owner.kind == model::ChartScaleKind::values) info.at(middle_start + 39) = record.items.at(13);
+    }
+    for (const auto& companion : model::metamodel::chart_scale_companion_descriptors()) {
+        const auto owners = model::metamodel::chart_scale_owner_descriptors();
+        const auto owner = std::ranges::find(owners, companion.owner, &model::metamodel::ChartScaleOwnerDescriptor::kind);
+        const auto fields = model::metamodel::chart_scale_property_descriptors();
+        const auto field = std::ranges::find(fields, companion.property, &model::metamodel::ChartScalePropertyDescriptor::id);
+        const auto& record = info.at((owner->tail ? scale_tail_start : style_defaults_start) + owner->record_offset);
+        const auto ordinal = integer_atom<std::size_t>(record.items.at(field->record_offset), "$/Chart/PlotArea");
+        const auto value = companion.value == model::metamodel::ChartScaleCompanionValue::ordinal ? ordinal :
+            companion.value == model::metamodel::ChartScaleCompanionValue::equals ? static_cast<std::size_t>(ordinal == companion.compared_ordinal) :
+            static_cast<std::size_t>(ordinal != companion.compared_ordinal);
+        const auto base = companion.base == model::metamodel::ChartScaleCompanionBase::middle ? middle_start :
+            cells_end;
+        info.at(base + companion.offset) = raw(std::to_string(value));
     }
     if (const auto* entry = properties.find(model::PropertyId::from_name("ActiveSeries"))) {
         const auto* reference = std::get_if<model::ChartSeriesRef>(&entry->value);
@@ -7466,9 +7488,13 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
                 const auto canonical = value_codec::canonical_decimal(text);
                 if (text != canonical || canonical.starts_with('-')) fail("OOF1115", path, "canonical nonnegative decimal", text, "Invalid Chart ScaleStep");
                 value = model::DecimalValue{canonical};
+            } else if (field.value_codec == model::metamodel::ValueCodec::enumeration) {
+                const auto ordinal = integer_atom<std::size_t>(stored, path);
+                if (ordinal >= field.members.size()) fail("OOF1115", path, "supported Chart scale enumeration ordinal", std::to_string(ordinal), "Invalid Chart scale enumeration ordinal");
+                value = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[ordinal])};
             } else value = decoded_localized_text(stored, path, false);
             if (list_stream::dump_compact(stored) != list_stream::dump_compact(defaults.items.at(field.record_offset))) {
-                scale.*(field.member) = std::move(value);
+                model::metamodel::set_chart_scale_property_value(scale, field, std::move(value));
                 explicit_scale = true;
             }
         }
@@ -7480,6 +7506,12 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         }
     }
     const auto expected_info = encode_chart_info(payload, title, properties, model::ObjectId{id});
+    for (const auto& companion : model::metamodel::chart_scale_companion_descriptors()) {
+        const auto base = companion.base == model::metamodel::ChartScaleCompanionBase::middle ? middle_start : cells_end;
+        const auto index = base + companion.offset;
+        require_exact(at(info, index, info_path), at(expected_info, index, info_path), child_path(info_path, index),
+            "Chart scale companion differs from its named enumeration");
+    }
     auto normalized_expected_info = expected_info;
     for (std::size_t i = 0; i < series_count; ++i) {
         if (payload.series[i].color.kind == model::ColorKind::automatic) {

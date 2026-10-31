@@ -757,13 +757,29 @@ void append_value_types(std::string& output) {
         }
         output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
     }
+    for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+        if (field.value_codec != model::metamodel::ValueCodec::enumeration) continue;
+        output += "  <xs:complexType";
+        append_attribute(output, "name", std::string(field.enumeration_type) + "ValueType");
+        output += "><xs:attribute name=\"type\" type=\"NonEmptyTokenType\" use=\"required\"";
+        append_attribute(output, "fixed", field.enumeration_type);
+        output += "/><xs:attribute name=\"member\" use=\"required\"><xs:simpleType><xs:restriction base=\"xs:string\">";
+        for (const auto member : field.members) {
+            output += "<xs:enumeration";
+            append_attribute(output, "value", member);
+            output += "/>";
+        }
+        output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
+    }
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
     output += "  <xs:simpleType name=\"ChartScaleStepType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/></xs:restriction></xs:simpleType>\n";
     output += "  <xs:complexType name=\"ChartScaleType\"><xs:sequence>";
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
         output += "<xs:element";
         append_attribute(output, "name", field.name);
-        append_attribute(output, "type", field.value_codec == model::metamodel::ValueCodec::decimal ? "ChartScaleStepType" : "LocalizedTextValueType");
+        append_attribute(output, "type", field.value_codec == model::metamodel::ValueCodec::enumeration
+            ? std::string(field.enumeration_type) + "ValueType"
+            : field.value_codec == model::metamodel::ValueCodec::decimal ? "ChartScaleStepType" : "LocalizedTextValueType");
         append_attribute(output, "minOccurs", "0");
         append_attribute(output, "maxOccurs", "1");
         output += "/>";
@@ -1489,12 +1505,12 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         }
     }
     output += "        </Properties></NamedConcept>\n";
-    output += "        <NamedConcept name=\"ChartScale\" russianName=\"ШкалаДиаграммы\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e\"><Properties>";
+    output += "        <NamedConcept name=\"ChartScale\" russianName=\"ШкалаДиаграммы\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e ev_fdaf734b79924b48b1c6745d881c8b1a\"><Properties>";
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
         output += "<Property";
         append_attribute(output, "name", field.name);
         append_attribute(output, "russianName", as_utf8(field.russian_name));
-        append_attribute(output, "russianType", field.value_codec == model::metamodel::ValueCodec::decimal ? "Число" : "Строка");
+        append_attribute(output, "russianType", as_utf8(field.russian_type));
         output += "/>";
     }
     output += "</Properties></NamedConcept>\n";

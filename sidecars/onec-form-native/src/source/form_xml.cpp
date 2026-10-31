@@ -1839,7 +1839,13 @@ private:
                             auto value = parse_property_value(value_node, definition->value_codec, id_text);
                             if (const auto* n = std::get_if<model::DecimalValue>(&value); n && n->canonical.starts_with('-'))
                                 fail("OOF2003", value_node, id_text, value_name, "nonnegative decimal", n->canonical, "Negative ScaleStep");
-                            scale.*(definition->member) = std::move(value);
+                            if (definition->value_codec == mm::ValueCodec::enumeration) {
+                                const auto* enumeration = std::get_if<model::EnumerationValue>(&value);
+                                if (!enumeration || enumeration->type_name != definition->enumeration_type ||
+                                    std::ranges::find(definition->members, enumeration->member) == definition->members.end())
+                                    fail("OOF2003", value_node, id_text, value_name, "valid scale enumeration", {}, "Invalid Chart scale enumeration");
+                            }
+                            mm::set_chart_scale_property_value(scale, *definition, std::move(value));
                         }
                     } else if (kind == model::ChartAreaKind::title && field_name == "Text") {
                         auto text = parse_property_value(field, mm::ValueCodec::localized_text, id_text);
@@ -4097,10 +4103,10 @@ private:
                 if (name == "PlotArea") for (const auto& owner : mm::chart_scale_owner_descriptors()) {
                     const auto& scale = (*area).*(owner.member);
                     bool present = false;
-                    for (const auto& field : mm::chart_scale_property_descriptors()) present = present || (scale.*(field.member)).has_value();
+                    for (const auto& field : mm::chart_scale_property_descriptors()) present = present || mm::chart_scale_property_value(scale, field) != nullptr;
                     if (!present) continue;
                     writer_.open(owner.name);
-                    for (const auto& field : mm::chart_scale_property_descriptors()) if (const auto& value = scale.*(field.member)) {
+                    for (const auto& field : mm::chart_scale_property_descriptors()) if (const auto* value = mm::chart_scale_property_value(scale, field)) {
                         mm::PropertyDescriptor property;
                         property.xml_name = field.name;
                         property.value_codec = field.value_codec;

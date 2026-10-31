@@ -1022,9 +1022,11 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (owner.category != ObjectCategory::control || owner.chart_area != ChartAreaKind::plot || scale_owner == owners.end() || !scale_control || scale_control->kind() != ControlKind::chart) return {PropertyReadStatus::unknown_owner, std::nullopt};
         const auto& plot = std::get<ChartPayload>(scale_control->payload).plot_area;
         for (const auto& field : metamodel::chart_scale_property_descriptors()) if (field.id == property) {
-            const auto value = plot ? ((*plot).*(scale_owner->member)).*(field.member) : std::optional<PropertyValue>{};
+            const auto* value = plot ? metamodel::chart_scale_property_value((*plot).*(scale_owner->member), field) : nullptr;
             return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
-                value.value_or(field.value_codec == metamodel::ValueCodec::decimal ? PropertyValue{DecimalValue{"0"}} : PropertyValue{std::string{}})};
+                value ? *value : (field.value_codec == metamodel::ValueCodec::enumeration
+                    ? PropertyValue{EnumerationValue{std::string(field.enumeration_type), std::string(field.members[field.default_ordinal])}}
+                    : field.value_codec == metamodel::ValueCodec::decimal ? PropertyValue{DecimalValue{"0"}} : PropertyValue{std::string{}})};
         }
         return {PropertyReadStatus::unknown_property, std::nullopt};
     }
@@ -1300,13 +1302,18 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 catch (const std::exception&) { return PropertyMutationStatus::invalid_value; }
                 if (text.starts_with('-')) text = "0";
                 value = DecimalValue{std::move(text)};
+            } else if (field.value_codec == metamodel::ValueCodec::enumeration) {
+                const auto* enumeration = std::get_if<EnumerationValue>(&value);
+                if (!enumeration || enumeration->type_name != field.enumeration_type ||
+                    std::ranges::find(field.members, enumeration->member) == field.members.end())
+                    return PropertyMutationStatus::invalid_value;
             } else if (!std::holds_alternative<std::string>(value) &&
                 !(std::holds_alternative<LocalizedStringValue>(value) && valid_localized_string(std::get<LocalizedStringValue>(value))))
                 return PropertyMutationStatus::invalid_value;
             const auto location = find_location(ObjectCategory::control, owner.id);
             auto& plot = std::get<ChartPayload>(collections_.controls[location->index].payload).plot_area;
             if (!plot) plot = default_chart_area(ChartAreaKind::plot, true);
-            ((*plot).*(scale_owner->member)).*(field.member) = std::move(value);
+            metamodel::set_chart_scale_property_value((*plot).*(scale_owner->member), field, std::move(value));
             return PropertyMutationStatus::applied_unclassified_storage;
         }
         return PropertyMutationStatus::unknown_property;
@@ -1781,7 +1788,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         for (const auto& field : metamodel::chart_scale_property_descriptors()) if (field.id == property) {
             const auto location = find_location(ObjectCategory::control, owner.id);
             auto& plot = std::get<ChartPayload>(collections_.controls[location->index].payload).plot_area;
-            if (plot) (((*plot).*(scale_owner->member)).*(field.member)).reset();
+            if (plot) metamodel::reset_chart_scale_property_value((*plot).*(scale_owner->member), field);
             return PropertyMutationStatus::reset_unclassified_storage;
         }
         return PropertyMutationStatus::unknown_property;
@@ -2827,9 +2834,15 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 for (const auto* area : {chart->plot_area ? &*chart->plot_area : nullptr, chart->title_area ? &*chart->title_area : nullptr, chart->legend_area ? &*chart->legend_area : nullptr}) {
                     if (!area) continue;
                     const auto& scale = area->*(owner.member);
+                    scale.properties.for_each_explicit([&](const PropertyEntry& entry) {
+                        const auto fields = metamodel::chart_scale_property_descriptors();
+                        const auto field = std::ranges::find(fields, entry.id, &metamodel::ChartScalePropertyDescriptor::id);
+                        if (field == fields.end() || field->member != nullptr)
+                            invalid_chart("Chart scale sparse properties contain an unknown or fixed property");
+                    });
                     for (const auto& field : metamodel::chart_scale_property_descriptors()) {
-                        if (control.properties().contains(field.id)) invalid_chart("Chart scale fields cannot be stored in scalar property bags");
-                        const auto& value = scale.*(field.member);
+                        if (control.properties().contains(field.id) && metamodel::find_property(ControlKind::chart, field.id) == nullptr) invalid_chart("Chart scale fields cannot be stored in scalar property bags");
+                        const auto* value = metamodel::chart_scale_property_value(scale, field);
                         if (!value) continue;
                         if (area != (chart->plot_area ? &*chart->plot_area : nullptr)) invalid_chart("Chart scales belong only to PlotArea");
                         if (field.value_codec == metamodel::ValueCodec::decimal) {
@@ -2837,6 +2850,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
                             try {
                                 if (!number || storage::value_codec::canonical_decimal(number->canonical) != number->canonical || number->canonical.starts_with('-')) invalid_chart("ScaleStep must be canonical nonnegative decimal");
                             } catch (const std::exception&) { invalid_chart("Invalid ScaleStep decimal"); }
+                        } else if (field.value_codec == metamodel::ValueCodec::enumeration) {
+                            const auto* enumeration = std::get_if<EnumerationValue>(&*value);
+                            if (!enumeration || enumeration->type_name != field.enumeration_type ||
+                                std::ranges::find(field.members, enumeration->member) == field.members.end())
+                                invalid_chart("Chart scale enumeration type or member is invalid");
                         } else if (!std::holds_alternative<std::string>(*value) && !(std::holds_alternative<LocalizedStringValue>(*value) && valid_localized_string(std::get<LocalizedStringValue>(*value)))) invalid_chart("Chart scale text must be plain or localized text");
                     }
                 }

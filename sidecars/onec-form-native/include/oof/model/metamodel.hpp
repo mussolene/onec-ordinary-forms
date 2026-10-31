@@ -241,9 +241,29 @@ struct ChartScalePropertyDescriptor {
     ValueCodec value_codec;
     std::optional<PropertyValue> ChartScale::*member;
     std::size_t record_offset;
+    std::string_view enumeration_type;
+    std::span<const std::string_view> members;
+    std::size_t default_ordinal = 0;
+    std::u8string_view russian_type;
 };
 [[nodiscard]] std::span<const ChartScaleOwnerDescriptor> chart_scale_owner_descriptors() noexcept;
 [[nodiscard]] std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors() noexcept;
+
+[[nodiscard]] const PropertyValue* chart_scale_property_value(const ChartScale& scale, const ChartScalePropertyDescriptor& field) noexcept;
+void set_chart_scale_property_value(ChartScale& scale, const ChartScalePropertyDescriptor& field, PropertyValue value);
+void reset_chart_scale_property_value(ChartScale& scale, const ChartScalePropertyDescriptor& field);
+
+enum class ChartScaleCompanionBase : std::uint8_t { middle, cells_end };
+enum class ChartScaleCompanionValue : std::uint8_t { ordinal, equals, differs };
+struct ChartScaleCompanionDescriptor {
+    ChartScaleKind owner;
+    PropertyId property;
+    ChartScaleCompanionBase base;
+    std::size_t offset;
+    ChartScaleCompanionValue value;
+    std::size_t compared_ordinal;
+};
+[[nodiscard]] std::span<const ChartScaleCompanionDescriptor> chart_scale_companion_descriptors() noexcept;
 
 struct ChartAreaPropertyDescriptor {
     PropertyId id{};

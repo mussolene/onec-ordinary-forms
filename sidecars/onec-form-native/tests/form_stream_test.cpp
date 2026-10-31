@@ -18614,6 +18614,31 @@ void test_chart_plot_area_formats_round_trip() {
 }
 
 void test_chart_scales_round_trip() {
+    static_assert(sizeof(model::ChartScale) <= 3 * sizeof(std::optional<model::PropertyValue>) + sizeof(model::PropertySet) + alignof(model::ChartScale),
+        "ChartScale must store new fields sparsely rather than enlarging every ControlNode");
+    model::ChartScale sparse_left, sparse_right;
+    const auto enum_fields = model::metamodel::chart_scale_property_descriptors();
+    for (const auto& field : enum_fields) if (!field.member)
+        model::metamodel::set_chart_scale_property_value(sparse_left, field, model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[0])});
+    for (auto field = enum_fields.rbegin(); field != enum_fields.rend(); ++field) if (!field->member)
+        model::metamodel::set_chart_scale_property_value(sparse_right, *field, model::EnumerationValue{std::string(field->enumeration_type), std::string(field->members[0])});
+    expect(sparse_left == sparse_right, "ChartScale value equality is independent of sparse insertion order");
+    sparse_right.properties.set_explicit(model::PropertyId::from_name("UnknownScaleProperty"), false);
+    expect(!(sparse_left == sparse_right), "ChartScale equality includes sparse values");
+    for (const auto name : {"UnknownScaleProperty", "ScaleStep", "TitleText", "LabelFormat", "ScaleLocation"}) {
+        model::ChartPayload invalid_payload;
+        invalid_payload.plot_area.emplace();
+        invalid_payload.plot_area->points_scale.properties.set_explicit(model::PropertyId::from_name(name), std::string{"invalid"});
+        model::Form invalid_form; invalid_form.id = model::ObjectId{1}; invalid_form.name = "InvalidSparseScale";
+        invalid_form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument invalid(std::move(invalid_form));
+        model::ControlNode invalid_control{model::ObjectId{2}, "Chart", std::move(invalid_payload)};
+        bool rejected = false;
+        try { invalid.add_control(std::move(invalid_control)); rejected = !invalid.validate().ok(); }
+        catch (const model::InvariantError&) { rejected = true; }
+        expect(rejected, "unknown, fixed duplicate and invalid typed sparse scale values are rejected");
+    }
+
     model::Form form; form.id = model::ObjectId{1}; form.name = "ChartScales";
     for (std::uint64_t i = 0; i < 12; ++i)
         form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
@@ -18663,6 +18688,21 @@ void test_chart_scales_round_trip() {
             expect(document.get_prop_val({plot.category, model::ObjectId{99999}, plot.chart_area, owner.kind}, step).status == model::PropertyReadStatus::unknown_owner &&
                 document.get_prop_val({plot.category, plot.id, plot.chart_area, static_cast<model::ChartScaleKind>(99)}, step).status == model::PropertyReadStatus::unknown_owner &&
                 document.get_prop_val({plot.category, plot.id, model::ChartAreaKind::none, owner.kind}, step).status == model::PropertyReadStatus::unknown_owner, "wrong owner, kind and ambiguous key rejected");
+            for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+                if (field.value_codec != model::metamodel::ValueCodec::enumeration) continue;
+                const model::PropertyValue default_value = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[field.default_ordinal])};
+                expect(document.get_prop_val(key, field.id).value == default_value, "scale enum default matches native ordinal");
+                for (const auto member : field.members) {
+                    const model::PropertyValue value = model::EnumerationValue{std::string(field.enumeration_type), std::string(member)};
+                    expect(document.set_prop_val(key, field.id, value) == model::PropertyMutationStatus::applied_unclassified_storage && document.get_prop_val(key, field.id).value == value, "all scale enum members apply and read back");
+                }
+                const auto previous = document.get_prop_val(key, field.id).value;
+                for (const model::PropertyValue& bad : std::vector<model::PropertyValue>{model::EnumerationValue{"WrongType", std::string(field.members[0])}, model::EnumerationValue{std::string(field.enumeration_type), "Unknown"}, std::string{field.members[0]}, model::UndefinedValue{}, true, std::int64_t{0}})
+                    expect(document.set_prop_val(key, field.id, bad) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, field.id).value == previous, "scale enums reject invalid values atomically");
+                expect(document.reset_prop_val(key, field.id) == model::PropertyMutationStatus::reset_unclassified_storage && document.get_prop_val(key, field.id).value == default_value, "scale enum reset returns native default");
+                const model::PropertyValue selected = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[(i + static_cast<std::size_t>(owner.kind)) % field.members.size()])};
+                expect(document.set_prop_val(key, field.id, selected) == model::PropertyMutationStatus::applied_unclassified_storage, "select scale enums across empty and populated controls");
+            }
             const auto before = document.get_prop_val(key, step).value;
             for (const model::PropertyValue& bad : std::vector<model::PropertyValue>{std::string{}, std::string{"1e2"}, std::string{"1 2"}, std::string{"++1"}, model::UndefinedValue{}, model::NullValue{}})
                 expect(document.set_prop_val(key, step, bad) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, step).value == before, "invalid scale assignment is atomic");
@@ -18679,6 +18719,20 @@ void test_chart_scales_round_trip() {
     expect(bad_chart != bad_records.end(), "scale mirror fixture Chart exists");
     bad_chart->items.at(3).items.at(18 + 39) = list_stream::parse("{1,0}");
     expect(!form_stream::decode_document(bad_mirror, "ChartScales"), "ValuesScale LabelFormat mirror mismatch rejected");
+    for (const auto& companion : model::metamodel::chart_scale_companion_descriptors()) {
+        auto malformed = encoded.value();
+        auto& records = malformed.items.at(1).items.at(2).items.at(2).items;
+        const auto record = std::ranges::find(records, std::string{"108"}, [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        auto& info = record->items.at(3).items;
+        const auto middle = std::size_t{18 + 11 * (2 + 3)};
+        const auto cells_end = middle + 100 + 3 * 2 * 3;
+        const auto base = companion.base == model::metamodel::ChartScaleCompanionBase::middle ? middle : cells_end;
+        const auto index = base + companion.offset;
+        info.at(index).atom = info.at(index).atom == "0" ? "1" : "0";
+        expect(!form_stream::decode_document(malformed, "ChartScales"), "every scale companion mismatch is strictly rejected");
+    }
     for (const auto name : {"ScaleStep", "PointsScale"}) {
         model::ChartPayload invalid_payload;
         invalid_payload.properties.set_explicit(model::PropertyId::from_name(name), model::DecimalValue{"1"});
@@ -18691,16 +18745,46 @@ void test_chart_scales_round_trip() {
         catch (const model::InvariantError&) { rejected = true; }
         expect(rejected, "duplicate direct scale bags rejected");
     }
+    for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+        if (field.value_codec != model::metamodel::ValueCodec::enumeration) continue;
+        auto malformed = encoded.value();
+        auto& records = malformed.items.at(1).items.at(2).items.at(2).items;
+        const auto record = std::ranges::find(records, std::string{"108"}, [](const auto& item) {
+            return item.is_list && item.items.size() > 1 && !item.items[1].is_list ? item.items[1].atom : std::string{};
+        });
+        auto& info = record->items.at(3).items;
+        const auto cells_end = std::size_t{18 + 11 * (2 + 3) + 100 + 3 * 2 * 3};
+        const auto scale_base = owner.tail ? info.size() - 19 : cells_end + 24 + (2 + 1);
+        info.at(scale_base + owner.record_offset).items.at(field.record_offset).atom = std::to_string(field.members.size());
+        expect(!form_stream::decode_document(malformed, "ChartScales"), "out of range scale enum ordinal rejected on every owner");
+    }
     const auto decoded = form_stream::decode_document(encoded.value(), "ChartScales");
     expect(decoded.ok() && decoded.value().reconstruction_complete(), "named scale fields decode completely");
     const auto xml = source::serialize_form_xml(decoded.value());
     expect(xml.ok() && xml.value().find("<PointsScale>") != std::string::npos, "named scale XML");
+    for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
+        if (field.value_codec != model::metamodel::ValueCodec::enumeration) continue;
+        for (const auto* attribute : {"type", "member"}) {
+            auto malformed = xml.value();
+            const auto element = malformed.find("<" + std::string(field.name) + " ");
+            expect(element != std::string::npos, "scale enum source element exists");
+            const auto begin = malformed.find(std::string(attribute) + "=\"", element) + std::string(attribute).size() + 2;
+            const auto end = malformed.find('"', begin);
+            malformed.replace(begin, end - begin, "Invalid");
+            expect(!source::parse_form_xml(malformed), "invalid scale enum type or member rejected in source");
+        }
+    }
     const auto parsed = source::parse_form_xml(xml.value());
     expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
     const auto binary = oof::save_form_bin(parsed.value());
     expect(binary.ok(), "scale Form.bin build");
     const auto loaded = oof::load_form_bin(binary.value(), "ChartScales");
     expect(loaded.ok() && loaded.value().reconstruction_complete(), "scale Form.bin load");
+    for (std::uint64_t i = 0; i < 12; ++i) for (const auto& owner : model::metamodel::chart_scale_owner_descriptors()) {
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot, owner.kind};
+        for (const auto& field : model::metamodel::chart_scale_property_descriptors())
+            expect(loaded.value().get_prop_val(key, field.id).value == document.get_prop_val(key, field.id).value, "all named scale fields survive XML and Form.bin");
+    }
     const auto rebuilt = form_stream::encode_document(loaded.value());
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "all scale records survive source and binary round trip");
     auto reset = loaded.value();
