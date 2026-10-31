@@ -91,6 +91,7 @@ enum class ValueCodec : std::uint8_t {
     composite_id,
     type_domain,
     enumeration,
+    line,
     border,
     color,
     font,
@@ -262,6 +263,13 @@ struct ChartPlotFormatDescriptor {
 [[nodiscard]] std::span<const ChartPlotFormatDescriptor> chart_plot_format_descriptors() noexcept;
 [[nodiscard]] const ChartPlotFormatDescriptor* find_chart_plot_format(PropertyId id) noexcept;
 
+struct LineFamilyDescriptor {
+    std::string_view name;
+    std::string_view guid;
+    std::span<const std::string_view> members;
+};
+[[nodiscard]] std::span<const LineFamilyDescriptor> line_family_descriptors() noexcept;
+
 struct ChartAreaStyleDescriptor {
     PropertyId id{};
     std::string_view name;
@@ -270,6 +278,7 @@ struct ChartAreaStyleDescriptor {
     std::optional<BorderValue> ChartArea::*border = nullptr;
     std::optional<FontValue> ChartArea::*font = nullptr;
     std::size_t storage_offset = 0;
+    std::optional<LineValue> ChartArea::*line = nullptr;
 };
 
 [[nodiscard]] std::span<const ChartAreaStyleDescriptor> chart_area_style_descriptors() noexcept;

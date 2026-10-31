@@ -18477,6 +18477,27 @@ void test_chart_area_border_font_round_trip() {
 }
 
 void test_chart_plot_area_formats_round_trip() {
+    std::vector<model::LineValue> lines;
+    for (const auto& family : model::metamodel::line_family_descriptors()) {
+        for (auto member : family.members) {
+            model::LineValue line{{std::string(family.name), std::string(member)}, 1, false};
+            expect(value_codec::decode_line(value_codec::encode_line(line)) == line, "every supported line family and member must round trip");
+            lines.push_back(line);
+        }
+    }
+    expect(lines.size() == 25, "all 25 native line members must be represented");
+    for (const auto* malformed : {
+        "{4,0,{0},1,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+        "{4,0,{0},99,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+        "{4,0,{0},1,1,0,00000000-0000-0000-0000-000000000000,0}",
+        "{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,2}",
+        "{4,0,{1},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0}"}) {
+        bool failed = false;
+        try { (void)value_codec::decode_line(malformed); } catch (const std::exception&) { failed = true; }
+        expect(failed, "malformed line must fail decoding");
+    }
+    model::LineValue negative{{"ChartLineType", "Solid"}, -1, false};
+    expect(value_codec::decode_line(value_codec::encode_line(negative)) == negative, "negative line width must round trip");
     constexpr std::array<std::string_view, 3> alignments{"Left", "Center", "Right"};
     constexpr std::array<std::string_view, 2> radar_modes{"Circle", "Polygon"};
     const std::array<model::PropertyValue, 3> formats{
@@ -18517,6 +18538,10 @@ void test_chart_plot_area_formats_round_trip() {
     color.red = 23; color.green = 67; color.blue = 101;
     for (std::uint64_t i = 0; i < 12; ++i) {
         const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot};
+        const auto line_id = model::PropertyId::from_name("ScaleLines");
+        const auto initial_line = document.get_prop_val(owner, line_id);
+        expect(initial_line.value && std::get<model::LineValue>(*initial_line.value) == model::LineValue{}, "ScaleLines default");
+        expect(document.set_prop_val(owner, line_id, lines[i + 2]) == model::PropertyMutationStatus::applied_unclassified_storage, "ScaleLines setter");
         const auto align_id = model::PropertyId::from_name("AlignDataTable");
         const auto radar_id = model::PropertyId::from_name("RadarChartScaleType");
         const auto format_id = model::PropertyId::from_name("DataTableFormat");
@@ -18570,6 +18595,8 @@ void test_chart_plot_area_formats_round_trip() {
     expect(loaded.ok() && loaded.value().reconstruction_complete(), "rebuilt PlotArea formats must load completely");
     for (std::uint64_t i = 0; i < 12; ++i) {
         const auto current = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::plot};
+        const auto line = loaded.value().get_prop_val(current, model::PropertyId::from_name("ScaleLines"));
+        expect(line.value && std::get<model::LineValue>(*line.value) == lines[i + 2], "ScaleLines survives XML and BIN");
         const auto align = loaded.value().get_prop_val(current, model::PropertyId::from_name("AlignDataTable"));
         const auto radar = loaded.value().get_prop_val(current, model::PropertyId::from_name("RadarChartScaleType"));
         const auto format = loaded.value().get_prop_val(current, model::PropertyId::from_name("DataTableFormat"));

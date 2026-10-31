@@ -549,6 +549,37 @@ void test_label_picture_api_access() {
     }
 }
 
+void test_chart_scale_lines() {
+    Form form; form.id = ObjectId{1}; form.name = "ChartScaleLines";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) document.add_control(ControlNode{ObjectId{100 + i}, "Chart" + std::to_string(i), ChartPayload{}});
+    const auto id = PropertyId::from_name("ScaleLines");
+    const auto families = metamodel::line_family_descriptors();
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey plot{ObjectCategory::control, ObjectId{100 + i}, ChartAreaKind::plot};
+        const auto initial = document.get_prop_val(plot, id);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value == PropertyValue{LineValue{}}, "line default");
+        const auto& family = families[i % families.size()];
+        LineValue line{{std::string(family.name), std::string(family.members[i % family.members.size()])}, -1, family.name == "SpreadsheetDocumentCellLineType"};
+        expect(document.set_prop_val(plot, id, line) == PropertyMutationStatus::applied_unclassified_storage, "set scale line");
+        const auto before = oof::source::serialize_form_xml(document);
+        expect(before.ok(), "valid line serializes");
+        auto invalid = line; invalid.type.member = "Unknown";
+        expect(document.set_prop_val(plot, id, invalid) == PropertyMutationStatus::invalid_value, "invalid line rejected");
+        const auto after = oof::source::serialize_form_xml(document);
+        expect(after.ok() && before.value() == after.value(), "invalid line preserves document");
+        expect(document.reset_prop_val(plot, id) == PropertyMutationStatus::reset_unclassified_storage && document.get_prop_val(plot, id).value == PropertyValue{LineValue{}}, "reset line default");
+        const OrdinaryFormDocument::ObjectKey title{ObjectCategory::control, ObjectId{100 + i}, ChartAreaKind::title};
+        expect(document.set_prop_val(title, id, line) == PropertyMutationStatus::unknown_property, "scale line belongs to plot only");
+    }
+    Form bad; bad.id = ObjectId{1}; bad.name = "BadArea"; bad.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument invalid(std::move(bad));
+    ChartPayload payload; payload.title_area.emplace(); payload.title_area->scale_lines = LineValue{};
+    invalid.add_control(ControlNode{ObjectId{2}, "Chart", std::move(payload)});
+    expect(!invalid.validate().ok(), "direct wrong area line must fail");
+}
+
 void test_chart_owned_collections() {
     using namespace oof::model::metamodel;
     for (const auto& [name, codec] : {std::pair{"Series", ValueCodec::chart_series_collection}, std::pair{"Points", ValueCodec::chart_points_collection}}) {
@@ -4004,6 +4035,7 @@ int main() {
         test_form_runtime_state_properties();
         test_chart_computed_counts();
         test_chart_owned_collections();
+        test_chart_scale_lines();
         test_form_runtime_variant_values();
         test_window_options_aliases();
         test_form_runtime_boolean_values();

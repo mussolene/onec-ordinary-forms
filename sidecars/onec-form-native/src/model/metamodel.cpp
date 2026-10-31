@@ -2221,6 +2221,19 @@ const ChartPlotFormatDescriptor* find_chart_plot_format(PropertyId id) noexcept 
     return found == descriptors.end() ? nullptr : &*found;
 }
 
+std::span<const LineFamilyDescriptor> line_family_descriptors() noexcept {
+    static constexpr std::string_view chart[] = {"None", "Solid", "Dotted", "Dashed", "DashDotted", "DashDottedDotted"};
+    static constexpr std::string_view drawing[] = {"None", "Solid", "Dashed", "Dotted", "DashDotted", "DashDottedDotted"};
+    static constexpr std::string_view cell[] = {"None", "Solid", "Dotted", "Double", "ThinDashed", "ThickDashed", "LargeDashed"};
+    static constexpr LineFamilyDescriptor families[] = {
+        {"ChartLineType", "e5cabe59-d992-4d31-8086-3116931aff81", chart},
+        {"SpreadsheetDocumentDrawingLineType", "b7438842-27cc-42a3-846f-2250cd9c1bc3", drawing},
+        {"SpreadsheetDocumentCellLineType", "f527dc88-1d39-40b3-bcbb-d98b690ead68", cell},
+        {"GeographicalSchemaLineType", "e7bbf659-5435-44b8-b759-461ee479e513", chart},
+    };
+    return families;
+}
+
 std::span<const ChartAreaStyleDescriptor> chart_area_style_descriptors() noexcept {
     static constexpr std::array descriptors{
         ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::title, &ChartArea::border, nullptr, 14},
@@ -2229,6 +2242,7 @@ std::span<const ChartAreaStyleDescriptor> chart_area_style_descriptors() noexcep
         ChartAreaStyleDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ChartAreaKind::legend, nullptr, &ChartArea::font, 32},
         ChartAreaStyleDescriptor{PropertyId::from_name("Border"), "Border", u8"Рамка", ChartAreaKind::plot, &ChartArea::border, nullptr, 18},
         ChartAreaStyleDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ChartAreaKind::plot, nullptr, &ChartArea::font, 33},
+        ChartAreaStyleDescriptor{PropertyId::from_name("ScaleLines"), "ScaleLines", u8"ЛинииШкал", ChartAreaKind::plot, nullptr, nullptr, 41, &ChartArea::scale_lines},
     };
     return descriptors;
 }
@@ -2505,6 +2519,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "type-domain";
         case ValueCodec::enumeration:
             return "enumeration";
+        case ValueCodec::line:
+            return "line";
         case ValueCodec::border:
             return "border";
         case ValueCodec::color:

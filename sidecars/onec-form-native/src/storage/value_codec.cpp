@@ -954,6 +954,48 @@ model::ColorValue decode_color(std::string_view text) {
     return read_color(in);
 }
 
+std::string encode_line(const model::LineValue& value) {
+    const auto families = model::metamodel::line_family_descriptors();
+    const auto family = std::ranges::find(families, value.type.type_name, &model::metamodel::LineFamilyDescriptor::name);
+    if (family == families.end()) throw std::runtime_error("unknown line family");
+    const auto member = std::ranges::find(family->members, value.type.member);
+    if (member == family->members.end()) throw std::runtime_error("unknown line member");
+    const bool cell = family->name == "SpreadsheetDocumentCellLineType";
+    const bool drawing = family->name == "SpreadsheetDocumentDrawingLineType";
+    const auto maximum = (value.type.member == "None" || (cell && value.type.member == "Double")) ? 1 : (cell || drawing ? 3 : 50);
+    if (value.width > maximum || (value.gap && !cell)) throw std::runtime_error("invalid line width or gap");
+    list_stream::ListOutStream out;
+    out.begin_list(); out.write_uint32(4); out.write_uint32(0);
+    out.begin_list(); out.write_uint32(0); out.end_list();
+    out.write_uint32(static_cast<std::uint32_t>(member - family->members.begin()));
+    out.write_uint32(static_cast<std::uint32_t>(value.width));
+    out.write_uint32(value == model::LineValue{} ? 0 : 7);
+    out.write_guid(std::string(family->guid)); out.write_bool(value.gap); out.end_list();
+    return out.text();
+}
+
+model::LineValue decode_line(std::string_view text) {
+    list_stream::ListInStream in(text);
+    in.begin_list();
+    if (in.read_uint32() != 4 || in.read_uint32() != 0) throw std::runtime_error("invalid line header");
+    in.begin_list(); if (in.read_uint32() != 0) throw std::runtime_error("invalid line reserved value"); in.end_list();
+    const auto ordinal = in.read_uint32();
+    const auto width = in.read_uint32();
+    const auto flag = in.read_uint32();
+    const auto guid = in.read_guid();
+    const auto gap = in.read_bool();
+    in.end_list(); if (in.has_next()) throw std::runtime_error("line stream contains trailing values");
+    const auto families = model::metamodel::line_family_descriptors();
+    const auto family = std::ranges::find(families, guid, &model::metamodel::LineFamilyDescriptor::guid);
+    if (family == families.end() || ordinal >= family->members.size()) throw std::runtime_error("unknown line family or member");
+    const auto signed_width = width <= static_cast<std::uint32_t>(INT32_MAX)
+        ? static_cast<std::int32_t>(width) : static_cast<std::int32_t>(static_cast<std::int64_t>(width) - 4294967296LL);
+    model::LineValue value{{std::string(family->name), std::string(family->members[ordinal])}, signed_width, gap};
+    if (flag != (value == model::LineValue{} ? 0U : 7U)) throw std::runtime_error("invalid line flags");
+    (void)encode_line(value);
+    return value;
+}
+
 std::string encode_font(const model::FontValue& value) {
     return encode_value(value, write_font);
 }

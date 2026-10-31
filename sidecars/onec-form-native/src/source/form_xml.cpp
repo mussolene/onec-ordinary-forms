@@ -722,6 +722,24 @@ constexpr std::array<std::pair<model::ControlBorderType, std::string_view>, 9> b
     {model::ControlBorderType::rounded, "Rounded"},
 }};
 
+model::LineValue parse_line(xmlNodePtr node) {
+    static constexpr std::string_view allowed[] = {"type", "member", "width", "gap"};
+    for (xmlAttrPtr a = node->properties; a; a = a->next) {
+        const std::string_view name(reinterpret_cast<const char*>(a->name));
+        if (a->ns || std::ranges::find(allowed, name) == std::end(allowed))
+            fail("OOF2003", node, {}, std::string(name), "named line attribute", "unsupported", "Invalid line attribute");
+    }
+    for (xmlNodePtr child = node->children; child; child = child->next)
+        if (child->type == XML_ELEMENT_NODE || ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) && !trim_ascii(node_text(child)).empty()))
+            fail("OOF2003", node, {}, "Line", "attributes only", "content", "Invalid line content");
+    model::LineValue value{{required_attribute(node, "type"), required_attribute(node, "member")},
+        parse_integer<std::int32_t>(required_attribute(node, "width"), node, "width"),
+        parse_boolean(required_attribute(node, "gap"), node, "gap")};
+    try { (void)storage::value_codec::encode_line(value); }
+    catch (const std::exception& e) { fail("OOF2003", node, {}, "Line", "known line type", e.what(), "Invalid line"); }
+    return value;
+}
+
 model::BorderValue parse_border(xmlNodePtr node) {
     static constexpr std::string_view allowed_attributes[] = {
         "kind", "borderType", "width", "styleName", "styleObjectId", "styleUuid"};
@@ -1074,6 +1092,8 @@ model::PropertyValue parse_property_value(
             return parse_enumeration(node);
         case mm::ValueCodec::color:
             return parse_color(node);
+        case mm::ValueCodec::line:
+            return parse_line(node);
         case mm::ValueCodec::border:
             return parse_border(node);
         case mm::ValueCodec::font:
@@ -1821,7 +1841,8 @@ private:
                             parsed.*(color->member) = parse_color(field);
                         } else if (const auto* style = mm::find_chart_area_style(kind, id)) {
                             if (style->border) parsed.*(style->border) = parse_border(field);
-                            else parsed.*(style->font) = parse_font(field);
+                            else if (style->font) parsed.*(style->font) = parse_font(field);
+                            else parsed.*(style->line) = parse_line(field);
                         } else if (const auto* descriptor = mm::find_chart_area_property(id); descriptor && descriptor->coordinate) {
                             (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
                             parsed.explicit_geometry[1 + descriptor->coordinate_offset] = true;
@@ -3016,6 +3037,17 @@ private:
         }
     }
 
+    void write_line(std::string_view name, const model::LineValue& value, std::string_view object_id) {
+        try { (void)storage::value_codec::encode_line(value); }
+        catch (const std::exception& e) { serialization_fail(std::string(object_id), std::string(name), "known line", e.what(), "Invalid line"); }
+        XmlAttributes attributes;
+        attributes.emplace_back("type", value.type.type_name);
+        attributes.emplace_back("member", value.type.member);
+        attributes.emplace_back("width", std::to_string(value.width));
+        attributes.emplace_back("gap", value.gap ? "true" : "false");
+        writer_.empty(name, attributes);
+    }
+
     void write_border(
         std::string_view name,
         const model::BorderValue& value,
@@ -3363,6 +3395,9 @@ private:
             }
             case mm::ValueCodec::color:
                 write_color(name, require_value<model::ColorValue>(value, object_id, name, "color"), object_id);
+                return;
+            case mm::ValueCodec::line:
+                write_line(name, require_value<model::LineValue>(value, object_id, name, "line"), object_id);
                 return;
             case mm::ValueCodec::border:
                 write_border(name, require_value<model::BorderValue>(value, object_id, name, "border"), object_id);
@@ -4021,6 +4056,8 @@ private:
                         write_border(descriptor.name, *((*area).*(descriptor.border)), id);
                     if (descriptor.font && ((*area).*(descriptor.font)))
                         write_font(descriptor.name, *((*area).*(descriptor.font)), id);
+                    if (descriptor.line && ((*area).*(descriptor.line)) && *((*area).*(descriptor.line)) != model::LineValue{})
+                        write_line(descriptor.name, *((*area).*(descriptor.line)), id);
                 }
                 for (const auto& descriptor : mm::chart_plot_format_descriptors()) {
                     if (descriptor.text) {

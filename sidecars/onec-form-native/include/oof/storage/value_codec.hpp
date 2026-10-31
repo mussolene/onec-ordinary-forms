@@ -52,6 +52,9 @@ void write_style_reference(
 void write_color(list_stream::ListOutStream& out, const model::ColorValue& value);
 [[nodiscard]] model::ColorValue read_color(list_stream::ListInStream& in);
 
+[[nodiscard]] std::string encode_line(const model::LineValue& value);
+[[nodiscard]] model::LineValue decode_line(std::string_view text);
+
 void write_font(list_stream::ListOutStream& out, const model::FontValue& value);
 [[nodiscard]] model::FontValue read_font(list_stream::ListInStream& in);
 

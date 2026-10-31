@@ -253,6 +253,13 @@ struct EnumerationValue {
     friend bool operator==(const EnumerationValue&, const EnumerationValue&) = default;
 };
 
+struct LineValue {
+    EnumerationValue type{"ChartLineType", "Solid"};
+    std::int32_t width = 1;
+    bool gap = false;
+    friend bool operator==(const LineValue&, const LineValue&) = default;
+};
+
 struct PlatformTypeValue {
     std::string name;
 
@@ -500,6 +507,7 @@ using PropertyValue = std::variant<
     CompositeIdValue,
     TypeDomainPatternValue,
     EnumerationValue,
+    LineValue,
     BorderValue,
     ColorValue,
     FontValue,
@@ -794,6 +802,7 @@ struct ChartArea {
     std::optional<ColorValue> scale_color;
     std::optional<BorderValue> border;
     std::optional<FontValue> font;
+    std::optional<LineValue> scale_lines;
     std::optional<PropertyValue> data_table_format;
     std::optional<EnumerationValue> align_data_table;
     std::optional<EnumerationValue> radar_chart_scale_type;

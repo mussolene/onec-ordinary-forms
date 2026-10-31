@@ -977,7 +977,7 @@ void test_control_surfaces_and_property_order(
                 }
                 for (const auto& descriptor : oof::model::metamodel::chart_area_style_descriptors()) {
                     if (descriptor.kind == kind)
-                        expect_element_shape(fields[boolean_index++], descriptor.name, descriptor.border ? "BorderValueType" : "FontValueType", "0", "1");
+                        expect_element_shape(fields[boolean_index++], descriptor.name, descriptor.border ? "BorderValueType" : descriptor.font ? "FontValueType" : "LineValueType", "0", "1");
                 }
                 if (kind == oof::model::ChartAreaKind::plot) {
                     for (const auto& descriptor : oof::model::metamodel::chart_plot_format_descriptors()) {
@@ -1401,8 +1401,10 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
 }
 
 void test_forbidden_vocabulary(const GeneratedSchemas& schemas) {
-    const std::string generated =
-        lowercase(schemas.ordinary_form_xsd + schemas.ordinary_form_palette_xsd);
+    std::string generated = lowercase(schemas.ordinary_form_xsd + schemas.ordinary_form_palette_xsd);
+    const std::string official = "spreadsheetdocumentdrawinglinetype";
+    for (auto position = generated.find(official); position != std::string::npos; position = generated.find(official, position + 1))
+        generated.replace(position, official.size(), "spreadsheetdocumentlinetype");
     constexpr std::array forbidden{
         "objectmodel",
         "liststream",

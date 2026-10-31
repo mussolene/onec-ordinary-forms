@@ -113,6 +113,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "EnumerationValueType";
         case ValueCodec::color:
             return "ColorValueType";
+        case ValueCodec::line:
+            return "LineValueType";
         case ValueCodec::border:
             return "BorderValueType";
         case ValueCodec::font:
@@ -624,6 +626,21 @@ void append_value_types(std::string& output) {
       <xs:maxInclusive value="5"/>
     </xs:restriction>
   </xs:simpleType>
+  <xs:simpleType name="LineFamilyType"><xs:restriction base="xs:string">
+    <xs:enumeration value="ChartLineType"/><xs:enumeration value="SpreadsheetDocumentDrawingLineType"/>
+    <xs:enumeration value="SpreadsheetDocumentCellLineType"/><xs:enumeration value="GeographicalSchemaLineType"/>
+  </xs:restriction></xs:simpleType>
+  <xs:simpleType name="LineMemberType"><xs:restriction base="xs:string">
+    <xs:enumeration value="None"/><xs:enumeration value="Solid"/><xs:enumeration value="Dotted"/>
+    <xs:enumeration value="Dashed"/><xs:enumeration value="DashDotted"/><xs:enumeration value="DashDottedDotted"/>
+    <xs:enumeration value="Double"/><xs:enumeration value="ThinDashed"/><xs:enumeration value="ThickDashed"/><xs:enumeration value="LargeDashed"/>
+  </xs:restriction></xs:simpleType>
+  <xs:complexType name="LineValueType">
+    <xs:attribute name="type" type="LineFamilyType" use="required"/>
+    <xs:attribute name="member" type="LineMemberType" use="required"/>
+    <xs:attribute name="width" type="xs:int" use="required"/>
+    <xs:attribute name="gap" type="xs:boolean" use="required"/>
+  </xs:complexType>
   <xs:complexType name="BorderValueType">
     <xs:attribute name="kind" type="BorderKindType" use="required"/>
     <xs:attribute name="borderType" type="ControlBorderTypeValueType" use="optional"/>
@@ -779,7 +796,7 @@ void append_value_types(std::string& output) {
             if (descriptor.kind != kind) continue;
             output += "<xs:element";
             append_attribute(output, "name", descriptor.name);
-            append_attribute(output, "type", descriptor.border ? "BorderValueType" : "FontValueType");
+            append_attribute(output, "type", descriptor.border ? "BorderValueType" : descriptor.font ? "FontValueType" : "LineValueType");
             append_attribute(output, "minOccurs", "0");
             append_attribute(output, "maxOccurs", "1");
             output += "/>";
@@ -1429,8 +1446,31 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         if (picture.storage_id < 0) append_attribute(output, "storageId", std::to_string(picture.storage_id));
         output += "/>\n";
     }
+    output += "        </StandardPictures>\n";
+    output += "        <NamedConcept name=\"Line\" russianName=\"Линия\" evidenceRefs=\"ev_d45a32e3b4cc4df1a1d06be5612b9233\"><Properties>\n";
+    output += "          <Property name=\"LineType\" apiName=\"LineType\" russianName=\"ТипЛинии\" russianType=\"Перечисление\"/>\n";
+    output += "          <Property name=\"Width\" apiName=\"Width\" russianName=\"Толщина\" russianType=\"Число\"/>\n";
+    output += "          <Property name=\"Gap\" apiName=\"Gap\" russianName=\"Отступ\" russianType=\"Булево\"/>\n";
+    static constexpr std::pair<std::string_view, std::string_view> line_members[] = {
+        {"None", "НетЛинии"}, {"Solid", "Сплошная"}, {"Dotted", "Точечная"}, {"Dashed", "Пунктир"},
+        {"DashDotted", "ПунктирТочка"}, {"DashDottedDotted", "ПунктирТочкаТочка"}, {"Double", "Двойная"},
+        {"ThinDashed", "РедкийПунктир"}, {"ThickDashed", "ЧастыйПунктир"}, {"LargeDashed", "БольшойПунктир"},
+    };
+    for (const auto& family : model::metamodel::line_family_descriptors()) {
+        const std::string_view russian_type = family.name == "ChartLineType" ? "ТипЛинииДиаграммы" :
+            family.name == "SpreadsheetDocumentDrawingLineType" ? "ТипЛинииРисункаТабличногоДокумента" :
+            family.name == "SpreadsheetDocumentCellLineType" ? "ТипЛинииЯчейкиТабличногоДокумента" : "ТипЛинииГеографическойСхемы";
+        for (const auto member : family.members) {
+            const auto label = std::ranges::find(line_members, member, &std::pair<std::string_view, std::string_view>::first);
+            output += "          <Property";
+            append_attribute(output, "name", std::string(family.name) + "." + std::string(member));
+            append_attribute(output, "russianName", std::string(russian_type) + "." + std::string(label->second));
+            append_attribute(output, "russianType", russian_type);
+            output += "/>\n";
+        }
+    }
+    output += "        </Properties></NamedConcept>\n";
     output +=
-        "        </StandardPictures>\n"
         "        <NamedConcept name=\"WindowsFonts\" russianName=\"WindowsШрифты\" evidenceRefs=\"ev_9d8015b7a8b246ffb91ce498507abd5f\"><Properties>\n"
         "          <Property name=\"DefaultGUIFont\" russianName=\"ШрифтДиалоговИМеню\" russianType=\"Шрифт\"/><Property name=\"OEMFixedFont\" russianName=\"OEMШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIFixedFont\" russianName=\"ANSIШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIVariableFont\" russianName=\"ANSIШрифтПропорциональный\" russianType=\"Шрифт\"/><Property name=\"SystemFont\" russianName=\"СистемныйШрифт\" russianType=\"Шрифт\"/>\n"
         "        </Properties></NamedConcept>\n"
@@ -1449,6 +1489,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"VerticalLinesDataTable\" russianName=\"ВертикальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"HorizontalLinesInDataTable\" russianName=\"ГоризонтальныеЛинииВТаблицеДанных\" russianType=\"Булево\"/><Property name=\"KeysInDataTable\" russianName=\"КлючиВТаблицеДанных\" russianType=\"Булево\"/>\n"
         "          <Property name=\"SurfaceColor\" russianName=\"ЦветПоверхности\" russianType=\"Цвет\"/><Property name=\"BorderColor\" russianName=\"ЦветРамки\" russianType=\"Цвет\"/><Property name=\"TextColor\" russianName=\"ЦветТекста\" russianType=\"Цвет\"/><Property name=\"BackColor\" russianName=\"ЦветФона\" russianType=\"Цвет\"/><Property name=\"ScaleColor\" russianName=\"ЦветШкал\" russianType=\"Цвет\"/>\n"
         "          <Property name=\"Border\" russianName=\"Рамка\" russianType=\"Рамка\"/><Property name=\"Font\" russianName=\"Шрифт\" russianType=\"Шрифт\"/>\n"
+        "          <Property name=\"ScaleLines\" russianName=\"ЛинииШкал\" russianType=\"Линия\" valueCodec=\"line\"/>\n"
         "          <Property name=\"DataTableFormat\" russianName=\"ФорматВТаблицеДанных\" russianType=\"Строка\"/><Property name=\"AlignDataTable\" russianName=\"ВыравниваниеВТаблицеДанных\" russianType=\"ГоризонтальноеПоложение\"/><Property name=\"RadarChartScaleType\" russianName=\"ТипШкалыРадарнойДиаграммы\" russianType=\"ТипШкалыРадарнойДиаграммы\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartLegendArea\" russianName=\"ОбластьЛегендыДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"

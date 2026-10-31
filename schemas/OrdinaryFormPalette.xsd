@@ -1045,6 +1045,36 @@
           <Picture name="PictureLib.ZoomIn" russianName="УвеличитьМасштаб" storageId="-16"/>
           <Picture name="PictureLib.ZoomOut" russianName="УменьшитьМасштаб" storageId="-15"/>
         </StandardPictures>
+        <NamedConcept name="Line" russianName="Линия" evidenceRefs="ev_d45a32e3b4cc4df1a1d06be5612b9233"><Properties>
+          <Property name="LineType" apiName="LineType" russianName="ТипЛинии" russianType="Перечисление"/>
+          <Property name="Width" apiName="Width" russianName="Толщина" russianType="Число"/>
+          <Property name="Gap" apiName="Gap" russianName="Отступ" russianType="Булево"/>
+          <Property name="ChartLineType.None" russianName="ТипЛинииДиаграммы.НетЛинии" russianType="ТипЛинииДиаграммы"/>
+          <Property name="ChartLineType.Solid" russianName="ТипЛинииДиаграммы.Сплошная" russianType="ТипЛинииДиаграммы"/>
+          <Property name="ChartLineType.Dotted" russianName="ТипЛинииДиаграммы.Точечная" russianType="ТипЛинииДиаграммы"/>
+          <Property name="ChartLineType.Dashed" russianName="ТипЛинииДиаграммы.Пунктир" russianType="ТипЛинииДиаграммы"/>
+          <Property name="ChartLineType.DashDotted" russianName="ТипЛинииДиаграммы.ПунктирТочка" russianType="ТипЛинииДиаграммы"/>
+          <Property name="ChartLineType.DashDottedDotted" russianName="ТипЛинииДиаграммы.ПунктирТочкаТочка" russianType="ТипЛинииДиаграммы"/>
+          <Property name="SpreadsheetDocumentDrawingLineType.None" russianName="ТипЛинииРисункаТабличногоДокумента.НетЛинии" russianType="ТипЛинииРисункаТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentDrawingLineType.Solid" russianName="ТипЛинииРисункаТабличногоДокумента.Сплошная" russianType="ТипЛинииРисункаТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentDrawingLineType.Dashed" russianName="ТипЛинииРисункаТабличногоДокумента.Пунктир" russianType="ТипЛинииРисункаТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentDrawingLineType.Dotted" russianName="ТипЛинииРисункаТабличногоДокумента.Точечная" russianType="ТипЛинииРисункаТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentDrawingLineType.DashDotted" russianName="ТипЛинииРисункаТабличногоДокумента.ПунктирТочка" russianType="ТипЛинииРисункаТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentDrawingLineType.DashDottedDotted" russianName="ТипЛинииРисункаТабличногоДокумента.ПунктирТочкаТочка" russianType="ТипЛинииРисункаТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentCellLineType.None" russianName="ТипЛинииЯчейкиТабличногоДокумента.НетЛинии" russianType="ТипЛинииЯчейкиТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentCellLineType.Solid" russianName="ТипЛинииЯчейкиТабличногоДокумента.Сплошная" russianType="ТипЛинииЯчейкиТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentCellLineType.Dotted" russianName="ТипЛинииЯчейкиТабличногоДокумента.Точечная" russianType="ТипЛинииЯчейкиТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentCellLineType.Double" russianName="ТипЛинииЯчейкиТабличногоДокумента.Двойная" russianType="ТипЛинииЯчейкиТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentCellLineType.ThinDashed" russianName="ТипЛинииЯчейкиТабличногоДокумента.РедкийПунктир" russianType="ТипЛинииЯчейкиТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentCellLineType.ThickDashed" russianName="ТипЛинииЯчейкиТабличногоДокумента.ЧастыйПунктир" russianType="ТипЛинииЯчейкиТабличногоДокумента"/>
+          <Property name="SpreadsheetDocumentCellLineType.LargeDashed" russianName="ТипЛинииЯчейкиТабличногоДокумента.БольшойПунктир" russianType="ТипЛинииЯчейкиТабличногоДокумента"/>
+          <Property name="GeographicalSchemaLineType.None" russianName="ТипЛинииГеографическойСхемы.НетЛинии" russianType="ТипЛинииГеографическойСхемы"/>
+          <Property name="GeographicalSchemaLineType.Solid" russianName="ТипЛинииГеографическойСхемы.Сплошная" russianType="ТипЛинииГеографическойСхемы"/>
+          <Property name="GeographicalSchemaLineType.Dotted" russianName="ТипЛинииГеографическойСхемы.Точечная" russianType="ТипЛинииГеографическойСхемы"/>
+          <Property name="GeographicalSchemaLineType.Dashed" russianName="ТипЛинииГеографическойСхемы.Пунктир" russianType="ТипЛинииГеографическойСхемы"/>
+          <Property name="GeographicalSchemaLineType.DashDotted" russianName="ТипЛинииГеографическойСхемы.ПунктирТочка" russianType="ТипЛинииГеографическойСхемы"/>
+          <Property name="GeographicalSchemaLineType.DashDottedDotted" russianName="ТипЛинииГеографическойСхемы.ПунктирТочкаТочка" russianType="ТипЛинииГеографическойСхемы"/>
+        </Properties></NamedConcept>
         <NamedConcept name="WindowsFonts" russianName="WindowsШрифты" evidenceRefs="ev_9d8015b7a8b246ffb91ce498507abd5f"><Properties>
           <Property name="DefaultGUIFont" russianName="ШрифтДиалоговИМеню" russianType="Шрифт"/><Property name="OEMFixedFont" russianName="OEMШрифтМоноширинный" russianType="Шрифт"/><Property name="ANSIFixedFont" russianName="ANSIШрифтМоноширинный" russianType="Шрифт"/><Property name="ANSIVariableFont" russianName="ANSIШрифтПропорциональный" russianType="Шрифт"/><Property name="SystemFont" russianName="СистемныйШрифт" russianType="Шрифт"/>
         </Properties></NamedConcept>
@@ -1063,6 +1093,7 @@
           <Property name="VerticalLinesDataTable" russianName="ВертикальныеЛинииВТаблицеДанных" russianType="Булево"/><Property name="HorizontalLinesInDataTable" russianName="ГоризонтальныеЛинииВТаблицеДанных" russianType="Булево"/><Property name="KeysInDataTable" russianName="КлючиВТаблицеДанных" russianType="Булево"/>
           <Property name="SurfaceColor" russianName="ЦветПоверхности" russianType="Цвет"/><Property name="BorderColor" russianName="ЦветРамки" russianType="Цвет"/><Property name="TextColor" russianName="ЦветТекста" russianType="Цвет"/><Property name="BackColor" russianName="ЦветФона" russianType="Цвет"/><Property name="ScaleColor" russianName="ЦветШкал" russianType="Цвет"/>
           <Property name="Border" russianName="Рамка" russianType="Рамка"/><Property name="Font" russianName="Шрифт" russianType="Шрифт"/>
+          <Property name="ScaleLines" russianName="ЛинииШкал" russianType="Линия" valueCodec="line"/>
           <Property name="DataTableFormat" russianName="ФорматВТаблицеДанных" russianType="Строка"/><Property name="AlignDataTable" russianName="ВыравниваниеВТаблицеДанных" russianType="ГоризонтальноеПоложение"/><Property name="RadarChartScaleType" russianName="ТипШкалыРадарнойДиаграммы" russianType="ТипШкалыРадарнойДиаграммы"/>
         </Properties></NamedConcept>
         <NamedConcept name="ChartLegendArea" russianName="ОбластьЛегендыДиаграммы" evidenceRefs="ev_8716e61c09c841db91cbb280c8ef420e"><Properties>

@@ -2,6 +2,7 @@
 #include <exception>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <tuple>
 #include <string>
@@ -29,6 +30,38 @@ void expect_rejected(Operation&& operation, std::string_view message) {
         return;
     }
     throw std::runtime_error(std::string(message));
+}
+
+void test_line() {
+    std::size_t count = 0;
+    for (const auto& family : model::metamodel::line_family_descriptors()) {
+        const bool cell = family.name == "SpreadsheetDocumentCellLineType";
+        const bool drawing = family.name == "SpreadsheetDocumentDrawingLineType";
+        for (const auto member : family.members) {
+            ++count;
+            const auto maximum = member == "None" || (cell && member == "Double") ? 1 : (cell || drawing ? 3 : 50);
+            model::LineValue value{{std::string(family.name), std::string(member)}, maximum, false};
+            expect(codec::decode_line(codec::encode_line(value)) == value, "line max must round trip");
+            value.width = maximum + 1;
+            expect_rejected([&] { (void)codec::encode_line(value); }, "line over max must fail");
+            value.width = std::numeric_limits<std::int32_t>::min();
+            expect(codec::decode_line(codec::encode_line(value)) == value, "minimum line width must round trip");
+            value.width = -1;
+            expect(codec::decode_line(codec::encode_line(value)) == value, "negative line width must round trip");
+            value.gap = true;
+            if (cell) expect(codec::decode_line(codec::encode_line(value)) == value, "cell gap must round trip");
+            else expect_rejected([&] { (void)codec::encode_line(value); }, "other families reject gap");
+        }
+    }
+    expect(count == 25, "line family registry must cover all members");
+    for (const auto* text : {
+        "{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0,0}",
+        "{4,1,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+        "{4,0,{0},1,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+        "{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,2}",
+        "{4,0,{0},50,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+        "{4,0,{0},1,1,0,00000000-0000-0000-0000-000000000000,0}"})
+        expect_rejected([&] { (void)codec::decode_line(text); }, "malformed line must fail");
 }
 
 void test_localized_string() {
@@ -617,6 +650,7 @@ void test_canonical_decimal() {
 
 int main() {
     try {
+        test_line();
         test_localized_string();
         test_formatted_string();
         test_composite_id();

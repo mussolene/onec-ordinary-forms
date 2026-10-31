@@ -6883,9 +6883,12 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
             if (descriptor.border) {
                 info.at(middle_start + descriptor.storage_offset) = encode_control_border(
                     (area.*(descriptor.border)).value_or(model::BorderValue{}), name, model::ControlKind::chart);
-            } else {
+            } else if (descriptor.font) {
                 info.at(middle_start + descriptor.storage_offset) = encode_control_font(
                     (area.*(descriptor.font)).value_or(model::FontValue{}), name);
+            } else {
+                try { info.at(middle_start + descriptor.storage_offset) = list_stream::parse(value_codec::encode_line((area.*(descriptor.line)).value_or(model::LineValue{}))); }
+                catch (const std::exception& e) { fail("OOF1122", std::string(name), "valid line", e.what(), "Invalid Chart scale line"); }
             }
         }
         for (const auto& descriptor : model::metamodel::chart_plot_format_descriptors()) {
@@ -7376,14 +7379,19 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             if (value != default_value) area.*(descriptor.member) = value;
         }
         for (const auto& descriptor : model::metamodel::chart_area_style_descriptors()) {
-            if (!include_area_style || descriptor.kind != kind) continue;
+            if (descriptor.kind != kind || (!include_area_style && !descriptor.line)) continue;
             const auto index = middle_start + descriptor.storage_offset;
             if (descriptor.border) {
                 auto value = decode_control_border(at(info, index, info_path), child_path(info_path, index), model::ControlKind::chart);
                 if (value != model::BorderValue{}) area.*(descriptor.border) = std::move(value);
-            } else {
+            } else if (descriptor.font) {
                 auto value = decode_control_font(at(info, index, info_path), child_path(info_path, index));
                 if (value != model::FontValue{}) area.*(descriptor.font) = std::move(value);
+            } else {
+                try {
+                    auto value = value_codec::decode_line(list_stream::dump_compact(at(info, index, info_path)));
+                    if (value != model::LineValue{}) area.*(descriptor.line) = std::move(value);
+                } catch (const std::exception& e) { fail("OOF1115", child_path(info_path, index), "valid line", e.what(), "Invalid Chart scale line"); }
             }
         }
         if (kind == model::ChartAreaKind::plot) {

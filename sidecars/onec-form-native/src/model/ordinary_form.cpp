@@ -315,6 +315,10 @@ bool property_value_matches(
                         (typed_value.member == "Single" || typed_value.member == "Multiple" || typed_value.member == "Interval");
                 }
                 return true;
+            } else if constexpr (std::is_same_v<Value, LineValue>) {
+                if (expected != metamodel::ValueCodec::line) return false;
+                try { (void)storage::value_codec::encode_line(typed_value); return true; }
+                catch (const std::exception&) { return false; }
             } else if constexpr (std::is_same_v<Value, BorderValue>) {
                 if (expected != metamodel::ValueCodec::border || !valid_border_value(typed_value)) return false;
                 return typed_value.kind != BorderKind::absolute || typed_value.border_type != ControlBorderType::rounded ||
@@ -1063,9 +1067,14 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
                 return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
                     PropertyValue{value.value_or(BorderValue{})}};
             }
-            const auto& value = area.*(descriptor->font);
+            if (descriptor->font) {
+                const auto& value = area.*(descriptor->font);
+                return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                    PropertyValue{value.value_or(FontValue{})}};
+            }
+            const auto& value = area.*(descriptor->line);
             return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
-                PropertyValue{value.value_or(FontValue{})}};
+                PropertyValue{value.value_or(LineValue{})}};
         }
         return {PropertyReadStatus::unknown_property, std::nullopt};
     }
@@ -1289,7 +1298,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 const auto* border = std::get_if<BorderValue>(&value);
                 if (border == nullptr || !valid_border_value(*border)) return PropertyMutationStatus::invalid_value;
                 updated.*(descriptor->border) = *border;
-            } else {
+            } else if (descriptor->font) {
                 const auto* font = std::get_if<FontValue>(&value);
                 if (font == nullptr) return PropertyMutationStatus::invalid_value;
                 if (font->kind == FontKind::windows_font || font->windows_font) {
@@ -1297,6 +1306,12 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                     catch (const std::exception&) { return PropertyMutationStatus::invalid_value; }
                 }
                 updated.*(descriptor->font) = *font;
+            } else {
+                const auto* line = std::get_if<LineValue>(&value);
+                if (!line) return PropertyMutationStatus::invalid_value;
+                try { static_cast<void>(storage::value_codec::encode_line(*line)); }
+                catch (const std::exception&) { return PropertyMutationStatus::invalid_value; }
+                updated.*(descriptor->line) = *line;
             }
         } else if (owner.chart_area == ChartAreaKind::plot && metamodel::find_chart_plot_format(property) != nullptr) {
             const auto* descriptor = metamodel::find_chart_plot_format(property);
@@ -1735,6 +1750,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             auto& area = owner.chart_area == ChartAreaKind::plot ? chart.plot_area : owner.chart_area == ChartAreaKind::title ? chart.title_area : chart.legend_area;
             if (area && descriptor->border) ((*area).*(descriptor->border)).reset();
             if (area && descriptor->font) ((*area).*(descriptor->font)).reset();
+            if (area && descriptor->line) ((*area).*(descriptor->line)).reset();
             return PropertyMutationStatus::reset_unclassified_storage;
         }
         if (owner.chart_area == ChartAreaKind::plot) {
@@ -2733,6 +2749,12 @@ ValidationReport OrdinaryFormDocument::validate() const {
             const auto invalid_chart = [&](std::string reason) {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
+            for (const auto* area : {chart->plot_area ? &*chart->plot_area : nullptr, chart->title_area ? &*chart->title_area : nullptr, chart->legend_area ? &*chart->legend_area : nullptr}) {
+                if (!area || !area->scale_lines) continue;
+                if (area != (chart->plot_area ? &*chart->plot_area : nullptr)) invalid_chart("ScaleLines belongs only to PlotArea");
+                try { (void)storage::value_codec::encode_line(*area->scale_lines); }
+                catch (const std::exception&) { invalid_chart("ScaleLines contains invalid line"); }
+            }
             if (control.properties().contains(PropertyId::from_name("Series")) ||
                 control.properties().contains(PropertyId::from_name("Points")))
                 invalid_chart("Chart collections are owned objects and cannot be stored as properties");
