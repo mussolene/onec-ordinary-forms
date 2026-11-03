@@ -10036,9 +10036,6 @@ DecodedControl decode_input_field(
                 fail("OOF1122", info_path, "supported named InputField bound", {}, "Unsupported InputField bound value");
             if (list_stream::dump_compact(primary) != list_stream::dump_compact(secondary))
                 fail("OOF1114", info_path, "matching InputField bound copies", {}, "InputField bound copies differ");
-            if (linked_attribute == nullptr && !std::holds_alternative<model::UndefinedValue>(*input_bounds[index]))
-                fail("OOF1122", info_path, "bound numeric InputField for nondefault MinValue or MaxValue", {},
-                    "Unbound InputField bounds are outside the supported profile");
         }
     }
     LV normalized_info = info;
@@ -11722,7 +11719,7 @@ LV encode_input_field(
         const auto name = index == 0 ? "MinValue" : "MaxValue";
         const auto* bound = control.properties().find(model::PropertyId::from_name(name));
         if (bound == nullptr) continue;
-        if (attribute == nullptr || !is_supported_input_numeric_type_domain(*effective_type) || explicit_bool(control.properties(), "ListChoiceMode", false))
+        if (!is_supported_input_numeric_type_domain(*effective_type) || explicit_bool(control.properties(), "ListChoiceMode", false))
             fail("OOF1122", "$/InputField/" + std::string(name), "numeric InputField with paired bounds", {}, "InputField bound is outside supported profile");
         const auto value = encoded_typed_value(bound->value, "$/InputField/" + std::string(name));
         input_info.items[2].items[0].items[19 + index] = value;

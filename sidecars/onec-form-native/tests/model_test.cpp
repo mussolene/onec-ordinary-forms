@@ -1055,6 +1055,60 @@ void test_control_name_property() {
         "Name does not manufacture an unknown owner");
 }
 
+void test_input_property_availability() {
+    Form form; form.id = ObjectId{1}; form.name = "InputAvailability";
+    OrdinaryFormDocument document(form);
+    const auto value_type = PropertyId::from_name("ValueType");
+    const auto key = [](std::uint64_t id) { return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}}; };
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        TypeDomainEntry entry;
+        entry.term = index % 3 == 0 ? TypeDomainTerm::string : index % 3 == 1 ? TypeDomainTerm::numeric : TypeDomainTerm::date;
+        if (entry.term == TypeDomainTerm::string) entry.string = {32, true};
+        else if (entry.term == TypeDomainTerm::numeric) entry.numeric = {12, 3, false};
+        else entry.date = {true, false};
+        TypeDomainPatternValue type{{entry}};
+        const ObjectId id{100 + index};
+        ControlNode input{id, "Input" + std::to_string(index), InputFieldPayload{}};
+        if (index % 2 == 0) {
+            Attribute attribute; attribute.id = ObjectId{900 + index}; attribute.name = "Data" + std::to_string(index); attribute.type = type;
+            input.data_path = DataPath{AttributeRef{attribute.id}, {}};
+            document.add_attribute(std::move(attribute));
+        } else input.extension_properties.set_explicit(value_type, type);
+        document.add_control(std::move(input));
+        for (const auto name : {"Mask", "MultiLine", "ExtendedEdit", "PasswordMode"}) {
+            const auto property = PropertyId::from_name(name);
+            const auto result = document.get_prop_val(key(id.value()), property);
+            if (entry.term == TypeDomainTerm::string) {
+                expect(result.value == (std::string_view(name) == "Mask" ? PropertyValue{std::string{}} : PropertyValue{false}),
+                    "String InputField exposes the platform defaults of its string properties");
+            } else {
+                expect(result.status == PropertyReadStatus::unsupported_surface &&
+                    document.set_prop_val(key(id.value()), property, std::string_view(name) == "Mask" ? PropertyValue{std::string{}} : PropertyValue{false}) == PropertyMutationStatus::unsupported_surface &&
+                    document.reset_prop_val(key(id.value()), property) == PropertyMutationStatus::unsupported_surface,
+                    "Numeric and Date InputFields must reject unavailable string properties without changing flags");
+            }
+        }
+        expect(document.get_prop_val(key(id.value()), PropertyId::from_name("TypeRestriction")).value == PropertyValue{TypeDomainPatternValue{}},
+            "known single-type InputFields expose an empty type restriction without a shadow property");
+        expect(document.get_prop_val(key(id.value()), PropertyId::from_name("TypeLinkItem")).value == PropertyValue{std::int64_t{1}},
+            "the supported InputField profiles expose the one-based default type-link item");
+        for (const auto name : {"MinValue", "MaxValue"}) {
+            const auto result = document.get_prop_val(key(id.value()), PropertyId::from_name(name));
+            expect(entry.term == TypeDomainTerm::numeric ? result.value == PropertyValue{UndefinedValue{}} : result.status == PropertyReadStatus::unsupported_surface,
+                "bounds are available for bound and unbound Numeric profiles only");
+        }
+        expect(document.find_control(id)->properties().empty(), "availability reads and rejected writes cannot change stored properties");
+    }
+    ControlNode dangling{ObjectId{200}, "Dangling", InputFieldPayload{}};
+    TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string = {20, true};
+    dangling.extension_properties.set_explicit(value_type, TypeDomainPatternValue{{text}});
+    dangling.data_path = DataPath{AttributeRef{ObjectId{9999}}, {}};
+    document.add_control(std::move(dangling));
+    for (const auto name : {"Mask", "MultiLine", "TypeRestriction", "MinValue"})
+        expect(document.get_prop_val(key(200), PropertyId::from_name(name)).status == PropertyReadStatus::unsupported_surface,
+            "a dangling binding cannot fall back to the local type when deciding property availability");
+}
+
 void test_binding_property_getters() {
     using namespace oof::model::metamodel;
     Form form; form.id = ObjectId{1}; form.name = "BindingProperties";
@@ -4807,6 +4861,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
         test_binding_property_getters();
+        test_input_property_availability();
         test_control_name_property();
         test_form_runtime_state_properties();
         test_chart_computed_counts();

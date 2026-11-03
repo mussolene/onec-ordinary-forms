@@ -1260,6 +1260,24 @@ std::optional<std::vector<ChildItemRef>> OrdinaryFormDocument::form_item_refs(Fo
 }
 
 namespace {
+bool is_string_input_property(const metamodel::PropertyDescriptor& descriptor) noexcept {
+    return descriptor.control_kind == ControlKind::input_field &&
+        (descriptor.api_name == "Mask" || descriptor.api_name == "MultiLine" ||
+         descriptor.api_name == "ExtendedEdit" || descriptor.api_name == "PasswordMode");
+}
+
+const TypeDomainPatternValue* effective_input_type(
+    const OrdinaryFormDocument& document, const ControlNode& control) noexcept {
+    if (control.kind() != ControlKind::input_field) return nullptr;
+    if (control.data_path) {
+        if (!control.data_path->members.empty()) return nullptr;
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        return attribute == nullptr ? nullptr : &attribute->type;
+    }
+    const auto* local = control.extension_properties.find(PropertyId::from_name("ValueType"));
+    return local == nullptr ? nullptr : std::get_if<TypeDomainPatternValue>(&local->value);
+}
+
 bool table_tree_property_available(const OrdinaryFormDocument& document, const ControlNode& control) {
     if (!control.data_path || !control.data_path->members.empty()) return false;
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
@@ -1646,12 +1664,29 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (descriptor->api_name == "Name")
             return {PropertyReadStatus::computed_value, PropertyValue{control.name}};
         if (descriptor->value_codec == metamodel::ValueCodec::typed_value) {
-            const auto* attribute = control.data_path ? find_attribute(control.data_path->attribute.id()) : nullptr;
+            const auto* type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
-            if (attribute == nullptr || !control.data_path->members.empty() || attribute->type.entries.size() != 1 ||
-                attribute->type.entries.front().term != TypeDomainTerm::numeric ||
+            if (type == nullptr || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
                 (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
+        if (is_string_input_property(*descriptor) ||
+            (control.kind() == ControlKind::input_field && descriptor->api_name == "TypeRestriction")) {
+            const auto* type = effective_input_type(*this, control);
+            if (type == nullptr || type->entries.size() != 1)
+                return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            const auto term = type->entries.front().term;
+            if (descriptor->api_name == "TypeRestriction") {
+                if (term != TypeDomainTerm::string && term != TypeDomainTerm::numeric && term != TypeDomainTerm::date)
+                    return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                if (!control.properties().contains(property))
+                    return {PropertyReadStatus::computed_value, PropertyValue{TypeDomainPatternValue{}}};
+            } else {
+                if (term != TypeDomainTerm::string)
+                    return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                if (descriptor->api_name == "Mask" && !control.properties().contains(property))
+                    return {PropertyReadStatus::proven_default, PropertyValue{std::string{}}};
+            }
         }
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
             const auto& selected = std::get<PanelPayload>(control.payload).current_page;
@@ -2042,6 +2077,11 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (is_string_input_property(*descriptor)) {
+            const auto* type = effective_input_type(*this, control);
+            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string)
+                return PropertyMutationStatus::unsupported_surface;
+        }
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
             const auto* page_ref = std::get_if<PageRef>(&value);
             if (page_ref == nullptr) return PropertyMutationStatus::invalid_value;
@@ -2183,10 +2223,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         return PropertyMutationStatus::unsupported_surface;
     }
     if (descriptor->value_codec == metamodel::ValueCodec::typed_value && property_control != nullptr) {
-        const auto* attribute = property_control->data_path ? find_attribute(property_control->data_path->attribute.id()) : nullptr;
+        const auto* type = effective_input_type(*this, *property_control);
         const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
-        if (attribute == nullptr || !property_control->data_path->members.empty() || attribute->type.entries.size() != 1 ||
-            attribute->type.entries.front().term != TypeDomainTerm::numeric ||
+        if (type == nullptr || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
             (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
             return PropertyMutationStatus::unsupported_surface;
     }
@@ -2484,6 +2523,11 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (is_string_input_property(*descriptor)) {
+            const auto* type = effective_input_type(*this, control);
+            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string)
+                return PropertyMutationStatus::unsupported_surface;
+        }
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage")
             return PropertyMutationStatus::unsupported_surface;
         if (descriptor->api_name == "TabOrder") {
@@ -2528,10 +2572,9 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     }
 
     if (descriptor->value_codec == metamodel::ValueCodec::typed_value && property_control != nullptr) {
-        const auto* attribute = property_control->data_path ? find_attribute(property_control->data_path->attribute.id()) : nullptr;
+        const auto* type = effective_input_type(*this, *property_control);
         const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
-        if (attribute == nullptr || !property_control->data_path->members.empty() || attribute->type.entries.size() != 1 ||
-            attribute->type.entries.front().term != TypeDomainTerm::numeric ||
+        if (type == nullptr || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
             (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
             return PropertyMutationStatus::unsupported_surface;
     }

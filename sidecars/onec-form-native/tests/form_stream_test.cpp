@@ -15825,8 +15825,12 @@ void test_canonical_unbound_input_fields_round_trip() {
     auto& unbound_info = unbound_with_bounds.items[1].items[2].items[2].items[1].items[2];
     unbound_info.items[2].items[0].items[19] = list_stream::parse(R"({"N",1})");
     unbound_info.items[3].items[1].items[1].items[1] = list_stream::parse(R"({"N",1})");
-    expect_failure(form_stream::decode_document(unbound_with_bounds, "StandaloneInput"), "OOF1122", "$/1/2/2/1/2",
-        "unbound nondefault bounds must not decode as complete when the encoder cannot rebuild them");
+    const auto decoded_unbound_bounds = form_stream::decode_document(unbound_with_bounds, "StandaloneInput");
+    expect(decoded_unbound_bounds.ok() && decoded_unbound_bounds.value().reconstruction_complete(),
+        "unbound numeric bounds must decode completely once their primary writer supports them");
+    const auto rebuilt_unbound_bounds = form_stream::encode_document(decoded_unbound_bounds.value());
+    expect(rebuilt_unbound_bounds.ok() && list_stream::dump_compact(rebuilt_unbound_bounds.value()) == list_stream::dump_compact(unbound_with_bounds),
+        "complete unbound numeric bounds must rebuild their canonical stream");
     residual_precision.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[15] =
         list_stream::ListValue::raw_atom("3");
     const auto partial = form_stream::decode_document(residual_precision, "StandaloneInput");
@@ -15834,6 +15838,57 @@ void test_canonical_unbound_input_fields_round_trip() {
         std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
             return diagnostic.code == "OOF1140" && diagnostic.path == "$/1/2/2/1/2";
         }), "the observed residual precision in an unbound String InputField must remain explicitly incomplete");
+}
+
+void test_unbound_numeric_input_bounds() {
+    using namespace model;
+    const ArrayValue array{{std::string{"Вложенный текст"}, DecimalValue{"-12.75"}, true, UndefinedValue{}}, false};
+    const StructureValue structure{{{"Caption", std::string{"Заголовок"}}, {"Nested", array}, {"Amount", DecimalValue{"123.45"}}}, false};
+    const MapValue map{{{std::string{"Title"}, std::string{"Значение"}}, {std::int64_t{17}, array}, {false, structure}}, false};
+    ValueListValue list;
+    list.items = {{0, std::string{"Первый"}, std::string{"Строка"}, true, {}},
+        {1, DecimalValue{"42.5"}, std::string{"Число"}, false, {}},
+        {2, true, std::string{"Булево"}, false, {}}};
+    const std::vector<PropertyValue> values{DecimalValue{"17.25"}, std::string{"Текст Ω"}, true,
+        DateValue{"2026-11-04T12:34:56"}, NullValue{}, UndefinedValue{},
+        UuidValue{"01234567-89ab-cdef-0123-456789abcdef"}, PlatformTypeValue{"String"}, array, structure, map, list};
+    Form form; form.id = ObjectId{1}; form.name = "UnboundBounds";
+    for (std::size_t i = 0; i < values.size(); ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    TypeDomainEntry number; number.term = TypeDomainTerm::numeric; number.numeric = {12, 3, false};
+    const auto min = PropertyId::from_name("MinValue"), max = PropertyId::from_name("MaxValue");
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const ObjectId id{100 + i};
+        ControlNode input{id, "Input" + std::to_string(i), InputFieldPayload{}};
+        input.extension_properties.set_explicit(PropertyId::from_name("ValueType"), TypeDomainPatternValue{{number}});
+        document.add_control(std::move(input));
+        for (const auto property : {min, max})
+            expect(document.set_prop_val({ObjectCategory::control, id}, property, values[i]) == PropertyMutationStatus::applied,
+                "unbound Numeric InputField accepts every supported named bound value through the shared API");
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "twelve unbound numeric bounds profiles must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "UnboundBounds");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "unbound numeric bounds must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<DataPath") == std::string::npos && decoded.value().collections().attributes.empty(),
+        "unbound bounds must not create fake bindings or attributes");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "unbound named bounds XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok(), "unbound named bounds XML must rebuild through the primary encoder");
+    auto restored = form_stream::decode_document(rebuilt.value(), "UnboundBounds");
+    expect(restored.ok() && restored.value().reconstruction_complete(), "rebuilt unbound bounds must remain complete");
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        for (const auto property : {min, max}) {
+            expect(restored.value().get_prop_val(owner, property).value == values[i],
+                "every unbound bound retains its typed value, including order-independent Map entries");
+            expect(restored.value().reset_prop_val(owner, property) == PropertyMutationStatus::reset &&
+                restored.value().get_prop_val(owner, property).value == PropertyValue{UndefinedValue{}},
+                "unbound bound reset restores Undefined without removing its local type");
+        }
+    }
 }
 
 void test_two_input_fields_round_trip() {
@@ -22080,6 +22135,7 @@ int main() {
         test_spreadsheet_document_field_round_trip();
         test_two_input_fields_round_trip();
         test_canonical_unbound_input_fields_round_trip();
+        test_unbound_numeric_input_bounds();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_root_pages_round_trip_with_page_local_control_order();
         test_owned_panel_colors_and_repeated_background();

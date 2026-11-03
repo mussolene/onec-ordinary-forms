@@ -1365,6 +1365,16 @@ void apply_proven_storage_overrides(
     }
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
+    const auto mask = std::ranges::find(input_field, "Mask", &PropertyDescriptor::api_name);
+    const auto restriction = std::ranges::find(input_field, "TypeRestriction", &PropertyDescriptor::api_name);
+    const auto type_link_item = std::ranges::find(input_field, "TypeLinkItem", &PropertyDescriptor::api_name);
+    if (mask == input_field.end() || restriction == input_field.end() || type_link_item == input_field.end())
+        throw std::logic_error("missing InputField editor descriptor");
+    mask->default_value = {DefaultKind::string, ""};
+    restriction->default_value = {DefaultKind::none, {}};
+    type_link_item->value_kind = ValueKind::number;
+    type_link_item->value_codec = ValueCodec::integer;
+    type_link_item->default_value = {DefaultKind::integer, "1"};
     for (const auto name : {"MinValue", "MaxValue"}) {
         auto property = std::ranges::find(input_field, name, &PropertyDescriptor::api_name);
         if (property == input_field.end()) throw std::logic_error("missing InputField bound");

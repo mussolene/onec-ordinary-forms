@@ -2347,7 +2347,7 @@
       <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChoiceListWidth" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="TypeLinkItem" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TypeLinkItem" type="xs:long" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="InputFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
