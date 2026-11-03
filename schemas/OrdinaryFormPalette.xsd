@@ -221,7 +221,7 @@
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="localized-text"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
-              <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="unclassified"/>
+              <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="value-list-reference"/>
               <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
@@ -299,7 +299,7 @@
               <Property name="IncompleteChoiceMode" apiName="IncompleteChoiceMode" russianName="РежимВыбораНезаполненного" russianType="РежимВыбораНезаполненного" valueCodec="enumeration"/>
               <Property name="PasswordMode" apiName="PasswordMode" russianName="РежимПароля" russianType="Булево" valueCodec="boolean"/>
               <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
-              <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="unclassified"/>
+              <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="value-list-reference"/>
               <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
               <Property name="Format" apiName="Format" russianName="Формат" russianType="Строка" valueCodec="string"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
@@ -632,7 +632,7 @@
               <Property name="ChangeSettingOfColumns" apiName="ChangeSettingOfColumns" russianName="ИзменятьНастройкуКолонок" russianType="Булево" valueCodec="boolean"/>
               <Property name="ChangePositionOfColumns" apiName="ChangePositionOfColumns" russianName="ИзменятьПозициюКолонок" russianType="Булево" valueCodec="boolean"/>
               <Property name="ChangeRowSet" apiName="ChangeRowSet" russianName="ИзменятьСоставСтрок" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Columns" apiName="Columns" russianName="Колонки" russianType="КолонкиТабличногоПоля" valueCodec="unclassified"/>
+              <Property name="Columns" apiName="Columns" russianName="Колонки" russianType="КолонкиТабличногоПоля" valueCodec="table-columns"/>
               <Property name="InitialTreeView" apiName="InitialTreeView" russianName="НачальноеОтображениеДерева" russianType="НачальноеОтображениеДерева" valueCodec="enumeration"/>
               <Property name="InitialListView" apiName="InitialListView" russianName="НачальноеОтображениеСписка" russianType="НачальноеОтображениеСписка" valueCodec="enumeration"/>
               <Property name="Footer" apiName="Footer" russianName="Подвал" russianType="Булево" valueCodec="boolean"/>

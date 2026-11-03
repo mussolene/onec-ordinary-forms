@@ -1243,6 +1243,12 @@ model::PropertyValue parse_property_value(
 ) {
     const std::string property = node_name(node);
     switch (codec) {
+        case mm::ValueCodec::table_columns:
+            fail("OOF2003", node, std::string(object_id), property, "named Table Columns", "scalar collection",
+                "Table columns must use their owned named object model");
+        case mm::ValueCodec::value_list_reference:
+            fail("OOF2003", node, std::string(object_id), property, "runtime-only list reference", "XML",
+                "Runtime value list references cannot be parsed from XML");
         case mm::ValueCodec::form_controls:
         case mm::ValueCodec::panel_pages:
             fail("OOF2003", node, std::string(object_id), property, "named ChildItems", "scalar collection",
@@ -3710,6 +3716,12 @@ private:
     ) {
         const std::string_view name = descriptor.xml_name;
         switch (descriptor.value_codec) {
+            case mm::ValueCodec::table_columns:
+                serialization_fail(std::string(object_id), std::string(name), "named Table Columns", "scalar collection",
+                    "Table columns must use their owned named object model");
+            case mm::ValueCodec::value_list_reference:
+                serialization_fail(std::string(object_id), std::string(name), "runtime-only list reference", "XML",
+                    "Runtime value list references cannot be serialized");
             case mm::ValueCodec::owned_panel:
                 serialization_fail(std::string(object_id), std::string(name), "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
             case mm::ValueCodec::typed_value:

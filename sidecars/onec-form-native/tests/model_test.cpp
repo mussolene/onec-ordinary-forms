@@ -2075,12 +2075,15 @@ void test_help_metamodel() {
             choice_border_color->default_value.canonical == "automatic",
         "ChoiceField BorderColor must describe its automatic persisted color default");
     expect(choice_list && choice_list->persistence == PersistenceClass::runtime_only &&
-            choice_list->storage_codec == StorageCodec::none,
+            choice_list->storage_codec == StorageCodec::none &&
+            choice_list->value_codec == ValueCodec::value_list_reference &&
+            choice_list->default_value.kind == DefaultKind::none,
         "ChoiceField ChoiceList must remain runtime-only rather than a persisted XML value");
     const auto* input_choice_list = find_property(ControlKind::input_field, "ChoiceList");
     expect(input_choice_list && input_choice_list->persistence == PersistenceClass::runtime_only &&
-        input_choice_list->storage_codec == StorageCodec::none,
-        "InputField ChoiceList must be classified as runtime state, without claiming a collection implementation");
+        input_choice_list->storage_codec == StorageCodec::none &&
+        input_choice_list->value_codec == ValueCodec::value_list_reference,
+        "InputField ChoiceList remains runtime state with a live reference codec");
     expect(
         event_descriptors(ControlKind::input_field).size() == 9,
         "InputField must retain the exact 9-event TextBox surface");
@@ -2657,12 +2660,136 @@ void test_property_default_semantics() {
         "reset must recover the factory default");
 }
 
+void test_table_columns_reference() {
+    using namespace oof::model::metamodel;
+    const auto* descriptor = find_property(ControlKind::table, "Columns");
+    expect(descriptor && descriptor->persistence == PersistenceClass::persisted_readonly &&
+        descriptor->storage_codec == StorageCodec::collection_record && descriptor->value_codec == ValueCodec::table_columns &&
+        descriptor->default_value.kind == DefaultKind::none, "Table.Columns describes its owned persisted collection");
+    Form form; form.id = ObjectId{1};
+    OrdinaryFormDocument document(form);
+    const auto property = PropertyId::from_name("Columns");
+    for (std::uint64_t id = 2; id < 14; ++id) {
+        ControlNode control; control.id = ObjectId{id}; control.name = "Table" + std::to_string(id);
+        TablePayload table;
+        for (std::size_t i = 0; i < (id - 2) % 4; ++i) {
+            TableColumn column; column.name = "Column" + std::to_string(i); column.data_path = column.name;
+            table.columns.push_back(std::move(column));
+        }
+        control.payload = std::move(table);
+        document.add_control(std::move(control));
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{id}};
+        const auto result = document.get_prop_val(owner, property);
+        expect(result.status == PropertyReadStatus::computed_value && result.value && std::holds_alternative<TableColumnsRef>(*result.value),
+            "twelve Table getters expose their owned columns");
+        const auto reference = std::get<TableColumnsRef>(*result.value);
+        const auto* columns = document.table_columns(reference);
+        expect(columns && columns == &std::get<TablePayload>(document.find_control(ObjectId{id})->payload).columns &&
+            columns->size() == (id - 2) % 4 && *result.value == *document.get_prop_val(owner, property).value,
+            "Table.Columns resolves the authoritative collection with stable identity");
+        for (std::size_t i = 0; i < columns->size(); ++i)
+            expect((*columns)[i].name == "Column" + std::to_string(i), "column order follows the existing owned model");
+        expect(document.set_prop_val(owner, property, UndefinedValue{}) == PropertyMutationStatus::read_only &&
+            document.set_prop_val(owner, property, reference) == PropertyMutationStatus::read_only &&
+            document.reset_prop_val(owner, property) == PropertyMutationStatus::read_only,
+            "owned collection cannot be replaced or reset");
+    }
+    ControlNode input; input.id = ObjectId{20}; input.name = "Input"; input.payload = InputFieldPayload{};
+    document.add_control(std::move(input));
+    expect(!document.table_columns({ControlRef{ObjectId{20}}}) && !document.table_columns({ControlRef{ObjectId{999}}}) &&
+        !document.table_columns({}), "Table.Columns resolution rejects missing or wrong owners");
+}
+
+void test_choice_list_live_references() {
+    Form form;
+    form.id = ObjectId{1};
+    OrdinaryFormDocument document(form);
+    const auto property = PropertyId::from_name("ChoiceList");
+    const auto key = [](std::uint64_t id) { return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}}; };
+    const auto read = [&](std::uint64_t id) {
+        const auto result = document.get_prop_val(key(id), property);
+        expect(result.status == PropertyReadStatus::computed_value && result.value && std::holds_alternative<ValueListRef>(*result.value),
+            "ChoiceList getter returns a live reference");
+        return std::get<ValueListRef>(*result.value);
+    };
+    std::vector<ValueListRef> defaults;
+    for (std::uint64_t id = 2; id < 14; ++id) {
+        ControlNode control;
+        control.id = ObjectId{id};
+        control.name = "Field" + std::to_string(id);
+        control.payload = id % 2 ? ControlPayload{ChoiceFieldPayload{}} : ControlPayload{InputFieldPayload{}};
+        document.add_control(std::move(control));
+        defaults.push_back(read(id));
+        expect(defaults.back().get() && defaults.back().get()->items.empty() && defaults.back() == read(id),
+            "all twelve fields have stable, initially empty lists");
+        if (id > 2) expect(defaults.back() != defaults.front(), "unassigned fields own distinct lists");
+    }
+    ValueListValue initial;
+    initial.items.push_back({0, std::string{"first"}, std::string{"First"}, false, {}});
+    const auto created = ValueListRef::create(initial);
+    expect(created.has_value(), "runtime list accepts shared typed values");
+    const auto shared = *created;
+    initial.items.front().value = false;
+    expect(std::get<std::string>(shared.get()->items.front().value) == "first", "create owns a deep value copy");
+    for (std::uint64_t id = 2; id < 14; ++id)
+        expect(document.set_prop_val(key(id), property, shared) == PropertyMutationStatus::applied_runtime_only && read(id) == shared,
+            "all twelve fields share the assigned list identity");
+    auto edited = *shared.get();
+    edited.items.push_back({1, std::int64_t{7}, std::string{"Seven"}, true, {}});
+    expect(read(3).replace(edited), "mutation through a field updates its shared object");
+    for (std::uint64_t id = 2; id < 14; ++id)
+        expect(read(id).get()->items.size() == 2, "shared mutation is visible to every owner");
+    const auto replacement = *ValueListRef::create(ValueListValue{});
+    expect(document.set_prop_val(key(2), property, replacement) == PropertyMutationStatus::applied_runtime_only &&
+        read(2) == replacement && read(3) == shared && defaults.front().get()->items.empty(),
+        "replacement detaches only one owner, preserving old handles");
+    auto cleared = *shared.get();
+    cleared.last_assigned_id = 1;
+    cleared.items.clear();
+    expect(shared.replace(cleared) && read(3).get()->items.empty() && shared.get()->effective_last_assigned_id() == 1,
+        "clearing shared content preserves native item ID history");
+    auto invalid = edited;
+    invalid.items.back().id = 0;
+    expect(!shared.replace(invalid) && *shared.get() == cleared && !ValueListRef::create(invalid),
+        "invalid replacement is rejected before changing the live object");
+    invalid = {};
+    invalid.items.push_back({0, shared, std::string{}, false, {}});
+    expect(!shared.replace(invalid), "live references cannot create nested ownership cycles");
+    invalid = {};
+    invalid.available_values.push_back({});
+    invalid.available_values.front().items.push_back({0, shared, std::string{}, false, {}});
+    expect(!ValueListRef::create(invalid), "available values reject nested live references too");
+    expect(!ValueListRef{}.replace({}), "null handle cannot acquire hidden ownership through replacement");
+    for (const auto& invalid_value : {PropertyValue{UndefinedValue{}}, PropertyValue{NullValue{}}, PropertyValue{ArrayValue{}}, PropertyValue{ValueListValue{}}, PropertyValue{ValueListRef{}}})
+        expect(document.set_prop_val(key(3), property, invalid_value) == PropertyMutationStatus::invalid_value && read(3) == shared,
+            "invalid assignment preserves the current list");
+    auto copied = document;
+    const auto copied_read = copied.get_prop_val(key(3), property);
+    expect(copied_read.value && std::get<ValueListRef>(*copied_read.value) == shared,
+        "document copies preserve external runtime reference identity");
+    OrdinaryFormDocument another(form);
+    ControlNode other;
+    other.id = ObjectId{20}; other.name = "Other"; other.payload = InputFieldPayload{};
+    another.add_control(std::move(other));
+    expect(another.set_prop_val(key(20), property, shared) == PropertyMutationStatus::applied_runtime_only,
+        "a runtime list can be shared across forms");
+    document.set_form(form);
+    expect(read(3) != shared && shared.get()->effective_last_assigned_id() == 1,
+        "form replacement releases its bindings without invalidating external handles");
+    expect(shared.replace(edited) && std::get<ValueListRef>(*another.get_prop_val(key(20), property).value).get()->items.size() == 2,
+        "detached handles remain live through another form owner");
+    expect(document.get_prop_val(key(999), property).status == PropertyReadStatus::unknown_owner,
+        "unknown owners cannot create runtime collections");
+    TypedValueBudget budget;
+    expect(!validate_typed_value(PropertyValue{shared}, budget), "runtime identity is excluded from serializable typed values");
+}
+
 void test_recursive_typed_values() {
     const auto valid = [](const PropertyValue& value) {
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     };
-    static_assert(std::variant_size_v<PropertyValue::Variant> == 38);
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 40);
     [&]<std::size_t... Index>(std::index_sequence<Index...>) {
         ([&] {
             using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
@@ -4584,6 +4711,8 @@ int main() {
         test_property_default_semantics();
         test_typed_property_set();
         test_recursive_typed_values();
+        test_choice_list_live_references();
+        test_table_columns_reference();
         test_value_list_named_values();
         test_typed_value_document_budget();
         test_document_property_api();

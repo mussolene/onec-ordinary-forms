@@ -77,6 +77,8 @@ enum class ValueCodec : std::uint8_t {
     owned_panel,
     form_controls,
     panel_pages,
+    value_list_reference,
+    table_columns,
     dendrogram_items,
     dendrogram_links,
     boolean,

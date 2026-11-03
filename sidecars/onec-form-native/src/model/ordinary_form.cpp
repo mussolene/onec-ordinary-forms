@@ -349,6 +349,10 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, FormItemCollectionRef>) {
                 return (expected == metamodel::ValueCodec::form_controls && typed_value.kind == FormItemCollectionKind::controls) ||
                     (expected == metamodel::ValueCodec::panel_pages && typed_value.kind == FormItemCollectionKind::pages);
+            } else if constexpr (std::is_same_v<Value, ValueListRef>) {
+                return expected == metamodel::ValueCodec::value_list_reference && typed_value.get();
+            } else if constexpr (std::is_same_v<Value, TableColumnsRef>) {
+                return expected == metamodel::ValueCodec::table_columns;
             } else if constexpr (std::is_same_v<Value, ChartSeriesRef>) {
                 return expected == metamodel::ValueCodec::chart_series_reference;
             } else if constexpr (std::is_same_v<Value, FormRef>) {
@@ -916,6 +920,27 @@ bool validate_typed_value(const PropertyValue& value, TypedValueBudget& budget) 
     }
 }
 
+std::optional<ValueListRef> ValueListRef::create(const ValueListValue& value) {
+    try {
+        TypedValueBudget budget{1};
+        if (!validate_value_list_contents(value, budget, 0)) return std::nullopt;
+    } catch (const std::exception&) { return std::nullopt; }
+    ValueListRef result;
+    result.value_ = std::make_shared<ValueListValue>(value);
+    return result;
+}
+
+bool ValueListRef::replace(const ValueListValue& value) const {
+    if (!value_) return false;
+    try {
+        TypedValueBudget budget{1};
+        if (!validate_value_list_contents(value, budget, 0)) return false;
+    } catch (const std::exception&) { return false; }
+    ValueListValue replacement = value;
+    *value_ = std::move(replacement);
+    return true;
+}
+
 const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
     const auto found = entries_.find(id);
     return found == entries_.end() ? nullptr : &found->second;
@@ -1020,6 +1045,7 @@ void OrdinaryFormDocument::set_form(Form form) {
     form_ = std::move(form);
     window_permissions_.clear();
     runtime_form_values_.clear();
+    runtime_choice_lists_.clear();
     rebuild_index();
 }
 
@@ -1174,6 +1200,12 @@ std::optional<OrdinaryFormDocument::ObjectLocation> OrdinaryFormDocument::find_l
 
 std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
     return index_.size();
+}
+
+const std::vector<TableColumn>* OrdinaryFormDocument::table_columns(TableColumnsRef reference) const noexcept {
+    const auto* control = find_control(reference.owner.id());
+    const auto* table = control ? std::get_if<TablePayload>(&control->payload) : nullptr;
+    return table ? &table->columns : nullptr;
 }
 
 std::optional<std::vector<ChildItemRef>> OrdinaryFormDocument::form_item_refs(FormItemCollectionRef reference) const {
@@ -1568,6 +1600,18 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
         const auto& control = collections_.controls[location->index];
+        if (control.kind() == ControlKind::table && property == PropertyId::from_name("Columns"))
+            return {PropertyReadStatus::computed_value, PropertyValue{TableColumnsRef{ControlRef{control.id}}}};
+        if ((control.kind() == ControlKind::input_field || control.kind() == ControlKind::choice_field) &&
+            property == PropertyId::from_name("ChoiceList")) {
+            auto found = runtime_choice_lists_.find(control.id);
+            if (found == runtime_choice_lists_.end()) {
+                const auto empty = ValueListRef::create(ValueListValue{});
+                if (!empty) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                found = runtime_choice_lists_.emplace(control.id, *empty).first;
+            }
+            return {PropertyReadStatus::computed_value, PropertyValue{found->second}};
+        }
         if (control.kind() == ControlKind::panel && property == PropertyId::from_name("Pages"))
             return {PropertyReadStatus::computed_value, PropertyValue{FormItemCollectionRef{control.id, FormItemCollectionKind::pages}}};
         if (control.kind() == ControlKind::chart && property == PropertyId::from_name("SummarySeries"))
@@ -1946,6 +1990,15 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (!location) return PropertyMutationStatus::unknown_owner;
         auto& control = collections_.controls[location->index];
         property_control = &control;
+        if (control.kind() == ControlKind::table && property == PropertyId::from_name("Columns"))
+            return PropertyMutationStatus::read_only;
+        if ((control.kind() == ControlKind::input_field || control.kind() == ControlKind::choice_field) &&
+            property == PropertyId::from_name("ChoiceList")) {
+            const auto* reference = std::get_if<ValueListRef>(&value);
+            if (!reference || !reference->get()) return PropertyMutationStatus::invalid_value;
+            runtime_choice_lists_.insert_or_assign(control.id, *reference);
+            return PropertyMutationStatus::applied_runtime_only;
+        }
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount")))
             return resize_chart(owner.id, property, value);
@@ -2381,6 +2434,11 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (!location) return PropertyMutationStatus::unknown_owner;
         auto& control = collections_.controls[location->index];
         property_control = &control;
+        if (control.kind() == ControlKind::table && property == PropertyId::from_name("Columns"))
+            return PropertyMutationStatus::read_only;
+        if ((control.kind() == ControlKind::input_field || control.kind() == ControlKind::choice_field) &&
+            property == PropertyId::from_name("ChoiceList"))
+            return PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount"))) {
             const auto status = resize_chart(owner.id, property, std::int64_t{0});
@@ -2778,7 +2836,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 add_violation(report, InvariantCode::invalid_property, source, {},
                     "property is unavailable on the ordinary-form platform owner");
             } else if (descriptor->value_codec == metamodel::ValueCodec::form_controls ||
-                descriptor->value_codec == metamodel::ValueCodec::panel_pages) {
+                descriptor->value_codec == metamodel::ValueCodec::panel_pages ||
+                descriptor->value_codec == metamodel::ValueCodec::value_list_reference ||
+                descriptor->value_codec == metamodel::ValueCodec::table_columns) {
                 add_violation(report, InvariantCode::invalid_property, source, {},
                     "form item collections are owned objects and cannot be stored as properties");
             } else if (!property_value_matches(*descriptor, property.value)) {

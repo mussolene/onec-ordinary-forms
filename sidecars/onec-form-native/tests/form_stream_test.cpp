@@ -381,6 +381,10 @@ void test_captured_table_column_record() {
         });
     expect(table != decoded.value().collections().controls.end(), "captured model must expose named Table");
     const auto& payload = std::get<model::TablePayload>(table->payload);
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, table->id};
+    const auto reference = decoded.value().get_prop_val(owner, model::PropertyId::from_name("Columns"));
+    expect(reference.value && decoded.value().table_columns(std::get<model::TableColumnsRef>(*reference.value)) == &payload.columns,
+        "native captured Table.Columns must resolve the decoded collection without copying");
     expect(payload.columns.size() == 1 && payload.columns[0].name == "Code" &&
             payload.columns[0].data_path == "Code" && payload.columns[0].control.kind == model::ControlKind::input_field,
         "captured Column must expose its name, DataPath, and typed InputField");

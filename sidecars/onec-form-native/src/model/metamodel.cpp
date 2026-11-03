@@ -1177,6 +1177,8 @@ void apply_proven_storage_overrides(
         choice_list != choice_field.end()) {
         choice_list->persistence = PersistenceClass::runtime_only;
         choice_list->storage_codec = StorageCodec::none;
+        choice_list->value_codec = ValueCodec::value_list_reference;
+        choice_list->default_value = {DefaultKind::none, {}};
     }
 
     auto& check_box = properties[static_cast<std::size_t>(ControlKind::check_box)];
@@ -1297,6 +1299,12 @@ void apply_proven_storage_overrides(
         classify_property(table, name, StorageCodec::control_info, DefaultKind::boolean, "false");
     for (const auto name : {"Header", "ChangeSettingOfColumns", "ChangePositionOfColumns", "ChangeRowSet", "HorizontalLines", "VerticalLines"})
         classify_property(table, name, StorageCodec::control_info, DefaultKind::boolean, "true");
+    auto columns = std::ranges::find(table, "Columns", &PropertyDescriptor::api_name);
+    if (columns == table.end()) throw std::logic_error("missing Table Columns");
+    columns->persistence = PersistenceClass::persisted_readonly;
+    columns->storage_codec = StorageCodec::collection_record;
+    columns->value_codec = ValueCodec::table_columns;
+    columns->default_value = {DefaultKind::none, {}};
 
     auto& progress_bar = properties[static_cast<std::size_t>(ControlKind::progress_bar)];
     classify_property(progress_bar, "MaxValue", StorageCodec::control_info, DefaultKind::integer, "100");
@@ -1354,6 +1362,7 @@ void apply_proven_storage_overrides(
         choice_list != input_field.end()) {
         choice_list->persistence = PersistenceClass::runtime_only;
         choice_list->storage_codec = StorageCodec::none;
+        choice_list->value_codec = ValueCodec::value_list_reference;
         choice_list->default_value = {DefaultKind::none, {}};
     }
     for (const auto name : {"Picture", "ChoiceButtonPicture", "SelButtonPicture"}) {
@@ -2728,6 +2737,10 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "form-controls";
         case ValueCodec::panel_pages:
             return "panel-pages";
+        case ValueCodec::value_list_reference:
+            return "value-list-reference";
+        case ValueCodec::table_columns:
+            return "table-columns";
         case ValueCodec::dendrogram_items:
             return "dendrogram-items";
         case ValueCodec::dendrogram_links:

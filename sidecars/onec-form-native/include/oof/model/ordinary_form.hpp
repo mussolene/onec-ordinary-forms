@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -181,6 +182,11 @@ struct FormItemCollectionRef {
     ObjectId owner{};
     FormItemCollectionKind kind = FormItemCollectionKind::controls;
     friend bool operator==(const FormItemCollectionRef&, const FormItemCollectionRef&) = default;
+};
+
+struct TableColumnsRef {
+    ControlRef owner;
+    friend bool operator==(const TableColumnsRef&, const TableColumnsRef&) = default;
 };
 
 enum class ChartScaleKind : std::uint8_t { none, points, values, additional_values, series };
@@ -558,6 +564,18 @@ struct ValueListValue {
     friend bool operator==(const ValueListValue&, const ValueListValue&);
 };
 
+class ValueListRef {
+public:
+    ValueListRef() = default;
+    [[nodiscard]] static std::optional<ValueListRef> create(const ValueListValue& value);
+    [[nodiscard]] const ValueListValue* get() const noexcept { return value_.get(); }
+    [[nodiscard]] bool replace(const ValueListValue& value) const;
+    friend bool operator==(const ValueListRef&, const ValueListRef&) = default;
+
+private:
+    std::shared_ptr<ValueListValue> value_;
+};
+
 using PropertyValueVariant = std::variant<
     UndefinedValue,
     NullValue,
@@ -596,7 +614,9 @@ using PropertyValueVariant = std::variant<
     ArrayValue,
     StructureValue,
     MapValue,
-    ValueListValue>;
+    ValueListValue,
+    ValueListRef,
+    TableColumnsRef>;
 
 struct PropertyValue : PropertyValueVariant {
     using Variant = PropertyValueVariant;
@@ -1311,6 +1331,7 @@ public:
     [[nodiscard]] const PictureAsset* find_asset(ObjectId id) const noexcept;
     [[nodiscard]] std::size_t indexed_id_count() const noexcept;
     [[nodiscard]] std::optional<std::vector<ChildItemRef>> form_item_refs(FormItemCollectionRef reference) const;
+    [[nodiscard]] const std::vector<TableColumn>* table_columns(TableColumnsRef reference) const noexcept;
 
     [[nodiscard]] std::optional<ChartTrendlineRef> add_chart_trendline(ObjectId chart, ObjectId series);
     [[nodiscard]] PropertyReadResult insert_chart_trendline(ObjectId chart, ObjectId series, const PropertyValue& argument);
@@ -1334,6 +1355,7 @@ private:
     bool opening_started_ = false;
     PropertySet window_permissions_;
     PropertySet runtime_form_values_;
+    mutable std::unordered_map<ObjectId, ValueListRef, ObjectIdHash> runtime_choice_lists_;
     struct ObjectKeyHash {
         [[nodiscard]] std::size_t operator()(const ObjectKey& key) const noexcept {
             const std::size_t category_hash = std::hash<std::uint8_t>{}(

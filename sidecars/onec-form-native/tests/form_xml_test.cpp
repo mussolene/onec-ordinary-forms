@@ -1319,6 +1319,23 @@ void test_choice_field_static_xml_profile_and_runtime_list_rejection() {
     expect(reparsed.ok() && reparsed.value().find_control(model::ObjectId{2}) != nullptr,
         "ChoiceField named static XML must round-trip");
 
+    auto runtime = parsed.value();
+    const auto list_property = model::PropertyId::from_name("ChoiceList");
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+    model::ValueListValue content;
+    content.items.push_back({0, std::string{"runtime"}, std::string{"Runtime"}, true, {}});
+    const auto reference = model::ValueListRef::create(content);
+    expect(reference && runtime.set_prop_val(owner, list_property, *reference) == model::PropertyMutationStatus::applied_runtime_only,
+        "ChoiceField accepts an external live list");
+    const auto populated_xml = source::serialize_form_xml(runtime);
+    expect(populated_xml.ok() && populated_xml.value() == serialized.value(),
+        "assigning and mutating a runtime list must leave persisted XML unchanged");
+    const auto cold = source::parse_form_xml(populated_xml.value());
+    const auto cold_list = cold.value().get_prop_val(owner, list_property);
+    expect(cold_list.value && std::get<model::ValueListRef>(*cold_list.value).get()->items.empty() &&
+        std::get<model::ValueListRef>(*cold_list.value) != *reference,
+        "cold XML reconstruction creates its own empty runtime list");
+
     constexpr std::string_view runtime_list_xml = R"XML(<Form id="1" name="ChoiceField" ordinaryFormVersion="2.1">
       <Attributes><Attribute id="3" name="Choice"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
       <ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><ChoiceList/></ChoiceField></ChildItems>

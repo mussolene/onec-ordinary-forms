@@ -80,6 +80,10 @@ std::string_view xsd_type(ValueCodec codec) {
             return "ControlChildItemsType";
         case ValueCodec::panel_pages:
             return "PanelChildItemsType";
+        case ValueCodec::value_list_reference:
+            return "ValueListValueType";
+        case ValueCodec::table_columns:
+            return "TableColumnsType";
         case ValueCodec::page_reference:
             return "ObjectIdType";
         case ValueCodec::dendrogram_items:
