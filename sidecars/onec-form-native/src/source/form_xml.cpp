@@ -1153,6 +1153,8 @@ model::PropertyValue parse_property_value(
             if (control_id) return model::ControlRef{parse_object_id(*control_id, node, property, object_id)};
             return model::UndefinedValue{};
         }
+        case mm::ValueCodec::chart_trendlines:
+        case mm::ValueCodec::chart_equation_area:
         case mm::ValueCodec::chart_plot_area:
         case mm::ValueCodec::chart_title_area:
         case mm::ValueCodec::chart_legend_area:
@@ -1394,6 +1396,61 @@ bool valid_picture_path(std::string_view path, model::PictureFormat format) {
         case model::PictureFormat::bmp: return file == "Picture.bmp";
     }
     return false;
+}
+
+model::ChartTrendline parse_chart_trendline(xmlNodePtr node, model::ObjectId id, std::string_view owner) {
+    if (node->properties) fail("OOF2003", node, std::string(owner), "Trendline", "ordered named Trendline without attributes", {}, "Trendline does not expose runtime identity attributes");
+    model::ChartTrendline trend; trend.id = id;
+    std::set<std::string> seen;
+    for (auto* child : element_children(node)) {
+        const auto name = node_name(child);
+        const auto fields = mm::chart_trendline_property_descriptors();
+        const auto field = std::ranges::find(fields, name, &mm::ChartSeriesPropertyDescriptor::name);
+        if (field == fields.end() || !seen.insert(name).second) fail("OOF2003", child, std::string(owner), name, "unique named Trendline property", {}, "Invalid Trendline property");
+        if (field->value_codec == mm::ValueCodec::chart_equation_area) {
+            if (child->properties) fail("OOF2003", child, std::string(owner), name, "EquationArea without attributes", {}, "EquationArea has no identity attributes");
+            std::set<std::string> equation_seen;
+            for (auto* property : element_children(child)) {
+                const auto property_name = node_name(property);
+                const auto equation_fields = mm::chart_label_area_property_descriptors();
+                const auto definition = std::ranges::find(equation_fields, property_name, &mm::ChartScalePropertyDescriptor::name);
+                if (definition == equation_fields.end() || !equation_seen.insert(property_name).second) fail("OOF2003", property, std::string(owner), property_name, "unique named EquationArea property", {}, "Invalid EquationArea property");
+                trend.equation_area.set_explicit(definition->id, parse_property_value(property, definition->value_codec, owner));
+            }
+        } else trend.properties.set_explicit(field->id, parse_property_value(child, field->value_codec, owner));
+    }
+    return trend;
+}
+void consume_chart_budget(std::size_t& budget, std::size_t count, xmlNodePtr node, std::string_view owner) {
+    if (count > model::max_chart_collection_items - budget)
+        fail("OOF2003", node, std::string(owner), "Chart", "bounded document Chart collections", {}, "Chart collections exceed the document resource budget");
+    budget += count;
+}
+void parse_chart_series_fields(xmlNodePtr node, mm::ChartSeriesObject object, std::string_view owner, std::size_t& budget) {
+    std::set<std::string> seen;
+    for (auto* child : element_children(node)) {
+        const auto name = node_name(child);
+        const auto fields = mm::chart_series_property_descriptors();
+        const auto field = std::ranges::find(fields, name, &mm::ChartSeriesPropertyDescriptor::name);
+        if (field == fields.end() || !seen.insert(name).second) fail("OOF2003", child, std::string(owner), name, "unique named Series property", {}, "Invalid Series property");
+        if (field->normal_runtime_only && std::holds_alternative<model::ChartSeries*>(object))
+            fail("OOF2003", child, std::string(owner), name, "persisted Series property", {}, "Runtime-only ordinary Series property cannot appear in source XML");
+        if (field->value_codec == mm::ValueCodec::chart_trendlines) {
+            if (child->properties) fail("OOF2003", child, std::string(owner), name, "Trendlines without attributes", {}, "Trendlines has no identity attributes");
+            std::visit([&](auto* item) {
+                for (auto* element : element_children(child)) {
+                    if (node_name(element) != "Trendline") fail("OOF2003", element, std::string(owner), "Trendlines", "named Trendline", {}, "Invalid Trendlines element");
+                    if (item->trendlines.size() >= model::max_chart_collection_items) fail("OOF2003", element, std::string(owner), name, "bounded Trendlines collection", {}, "Trendlines exceeds supported collection size");
+                    consume_chart_budget(budget, 1, element, owner);
+                    const auto id = model::ObjectId{item->next_trendline_id++};
+                    item->trendlines.push_back(parse_chart_trendline(element, id, owner));
+                }
+            }, object);
+        } else {
+            if (field->storage == mm::ChartSeriesStorage::computed) fail("OOF2003", child, std::string(owner), name, "derived Series property", {}, "Computed Series properties are reconstructed from the named owner and GraphicalRepresentationType");
+            mm::set_chart_series_property_value(object, *field, parse_property_value(child, field->value_codec, owner));
+        }
+    }
 }
 
 struct ParsedObjects {
@@ -1909,25 +1966,7 @@ private:
                 if (chart_summary_series_seen) fail("OOF2003", child, id_text, name, "one SummarySeries", name, "Duplicate SummarySeries");
                 chart_summary_series_seen = true;
                 auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
-                bool color_seen = false;
-                bool marker_seen = false;
-                bool text_seen = false;
-                bool value_seen = false;
-                for (xmlNodePtr field : element_children(child)) {
-                    if (node_name(field) == "Text" && !text_seen) {
-                        text_seen = true;
-                        summary.text = parse_property_value(field, mm::ValueCodec::localized_text, id_text);
-                    } else if (node_name(field) == "Value" && !value_seen) {
-                        value_seen = true;
-                        summary.value = parse_typed_value(field, id_text);
-                    } else if (node_name(field) == "Color" && !color_seen) {
-                        color_seen = true;
-                        summary.color = parse_color(field);
-                    } else if (node_name(field) == "Marker" && !marker_seen) {
-                        marker_seen = true;
-                        summary.marker = parse_enumeration(field);
-                    } else fail("OOF2003", field, id_text, node_name(field), "one Color or Marker", node_name(field), "Unknown or duplicate SummarySeries field");
-                }
+                parse_chart_series_fields(child, mm::ChartSeriesObject{&summary}, id_text, chart_budget_);
             } else if (descriptor->kind == model::ControlKind::chart &&
                        (name == "Series" || name == "Points" || name == "Values")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
@@ -1947,18 +1986,13 @@ private:
                 }
                 for (xmlNodePtr item : element_children(child)) {
                     if (name == "Series" && node_name(item) == "ChartSeries") {
+                        consume_chart_budget(chart_budget_, 1 + chart.points.size(), item, id_text);
                         model::ChartSeries series;
                         series.id = parse_object_id(required_attribute(item, "id"), item);
-                        for (xmlNodePtr field : element_children(item)) {
-                            const std::string field_name = node_name(field);
-                            if (field_name == "Text") series.text = node_text(field);
-                            else if (field_name == "Color") series.color = parse_color(field);
-                            else if (field_name == "Marker") series.marker = parse_enumeration(field);
-                            else if (field_name == "Value") series.value = parse_typed_value(field, id_text);
-                            else fail("OOF2003", field, id_text, field_name, "Text, Color, or Marker", field_name, "Unknown ChartSeries field");
-                        }
+                        parse_chart_series_fields(item, mm::ChartSeriesObject{&series}, id_text, chart_budget_);
                         chart.series.push_back(std::move(series));
                     } else if (name == "Points" && node_name(item) == "ChartPoint") {
+                        consume_chart_budget(chart_budget_, 1 + chart.series.size(), item, id_text);
                         model::ChartPoint point;
                         point.id = parse_object_id(required_attribute(item, "id"), item);
                         for (xmlNodePtr field : element_children(item)) {
@@ -1970,6 +2004,8 @@ private:
                         }
                         chart.points.push_back(std::move(point));
                     } else if (name == "Values" && node_name(item) == "ChartValue") {
+                        if (chart.values.size() >= chart.series.size() * chart.points.size())
+                            fail("OOF2003", item, id_text, "ChartValue", "bounded dense Chart matrix", {}, "Chart Values exceed the declared Series by Point matrix");
                         model::ChartValue value;
                         value.series_ref = parse_object_id(required_attribute(item, "seriesRef"), item);
                         value.point_ref = parse_object_id(required_attribute(item, "pointRef"), item);
@@ -2768,6 +2804,7 @@ private:
 
     const mm::Metamodel& metamodel_;
     ParsedObjects objects_;
+    std::size_t chart_budget_ = 0;
 };
 
 using XmlAttributes = std::vector<std::pair<std::string, std::string>>;
@@ -3506,6 +3543,8 @@ private:
                 return;
             case mm::ValueCodec::command_bar_buttons:
                 serialization_fail(std::string(object_id), std::string(name), "owned Buttons collection", "scalar", "Buttons is not a scalar property");
+            case mm::ValueCodec::chart_trendlines:
+            case mm::ValueCodec::chart_equation_area:
             case mm::ValueCodec::chart_plot_area:
             case mm::ValueCodec::chart_title_area:
             case mm::ValueCodec::chart_legend_area:
@@ -3527,6 +3566,51 @@ private:
             case mm::ValueCodec::command_reference:
                 writer_.text(name, object_id_text(require_value<model::CommandRef>(value, object_id, name, "command reference").id()));
                 return;
+        }
+    }
+
+    void write_chart_family_value(const mm::ChartSeriesPropertyDescriptor& field, const model::PropertyValue& value, std::string_view owner) {
+        mm::PropertyDescriptor property;
+        property.xml_name = field.name;
+        property.value_codec = field.value_codec;
+        write_property(property, value, owner);
+    }
+    void write_chart_series_fields(mm::ConstChartSeriesObject object, std::string_view owner) {
+        const bool summary = std::holds_alternative<const model::ChartSummarySeries*>(object);
+        const auto fields = mm::chart_series_property_descriptors();
+        for (const auto name : summary ? std::array<std::string_view, 4>{"Text", "Value", "Color", "Marker"} : std::array<std::string_view, 4>{"Text", "Color", "Marker", "Value"}) {
+            const auto field = std::ranges::find(fields, name, &mm::ChartSeriesPropertyDescriptor::name);
+            const auto value = mm::chart_series_property_value(object, *field);
+            if (!value || (name == "Value" && std::holds_alternative<model::UndefinedValue>(*value)) ||
+                (summary && (name == "Color" || name == "Marker") && *value == field->default_value)) continue;
+            write_chart_family_value(*field, *value, owner);
+        }
+        for (const auto& field : fields) {
+            if (field.value_codec == mm::ValueCodec::chart_trendlines) {
+                std::visit([&](auto* item) {
+                    if (item->trendlines.empty()) return;
+                    writer_.open("Trendlines");
+                    for (const auto& trend : item->trendlines) {
+                        writer_.open("Trendline");
+                        for (const auto& definition : mm::chart_trendline_property_descriptors()) {
+                            if (definition.value_codec == mm::ValueCodec::chart_equation_area) {
+                                if (trend.equation_area.empty()) continue;
+                                writer_.open("EquationArea");
+                                for (const auto& property : mm::chart_label_area_property_descriptors()) if (const auto* entry = trend.equation_area.find(property.id)) {
+                                    mm::PropertyDescriptor descriptor;
+                                    descriptor.xml_name = property.name;
+                                    descriptor.value_codec = property.value_codec;
+                                    write_property(descriptor, entry->value, owner);
+                                }
+                                writer_.close("EquationArea");
+                            } else if (const auto* entry = trend.properties.find(definition.id)) write_chart_family_value(definition, entry->value, owner);
+                        }
+                        writer_.close("Trendline");
+                    }
+                    writer_.close("Trendlines");
+                }, object);
+            } else if (field.fixed == mm::ChartSeriesFixed::none && field.storage != mm::ChartSeriesStorage::computed && (!field.normal_runtime_only || summary))
+                if (const auto value = mm::chart_series_property_value(object, field)) write_chart_family_value(field, *value, owner);
         }
     }
 
@@ -4167,24 +4251,11 @@ private:
                 title_area = std::move(defaults);
             }
             write_area("TitleArea", title_area);
-            if (chart->summary_series.text || !std::holds_alternative<model::UndefinedValue>(chart->summary_series.value) ||
+            if (!chart->summary_series.properties.empty() || !chart->summary_series.trendlines.empty() || chart->summary_series.text || !std::holds_alternative<model::UndefinedValue>(chart->summary_series.value) ||
                 chart->summary_series.color != model::ColorValue{} ||
                 chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
                 writer_.open("SummarySeries");
-                if (chart->summary_series.text) {
-                    mm::PropertyDescriptor property;
-                    property.xml_name = "Text";
-                    property.value_codec = mm::ValueCodec::localized_text;
-                    write_property(property, *chart->summary_series.text, id);
-                }
-                if (!std::holds_alternative<model::UndefinedValue>(chart->summary_series.value)) {
-                    writer_.open("Value");
-                    write_typed_scalar(chart->summary_series.value, id);
-                    writer_.close("Value");
-                }
-                if (chart->summary_series.color != model::ColorValue{}) write_color("Color", chart->summary_series.color, id);
-                if (chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"})
-                    write_enumeration("Marker", chart->summary_series.marker);
+                write_chart_series_fields(mm::ConstChartSeriesObject{&chart->summary_series}, id);
                 writer_.close("SummarySeries");
             }
             const auto write_chart_key = [&](std::string_view name, const model::PropertyValue& value, std::string_view owner) {
@@ -4211,10 +4282,7 @@ private:
             else writer_.open("Series");
             for (const auto& item : chart->series) {
                 writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
-                writer_.text("Text", item.text);
-                write_color("Color", item.color, object_id_text(item.id));
-                write_enumeration("Marker", item.marker);
-                write_chart_key("Value", item.value, object_id_text(item.id));
+                write_chart_series_fields(mm::ConstChartSeriesObject{&item}, object_id_text(item.id));
                 writer_.close("ChartSeries");
             }
             writer_.close("Series");

@@ -1,5 +1,6 @@
 #include "oof/source/schema_generator.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <set>
@@ -125,6 +126,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "ContextMenuReferenceValueType";
         case ValueCodec::chart_series_reference:
             return "ObjectIdType";
+        case ValueCodec::chart_trendlines: return "ChartTrendlinesType";
+        case ValueCodec::chart_equation_area: return "ChartLabelAreaType";
         case ValueCodec::chart_plot_area: return "ChartPlotAreaType";
         case ValueCodec::chart_title_area: return "ChartTitleAreaType";
         case ValueCodec::chart_legend_area: return "ChartLegendAreaType";
@@ -147,6 +150,7 @@ std::string_view xsd_type(ValueCodec codec) {
 }
 
 std::string_view xsd_type(const PropertyDescriptor& property) {
+    if (property.control_kind == model::ControlKind::chart && property.api_name == "SummarySeries") return "ChartSummarySeriesType";
     if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "EnterKeyBehavior")
         return "EnterKeyBehaviorValueType";
     if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "SizeChange")
@@ -335,6 +339,21 @@ void validate_metamodel(const Metamodel& metamodel) {
         "PanelPlacement",
         DescriptorOwner::control,
         PropertySurface::panel_placement);
+}
+
+void append_chart_enum_type(std::string& output, std::string_view type, std::span<const std::string_view> members, std::set<std::string_view>& emitted) {
+    if (!emitted.insert(type).second) return;
+    output += "  <xs:complexType";
+    append_attribute(output, "name", std::string(type) + "ValueType");
+    output += "><xs:attribute name=\"type\" type=\"NonEmptyTokenType\" use=\"required\"";
+    append_attribute(output, "fixed", type);
+    output += "/><xs:attribute name=\"member\" use=\"required\"><xs:simpleType><xs:restriction base=\"xs:string\">";
+    for (const auto member : members) {
+        output += "<xs:enumeration";
+        append_attribute(output, "value", member);
+        output += "/>";
+    }
+    output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
 }
 
 void append_value_types(std::string& output) {
@@ -762,20 +781,9 @@ void append_value_types(std::string& output) {
     }
     std::set<std::string_view> scale_enum_types;
     for (const auto fields : {model::metamodel::chart_scale_property_descriptors(), model::metamodel::chart_label_area_property_descriptors()})
-    for (const auto& field : fields) {
-        if (field.value_codec != model::metamodel::ValueCodec::enumeration || !scale_enum_types.insert(field.enumeration_type).second) continue;
-        output += "  <xs:complexType";
-        append_attribute(output, "name", std::string(field.enumeration_type) + "ValueType");
-        output += "><xs:attribute name=\"type\" type=\"NonEmptyTokenType\" use=\"required\"";
-        append_attribute(output, "fixed", field.enumeration_type);
-        output += "/><xs:attribute name=\"member\" use=\"required\"><xs:simpleType><xs:restriction base=\"xs:string\">";
-        for (const auto member : field.members) {
-            output += "<xs:enumeration";
-            append_attribute(output, "value", member);
-            output += "/>";
-        }
-        output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
-    }
+        for (const auto& field : fields) if (field.value_codec == ValueCodec::enumeration) append_chart_enum_type(output, field.enumeration_type, field.members, scale_enum_types);
+    for (const auto fields : {model::metamodel::chart_series_property_descriptors(), model::metamodel::chart_trendline_property_descriptors()})
+        for (const auto& field : fields) if (field.value_codec == ValueCodec::enumeration) append_chart_enum_type(output, field.enumeration_type, field.members, scale_enum_types);
     output += "  <xs:simpleType name=\"ChartAreaCoordinateType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/><xs:maxInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
     output += "  <xs:simpleType name=\"ChartScaleStepType\"><xs:restriction base=\"xs:decimal\"><xs:minInclusive value=\"0\"/></xs:restriction></xs:simpleType>\n";
     output += "  <xs:complexType name=\"NullableLineValueType\"><xs:choice><xs:element name=\"Line\" type=\"LineValueType\"/><xs:element name=\"Undefined\" type=\"UndefinedValueType\"/></xs:choice></xs:complexType>\n";
@@ -875,8 +883,6 @@ void append_value_types(std::string& output) {
 
     output += R"XSD(  <xs:simpleType name="ChartValueTypeName"><xs:restriction base="xs:string"><xs:enumeration value="String"/><xs:enumeration value="Number"/><xs:enumeration value="Boolean"/><xs:enumeration value="Date"/><xs:enumeration value="UUID"/><xs:enumeration value="Array"/><xs:enumeration value="Structure"/><xs:enumeration value="Map"/><xs:enumeration value="ValueTable"/><xs:enumeration value="Color"/><xs:enumeration value="Font"/><xs:enumeration value="Type"/></xs:restriction></xs:simpleType>
   <xs:complexType name="TypedScalarValueType"><xs:choice><xs:element name="String" type="xs:string"/><xs:element name="Number" type="xs:decimal"/><xs:element name="Boolean" type="xs:boolean"/><xs:element name="Date" type="LocalDateValueType"/><xs:element name="Undefined" type="UndefinedValueType"/><xs:element name="Null" type="xs:string"/><xs:element name="UUID" type="UuidValueType"/><xs:element name="Type" type="ChartValueTypeName"/></xs:choice></xs:complexType>
-  <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/><xs:element name="Value" type="TypedScalarValueType" minOccurs="0"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
-  <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Text" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Value" type="TypedScalarValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Marker" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
   <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Value" type="TypedScalarValueType" minOccurs="0"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartValueType"><xs:sequence><xs:choice><xs:element name="String" type="xs:string"/><xs:element name="Number" type="xs:decimal"/><xs:element name="Boolean" type="xs:boolean"/><xs:element name="Date" type="LocalDateValueType"/><xs:element name="Undefined" type="UndefinedValueType"/><xs:element name="Null" type="xs:string"/><xs:element name="UUID" type="UuidValueType"/><xs:element name="Type" type="ChartValueTypeName"/></xs:choice><xs:element name="Details" type="TypedScalarValueType" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:sequence><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:simpleType name="ChartLastAssignedIdType"><xs:restriction base="xs:unsignedLong"><xs:maxInclusive value="9223372036854775807"/></xs:restriction></xs:simpleType>
@@ -886,6 +892,56 @@ void append_value_types(std::string& output) {
   <xs:complexType name="ChartValueCollectionType"><xs:sequence><xs:element name="ChartValue" type="ChartValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="dataMode" type="ChartDataModeType" use="optional"/></xs:complexType>
 
 )XSD";
+    output += "  <xs:simpleType name=\"ChartTrendlineApproximationDegreeType\"><xs:restriction base=\"xs:int\"><xs:minInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
+    output += "  <xs:complexType name=\"ChartTrendlineType\"><xs:sequence>";
+    for (const auto& field : model::metamodel::chart_trendline_property_descriptors()) {
+        output += "<xs:element";
+        append_attribute(output, "name", field.name);
+        append_attribute(output, "type", field.value_codec == ValueCodec::enumeration ? std::string(field.enumeration_type) + "ValueType" :
+            field.value_codec == ValueCodec::integer32 ? "ChartTrendlineApproximationDegreeType" : std::string(xsd_type(field.value_codec)));
+        append_attribute(output, "minOccurs", "0");
+        output += "/>";
+    }
+    output += "</xs:sequence></xs:complexType>\n";
+    output += "  <xs:complexType name=\"ChartTrendlinesType\"><xs:sequence><xs:element name=\"Trendline\" type=\"ChartTrendlineType\" minOccurs=\"0\" maxOccurs=\"unbounded\"/></xs:sequence></xs:complexType>\n";
+    output += "  <xs:group name=\"ChartSeriesAdditionalProperties\"><xs:sequence>";
+    for (const auto& field : model::metamodel::chart_series_property_descriptors()) {
+        if (field.normal_runtime_only || field.fixed != model::metamodel::ChartSeriesFixed::none || (field.storage == model::metamodel::ChartSeriesStorage::computed && field.value_codec != ValueCodec::chart_trendlines)) continue;
+        output += "<xs:element";
+        append_attribute(output, "name", field.name);
+        append_attribute(output, "type", field.value_codec == ValueCodec::enumeration ? std::string(field.enumeration_type) + "ValueType" : std::string(xsd_type(field.value_codec)));
+        append_attribute(output, "minOccurs", "0");
+        output += "/>";
+    }
+    output += "</xs:sequence></xs:group>\n";
+    for (const bool summary : {false, true}) {
+        output += "  <xs:complexType";
+        append_attribute(output, "name", summary ? "ChartSummarySeriesType" : "ChartSeriesType");
+        output += "><xs:sequence>";
+        const auto fields = model::metamodel::chart_series_property_descriptors();
+        for (const auto name : summary ? std::array<std::string_view, 4>{"Text", "Value", "Color", "Marker"} : std::array<std::string_view, 4>{"Text", "Color", "Marker", "Value"}) {
+            const auto field = std::ranges::find(fields, name, &model::metamodel::ChartSeriesPropertyDescriptor::name);
+            output += "<xs:element";
+            append_attribute(output, "name", name);
+            append_attribute(output, "type", name == "Marker" ? "EnumerationValueType" : xsd_type(field->value_codec));
+            if (summary || name == "Value") append_attribute(output, "minOccurs", "0");
+            if (summary) append_attribute(output, "maxOccurs", "1");
+            output += "/>";
+        }
+        output += "<xs:group ref=\"ChartSeriesAdditionalProperties\"/>";
+        if (summary) for (const auto& field : fields) if (field.normal_runtime_only) {
+            output += "<xs:element";
+            append_attribute(output, "name", field.name);
+            append_attribute(output, "type", xsd_type(field.value_codec));
+            append_attribute(output, "minOccurs", "0");
+            append_attribute(output, "maxOccurs", "1");
+            output += "/>";
+        }
+        output += "</xs:sequence>";
+        if (!summary) output += "<xs:attribute name=\"id\" type=\"ObjectIdType\" use=\"required\"/>";
+        output += "</xs:complexType>\n";
+    }
+
 
     output += "\n  <xs:simpleType name=\"ShortcutKeyType\">\n    <xs:restriction base=\"xs:string\">\n";
     for (const auto& key : model::metamodel::shortcut_key_descriptors()) {
@@ -1533,6 +1589,32 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         }
     }
     output += "        </Properties></NamedConcept>\n";
+    for (const auto& [concept_name, fields] : {
+            std::pair{std::string_view{"ChartSeries"}, model::metamodel::chart_series_property_descriptors()},
+            std::pair{std::string_view{"ChartSummarySeries"}, model::metamodel::chart_series_property_descriptors()},
+            std::pair{std::string_view{"ChartTrendline"}, model::metamodel::chart_trendline_property_descriptors()}}) {
+        output += "        <NamedConcept";
+        append_attribute(output, "name", concept_name);
+        append_attribute(output, "apiName", concept_name == "ChartSummarySeries" ? "SummarySeries" : concept_name);
+        append_attribute(output, "russianName", concept_name == "ChartSummarySeries" ? "СводнаяСерия" : concept_name == "ChartSeries" ? "СерияДиаграммы" : "ЛинияТрендаДиаграммы");
+        append_attribute(output, "russianType", concept_name == "ChartTrendline" ? "ЛинияТрендаДиаграммы" : "СерияДиаграммы");
+        append_attribute(output, "source", concept_name == "ChartSummarySeries" ? "Chart.SummarySeries" : concept_name);
+        append_attribute(output, "evidenceRefs", "ev_418fc1414bc745bbbb90a22694e5cae1 ev_0bf2de977ee74d0e8e69e117b819f78c ev_13ef0edd6d9249c8a3e28ec5cd81e80a ev_53548909d4e14fbbb2d03ed4a7cf4c30 ev_eb9b7fe1b8e143df99b272ab954a892d ev_612f08f59f24474e92f5bb692afc2409");
+        output += "><Properties>";
+        for (const auto& field : fields) {
+            output += "<Property";
+            append_attribute(output, "name", field.name);
+            append_attribute(output, "apiName", field.name);
+            append_attribute(output, "russianName", as_utf8(field.russian_name));
+            append_attribute(output, "russianType", as_utf8(field.russian_type));
+            append_attribute(output, "valueCodec", model::metamodel::value_codec_name(field.value_codec));
+            if (field.normal_runtime_only) append_attribute(output, "persistence", concept_name == "ChartSeries" ? "runtime-only" : "persisted-editable");
+            if (field.read_only) append_attribute(output, "apiAccess", "readOnly");
+            if (field.name == "Indicator") append_attribute(output, "derivedFrom", "GraphicalRepresentationType");
+            output += "/>";
+        }
+        output += "</Properties></NamedConcept>\n";
+    }
     output += "        <NamedConcept name=\"ChartScale\" russianName=\"ШкалаДиаграммы\" evidenceRefs=\"ev_43fb18e286fc41f592888037cb9471a7 ev_7965b712f58040819191d1e7ac14e38e ev_fdaf734b79924b48b1c6745d881c8b1a ev_8acb08b31fe04c098e2f7fc1cfb2359c ev_5a399212306c4804804215808cc216eb ev_afbdbf8284434954a3e84bf3bcd4a80c\"><Properties>";
     for (const auto& field : model::metamodel::chart_scale_property_descriptors()) {
         output += "<Property";
@@ -1564,15 +1646,6 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     output +=
         "        <NamedConcept name=\"WindowsFonts\" russianName=\"WindowsШрифты\" evidenceRefs=\"ev_9d8015b7a8b246ffb91ce498507abd5f\"><Properties>\n"
         "          <Property name=\"DefaultGUIFont\" russianName=\"ШрифтДиалоговИМеню\" russianType=\"Шрифт\"/><Property name=\"OEMFixedFont\" russianName=\"OEMШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIFixedFont\" russianName=\"ANSIШрифтМоноширинный\" russianType=\"Шрифт\"/><Property name=\"ANSIVariableFont\" russianName=\"ANSIШрифтПропорциональный\" russianType=\"Шрифт\"/><Property name=\"SystemFont\" russianName=\"СистемныйШрифт\" russianType=\"Шрифт\"/>\n"
-        "        </Properties></NamedConcept>\n"
-        "        <NamedConcept name=\"ChartSeries\" russianName=\"СерияДиаграммы\"><Properties>\n"
-        "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/><Property name=\"Marker\" apiName=\"Маркер\" russianType=\"ТипМаркераДиаграммы\"/>\n"
-        "        </Properties></NamedConcept>\n"
-        "        <NamedConcept name=\"ChartSummarySeries\" apiName=\"SummarySeries\" russianName=\"СводнаяСерия\" russianType=\"СерияДиаграммы\" source=\"Chart.SummarySeries; 8.5.1.1343 ValueToFile API\" evidenceRefs=\"ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823 ev_0bf2de977ee74d0e8e69e117b819f78c ev_8f3887542c4c4ce589fe3d80f0aa9fd5\"><Properties>\n"
-        "          <Property name=\"Text\" apiName=\"Text\" russianName=\"Текст\" russianType=\"Строка\" valueCodec=\"localized-text\"/>\n"
-        "          <Property name=\"Value\" apiName=\"Value\" russianName=\"Значение\" russianType=\"Произвольный\" valueCodec=\"typed-scalar\"/>\n"
-        "          <Property name=\"Color\" apiName=\"Color\" russianName=\"Цвет\" russianType=\"Цвет\" valueCodec=\"color\"/>\n"
-        "          <Property name=\"Marker\" apiName=\"Marker\" russianName=\"Маркер\" russianType=\"ТипМаркераДиаграммы\" valueCodec=\"enumeration\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPlotArea\" russianName=\"ОбластьПостроенияДиаграммы\" evidenceRefs=\"ev_8716e61c09c841db91cbb280c8ef420e\"><Properties>\n"
         "          <Property name=\"Placement\" russianName=\"Расположение\" russianType=\"РасположениеОбластиПостроенияДиаграммы\"/><Property name=\"Left\" russianName=\"Лево\" russianType=\"Число\"/><Property name=\"Top\" russianName=\"Верх\" russianType=\"Число\"/><Property name=\"Right\" russianName=\"Право\" russianType=\"Число\"/><Property name=\"Bottom\" russianName=\"Низ\" russianType=\"Число\"/>\n"

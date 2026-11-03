@@ -104,6 +104,8 @@ enum class ValueCodec : std::uint8_t {
     chart_plot_area,
     chart_title_area,
     chart_legend_area,
+    chart_trendlines,
+    chart_equation_area,
     control_reference,
     form_reference,
     attribute_reference,
@@ -227,6 +229,31 @@ struct PropertyDescriptor {
     StorageCodec storage_codec = StorageCodec::unclassified;
     DefaultValue default_value{};
 };
+
+enum class ChartSeriesStorage : std::uint8_t { row, style, companion, computed };
+enum class ChartSeriesFixed : std::uint8_t { none, text, value, color, marker };
+struct ChartSeriesPropertyDescriptor {
+    PropertyId id;
+    std::string_view name;
+    std::u8string_view russian_name;
+    ValueCodec value_codec;
+    std::u8string_view russian_type;
+    ChartSeriesStorage storage;
+    std::size_t slot;
+    ChartSeriesFixed fixed = ChartSeriesFixed::none;
+    std::string_view enumeration_type;
+    std::span<const std::string_view> members;
+    PropertyValue default_value{UndefinedValue{}};
+    bool read_only = false;
+    bool normal_runtime_only = false;
+};
+using ConstChartSeriesObject = std::variant<const ChartSeries*, const ChartSummarySeries*>;
+using ChartSeriesObject = std::variant<ChartSeries*, ChartSummarySeries*>;
+[[nodiscard]] std::span<const ChartSeriesPropertyDescriptor> chart_series_property_descriptors() noexcept;
+[[nodiscard]] std::span<const ChartSeriesPropertyDescriptor> chart_trendline_property_descriptors() noexcept;
+[[nodiscard]] std::optional<PropertyValue> chart_series_property_value(ConstChartSeriesObject object, const ChartSeriesPropertyDescriptor& field);
+void set_chart_series_property_value(ChartSeriesObject object, const ChartSeriesPropertyDescriptor& field, PropertyValue value);
+void reset_chart_series_property_value(ChartSeriesObject object, const ChartSeriesPropertyDescriptor& field);
 
 struct ChartScaleOwnerDescriptor {
     PropertyId id;

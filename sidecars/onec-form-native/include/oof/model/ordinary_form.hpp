@@ -205,6 +205,24 @@ struct ChartSeriesRef {
     friend bool operator==(const ChartSeriesRef&, const ChartSeriesRef&) = default;
 };
 
+struct ChartTrendlinesRef {
+    ObjectId owner{};
+    ObjectId series{};
+    friend bool operator==(const ChartTrendlinesRef&, const ChartTrendlinesRef&) = default;
+};
+struct ChartTrendlineRef {
+    ObjectId owner{};
+    ObjectId series{};
+    ObjectId trendline{};
+    friend bool operator==(const ChartTrendlineRef&, const ChartTrendlineRef&) = default;
+};
+struct ChartEquationAreaRef {
+    ObjectId owner{};
+    ObjectId series{};
+    ObjectId trendline{};
+    friend bool operator==(const ChartEquationAreaRef&, const ChartEquationAreaRef&) = default;
+};
+
 struct UndefinedValue {
     friend bool operator==(UndefinedValue, UndefinedValue) = default;
 };
@@ -529,6 +547,9 @@ using PropertyValue = std::variant<
     ChartAreaRef,
     ChartScaleRef,
     ChartSeriesRef,
+    ChartTrendlinesRef,
+    ChartTrendlineRef,
+    ChartEquationAreaRef,
     ChartCollectionRef,
     CommandBarButtonRef>;
 
@@ -760,12 +781,21 @@ struct RadioButtonPayload final : TypedControlPayload<ControlKind::radio_button>
 struct InputFieldPayload final : TypedControlPayload<ControlKind::input_field> {};
 struct UsualGroupPayload final : TypedControlPayload<ControlKind::usual_group> {};
 struct SplitterPayload final : TypedControlPayload<ControlKind::splitter> {};
+struct ChartTrendline {
+    ObjectId id{};
+    PropertySet properties;
+    PropertySet equation_area;
+};
+
 struct ChartSeries {
     ObjectId id{};
-    std::string text;
+    PropertyValue text{std::string{}};
     ColorValue color;
-    EnumerationValue marker;
+    EnumerationValue marker{"ChartMarkerType", "Auto"};
     PropertyValue value{UndefinedValue{}};
+    PropertySet properties;
+    std::vector<ChartTrendline> trendlines;
+    std::uint64_t next_trendline_id = 1;
 };
 
 struct ChartPoint {
@@ -788,6 +818,9 @@ struct ChartSummarySeries {
     PropertyValue value{UndefinedValue{}};
     ColorValue color;
     EnumerationValue marker{"ChartMarkerType", "Auto"};
+    PropertySet properties;
+    std::vector<ChartTrendline> trendlines;
+    std::uint64_t next_trendline_id = 1;
 };
 
 struct ChartScale {
@@ -1134,6 +1167,10 @@ public:
         ChartAreaKind chart_area = ChartAreaKind::none;
         ChartScaleKind chart_scale = ChartScaleKind::none;
 
+        ObjectId chart_series{};
+        ObjectId chart_trendline{};
+        bool chart_equation_area = false;
+
         friend bool operator==(const ObjectKey&, const ObjectKey&) = default;
     };
 
@@ -1191,6 +1228,13 @@ public:
     [[nodiscard]] const Event* find_event(ObjectId id) const noexcept;
     [[nodiscard]] const PictureAsset* find_asset(ObjectId id) const noexcept;
     [[nodiscard]] std::size_t indexed_id_count() const noexcept;
+
+    [[nodiscard]] std::optional<ChartTrendlineRef> add_chart_trendline(ObjectId chart, ObjectId series);
+    [[nodiscard]] PropertyReadResult insert_chart_trendline(ObjectId chart, ObjectId series, const PropertyValue& argument);
+    [[nodiscard]] PropertyMutationStatus delete_chart_trendline(ObjectId chart, ObjectId series, std::int64_t index);
+    [[nodiscard]] std::optional<ChartTrendlineRef> chart_trendline_at(ObjectId chart, ObjectId series, std::int64_t index) const;
+    [[nodiscard]] std::optional<std::int64_t> chart_trendline_index(ChartTrendlineRef reference) const;
+    [[nodiscard]] std::optional<std::size_t> chart_trendline_count(ObjectId chart, ObjectId series) const;
 
     [[nodiscard]] PropertyReadResult get_prop_val(ObjectKey owner, PropertyId property) const;
     [[nodiscard]] PropertyMutationStatus set_prop_val(

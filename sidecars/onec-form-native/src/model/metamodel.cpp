@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <type_traits>
 #include <vector>
 
 namespace oof::model::metamodel {
@@ -752,6 +753,15 @@ void apply_proven_storage_overrides(
         property->persistence = PersistenceClass::persisted_readonly;
         property->storage_codec = StorageCodec::control_info;
         property->value_codec = codec;
+        property->default_value = {DefaultKind::none, {}};
+    }
+    {
+        auto property = std::ranges::find(chart_properties, "SummarySeries", &PropertyDescriptor::api_name);
+        if (property == chart_properties.end()) throw std::logic_error("missing owned Chart SummarySeries descriptor");
+        property->api_access = ApiAccess::read_only;
+        property->persistence = PersistenceClass::persisted_readonly;
+        property->storage_codec = StorageCodec::control_info;
+        property->value_codec = ValueCodec::chart_series_reference;
         property->default_value = {DefaultKind::none, {}};
     }
     for (const auto name : {"SeriesCount", "PointCount"}) {
@@ -2325,6 +2335,97 @@ const ChartAreaBooleanDescriptor* find_chart_area_boolean(ChartAreaKind kind, Pr
     return found == descriptors.end() ? nullptr : &*found;
 }
 
+std::span<const ChartSeriesPropertyDescriptor> chart_series_property_descriptors() noexcept {
+    static constexpr std::array<std::string_view, 3> visibility{"Auto","Show","DontShow"};
+    static constexpr std::array<std::string_view, 6> graph{"Auto","Line","Step","Area","Column","Column3D"};
+    static constexpr std::array<std::string_view, 3> axis{"Auto","Main","Additional"};
+    static constexpr std::array<std::string_view, 4> stack{"Auto","Unstacked","Stacked","StackedNormalized"};
+    static constexpr std::array<std::string_view, 3> edit{"Auto","Use","DontUse"};
+    static constexpr std::array<std::string_view, 6> marker{"None","Rect","Circle","Rhomb","Auto","Alternation"};
+    static const std::array descriptors{
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Color"), "Color", u8"Цвет", ValueCodec::color, u8"Цвет", ChartSeriesStorage::style, 0, ChartSeriesFixed::color, {}, {}, PropertyValue{ColorValue{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowGraphicalDataRepresentationInChartLegend"), "ShowGraphicalDataRepresentationInChartLegend", u8"ОтображатьГрафическоеПредставлениеДанныхВЛегендеДиаграммы", ValueCodec::enumeration, u8"ОтображениеВЛегендеДиаграммы", ChartSeriesStorage::companion, 0, ChartSeriesFixed::none, "ShowInChartLegend", visibility, PropertyValue{EnumerationValue{"ShowInChartLegend", "Auto"}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Trendlines"), "Trendlines", u8"ЛинииТренда", ValueCodec::chart_trendlines, u8"ЛинииТрендаДиаграммы", ChartSeriesStorage::computed, 0, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}, true},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowGraphicalDataRepresentationInChart"), "ShowGraphicalDataRepresentationInChart", u8"ОтображатьГрафическоеПредставлениеДанныхВДиаграмме", ValueCodec::enumeration, u8"ОтображениеВДиаграмме", ChartSeriesStorage::companion, 1, ChartSeriesFixed::none, "ShowInChart", visibility, PropertyValue{EnumerationValue{"ShowInChart", "Auto"}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Details"), "Details", u8"Расшифровка", ValueCodec::typed_scalar, u8"Произвольный", ChartSeriesStorage::row, 8, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("LabelPercentFormat"), "LabelPercentFormat", u8"ФорматПроцентовВПодписях", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::style, 7, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Text"), "Text", u8"Текст", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::row, 3, ChartSeriesFixed::text, {}, {}, PropertyValue{std::string{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("LabelValueFormat"), "LabelValueFormat", u8"ФорматЗначенийВПодписях", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::style, 6, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Line"), "Line", u8"Линия", ValueCodec::line, u8"Линия", ChartSeriesStorage::row, 1, ChartSeriesFixed::none, {}, {}, PropertyValue{LineValue{{"ChartLineType", "Solid"}, 2, false}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("DataTableFormat"), "DataTableFormat", u8"ФорматВТаблицеДанных", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::style, 8, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Marker"), "Marker", u8"Маркер", ValueCodec::enumeration, u8"ТипМаркераДиаграммы", ChartSeriesStorage::style, 1, ChartSeriesFixed::marker, "ChartMarkerType", marker, PropertyValue{EnumerationValue{"ChartMarkerType", "Auto"}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("SummarySeries"), "SummarySeries", u8"СводнаяСерия", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::computed, 0, ChartSeriesFixed::none, {}, {}, PropertyValue{false}, true},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("GraphicalRepresentationType"), "GraphicalRepresentationType", u8"ТипГрафическогоПредставления", ValueCodec::enumeration, u8"ТипГрафическогоПредставленияСерииДиаграммы", ChartSeriesStorage::style, 3, ChartSeriesFixed::none, "ChartSeriesGraphicalRepresentationType", graph, PropertyValue{EnumerationValue{"ChartSeriesGraphicalRepresentationType", "Auto"}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("UsedValueAxis"), "UsedValueAxis", u8"ИспользуемаяОсьЗначений", ValueCodec::enumeration, u8"ИспользуемаяОсьЗначенийДиаграммы", ChartSeriesStorage::style, 4, ChartSeriesFixed::none, "UsedChartValuesAxis", axis, PropertyValue{EnumerationValue{"UsedChartValuesAxis", "Auto"}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("StackType"), "StackType", u8"ТипНакопления", ValueCodec::enumeration, u8"ТипНакопленияСерииДиаграммы", ChartSeriesStorage::style, 2, ChartSeriesFixed::none, "ChartSeriesStackType", stack, PropertyValue{EnumerationValue{"ChartSeriesStackType", "Auto"}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Separate"), "Separate", u8"Раздвигать", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 5, ChartSeriesFixed::none, {}, {}, PropertyValue{false}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Indicator"), "Indicator", u8"Индикатор", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::computed, 0, ChartSeriesFixed::none, {}, {}, PropertyValue{false}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ValuesEditMode"), "ValuesEditMode", u8"РежимРедактированияЗначений", ValueCodec::enumeration, u8"РежимРедактированияЗначенийДиаграммы", ChartSeriesStorage::style, 9, ChartSeriesFixed::none, "ChartValuesEditMode", edit, PropertyValue{EnumerationValue{"ChartValuesEditMode", "Auto"}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("StackGroup"), "StackGroup", u8"ГруппаНакопления", ValueCodec::string, u8"Строка", ChartSeriesStorage::style, 5, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Value"), "Value", u8"Значение", ValueCodec::typed_scalar, u8"Произвольный", ChartSeriesStorage::row, 9, ChartSeriesFixed::value, {}, {}, PropertyValue{UndefinedValue{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ColorPriority"), "ColorPriority", u8"ПриоритетЦвета", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 10, ChartSeriesFixed::none, {}, {}, PropertyValue{false}, false, true},
+    };
+    return descriptors;
+}
+std::span<const ChartSeriesPropertyDescriptor> chart_trendline_property_descriptors() noexcept {
+    static constexpr std::array<std::string_view, 5> approximation{"Linear", "Exponential", "Logarithmic", "Power", "Polynomial"};
+    static constexpr std::array<std::string_view, 6> markers{"None", "Rect", "Circle", "Rhomb", "Auto", "Alternation"};
+    static constexpr std::array<std::string_view, 5> stock{"Open", "High", "Low", "Close", "OpenCloseAverage"};
+    static constexpr std::array<std::string_view, 3> factors{"PointNumber", "PointValue", "Auto"};
+    static const std::array descriptors{
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ApproximationType"), "ApproximationType", u8"ТипАппроксимации", ValueCodec::enumeration, u8"ТипАппроксимацииЛинииТрендаДиаграммы", ChartSeriesStorage::row, 1, ChartSeriesFixed::none, "ChartTrendlineApproximationType", approximation, PropertyValue{EnumerationValue{"ChartTrendlineApproximationType", "Linear"}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ApproximationDegree"), "ApproximationDegree", u8"ПорядокАппроксимации", ValueCodec::integer32, u8"Число", ChartSeriesStorage::row, 2, ChartSeriesFixed::none, {}, {}, PropertyValue{std::int64_t{3}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Line"), "Line", u8"Линия", ValueCodec::line, u8"Линия", ChartSeriesStorage::row, 3, ChartSeriesFixed::none, {}, {}, PropertyValue{LineValue{}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Factor"), "Factor", u8"Фактор", ValueCodec::enumeration, u8"ФакторЛинииТрендаДиаграммы", ChartSeriesStorage::row, 4, ChartSeriesFixed::none, "ChartTrendlineFactor", factors, PropertyValue{EnumerationValue{"ChartTrendlineFactor", "Auto"}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Color"), "Color", u8"Цвет", ValueCodec::color, u8"Цвет", ChartSeriesStorage::row, 5, ChartSeriesFixed::none, {}, {}, PropertyValue{ColorValue{}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Text"), "Text", u8"Текст", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::row, 6, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowInLegend"), "ShowInLegend", u8"ОтображатьВЛегенде", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 7, ChartSeriesFixed::none, {}, {}, PropertyValue{false}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowEquation"), "ShowEquation", u8"ОтображатьУравнение", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 8, ChartSeriesFixed::none, {}, {}, PropertyValue{false}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowDeterminationFactor"), "ShowDeterminationFactor", u8"ОтображатьКоэффициентДетерминации", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 9, ChartSeriesFixed::none, {}, {}, PropertyValue{false}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Marker"), "Marker", u8"Маркер", ValueCodec::enumeration, u8"ТипМаркераДиаграммы", ChartSeriesStorage::row, 10, ChartSeriesFixed::none, "ChartMarkerType", markers, PropertyValue{EnumerationValue{"ChartMarkerType", "Auto"}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Details"), "Details", u8"Расшифровка", ValueCodec::typed_scalar, u8"Произвольный", ChartSeriesStorage::row, 11, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("StockChartUsedPointValue"), "StockChartUsedPointValue", u8"ИспользуемоеЗначениеТочкиБиржевойДиаграммы", ValueCodec::enumeration, u8"ИспользуемоеЗначениеТочкиБиржевойДиаграммы", ChartSeriesStorage::row, 12, ChartSeriesFixed::none, "StockChartUsedPointValue", stock, PropertyValue{EnumerationValue{"StockChartUsedPointValue", "OpenCloseAverage"}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("EquationArea"), "EquationArea", u8"ОбластьУравнения", ValueCodec::chart_equation_area, u8"ОбластьПодписиДиаграммы", ChartSeriesStorage::row, 13, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}},
+    };
+    return descriptors;
+}
+
+std::optional<PropertyValue> chart_series_property_value(ConstChartSeriesObject object, const ChartSeriesPropertyDescriptor& field) {
+    return std::visit([&](auto* item) -> std::optional<PropertyValue> {
+        switch (field.fixed) {
+            case ChartSeriesFixed::text:
+                return item->text;
+            case ChartSeriesFixed::value: return item->value;
+            case ChartSeriesFixed::color: return PropertyValue{item->color};
+            case ChartSeriesFixed::marker: return PropertyValue{item->marker};
+            case ChartSeriesFixed::none:
+                if (const auto* entry = item->properties.find(field.id)) return entry->value;
+                return std::nullopt;
+        }
+        return std::nullopt;
+    }, object);
+}
+void set_chart_series_property_value(ChartSeriesObject object, const ChartSeriesPropertyDescriptor& field, PropertyValue value) {
+    std::visit([&](auto* item) {
+        switch (field.fixed) {
+            case ChartSeriesFixed::text: item->text = std::move(value); break;
+            case ChartSeriesFixed::value: item->value = std::move(value); break;
+            case ChartSeriesFixed::color: item->color = std::get<ColorValue>(std::move(value)); break;
+            case ChartSeriesFixed::marker: item->marker = std::get<EnumerationValue>(std::move(value)); break;
+            case ChartSeriesFixed::none: item->properties.set_explicit(field.id, std::move(value)); break;
+        }
+    }, object);
+}
+void reset_chart_series_property_value(ChartSeriesObject object, const ChartSeriesPropertyDescriptor& field) {
+    std::visit([&](auto* item) {
+        if (field.fixed == ChartSeriesFixed::none) item->properties.unset(field.id);
+        else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*item)>, ChartSummarySeries>) {
+            if (field.fixed == ChartSeriesFixed::text) item->text.reset();
+            else set_chart_series_property_value(ChartSeriesObject{item}, field, field.default_value);
+        } else set_chart_series_property_value(ChartSeriesObject{item}, field, field.default_value);
+    }, object);
+}
+
 std::span<const ChartScaleOwnerDescriptor> chart_scale_owner_descriptors() noexcept {
     static const std::array descriptors{
         ChartScaleOwnerDescriptor{PropertyId::from_name("PointsScale"), "PointsScale", u8"ШкалаТочек", ChartScaleKind::points, &ChartArea::points_scale, false, 13},
@@ -2370,11 +2471,10 @@ std::span<const ChartScalePropertyDescriptor> chart_scale_property_descriptors()
 }
 
 std::span<const ChartScalePropertyDescriptor> chart_label_area_property_descriptors() noexcept {
-    static constexpr std::array<std::string_view, 11> locations{"Edge", "Center", "EdgeInside", "EdgeAuto", "Auto", "LeftTop", "LeftBottom", "RightTop", "RightBottom", "LeftAndTopSpecified", "EmptySpace"};
     static constexpr std::array<std::string_view, 6> markers{"None", "Rect", "Circle", "Rhomb", "Auto", "Alternation"};
     static constexpr std::array<std::string_view, 4> orientations{"Horizontal", "Vertical", "Auto", "CustomAngle"};
     static const std::array descriptors{
-        ChartScalePropertyDescriptor{PropertyId::from_name("Location"), "Location", u8"Положение", ValueCodec::enumeration, nullptr, 1, "ChartLabelLocation", locations, 4, u8"ПоложениеПодписейКДиаграмме"},
+        ChartScalePropertyDescriptor{PropertyId::from_name("Location"), "Location", u8"Положение", ValueCodec::enumeration, nullptr, 1, "ChartLabelLocation", detail::chart_label_location, 4, u8"ПоложениеПодписейКДиаграмме"},
         ChartScalePropertyDescriptor{PropertyId::from_name("Left"), "Left", u8"Лево", ValueCodec::decimal, nullptr, 2, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::unit_decimal, PropertyValue{DecimalValue{"0.5"}}},
         ChartScalePropertyDescriptor{PropertyId::from_name("Top"), "Top", u8"Верх", ValueCodec::decimal, nullptr, 3, {}, {}, 0, u8"Число", ChartScaleNumericPolicy::unit_decimal, PropertyValue{DecimalValue{"0.5"}}},
         ChartScalePropertyDescriptor{PropertyId::from_name("Font"), "Font", u8"Шрифт", ValueCodec::font, nullptr, 4, {}, {}, 0, u8"Шрифт"},
@@ -2659,6 +2759,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
         case ValueCodec::chart_plot_area: return "chart-plot-area";
         case ValueCodec::chart_title_area: return "chart-title-area";
         case ValueCodec::chart_legend_area: return "chart-legend-area";
+        case ValueCodec::chart_trendlines: return "chart-trendlines";
+        case ValueCodec::chart_equation_area: return "chart-equation-area";
         case ValueCodec::control_reference:
             return "control-reference";
         case ValueCodec::form_reference:

@@ -1001,8 +1001,8 @@ void encode_chart_back_color(LV& info, std::size_t first, std::size_t second,
     info.items.at(second) = encode_control_color(color == chart_back_color_default() ? model::ColorValue{} : color, path);
 }
 
-std::pair<std::size_t, std::size_t> chart_back_color_slots(std::size_t series, std::size_t points) {
-    return {39 + 11 * (series + points), 214 + 13 * series + 12 * points + 4 * series * points};
+std::pair<std::size_t, std::size_t> chart_back_color_slots(std::size_t series, std::size_t points, std::size_t trendline_owners = 0) {
+    return {39 + 11 * (series + points), 214 + 13 * series + 12 * points + 4 * series * points + trendline_owners};
 }
 
 model::ColorValue explicit_control_color(const model::PropertySet& properties, std::string_view name,
@@ -4415,8 +4415,9 @@ struct DecodedChartInfo {
 };
 
 DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
-    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style = true);
-std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path);
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style = true, std::size_t* collection_items = nullptr);
+std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path, std::size_t trendline_owners = 0);
+std::size_t chart_data_end(std::size_t series_count, std::size_t point_count, std::string_view path);
 
 struct EmbeddedChartEvents {
     std::vector<DecodedControlEvent> events;
@@ -4436,9 +4437,11 @@ EmbeddedChartEvents extract_embedded_chart_events(
         fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Embedded Chart Series count overflows its offset");
     const auto points_offset = std::size_t{5} + 11 * (series_size + 1) + 1;
     const auto point_count = integer_atom<std::uint32_t>(at(info, points_offset, info_path), child_path(info_path, points_offset));
-    const auto expected_count = chart_info_item_count(series_size, static_cast<std::size_t>(point_count), info_path);
     const auto flag = points_offset + 1 + 11 * static_cast<std::size_t>(point_count) + 94;
     const bool has_events = bool_atom(at(info, flag, info_path), child_path(info_path, flag));
+    const auto owner_count_slot = chart_data_end(series_size, point_count, info_path) + 23 + (has_events ? 1U : 0U);
+    const auto trendline_owners = integer_atom<std::size_t>(at(info, owner_count_slot, info_path), child_path(info_path, owner_count_slot));
+    const auto expected_count = chart_info_item_count(series_size, point_count, info_path, trendline_owners);
     if ((has_events && expected_count == std::numeric_limits<std::size_t>::max()) ||
         info.items.size() != expected_count + (has_events ? 1U : 0U))
         fail("OOF1102", info_path, "supported embedded Chart cardinality", std::to_string(info.items.size()), "Embedded Chart Info dimensions are unsupported");
@@ -4449,7 +4452,7 @@ EmbeddedChartEvents extract_embedded_chart_events(
         info.items.erase(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1));
         info.items[flag] = raw("0");
     }
-    const auto [first, second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count));
+    const auto [first, second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count), trendline_owners);
     return {std::move(events), first, second};
 }
 
@@ -6614,7 +6617,7 @@ std::uint32_t chart_marker_cache(const model::EnumerationValue& value, std::stri
     return value.member == "Auto" ? 3u : ordinal;
 }
 
-std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path) {
+std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path, std::size_t trendline_owners) {
     constexpr auto maximum = std::numeric_limits<std::size_t>::max();
     if (series_count > maximum / 13 || point_count > maximum / 12 ||
         (series_count != 0 && point_count > maximum / series_count)) {
@@ -6627,7 +6630,16 @@ std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_co
         point_items > maximum - 222 - series_items || 4 * cells > maximum - 222 - series_items - point_items) {
         fail("OOF1102", std::string(path), "non-overflowing Chart dimensions", "oversized dimensions", "Chart dimensions overflow the native record size");
     }
-    return 222 + series_items + point_items + 4 * cells;
+    const auto base = 222 + series_items + point_items + 4 * cells;
+    if (trendline_owners > series_count + 1 || trendline_owners > maximum - base)
+        fail("OOF1102", std::string(path), "bounded sparse Trendline owners", {}, "Trendline owner count exceeds Chart Series ownership");
+    return base + trendline_owners;
+}
+
+std::size_t chart_data_end(std::size_t series_count, std::size_t point_count, std::string_view path) {
+    (void)chart_info_item_count(series_count, point_count, path);
+    return 5 + 11 * (series_count + 1) + 2 + 11 * point_count +
+        canonical_chart_middle_defaults().size() + 3 + 3 * series_count * point_count;
 }
 
 void apply_chart_render_cache(const LV& actual, LV& expected,
@@ -6730,6 +6742,122 @@ constexpr std::array chart_boolean_properties{
     ChartBooleanProperty{"AutoMinValue", 79, true, false},
 };
 
+LV encode_chart_label_area(const model::PropertySet& properties, std::string_view path) {
+    auto record = list(std::vector<LV>(13, raw("0")));
+    record.items[0] = raw("1");
+    for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+        const auto* entry = properties.find(field.id);
+        record.items[field.record_offset] = encode_chart_label_area_property(entry ? entry->value : model::metamodel::chart_scale_property_default(field), field, path);
+    }
+    return record;
+}
+model::PropertySet decode_chart_label_area(const LV& record, std::string_view path) {
+    require_arity(record, 13, path);
+    require_raw_constant(record.items[0], "1", child_path(path, 0));
+    model::PropertySet properties;
+    for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+        auto value = decode_chart_label_area_property(record.items[field.record_offset], field, child_path(path, field.record_offset));
+        (void)encode_chart_label_area_property(value, field, path);
+        if (value != model::metamodel::chart_scale_property_default(field)) properties.set_explicit(field.id, std::move(value));
+    }
+    return properties;
+}
+LV encode_chart_family_property(const model::PropertyValue& value, const model::metamodel::ChartSeriesPropertyDescriptor& field, std::string_view path) {
+    using model::metamodel::ValueCodec;
+    switch (field.value_codec) {
+        case ValueCodec::enumeration: {
+            const auto* enumeration = std::get_if<model::EnumerationValue>(&value);
+            if (!enumeration || enumeration->type_name != field.enumeration_type) fail("OOF1122", std::string(path), "typed chart family enum", {}, "Invalid chart family enum type");
+            const auto found = std::ranges::find(field.members, enumeration->member);
+            if (found == field.members.end()) fail("OOF1122", std::string(path), "known chart family enum member", enumeration->member, "Invalid chart family enum member");
+            return raw(std::to_string(std::distance(field.members.begin(), found)));
+        }
+        case ValueCodec::boolean:
+            if (const auto* boolean = std::get_if<bool>(&value)) return raw(*boolean ? "1" : "0");
+            break;
+        case ValueCodec::integer32:
+            if (const auto* integer = std::get_if<std::int64_t>(&value); integer && *integer >= 1 && *integer <= INT32_MAX) return raw(std::to_string(*integer));
+            break;
+        case ValueCodec::string:
+            if (const auto* text = std::get_if<std::string>(&value)) return string_value(*text);
+            break;
+        case ValueCodec::localized_text: return encoded_localized_text(value, path, false);
+        case ValueCodec::typed_scalar: return encoded_typed_scalar(value, path);
+        case ValueCodec::color:
+            if (const auto* color = std::get_if<model::ColorValue>(&value)) return encode_control_color(*color, path);
+            break;
+        case ValueCodec::line:
+            if (const auto* line = std::get_if<model::LineValue>(&value)) {
+                auto record = list_stream::parse(value_codec::encode_line(*line));
+                if (value == field.default_value) record.items[5] = raw("0");
+                return record;
+            }
+            break;
+        default: break;
+    }
+    fail("OOF1122", std::string(path), "typed named chart family property", {}, "Invalid chart family property");
+}
+model::PropertyValue decode_chart_family_property(const LV& record, const model::metamodel::ChartSeriesPropertyDescriptor& field, std::string_view path) {
+    using model::metamodel::ValueCodec;
+    switch (field.value_codec) {
+        case ValueCodec::enumeration: {
+            const auto ordinal = integer_atom<std::size_t>(record, path);
+            if (ordinal >= field.members.size()) fail("OOF1115", std::string(path), "known chart family ordinal", std::to_string(ordinal), "Invalid chart family ordinal");
+            return model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[ordinal])};
+        }
+        case ValueCodec::boolean: return bool_atom(record, path);
+        case ValueCodec::integer32: {
+            const auto integer = integer_atom<std::int64_t>(record, path);
+            if (integer < 1 || integer > INT32_MAX) fail("OOF1115", std::string(path), "positive chart approximation degree", std::to_string(integer), "Invalid chart approximation degree");
+            return integer;
+        }
+        case ValueCodec::string: return string_atom(record, path);
+        case ValueCodec::localized_text: return decoded_localized_text(record, path, false);
+        case ValueCodec::typed_scalar: {
+            const auto value = decoded_typed_scalar(record, path);
+            if (!value) fail("OOF1115", std::string(path), "named typed scalar", {}, "Unsupported chart family scalar");
+            return *value;
+        }
+        case ValueCodec::color: return decode_control_color(record, path);
+        case ValueCodec::line: {
+            auto normalized = record;
+            if (record.items.size() == 8 && std::holds_alternative<model::LineValue>(field.default_value)) {
+                const auto expected = encode_chart_family_property(field.default_value, field, path);
+                if (list_stream::dump_compact(record) == list_stream::dump_compact(expected)) {
+                    const auto& line = std::get<model::LineValue>(field.default_value);
+                    normalized = list_stream::parse(value_codec::encode_line(line));
+                }
+            }
+            return value_codec::decode_line(list_stream::dump_compact(normalized));
+        }
+        default: fail("OOF1115", std::string(path), "known chart family codec", {}, "Unsupported chart family codec");
+    }
+}
+LV encode_chart_trendline(const model::ChartTrendline& trend, std::string_view path) {
+    auto record = list(std::vector<LV>(14, raw("0")));
+    for (const auto& field : model::metamodel::chart_trendline_property_descriptors()) {
+        if (field.value_codec == model::metamodel::ValueCodec::chart_equation_area) record.items[field.slot] = encode_chart_label_area(trend.equation_area, path);
+        else {
+            const auto* entry = trend.properties.find(field.id);
+            record.items[field.slot] = encode_chart_family_property(entry ? entry->value : field.default_value, field, path);
+        }
+    }
+    return record;
+}
+model::ChartTrendline decode_chart_trendline(const LV& record, model::ObjectId id, std::string_view path) {
+    require_arity(record, 14, path);
+    require_raw_constant(record.items[0], "0", child_path(path, 0));
+    model::ChartTrendline trend; trend.id = id;
+    for (const auto& field : model::metamodel::chart_trendline_property_descriptors()) {
+        if (field.value_codec == model::metamodel::ValueCodec::chart_equation_area) trend.equation_area = decode_chart_label_area(record.items[field.slot], child_path(path, field.slot));
+        else {
+            auto value = decode_chart_family_property(record.items[field.slot], field, child_path(path, field.slot));
+            if (value != field.default_value) trend.properties.set_explicit(field.id, std::move(value));
+        }
+    }
+    return trend;
+}
+
 LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValue& title,
     const model::PropertySet& properties = {}, model::ObjectId owner = {}) {
     int chart_type = 4;
@@ -6744,7 +6872,11 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     }
     const auto series_count = chart.series.size();
     const auto point_count = chart.points.size();
-    const auto expected = chart_info_item_count(series_count, point_count, "$/Chart/Info");
+    std::map<std::uint64_t, const std::vector<model::ChartTrendline>*> trendline_owner_table;
+    if (!chart.summary_series.trendlines.empty()) trendline_owner_table.emplace(1, &chart.summary_series.trendlines);
+    for (const auto& series : chart.series) if (!series.trendlines.empty()) trendline_owner_table.emplace(series.id.value(), &series.trendlines);
+    const auto trendline_owners = trendline_owner_table.size();
+    const auto expected = chart_info_item_count(series_count, point_count, "$/Chart/Info", trendline_owners);
     const auto expected_cell_count = series_count * point_count;
     using ChartValueKey = std::pair<std::uint64_t, std::uint64_t>;
     std::map<ChartValueKey, const model::ChartValue*> value_index;
@@ -6779,20 +6911,15 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     for (std::size_t index = 0; index < series_count; ++index) {
         const auto& item = chart.series[index];
         auto row = canonical_chart_series_defaults();
-        row[0] = encode_chart_resolved_color(item.color, "$/Chart/Series/Color");
+        row[0] = item.color.kind == model::ColorKind::automatic ? encode_chart_resolved_color(item.color, "$/Chart/Series/Color") : encode_control_color(item.color, "$/Chart/Series/Color");
         row[2] = raw(std::to_string(chart_marker_cache(item.marker, "$/Chart/Series/Marker")));
-        row[3] = encoded_localized(item.text);
+        row[3] = encoded_localized_text(item.text, "$/Chart/Series/Text", false);
         row[4] = raw("1");
         row[7] = raw(std::to_string(item.id.value()));
         row[9] = encoded_typed_scalar(item.value, "$/Chart/Series/Value");
         rows.insert(rows.end(), row.begin(), row.end());
     }
     append(std::move(rows));
-    if (chart.summary_series.marker.type_name != "ChartMarkerType" ||
-        (chart.summary_series.marker.member != "Auto" && chart.summary_series.marker.member != "Rhomb")) {
-        fail("OOF1122", "$/Chart/SummarySeries/Marker", "ChartMarkerType Auto or Rhomb",
-            "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
-    }
     auto summary_row = canonical_chart_series_defaults();
     if (chart.summary_series.text) {
         summary_row[3] = encoded_localized_text(*chart.summary_series.text, "$/Chart/SummarySeries/Text");
@@ -6803,13 +6930,9 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     if (std::ranges::find(line_color_types, chart_type) != line_color_types.end()) {
         summary_row[0].items[2].items[0] = raw("8874375");
     }
-    if (chart.summary_series.marker.member == "Rhomb") summary_row[2] = raw("3");
-    if (chart.summary_series.color.kind == model::ColorKind::absolute) {
-        summary_row[0] = encode_chart_color_property(chart.summary_series.color, "$/Chart/SummarySeries/Color");
-    } else if (chart.summary_series.color != model::ColorValue{}) {
-        fail("OOF1122", "$/Chart/SummarySeries/Color", "automatic or absolute opaque RGB color",
-            "unsupported ColorValue", "Chart SummarySeries Color is unsupported");
-    }
+    summary_row[2] = raw(std::to_string(chart.summary_series.marker.member == "Auto" || chart.summary_series.marker.member == "Alternation" ? 1U : chart_marker_value(chart.summary_series.marker, "$/Chart/SummarySeries/Marker")));
+    if (chart.summary_series.color.kind != model::ColorKind::automatic)
+        summary_row[0] = encode_control_color(chart.summary_series.color, "$/Chart/SummarySeries/Color");
     append(std::move(summary_row));
     info.push_back(raw("1"));
     info.push_back(raw(std::to_string(point_count)));
@@ -6839,18 +6962,38 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     }
     const auto cells_end = info.size();
     append(canonical_chart_data_defaults());
-    const auto companion = list({raw("0"), raw("0")});
-    for (std::size_t index = 0; index <= series_count; ++index) append({companion});
+    info.at(cells_end + 23) = raw(std::to_string(trendline_owners));
+    for (const auto& [series_id, trends] : trendline_owner_table) {
+        auto record = list({raw("0"), raw(std::to_string(series_id)), raw(std::to_string(trends->size()))});
+        for (const auto& trend : *trends) record.items.push_back(encode_chart_trendline(trend, "$/Chart/Series/Trendlines"));
+        append({std::move(record)});
+    }
+    for (std::size_t index = 0; index <= series_count; ++index) {
+        const model::metamodel::ConstChartSeriesObject object = index == series_count ? model::metamodel::ConstChartSeriesObject{&chart.summary_series} : model::metamodel::ConstChartSeriesObject{&chart.series[index]};
+        auto companion = list({raw("0"), raw("0")});
+        for (const auto& field : model::metamodel::chart_series_property_descriptors()) if (field.storage == model::metamodel::ChartSeriesStorage::companion)
+            companion.items[field.slot] = encode_chart_family_property(model::metamodel::chart_series_property_value(object, field).value_or(field.default_value), field, "$/Chart/Series");
+        append({std::move(companion)});
+    }
     const auto style_defaults_start = info.size();
     append(canonical_chart_style_defaults());
     const auto no_text = list({raw("1"), raw("0")});
     for (const auto& point : chart.points) append({list({encode_chart_color_property(point.color, "$/Chart/Points/Color")})});
     for (std::size_t index = 0; index <= series_count; ++index) {
         const bool summary = index == series_count;
-        const auto style_color = summary ? encode_control_color(chart.summary_series.color, "$/Chart/SummarySeries/Color") : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
+        const auto style_color = summary ? encode_control_color(chart.summary_series.color, "$/Chart/SummarySeries/Color") : encode_control_color(chart.series[index].color, "$/Chart/Series/Color");
         const auto marker = summary ? chart_marker_value(chart.summary_series.marker, "$/Chart/SummarySeries/Marker") : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
-        const auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
-        append({style});
+        auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
+        const model::metamodel::ConstChartSeriesObject object = summary ? model::metamodel::ConstChartSeriesObject{&chart.summary_series} : model::metamodel::ConstChartSeriesObject{&chart.series[index]};
+        const auto row = std::size_t{5} + index * 11;
+        for (const auto& field : model::metamodel::chart_series_property_descriptors()) {
+            if (field.fixed != model::metamodel::ChartSeriesFixed::none || field.storage == model::metamodel::ChartSeriesStorage::companion || field.storage == model::metamodel::ChartSeriesStorage::computed) continue;
+            auto value = !summary && field.normal_runtime_only ? field.default_value : model::metamodel::chart_series_property_value(object, field).value_or(field.default_value);
+            if (field.storage == model::metamodel::ChartSeriesStorage::row) info.at(row + field.slot) = encode_chart_family_property(value, field, "$/Chart/Series");
+            else style.items[field.slot] = encode_chart_family_property(value, field, "$/Chart/Series");
+        }
+        info.at(row + 6) = raw(style.items[3].atom == "1" ? "1" : "0");
+        append({std::move(style)});
     }
     const auto render_start = info.size();
     append(canonical_chart_render_defaults());
@@ -6954,7 +7097,10 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
                 fail("OOF1122", path, "known Chart enumeration member", value->member, "Chart enumeration member is unsupported");
             ordinal = static_cast<int>(std::distance(spec.members.begin(), member));
         }
-        info.at(middle_start + spec.offset) = raw(std::to_string(ordinal));
+        const auto base = spec.base == model::detail::ChartEnumBase::middle ? middle_start : cells_end;
+        info.at(base + spec.offset) = raw(std::to_string(ordinal));
+        if (spec.render_mirror) info.at(render_start + *spec.render_mirror).items.at(1) = raw(std::to_string(ordinal));
+        if (spec.source_render_slot) info.at(render_start + *spec.source_render_slot).items.at(1) = raw(std::to_string(ordinal));
     }
     info.at(middle_start + 4) = string_value(explicit_string(properties, "LabelDelimiter", ", "));
     for (const auto& [name, offset] : {std::pair{"ValueLabelFormat", 6U}, std::pair{"PercentLabelFormat", 7U}}) {
@@ -7066,7 +7212,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     info.at(middle_start + 102 + 3 * expected_cell_count) = encode_control_font(label_font, "$/Chart/LabelFont");
     info.at(middle_start + 103 + 3 * expected_cell_count) =
         raw(explicit_bool(properties, "TransparentLabel", true) ? "1" : "0");
-    auto& limits = info.at(middle_start + 126 + 3 * expected_cell_count + series_count);
+    auto& limits = info.at(middle_start + 126 + 3 * expected_cell_count + series_count + trendline_owners);
     require_arity(limits, 5, "$/Chart/Info/Limits");
     std::string base_value = "0";
     if (const auto* entry = properties.find(model::PropertyId::from_name("BaseValue"))) {
@@ -7135,7 +7281,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         if (encoded.items.size() == 7) encoded.items[5] = raw(border == default_border ? "0" : "3");
         result.items.at(index) = std::move(encoded);
     }
-    const auto [back_first, back_second] = chart_back_color_slots(series_count, point_count);
+    const auto [back_first, back_second] = chart_back_color_slots(series_count, point_count, trendline_owners);
     encode_chart_back_color(result, back_first, back_second, properties, "$/Chart/BackColor");
     return result;
 }
@@ -7160,7 +7306,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
         "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue", "MaxValue", "MinValue", "ActiveSeries",
-        "AutoSeriesSeparation", "LabelType", "MaxSeries", "Orientation", "GaugeChartValueRepresentation", "LabelLocation", "GaugeChartValuesScaleLabelsLocation", "SpaceMode"}, "$/Chart");
+        "AutoSeriesSeparation", "LabelType", "MaxSeries", "Orientation", "GaugeChartValueRepresentation", "LabelLocation", "GaugeChartValuesScaleLabelsLocation", "SpaceMode", "ColorPalette"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     const auto title = explicit_localized_text(control.properties(), "Title", "$/Chart/TitleArea");
     auto info = encode_chart_info(*chart, title, control.properties(), control.id);
@@ -7179,25 +7325,49 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
 }
 
 DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& info_path,
-    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style) {
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style, std::size_t* collection_items) {
     require_list(stored_info, info_path);
-    LV info = stored_info;
-    if (info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(info), "Chart Info is truncated");
-    require_raw_constant(at(info, 0, info_path), "75", child_path(info_path, 0));
-    const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
+    if (stored_info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(stored_info), "Chart Info is truncated");
+    require_raw_constant(at(stored_info, 0, info_path), "75", child_path(info_path, 0));
+    const auto series_count = integer_atom<std::uint32_t>(at(stored_info, 4, info_path), child_path(info_path, 4));
     const auto series_size = static_cast<std::size_t>(series_count);
     if (series_size >= std::numeric_limits<std::size_t>::max() / 11) {
         fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Chart Series count overflows its record offset");
     }
     const auto points_count_offset = std::size_t{5} + (series_size + 1) * 11 + 1;
-    if (points_count_offset >= info.items.size()) fail("OOF1102", info_path, "point count after Series records", describe(info), "Chart Info is truncated");
-    const auto point_count = integer_atom<std::uint32_t>(at(info, points_count_offset, info_path), child_path(info_path, points_count_offset));
-    const auto expected = chart_info_item_count(static_cast<std::size_t>(series_count), static_cast<std::size_t>(point_count), info_path);
+    if (points_count_offset >= stored_info.items.size()) fail("OOF1102", info_path, "point count after Series records", describe(stored_info), "Chart Info is truncated");
+    const auto point_count = integer_atom<std::uint32_t>(at(stored_info, points_count_offset, info_path), child_path(info_path, points_count_offset));
     const auto event_flag_index = points_count_offset + 1 + static_cast<std::size_t>(point_count) * 11 + 94;
-    const bool has_events = bool_atom(at(info, event_flag_index, info_path), child_path(info_path, event_flag_index));
+    const bool has_events = bool_atom(at(stored_info, event_flag_index, info_path), child_path(info_path, event_flag_index));
+    const auto owner_count_slot = chart_data_end(series_size, point_count, info_path) + 23 + (has_events ? 1U : 0U);
+    const auto trendline_owners = integer_atom<std::size_t>(at(stored_info, owner_count_slot, info_path), child_path(info_path, owner_count_slot));
+    const auto expected = chart_info_item_count(series_size, point_count, info_path, trendline_owners);
     if ((has_events && expected == std::numeric_limits<std::size_t>::max()) ||
-        info.items.size() != expected + (has_events ? 1U : 0U))
-        fail("OOF1102", info_path, "supported dense Chart collection cardinality", std::to_string(info.items.size()), "Chart Info dimensions are unsupported");
+        stored_info.items.size() != expected + (has_events ? 1U : 0U))
+        fail("OOF1102", info_path, "supported dense Chart collection cardinality", std::to_string(stored_info.items.size()), "Chart Info dimensions are unsupported");
+    std::size_t local_collection_items = 0;
+    auto& decoded_collection_items = collection_items ? *collection_items : local_collection_items;
+    if (series_size > model::max_chart_collection_items || point_count > model::max_chart_collection_items)
+        fail("OOF1102", info_path, "bounded Chart collections", {}, "Chart collection dimensions exceed supported limits");
+    const auto dimension_items = series_size + static_cast<std::size_t>(point_count) + series_size * point_count;
+    const auto available_items = model::max_chart_collection_items - decoded_collection_items;
+    if (dimension_items > available_items)
+        fail("OOF1102", info_path, "bounded document Chart collections", {}, "Chart dimensions exceed the shared document collection budget");
+    auto chart_collection_items = dimension_items;
+    const auto owner_records_start = chart_data_end(series_size, point_count, info_path) + 24 + (has_events ? 1U : 0U);
+    for (std::size_t index = 0; index < trendline_owners; ++index) {
+        const auto record_path = child_path(info_path, owner_records_start + index);
+        const auto& record = at(stored_info, owner_records_start + index, info_path);
+        require_list(record, record_path);
+        if (record.items.size() < 3) fail("OOF1115", record_path, "Trendline owner header", {}, "Truncated Trendline owner record");
+        const auto count = integer_atom<std::size_t>(record.items[2], child_path(record_path, 2));
+        if (count == 0 || count > available_items - chart_collection_items)
+            fail("OOF1102", record_path, "positive Trendlines within shared document budget", {}, "Trendlines exceed the shared document collection budget");
+        require_arity(record, 3 + count, record_path);
+        chart_collection_items += count;
+    }
+    decoded_collection_items += chart_collection_items;
+    LV info = stored_info;
     std::vector<DecodedControlEvent> chart_events;
     if (has_events) {
         chart_events = decode_control_event_collection(at(info, event_flag_index + 1, info_path),
@@ -7215,7 +7385,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const auto series_id = integer_atom<std::uint64_t>(at(info, row_offset + 7, info_path), child_path(info_path, row_offset + 7));
         model::ChartSeries series;
         series.id = model::ObjectId{series_id};
-        series.text = decoded_single_language_text(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
+        series.text = decoded_localized_text(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3), false);
         if (auto value = decoded_typed_scalar(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) series.value = std::move(*value);
         payload.series.push_back(std::move(series));
     }
@@ -7271,10 +7441,13 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     const auto data_defaults = canonical_chart_data_defaults();
     const auto style_defaults = canonical_chart_style_defaults();
     const auto cells_end = data_start + static_cast<std::size_t>(series_count) * point_count * 3;
-    const auto series_companions_start = cells_end + data_defaults.size();
+    const auto trendline_owners_start = cells_end + data_defaults.size();
+    const auto series_companions_start = trendline_owners_start + trendline_owners;
     const auto style_defaults_start = series_companions_start + series_size + 1;
     const auto point_styles_start = style_defaults_start + style_defaults.size();
     const auto series_styles_start = point_styles_start + static_cast<std::size_t>(point_count);
+    const auto render_start = cells_end + data_defaults.size() + trendline_owners + series_size + 1 + style_defaults.size() +
+        static_cast<std::size_t>(point_count) + series_size + 1;
     std::vector<std::optional<std::uint32_t>> derived_marker_caches(series_count);
     for (std::size_t point = 0; point < point_count; ++point) {
         const auto style_path = child_path(info_path, point_styles_start + point);
@@ -7295,15 +7468,17 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const auto& series_style = at(info, series_styles_start + series, info_path);
         require_arity(series_style, 10, style_path);
         auto color = decode_control_color(series_style.items[0], child_path(style_path, 0));
-        if (color.kind != model::ColorKind::automatic && color.kind != model::ColorKind::absolute)
-            fail("OOF1122", style_path, "automatic or absolute Chart Series Color", "unsupported ColorValue", "Chart Series Color is outside the supported profile");
         const auto marker_id = integer_atom<std::uint32_t>(series_style.items[1], child_path(style_path, 1));
         const auto marker = decode_chart_marker(marker_id, child_path(style_path, 1));
         const auto row_offset = std::size_t{5} + series * 11;
-        const auto row_color = decode_chart_color_property(at(info, row_offset, info_path), child_path(info_path, row_offset));
+        const auto row_color = decode_control_color(at(info, row_offset, info_path), child_path(info_path, row_offset));
         if (color.kind == model::ColorKind::absolute && chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset))) {
             fail("OOF1115", style_path, "Series Color matching resolved RGB", "mismatch", "Chart Series Color differs from its resolved native RGB");
         }
+        if (color.kind == model::ColorKind::automatic && row_color.kind != model::ColorKind::absolute)
+            fail("OOF1115", style_path, "absolute derived Series RGB cache", "different Color kind", "Automatic Series Color cache must contain physical RGB");
+        if (color.kind == model::ColorKind::style_reference && color != row_color)
+            fail("OOF1115", style_path, "Series named Color matching row Color", "mismatch", "Series named Color mirror differs");
         const auto marker_cache_path = child_path(info_path, row_offset + 2);
         const auto rendered_marker = integer_atom<std::uint32_t>(at(info, row_offset + 2, info_path), marker_cache_path);
         if (marker.member == "Auto" || marker.member == "Alternation") {
@@ -7329,18 +7504,18 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             fail("OOF1115", summary_style_path, "SummarySeries Color matching resolved RGB", "mismatch",
                 "Chart SummarySeries Color differs from its resolved native RGB");
         }
-    } else if (summary_color != model::ColorValue{}) {
-        fail("OOF1122", child_path(summary_style_path, 0), "automatic or absolute opaque RGB color",
-            "unsupported ColorValue", "Chart SummarySeries Color is unsupported");
+    } else if (summary_color.kind == model::ColorKind::automatic) {
+        const auto row_offset = std::size_t{5} + series_size * 11;
+        const auto row_color = decode_control_color(at(info, row_offset, info_path), child_path(info_path, row_offset));
+        if (row_color.kind != model::ColorKind::absolute) fail("OOF1115", summary_style_path, "absolute derived SummarySeries RGB cache", "different Color kind", "Automatic SummarySeries Color cache must contain physical RGB");
+    } else if (summary_color.kind == model::ColorKind::style_reference) {
+        const auto row_color = decode_control_color(at(info, std::size_t{5} + series_size * 11, info_path), summary_style_path);
+        if (row_color != summary_color) fail("OOF1115", summary_style_path, "matching named SummarySeries Color", "mismatch", "SummarySeries Color mirror differs");
     }
     const auto summary_marker = decode_chart_marker(integer_atom<std::uint32_t>(summary_style.items[1], child_path(summary_style_path, 1)), child_path(summary_style_path, 1));
-    if (summary_marker.member != "Auto" && summary_marker.member != "Rhomb") {
-        fail("OOF1122", child_path(summary_style_path, 1), "ChartMarkerType Auto or Rhomb",
-            "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
-    }
     const auto summary_marker_cache_path = child_path(info_path, std::size_t{7} + series_size * 11);
     require_raw_constant(at(info, std::size_t{7} + series_size * 11, info_path),
-        summary_marker.member == "Auto" ? "1" : "3", summary_marker_cache_path);
+        std::to_string(summary_marker.member == "Auto" || summary_marker.member == "Alternation" ? 1U : chart_marker_value(summary_marker, summary_marker_cache_path)), summary_marker_cache_path);
     payload.summary_series.marker = summary_marker;
     payload.summary_series.color = summary_color;
     const auto summary_offset = std::size_t{5} + series_size * 11;
@@ -7352,6 +7527,66 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     const auto summary_value = decoded_typed_scalar(at(info, summary_offset + 9, info_path), child_path(info_path, summary_offset + 9));
     if (!summary_value) fail("OOF1122", child_path(info_path, summary_offset + 9), "supported SummarySeries Value", "unsupported", "SummarySeries Value type is unsupported");
     payload.summary_series.value = *summary_value;
+    for (std::size_t index = 0; index <= series_size; ++index) {
+        model::metamodel::ChartSeriesObject object = index == series_size ? model::metamodel::ChartSeriesObject{&payload.summary_series} : model::metamodel::ChartSeriesObject{&payload.series[index]};
+        const auto row = std::size_t{5} + index * 11;
+        const auto& style = at(info, series_styles_start + index, info_path);
+        const auto& companion = at(info, series_companions_start + index, info_path);
+        require_arity(companion, 2, info_path);
+        for (const auto& field : model::metamodel::chart_series_property_descriptors()) {
+            if (field.fixed != model::metamodel::ChartSeriesFixed::none || field.storage == model::metamodel::ChartSeriesStorage::computed) continue;
+            const auto& stored = field.storage == model::metamodel::ChartSeriesStorage::row ? at(info, row + field.slot, info_path) :
+                field.storage == model::metamodel::ChartSeriesStorage::style ? at(style, field.slot, info_path) : at(companion, field.slot, info_path);
+            auto value = decode_chart_family_property(stored, field, info_path);
+            if (index != series_size && field.normal_runtime_only) {
+                info.items[row + field.slot] = encode_chart_family_property(field.default_value, field, info_path);
+                continue;
+            }
+            if (value != field.default_value) model::metamodel::set_chart_series_property_value(object, field, value);
+            if (field.value_codec == model::metamodel::ValueCodec::line) info.items[row + field.slot] = encode_chart_family_property(value, field, info_path);
+        }
+        const auto indicator = bool_atom(at(info, row + 6, info_path), info_path);
+        if (indicator != (style.items[3].atom == "1")) fail("OOF1115", info_path, "Indicator matching GraphicalRepresentationType Line", {}, "Series Indicator alias mismatch");
+    }
+    std::uint64_t previous_trendline_owner = 0;
+    for (std::size_t index = 0; index < trendline_owners; ++index) {
+        const auto owner_slot = trendline_owners_start + index;
+        const auto owner_path = child_path(info_path, owner_slot);
+        const auto& record = at(info, owner_slot, info_path);
+        require_list(record, owner_path);
+        if (record.items.size() < 3) fail("OOF1115", owner_path, "Trendline owner header", {}, "Truncated Trendline owner record");
+        require_raw_constant(record.items[0], "0", child_path(owner_path, 0));
+        const auto series_id = integer_atom<std::uint64_t>(record.items[1], child_path(owner_path, 1));
+        if (series_id <= previous_trendline_owner) fail("OOF1115", owner_path, "unique ascending Trendline owner IDs", {}, "Duplicate or unordered Trendline owner");
+        previous_trendline_owner = series_id;
+        model::metamodel::ChartSeriesObject object{&payload.summary_series};
+        if (series_id != 1) {
+            const auto series = std::ranges::find(payload.series, model::ObjectId{series_id}, &model::ChartSeries::id);
+            if (series == payload.series.end()) fail("OOF1115", owner_path, "existing Series owner ID", std::to_string(series_id), "Unknown Trendline owner");
+            object = &*series;
+        }
+        const auto count = integer_atom<std::size_t>(record.items[2], child_path(owner_path, 2));
+        if (count == 0 || count > model::max_chart_collection_items) fail("OOF1115", owner_path, "positive bounded Trendline count", {}, "Invalid Trendline count");
+        require_arity(record, 3 + count, owner_path);
+        std::visit([&](auto* item) {
+            item->trendlines.reserve(count);
+            for (std::size_t i = 0; i < count; ++i) {
+                item->trendlines.push_back(decode_chart_trendline(record.items[3 + i], model::ObjectId{i + 1}, owner_path));
+                for (const auto& owned : model::metamodel::chart_trendline_property_descriptors()) {
+                    if (owned.value_codec != model::metamodel::ValueCodec::chart_equation_area) continue;
+                    for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+                        if (field.value_codec != model::metamodel::ValueCodec::border) continue;
+                        auto& border = info.items[owner_slot].items[3 + i].items[owned.slot].items[field.record_offset];
+                        if (border.items.size() != 7) continue;
+                        const auto* entry = item->trendlines.back().equation_area.find(field.id);
+                        const auto encoded = encode_chart_label_area_property(entry ? entry->value : model::metamodel::chart_scale_property_default(field), field, owner_path);
+                        border.items[5] = encoded.items[5];
+                    }
+                }
+            }
+            item->next_trendline_id = count + 1;
+        }, object);
+    }
     model::PropertySet properties;
     const auto type_path = child_path(info_path, middle_start + 2);
     const auto type_ordinal = integer_atom<int>(at(info, middle_start + 2, info_path), type_path);
@@ -7361,15 +7596,36 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     if (type_ordinal != 4)
         properties.set_explicit(model::PropertyId::from_name("ChartType"), model::EnumerationValue{"ChartType", std::string(type_member->first)});
     for (const auto& spec : model::detail::chart_enum_specs) {
-        const auto path = child_path(info_path, middle_start + spec.offset);
-        const auto ordinal = integer_atom<int>(at(info, middle_start + spec.offset, info_path), path);
+        const auto base = spec.base == model::detail::ChartEnumBase::middle ? middle_start : cells_end;
+        const auto path = child_path(info_path, base + spec.offset);
+        const auto* stored = &at(info, base + spec.offset, info_path);
+        if (spec.source_render_slot) {
+            const auto& record = at(info, render_start + *spec.source_render_slot, info_path);
+            require_arity(record, 6, path);
+            stored = &record.items[1];
+        }
+        const auto ordinal = integer_atom<int>(*stored, path);
         if (ordinal < 0 || static_cast<std::size_t>(ordinal) >= spec.members.size())
-            fail("OOF1115", path, "known Chart enumeration ordinal", std::to_string(ordinal), "Chart enumeration ordinal is unsupported");
+            fail("OOF1115", path, "known stored Chart enumeration ordinal", std::to_string(ordinal), "Chart enumeration ordinal is unsupported");
+        if (spec.source_render_slot) {
+            const auto current = integer_atom<int>(at(info, base + spec.offset, info_path), path);
+            if (current < 0 || static_cast<std::size_t>(current) >= spec.members.size())
+                fail("OOF1115", path, "known current Chart enumeration ordinal", std::to_string(current), "Chart current enumeration projection is invalid");
+            info.items[base + spec.offset] = raw(std::to_string(ordinal));
+            if (spec.render_mirror) {
+                auto& record = info.items[render_start + *spec.render_mirror];
+                require_arity(record, 6, path);
+                const auto cached = integer_atom<int>(record.items[1], path);
+                if (cached < 0 || static_cast<std::size_t>(cached) >= spec.members.size())
+                    fail("OOF1115", path, "known runtime Chart enumeration ordinal", std::to_string(cached), "Chart runtime enumeration projection is invalid");
+                record.items[1] = raw(std::to_string(ordinal));
+            }
+        }
         if (ordinal != spec.default_ordinal)
             properties.set_explicit(model::PropertyId::from_name(spec.property),
                 model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[ordinal])});
     }
-    const auto [back_first, back_second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count));
+    const auto [back_first, back_second] = chart_back_color_slots(series_size, static_cast<std::size_t>(point_count), trendline_owners);
     const auto back_color = decode_chart_back_color(info, back_first, back_second, info_path);
     if (back_color != chart_back_color_default()) properties.set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     model::ColorValue border_default; border_default.kind = model::ColorKind::style_reference;
@@ -7434,7 +7690,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     const auto transparent_label_index = label_font_index + 1;
     const bool transparent_label = bool_atom(at(info, transparent_label_index, info_path), child_path(info_path, transparent_label_index));
     if (!transparent_label) properties.set_explicit(model::PropertyId::from_name("TransparentLabel"), false);
-    const auto limit_index = middle_start + 126 + 3 * series_size * static_cast<std::size_t>(point_count) + series_size;
+    const auto limit_index = middle_start + 126 + 3 * series_size * static_cast<std::size_t>(point_count) + series_size + trendline_owners;
     const auto limit_path = child_path(info_path, limit_index);
     const auto& limits = at(info, limit_index, info_path);
     require_arity(limits, 5, limit_path);
@@ -7473,8 +7729,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const bool enabled = entry == nullptr || std::get<bool>(entry->value);
         require_raw_constant(limits.items[slot], enabled ? "0" : "2", child_path(limit_path, slot));
     }
-    const auto render_start = cells_end + data_defaults.size() + series_size + 1 + style_defaults.size() +
-        static_cast<std::size_t>(point_count) + series_size + 1;
+
     const auto read_area = [&](std::size_t mode_offset, std::size_t bounds_offset, const auto& placements,
                                const model::ChartArea& defaults, std::string_view name) -> std::optional<model::ChartArea> {
         const auto mode_path = child_path(info_path, render_start + mode_offset);
@@ -7637,12 +7892,20 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         const auto index = (owner.tail ? scale_tail_start : style_defaults_start) + owner.record_offset;
         expected_info.items[index] = chart_scale_without_line_values(expected_info.items[index], child_path(info_path, index));
     }
+    for (const auto& spec : model::detail::chart_enum_specs) if (spec.render_mirror) {
+        const auto index = render_start + *spec.render_mirror;
+        require_exact(at(info, index, info_path), at(expected_info, index, info_path), child_path(info_path, index), "Chart enumeration mirror differs from its named value");
+    }
     auto normalized_expected_info = expected_info;
     for (std::size_t i = 0; i < series_count; ++i) {
         if (payload.series[i].color.kind == model::ColorKind::automatic) {
             const auto index = std::size_t{5} + i * 11;
             normalized_expected_info.items[index] = info.items[index];
         }
+    }
+    if (payload.summary_series.color.kind == model::ColorKind::automatic) {
+        const auto index = std::size_t{5} + series_size * 11;
+        normalized_expected_info.items[index] = info.items[index];
     }
     for (std::size_t i = 0; i < point_count; ++i) {
         if (payload.points[i].color.kind == model::ColorKind::automatic) {
@@ -7703,14 +7966,14 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
 }
 
 DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context,
-    Diagnostics& warnings, bool& reconstruction_complete) {
+    Diagnostics& warnings, bool& reconstruction_complete, std::size_t& collection_items) {
     require_arity(record, 7, path);
     require_raw_constant(at(record, 0, path), model::metamodel::descriptor_for(model::ControlKind::chart).guid, child_path(path, 0));
     require_exact(at(record, 2, path), list({raw("11")}), child_path(path, 2), "Chart geometry header is unsupported");
     require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
     const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
     auto decoded = decode_chart_info(at(record, 3, path), child_path(path, 3), id,
-        warnings, reconstruction_complete);
+        warnings, reconstruction_complete, true, &collection_items);
     model::ControlNode control{model::ObjectId{id},
         string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)),
         std::move(decoded.payload)};
@@ -11824,6 +12087,7 @@ Result<model::OrdinaryFormDocument> decode_document(
     bool reconstruction_complete = true;
     auto decoded = capture_decode_failure<model::OrdinaryFormDocument>(
         [&payload, form_name, &warnings, &reconstruction_complete] {
+        std::size_t decoded_chart_collection_items = 0;
         const auto layout = probe_layout(payload);
         if (!layout) {
             throw DecodeFailure(layout.diagnostics().front());
@@ -12149,7 +12413,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const GeometryContext context{owner, static_cast<std::uint32_t>(page_index), slot->ordinal};
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
-                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context, warnings, reconstruction_complete);
+                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context, warnings, reconstruction_complete, decoded_chart_collection_items);
                     else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id, default_owner_id, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)

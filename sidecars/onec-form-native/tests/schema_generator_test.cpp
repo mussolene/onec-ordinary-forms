@@ -1007,19 +1007,30 @@ void test_control_surfaces_and_property_order(
             }
             expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");
             const auto summary_fields = direct_children(sequence_for_type(schema, "ChartSummarySeriesType"), "element");
-            expect(summary_fields.size() == 4 && attribute(summary_fields[0], "name") == "Text" && attribute(summary_fields[1], "name") == "Value" && attribute(summary_fields[2], "name") == "Color" &&
+            expect(summary_fields.size() == 5 && attribute(summary_fields[0], "name") == "Text" && attribute(summary_fields[1], "name") == "Value" && attribute(summary_fields[2], "name") == "Color" &&
                 attribute(summary_fields[2], "type") == "ColorValueType" && attribute(summary_fields[2], "minOccurs") == "0" &&
                 attribute(summary_fields[0], "maxOccurs") == "1", "SummarySeries schema must expose optional default Color");
             expect_element_shape(elements[cursor++], "Series", "ChartSeriesCollectionType", "1", "1");
             expect_element_shape(elements[cursor++], "Points", "ChartPointCollectionType", "1", "1");
             expect_element_shape(elements[cursor++], "Values", "ChartValueCollectionType", "1", "1");
             expect_element_shape(summary_fields[3], "Marker", "EnumerationValueType", "0", "1");
+            expect_element_shape(summary_fields[4], "ColorPriority", "xs:boolean", "0", "1");
             const auto series_fields = direct_children(sequence_for_type(schema, "ChartSeriesType"), "element");
             expect(series_fields.size() == 4 && attribute(series_fields[0], "name") == "Text" &&
                 attribute(series_fields[1], "name") == "Color" && attribute(series_fields[1], "type") == "ColorValueType" &&
                 attribute(series_fields[2], "name") == "Marker" && attribute(series_fields[2], "type") == "EnumerationValueType" &&
                 attribute(series_fields[3], "name") == "Value" && attribute(series_fields[3], "type") == "TypedScalarValueType",
                 "ChartSeries schema must expose named Text, Color, Marker, and typed Value fields");
+            expect(attribute(series_fields[0], "type") == "LocalizedTextValueType", "Series Text preserves all languages");
+            const auto trendline_fields = direct_children(sequence_for_type(schema, "ChartTrendlineType"), "element");
+            expect(trendline_fields.size() == oof::model::metamodel::chart_trendline_property_descriptors().size(), "Trendline schema covers its full descriptor contract");
+            std::size_t trendline_index = 0;
+            for (const auto& field : oof::model::metamodel::chart_trendline_property_descriptors()) {
+                expect(attribute(trendline_fields[trendline_index], "name") == field.name && attribute(trendline_fields[trendline_index], "minOccurs") == "0", "Trendline properties follow descriptor order");
+                ++trendline_index;
+            }
+            const auto trendline_items = direct_children(sequence_for_type(schema, "ChartTrendlinesType"), "element");
+            expect(trendline_items.size() == 1 && attribute(trendline_items[0], "name") == "Trendline" && attribute(trendline_items[0], "maxOccurs") == "unbounded", "Trendlines are ordered named objects");
             const auto point_fields = direct_children(sequence_for_type(schema, "ChartPointType"), "element");
             expect(point_fields.size() == 3 && attribute(point_fields[0], "name") == "Text" &&
                 attribute(point_fields[1], "name") == "Color" && attribute(point_fields[1], "type") == "ColorValueType" &&
@@ -1320,11 +1331,17 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
         attribute(summary, "evidenceRefs").find("ev_418fc1414bc745bbbb90a22694e5cae1") != std::string::npos,
         "SummarySeries palette must retain named API provenance");
     const auto summary_properties = direct_children(direct_child(summary, "Properties"), "Property");
-    expect(summary_properties.size() == 4 && attribute(summary_properties[0], "apiName") == "Text" && attribute(summary_properties[1], "apiName") == "Value" && attribute(summary_properties[2], "apiName") == "Color" &&
-        attribute(summary_properties[2], "russianName") == "Цвет", "SummarySeries palette must expose proven Color");
-    expect(attribute(summary_properties[3], "apiName") == "Marker" && attribute(summary_properties[3], "russianName") == "Маркер" &&
-        attribute(summary, "evidenceRefs").find("ev_0bf2de977ee74d0e8e69e117b819f78c") != std::string::npos,
-        "SummarySeries Marker palette must retain proven API provenance");
+    expect(summary_properties.size() == oof::model::metamodel::chart_series_property_descriptors().size(), "SummarySeries Palette covers the common full contract");
+    std::size_t summary_index = 0;
+    for (const auto& field : oof::model::metamodel::chart_series_property_descriptors()) {
+        expect(attribute(summary_properties[summary_index], "name") == field.name && attribute(summary_properties[summary_index], "apiName") == field.name, "SummarySeries Palette retains named API properties");
+        ++summary_index;
+    }
+    expect(attribute(summary, "russianType") == "СерияДиаграммы" && attribute(summary, "source") == "Chart.SummarySeries", "SummarySeries Palette retains type and owner provenance");
+    const auto ordinary = direct_child_with_attribute(palette, "NamedConcept", "name", "ChartSeries");
+    const auto ordinary_priority = direct_child_with_attribute(direct_child(ordinary, "Properties"), "Property", "name", "ColorPriority");
+    const auto summary_priority = direct_child_with_attribute(direct_child(summary, "Properties"), "Property", "name", "ColorPriority");
+    expect(attribute(ordinary_priority, "persistence") == "runtime-only" && attribute(summary_priority, "persistence") == "persisted-editable", "ColorPriority Palette metadata distinguishes actual owner persistence");
     xmlNodePtr table_column = direct_child_with_attribute(palette, "NamedConcept", "name", "TableColumn");
     xmlNodePtr column_properties = direct_child(table_column, "Properties");
     xmlNodePtr column_width = direct_child_with_attribute(column_properties, "Property", "name", "Width");

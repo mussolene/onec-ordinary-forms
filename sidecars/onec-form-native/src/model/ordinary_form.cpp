@@ -496,6 +496,7 @@ bool is_typed_collection_property(const metamodel::PropertyDescriptor& descripto
         descriptor.value_codec == ValueCodec::chart_plot_area ||
         descriptor.value_codec == ValueCodec::chart_title_area ||
         descriptor.value_codec == ValueCodec::chart_legend_area ||
+        (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "SummarySeries") ||
         descriptor.value_codec == ValueCodec::dendrogram_items ||
         descriptor.value_codec == ValueCodec::dendrogram_links;
 }
@@ -1084,6 +1085,75 @@ bool normalize_chart_scale_property_value(const metamodel::ChartScalePropertyDes
     return true;
 }
 
+bool chart_budget_fits(const std::vector<ControlNode>& controls, ObjectId resized = {},
+    std::size_t new_series = 0, std::size_t new_points = 0, std::size_t extra_trendlines = 0) {
+    std::size_t budget = 0;
+    const auto add = [&](std::size_t count) {
+        if (count > max_chart_collection_items - budget) return false;
+        budget += count;
+        return true;
+    };
+    for (const auto& control : controls) {
+        const auto* chart = std::get_if<ChartPayload>(&control.payload);
+        if (!chart) continue;
+        const bool changed = resized && control.id == resized;
+        const auto series = changed ? new_series : chart->series.size();
+        const auto points = changed ? new_points : chart->points.size();
+        if (series > max_chart_collection_items || points > max_chart_collection_items ||
+            (points && series > max_chart_collection_items / points) ||
+            !add(series) || !add(points) || !add(series * points) ||
+            !add(chart->summary_series.trendlines.size())) return false;
+        const auto retained = std::min(series, chart->series.size());
+        for (std::size_t i = 0; i < retained; ++i)
+            if (!add(chart->series[i].trendlines.size())) return false;
+    }
+    return add(extra_trendlines);
+}
+
+template<class Chart>
+auto chart_series_object(Chart& chart, ObjectId series) -> std::optional<std::conditional_t<std::is_const_v<Chart>, metamodel::ConstChartSeriesObject, metamodel::ChartSeriesObject>> {
+    using View = std::conditional_t<std::is_const_v<Chart>, metamodel::ConstChartSeriesObject, metamodel::ChartSeriesObject>;
+    if (series == ObjectId{1}) return View{&chart.summary_series};
+    const auto found = std::ranges::find(chart.series, series, &ChartSeries::id);
+    if (found == chart.series.end()) return std::nullopt;
+    return View{&*found};
+}
+bool normalize_chart_series_property_value(const metamodel::ChartSeriesPropertyDescriptor& field, PropertyValue& value) {
+    if (field.value_codec == metamodel::ValueCodec::enumeration) {
+        const auto* enumeration = std::get_if<EnumerationValue>(&value);
+        return enumeration && enumeration->type_name == field.enumeration_type && std::ranges::find(field.members, enumeration->member) != field.members.end();
+    }
+    if (field.value_codec == metamodel::ValueCodec::line)
+        return std::holds_alternative<LineValue>(value) && valid_chart_style(field.value_codec, value);
+    if (field.value_codec == metamodel::ValueCodec::color || field.value_codec == metamodel::ValueCodec::font)
+        return valid_chart_style(field.value_codec, value);
+    if (field.value_codec == metamodel::ValueCodec::boolean) return std::holds_alternative<bool>(value);
+    if (field.value_codec == metamodel::ValueCodec::integer32) {
+        std::string text;
+        if (const auto* number = std::get_if<std::int64_t>(&value)) text = std::to_string(*number);
+        else if (const auto* number = std::get_if<DecimalValue>(&value)) text = number->canonical;
+        else if (const auto* boolean = std::get_if<bool>(&value)) text = *boolean ? "1" : "0";
+        else if (const auto* string = std::get_if<std::string>(&value)) { text = *string; std::replace(text.begin(), text.end(), ',', '.'); }
+        else return false;
+        try { text = storage::value_codec::canonical_decimal(text); } catch (const std::exception&) { return false; }
+        text.resize(text.find('.') == std::string::npos ? text.size() : text.find('.'));
+        std::int32_t number = 0;
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), number);
+        if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size()) return false;
+        value = static_cast<std::int64_t>(std::max(number, 1));
+        return true;
+    }
+    if (field.value_codec == metamodel::ValueCodec::string) return std::holds_alternative<std::string>(value);
+    if (field.value_codec == metamodel::ValueCodec::localized_text)
+        return std::holds_alternative<std::string>(value) || (std::holds_alternative<LocalizedStringValue>(value) && valid_localized_string(std::get<LocalizedStringValue>(value)));
+    if (field.value_codec == metamodel::ValueCodec::typed_scalar) {
+        metamodel::PropertyDescriptor scalar;
+        scalar.value_codec = metamodel::ValueCodec::typed_scalar;
+        return property_value_matches(scalar, value);
+    }
+    return false;
+}
+
 const DecimalValue* chart_area_coordinate(const ChartArea& area, PropertyId property) {
     const auto* descriptor = metamodel::find_chart_area_property(property);
     return descriptor && descriptor->coordinate ? &(area.*(descriptor->coordinate)) : nullptr;
@@ -1091,6 +1161,45 @@ const DecimalValue* chart_area_coordinate(const ChartArea& area, PropertyId prop
 }
 
 PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyId property) const {
+    if (owner.chart_series || owner.chart_trendline || owner.chart_equation_area) {
+        if (owner.category != ObjectCategory::control || !owner.chart_series || owner.chart_area != ChartAreaKind::none || owner.chart_scale != ChartScaleKind::none || (owner.chart_equation_area && !owner.chart_trendline)) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        const auto* control = find_control(owner.id);
+        if (!control || control->kind() != ControlKind::chart) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        const auto object = chart_series_object(std::get<ChartPayload>(control->payload), owner.chart_series);
+        if (!object) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        if (owner.chart_trendline) {
+            const ChartTrendline* trend = std::visit([&](auto* item) -> const ChartTrendline* {
+                const auto found = std::ranges::find(item->trendlines, owner.chart_trendline, &ChartTrendline::id);
+                return found == item->trendlines.end() ? nullptr : &*found;
+            }, *object);
+            if (!trend) return {PropertyReadStatus::unknown_owner, std::nullopt};
+            if (owner.chart_equation_area) {
+                for (const auto& field : metamodel::chart_label_area_property_descriptors()) if (field.id == property) {
+                    const auto* entry = trend->equation_area.find(property);
+                    return {entry ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default, entry ? entry->value : metamodel::chart_scale_property_default(field)};
+                }
+            } else for (const auto& field : metamodel::chart_trendline_property_descriptors()) if (field.id == property) {
+                if (field.value_codec == metamodel::ValueCodec::chart_equation_area) return {PropertyReadStatus::computed_value, PropertyValue{ChartEquationAreaRef{owner.id, owner.chart_series, owner.chart_trendline}}};
+                const auto* entry = trend->properties.find(property);
+                return {entry ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default, entry ? entry->value : field.default_value};
+            }
+            return {PropertyReadStatus::unknown_property, std::nullopt};
+        }
+        for (const auto& field : metamodel::chart_series_property_descriptors()) if (field.id == property) {
+            if (field.name == "SummarySeries") return {PropertyReadStatus::computed_value, PropertyValue{owner.chart_series == ObjectId{1}}};
+            if (field.name == "Trendlines") return {PropertyReadStatus::computed_value, PropertyValue{ChartTrendlinesRef{owner.id, owner.chart_series}}};
+            if (field.name == "Indicator") {
+                const auto fields = metamodel::chart_series_property_descriptors();
+                const auto graph = std::ranges::find(fields, std::string_view{"GraphicalRepresentationType"}, &metamodel::ChartSeriesPropertyDescriptor::name);
+                const auto value = metamodel::chart_series_property_value(*object, *graph).value_or(graph->default_value);
+                return {PropertyReadStatus::computed_value, PropertyValue{std::get<EnumerationValue>(value).member == "Line"}};
+            }
+            const auto value = metamodel::chart_series_property_value(*object, field);
+            const auto default_value = field.name == "Text" && owner.chart_series == ObjectId{1} ? PropertyValue{std::string{"Сводная"}} : field.default_value;
+            return {value ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default, value.value_or(default_value)};
+        }
+        return {PropertyReadStatus::unknown_property, std::nullopt};
+    }
     if (owner.chart_scale != ChartScaleKind::none) {
         const auto owners = metamodel::chart_scale_owner_descriptors();
         const auto scale_owner = std::ranges::find(owners, owner.chart_scale, &metamodel::ChartScaleOwnerDescriptor::kind);
@@ -1226,6 +1335,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
         const auto& control = collections_.controls[location->index];
+        if (control.kind() == ControlKind::chart && property == PropertyId::from_name("SummarySeries"))
+            return {PropertyReadStatus::computed_value, PropertyValue{ChartSeriesRef{owner.id, ObjectId{1}}}};
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount"))) {
             const auto& chart = std::get<ChartPayload>(control.payload);
@@ -1357,6 +1468,54 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ObjectKey owner,
     PropertyId property,
     PropertyValue value) {
+    if (owner.chart_series || owner.chart_trendline || owner.chart_equation_area) {
+        if (owner.category != ObjectCategory::control || !owner.chart_series || owner.chart_area != ChartAreaKind::none || owner.chart_scale != ChartScaleKind::none || (owner.chart_equation_area && !owner.chart_trendline)) return PropertyMutationStatus::unknown_owner;
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location || collections_.controls[location->index].kind() != ControlKind::chart) return PropertyMutationStatus::unknown_owner;
+        auto object = chart_series_object(std::get<ChartPayload>(collections_.controls[location->index].payload), owner.chart_series);
+        if (!object) return PropertyMutationStatus::unknown_owner;
+        if (owner.chart_trendline) {
+            auto* trend = std::visit([&](auto* item) -> ChartTrendline* {
+                const auto found = std::ranges::find(item->trendlines, owner.chart_trendline, &ChartTrendline::id);
+                return found == item->trendlines.end() ? nullptr : &*found;
+            }, *object);
+            if (!trend) return PropertyMutationStatus::unknown_owner;
+            if (owner.chart_equation_area) {
+                for (const auto& field : metamodel::chart_label_area_property_descriptors()) if (field.id == property) {
+                    if (!normalize_chart_scale_property_value(field, value)) return PropertyMutationStatus::invalid_value;
+                    trend->equation_area.set_explicit(property, std::move(value));
+                    return PropertyMutationStatus::applied;
+                }
+            } else for (const auto& field : metamodel::chart_trendline_property_descriptors()) if (field.id == property) {
+                if (field.value_codec == metamodel::ValueCodec::chart_equation_area) {
+                    if (std::holds_alternative<UndefinedValue>(value)) return PropertyMutationStatus::applied;
+                    const auto* reference = std::get_if<ChartEquationAreaRef>(&value);
+                    if (!reference) return PropertyMutationStatus::invalid_value;
+                    if (!chart_trendline_index(ChartTrendlineRef{reference->owner, reference->series, reference->trendline})) return PropertyMutationStatus::invalid_reference;
+                    return PropertyMutationStatus::applied;
+                }
+                if (!normalize_chart_series_property_value(field, value)) return PropertyMutationStatus::invalid_value;
+                trend->properties.set_explicit(property, std::move(value));
+                return PropertyMutationStatus::applied;
+            }
+            return PropertyMutationStatus::unknown_property;
+        }
+        for (const auto& field : metamodel::chart_series_property_descriptors()) if (field.id == property) {
+            if (field.read_only) return PropertyMutationStatus::read_only;
+            if (field.name == "Indicator") {
+                const auto* boolean = std::get_if<bool>(&value);
+                if (!boolean) return PropertyMutationStatus::invalid_value;
+                const auto fields = metamodel::chart_series_property_descriptors();
+                const auto graph = std::ranges::find(fields, std::string_view{"GraphicalRepresentationType"}, &metamodel::ChartSeriesPropertyDescriptor::name);
+                metamodel::set_chart_series_property_value(*object, *graph, EnumerationValue{"ChartSeriesGraphicalRepresentationType", *boolean ? "Line" : "Auto"});
+                return PropertyMutationStatus::applied;
+            }
+            if (!normalize_chart_series_property_value(field, value)) return PropertyMutationStatus::invalid_value;
+            metamodel::set_chart_series_property_value(*object, field, std::move(value));
+            return field.normal_runtime_only && owner.chart_series != ObjectId{1} ? PropertyMutationStatus::applied_runtime_only : PropertyMutationStatus::applied;
+        }
+        return PropertyMutationStatus::unknown_property;
+    }
     if (owner.chart_scale != ChartScaleKind::none) {
         const auto owners = metamodel::chart_scale_owner_descriptors();
         const auto scale_owner = std::ranges::find(owners, owner.chart_scale, &metamodel::ChartScaleOwnerDescriptor::kind);
@@ -1670,7 +1829,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
             return (descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
-                descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area) ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
+                descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area || descriptor->api_name == "SummarySeries") ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
             position_control = &control;
@@ -1833,6 +1992,43 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
 }
 
 PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, PropertyId property) {
+    if (owner.chart_series || owner.chart_trendline || owner.chart_equation_area) {
+        if (owner.category != ObjectCategory::control || !owner.chart_series || owner.chart_area != ChartAreaKind::none || owner.chart_scale != ChartScaleKind::none || (owner.chart_equation_area && !owner.chart_trendline)) return PropertyMutationStatus::unknown_owner;
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location || collections_.controls[location->index].kind() != ControlKind::chart) return PropertyMutationStatus::unknown_owner;
+        auto object = chart_series_object(std::get<ChartPayload>(collections_.controls[location->index].payload), owner.chart_series);
+        if (!object) return PropertyMutationStatus::unknown_owner;
+        if (owner.chart_trendline) {
+            auto* trend = std::visit([&](auto* item) -> ChartTrendline* {
+                const auto found = std::ranges::find(item->trendlines, owner.chart_trendline, &ChartTrendline::id);
+                return found == item->trendlines.end() ? nullptr : &*found;
+            }, *object);
+            if (!trend) return PropertyMutationStatus::unknown_owner;
+            if (owner.chart_equation_area) {
+                for (const auto& field : metamodel::chart_label_area_property_descriptors()) if (field.id == property) {
+                    trend->equation_area.unset(property);
+                    return PropertyMutationStatus::reset;
+                }
+            } else for (const auto& field : metamodel::chart_trendline_property_descriptors()) if (field.id == property) {
+                if (field.value_codec == metamodel::ValueCodec::chart_equation_area) return PropertyMutationStatus::reset;
+                trend->properties.unset(property);
+                return PropertyMutationStatus::reset;
+            }
+            return PropertyMutationStatus::unknown_property;
+        }
+        for (const auto& field : metamodel::chart_series_property_descriptors()) if (field.id == property) {
+            if (field.read_only) return PropertyMutationStatus::read_only;
+            if (field.name == "Indicator") {
+                const auto fields = metamodel::chart_series_property_descriptors();
+                const auto graph = std::ranges::find(fields, std::string_view{"GraphicalRepresentationType"}, &metamodel::ChartSeriesPropertyDescriptor::name);
+                metamodel::reset_chart_series_property_value(*object, *graph);
+                return PropertyMutationStatus::reset;
+            }
+            metamodel::reset_chart_series_property_value(*object, field);
+            return field.normal_runtime_only && owner.chart_series != ObjectId{1} ? PropertyMutationStatus::reset_runtime_only : PropertyMutationStatus::reset;
+        }
+        return PropertyMutationStatus::unknown_property;
+    }
     if (owner.chart_scale != ChartScaleKind::none) {
         const auto owners = metamodel::chart_scale_owner_descriptors();
         const auto scale_owner = std::ranges::find(owners, owner.chart_scale, &metamodel::ChartScaleOwnerDescriptor::kind);
@@ -1968,7 +2164,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
             return (descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
-                descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area) ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
+                descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area || descriptor->api_name == "SummarySeries") ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
             position_control = &control;
@@ -2047,6 +2243,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
 
 ValidationReport OrdinaryFormDocument::validate() const {
     ValidationReport report;
+    if (!chart_budget_fits(collections_.controls))
+        add_violation(report, InvariantCode::invalid_property, form_.id, {}, "Chart collections exceed the document resource budget");
     std::unordered_set<ObjectKey, ObjectKeyHash> seen;
 
     const auto record_id = [&](ObjectId id, ObjectCategory category) {
@@ -2921,7 +3119,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 }
             }
             if (control.properties().contains(PropertyId::from_name("Series")) ||
-                control.properties().contains(PropertyId::from_name("Points")))
+                control.properties().contains(PropertyId::from_name("Points")) ||
+                control.properties().contains(PropertyId::from_name("SummarySeries")))
                 invalid_chart("Chart collections are owned objects and cannot be stored as properties");
             if (control.properties().contains(PropertyId::from_name("SeriesCount")) ||
                 control.properties().contains(PropertyId::from_name("PointCount")))
@@ -2944,28 +3143,48 @@ ValidationReport OrdinaryFormDocument::validate() const {
             scalar_descriptor.value_codec = metamodel::ValueCodec::typed_scalar;
             if (!property_value_matches(scalar_descriptor, chart->summary_series.value))
                 invalid_chart("Chart SummarySeries Value must be a supported typed scalar");
-            const auto& summary_marker = chart->summary_series.marker;
-            if (summary_marker.type_name != "ChartMarkerType" ||
-                (summary_marker.member != "Auto" && summary_marker.member != "Rhomb")) {
-                invalid_chart("Chart SummarySeries Marker supports only proven Auto or Rhomb");
-            }
-            const auto& summary_color = chart->summary_series.color;
-            if ((summary_color.kind != ColorKind::automatic && summary_color.kind != ColorKind::absolute) ||
-                summary_color.alpha != 255 || !std::holds_alternative<std::monostate>(summary_color.style) ||
-                (summary_color.kind == ColorKind::automatic &&
-                 (summary_color.red != 0 || summary_color.green != 0 || summary_color.blue != 0))) {
-                invalid_chart("Chart SummarySeries Color must be automatic or absolute opaque RGB");
-            }
+            const auto validate_series_object = [&](metamodel::ConstChartSeriesObject object) {
+                std::visit([&](auto* item) {
+                    item->properties.for_each_explicit([&](const PropertyEntry& entry) {
+                        const auto fields = metamodel::chart_series_property_descriptors();
+                        const auto field = std::ranges::find(fields, entry.id, &metamodel::ChartSeriesPropertyDescriptor::id);
+                        if (field == fields.end() || field->fixed != metamodel::ChartSeriesFixed::none || field->storage == metamodel::ChartSeriesStorage::computed)
+                            invalid_chart("Series sparse properties contain an unknown, fixed, or computed property");
+                    });
+                    if (item->trendlines.size() > max_chart_collection_items) invalid_chart("Trendlines collection exceeds supported size");
+                    std::unordered_set<ObjectId, ObjectIdHash> ids;
+                    for (const auto& trend : item->trendlines) {
+                        if (!trend.id || !ids.insert(trend.id).second || trend.id.value() >= item->next_trendline_id) invalid_chart("Trendline runtime identities are invalid");
+                        trend.properties.for_each_explicit([&](const PropertyEntry& entry) {
+                            const auto fields = metamodel::chart_trendline_property_descriptors();
+                            const auto field = std::ranges::find(fields, entry.id, &metamodel::ChartSeriesPropertyDescriptor::id);
+                            auto normalized = entry.value;
+                            if (field == fields.end() || !normalize_chart_series_property_value(*field, normalized) || normalized != entry.value)
+                                invalid_chart("Trendline property is unknown or invalid");
+                        });
+                        trend.equation_area.for_each_explicit([&](const PropertyEntry& entry) {
+                            const auto fields = metamodel::chart_label_area_property_descriptors();
+                            const auto field = std::ranges::find(fields, entry.id, &metamodel::ChartScalePropertyDescriptor::id);
+                            auto normalized = entry.value;
+                            if (field == fields.end() || !normalize_chart_scale_property_value(*field, normalized) || normalized != entry.value)
+                                invalid_chart("Trendline EquationArea property is unknown or invalid");
+                        });
+                    }
+                }, object);
+                for (const auto& field : metamodel::chart_series_property_descriptors()) {
+                    if (field.storage == metamodel::ChartSeriesStorage::computed) continue;
+                    const auto value = metamodel::chart_series_property_value(object, field);
+                    if (!value) continue;
+                    auto normalized = *value;
+                    if (!normalize_chart_series_property_value(field, normalized) || normalized != *value) invalid_chart("Series named property is invalid");
+                }
+            };
+            validate_series_object(metamodel::ConstChartSeriesObject{&chart->summary_series});
+            for (const auto& series : chart->series) validate_series_object(metamodel::ConstChartSeriesObject{&series});
             std::unordered_set<ObjectId, ObjectIdHash> series_ids;
             for (const auto& series : chart->series) {
                 if (!series.id || series.id.value() == 1 || !series_ids.insert(series.id).second) {
                     invalid_chart("Chart Series IDs must be unique, positive, and distinct from reserved summary ID 1");
-                }
-                const bool absolute_color = series.color.kind == ColorKind::absolute && series.color.alpha == 255 &&
-                    std::holds_alternative<std::monostate>(series.color.style);
-                const bool automatic_color = series.color == ColorValue{};
-                if (!absolute_color && !automatic_color) {
-                    invalid_chart("Chart Series Color must be automatic or an absolute opaque RGB value");
                 }
                 if (series.marker.type_name != "ChartMarkerType" ||
                     (series.marker.member != "Auto" && series.marker.member != "Alternation" &&
@@ -3131,6 +3350,65 @@ void OrdinaryFormDocument::validate_or_throw() const {
     }
 }
 
+std::optional<ChartTrendlineRef> OrdinaryFormDocument::add_chart_trendline(ObjectId chart_id, ObjectId series_id) {
+    const auto location = find_location(ObjectCategory::control, chart_id);
+    if (!location || collections_.controls[location->index].kind() != ControlKind::chart) return std::nullopt;
+    auto object = chart_series_object(std::get<ChartPayload>(collections_.controls[location->index].payload), series_id);
+    if (!object || !chart_budget_fits(collections_.controls, {}, 0, 0, 1)) return std::nullopt;
+    return std::visit([&](auto* item) -> std::optional<ChartTrendlineRef> {
+        if (item->trendlines.size() >= max_chart_collection_items || item->next_trendline_id == 0 || item->next_trendline_id == std::numeric_limits<std::uint64_t>::max()) return std::nullopt;
+        ChartTrendline trend;
+        trend.id = ObjectId{item->next_trendline_id};
+        const auto reference = ChartTrendlineRef{chart_id, series_id, trend.id};
+        item->trendlines.push_back(std::move(trend));
+        ++item->next_trendline_id;
+        return reference;
+    }, *object);
+}
+PropertyReadResult OrdinaryFormDocument::insert_chart_trendline(ObjectId chart_id, ObjectId series_id, const PropertyValue&) {
+    if (!chart_trendline_count(chart_id, series_id)) return {PropertyReadStatus::unknown_owner, std::nullopt};
+    return {PropertyReadStatus::computed_value, PropertyValue{UndefinedValue{}}};
+}
+PropertyMutationStatus OrdinaryFormDocument::delete_chart_trendline(ObjectId chart_id, ObjectId series_id, std::int64_t index) {
+    const auto location = find_location(ObjectCategory::control, chart_id);
+    if (!location || collections_.controls[location->index].kind() != ControlKind::chart) return PropertyMutationStatus::unknown_owner;
+    auto object = chart_series_object(std::get<ChartPayload>(collections_.controls[location->index].payload), series_id);
+    if (!object) return PropertyMutationStatus::unknown_owner;
+    return std::visit([&](auto* item) {
+        if (index < 0 || static_cast<std::uint64_t>(index) >= item->trendlines.size()) return PropertyMutationStatus::invalid_value;
+        item->trendlines.erase(item->trendlines.begin() + index);
+        return PropertyMutationStatus::applied;
+    }, *object);
+}
+std::optional<std::size_t> OrdinaryFormDocument::chart_trendline_count(ObjectId chart_id, ObjectId series_id) const {
+    const auto* control = find_control(chart_id);
+    if (!control || control->kind() != ControlKind::chart) return std::nullopt;
+    const auto object = chart_series_object(std::get<ChartPayload>(control->payload), series_id);
+    if (!object) return std::nullopt;
+    return std::visit([](auto* item) { return item->trendlines.size(); }, *object);
+}
+std::optional<ChartTrendlineRef> OrdinaryFormDocument::chart_trendline_at(ObjectId chart_id, ObjectId series_id, std::int64_t index) const {
+    const auto* control = find_control(chart_id);
+    if (!control || control->kind() != ControlKind::chart || index < 0) return std::nullopt;
+    const auto object = chart_series_object(std::get<ChartPayload>(control->payload), series_id);
+    if (!object) return std::nullopt;
+    return std::visit([&](auto* item) -> std::optional<ChartTrendlineRef> {
+        if (static_cast<std::uint64_t>(index) >= item->trendlines.size()) return std::nullopt;
+        return ChartTrendlineRef{chart_id, series_id, item->trendlines[static_cast<std::size_t>(index)].id};
+    }, *object);
+}
+std::optional<std::int64_t> OrdinaryFormDocument::chart_trendline_index(ChartTrendlineRef reference) const {
+    const auto* control = find_control(reference.owner);
+    if (!control || control->kind() != ControlKind::chart) return std::nullopt;
+    const auto object = chart_series_object(std::get<ChartPayload>(control->payload), reference.series);
+    if (!object) return std::nullopt;
+    return std::visit([&](auto* item) -> std::optional<std::int64_t> {
+        const auto found = std::ranges::find(item->trendlines, reference.trendline, &ChartTrendline::id);
+        if (found == item->trendlines.end()) return std::nullopt;
+        return static_cast<std::int64_t>(std::distance(item->trendlines.begin(), found));
+    }, *object);
+}
+
 PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyId property, const PropertyValue& value) {
     try {
         std::string text;
@@ -3159,19 +3437,8 @@ PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyI
         const bool series_axis = property == PropertyId::from_name("SeriesCount");
         const auto new_series_count = series_axis ? static_cast<std::size_t>(requested) : chart->series.size();
         const auto new_point_count = series_axis ? chart->points.size() : static_cast<std::size_t>(requested);
-        std::size_t budget = 0;
-        for (const auto& candidate : collections_.controls) {
-            const auto* other = std::get_if<ChartPayload>(&candidate.payload);
-            if (!other) continue;
-            const auto series = candidate.id == id ? new_series_count : other->series.size();
-            const auto points = candidate.id == id ? new_point_count : other->points.size();
-            if (series > max_chart_collection_items || points > max_chart_collection_items ||
-                (points && series > max_chart_collection_items / points)) return PropertyMutationStatus::resource_limit;
-            const auto cells = series * points;
-            if (series > max_chart_collection_items - budget || points > max_chart_collection_items - budget - series ||
-                cells > max_chart_collection_items - budget - series - points) return PropertyMutationStatus::resource_limit;
-            budget += series + points + cells;
-        }
+        if (!chart_budget_fits(collections_.controls, id, new_series_count, new_point_count))
+            return PropertyMutationStatus::resource_limit;
         const auto report = validate();
         if (std::ranges::any_of(report.violations, [id](const InvariantViolation& violation) { return violation.source == id; }))
             return PropertyMutationStatus::unsupported_surface;

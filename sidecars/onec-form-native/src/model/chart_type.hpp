@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <span>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -35,6 +36,8 @@ inline constexpr std::array chart_type_members{
     std::pair{std::string_view{"Donut3D"}, 46},
 };
 
+enum class ChartEnumBase { middle, cells_end };
+
 struct ChartEnumSpec {
     std::string_view property;
     std::string_view type_name;
@@ -42,6 +45,9 @@ struct ChartEnumSpec {
     std::size_t offset;
     int default_ordinal;
     std::string_view default_qualified;
+    ChartEnumBase base = ChartEnumBase::middle;
+    std::optional<std::size_t> render_mirror{};
+    std::optional<std::size_t> source_render_slot{};
 };
 
 inline constexpr std::array<std::string_view, 4> chart_auto_series_separation{
@@ -55,12 +61,16 @@ inline constexpr std::array<std::string_view, 3> chart_max_series{"NotDefined", 
 inline constexpr std::array<std::string_view, 2> chart_orientation{"SouthWest", "SouthEast"};
 inline constexpr std::array<std::string_view, 2> chart_gauge_value_representation{"Needle", "Sector"};
 inline constexpr std::array<std::string_view, 11> chart_label_location{
-    "Edge", "Center", "EdgeInside", "EdgeAuto", "Auto", "TopLeft", "BottomLeft",
-    "TopRight", "BottomRight", "TopAndLeftSpecified", "EmptySpace"};
+    "Edge", "Center", "EdgeInside", "EdgeAuto", "Auto", "LeftTop", "LeftBottom",
+    "RightTop", "RightBottom", "LeftAndTopSpecified", "EmptySpace"};
 inline constexpr std::array<std::string_view, 2> chart_gauge_labels_location{"AtScale", "InsideScale"};
 inline constexpr std::array<std::string_view, 3> chart_space_mode{"None", "Half", "Full"};
 
-inline constexpr std::array<ChartEnumSpec, 8> chart_enum_specs{{
+inline constexpr std::array<std::string_view, 17> chart_color_palette{
+    "Palette8", "Palette32", "Pastel", "Bright", "Soft", "Warm", "Cold", "Blue", "Orange",
+    "Green", "Yellow", "Gray", "Custom", "Gradient", "Auto", "SoftAdaptive", "Rich"};
+
+inline constexpr std::array<ChartEnumSpec, 9> chart_enum_specs{{
     {"AutoSeriesSeparation", "AutoSeriesSeparation", chart_auto_series_separation, 9, 0, "AutoSeriesSeparation.None"},
     {"LabelType", "ChartLabelType", chart_label_type, 3, 0, "ChartLabelType.None"},
     {"MaxSeries", "MaxSeries", chart_max_series, 45, 0, "MaxSeries.NotDefined"},
@@ -69,6 +79,7 @@ inline constexpr std::array<ChartEnumSpec, 8> chart_enum_specs{{
     {"LabelLocation", "ChartLabelLocation", chart_label_location, 5, 4, "ChartLabelLocation.Auto"},
     {"GaugeChartValuesScaleLabelsLocation", "GaugeChartValuesScaleLabelsLocation", chart_gauge_labels_location, 73, 1, "GaugeChartValuesScaleLabelsLocation.InsideScale"},
     {"SpaceMode", "ChartSpaceMode", chart_space_mode, 48, 1, "ChartSpaceMode.Half"},
+    {"ColorPalette", "ChartColorPalette", chart_color_palette, 0, 14, "ChartColorPalette.Auto", ChartEnumBase::cells_end, 32, 31},
 }};
 
 }  // namespace oof::model::detail

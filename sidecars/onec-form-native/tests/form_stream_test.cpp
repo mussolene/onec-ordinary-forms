@@ -2338,7 +2338,7 @@ void test_chart_count_mutation() {
             document.set_prop_val(owner, point_count, model::DecimalValue{"2.9"}) == model::PropertyMutationStatus::applied_unclassified_storage, "count coercion must truncate");
         const auto& grown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
         expect(grown.series.size() == 2 && grown.points.size() == 2 && grown.series[1].id.value() == 5 && grown.points[1].id.value() == 4 &&
-            grown.series[1].text == "Серия 2" && grown.points[1].text == "Точка 2" && grown.values.size() == 4, "growth must preserve history and generate labels");
+            grown.series[1].text == model::PropertyValue{std::string{"Серия 2"}} && grown.points[1].text == "Точка 2" && grown.values.size() == 4, "growth must preserve history and generate labels");
         expect(grown.values[0].value == model::PropertyValue{model::DecimalValue{"7.25"}} && grown.values[0].tooltip == "tip" &&
             grown.values[0].details == model::PropertyValue{std::string{"detail"}}, "intersection values and metadata must survive");
         if (i % 2 == 0) expect(std::holds_alternative<model::UndefinedValue>(grown.values[1].value), "explicit new cells are Undefined");
@@ -2377,7 +2377,7 @@ void test_chart_count_mutation() {
         document.reset_prop_val(owner, point_count) == model::PropertyMutationStatus::reset_unclassified_storage &&
         document.set_prop_val(owner, point_count, std::int64_t{1}) == model::PropertyMutationStatus::applied_unclassified_storage, "regrowth must succeed");
     const auto& regrown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
-    expect(regrown.series.back().id.value() == 4 && regrown.points.back().id.value() == 2 && regrown.series.back().text.empty() && regrown.points.back().text.empty() &&
+    expect(regrown.series.back().id.value() == 4 && regrown.points.back().id.value() == 2 && std::get<std::string>(regrown.series.back().text).empty() && regrown.points.back().text.empty() &&
         std::holds_alternative<model::UndefinedValue>(regrown.values.back().value), "regrowth respects counters and disabled labels");
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), "selected resized chart must encode");
@@ -17485,10 +17485,31 @@ void test_chart_enum_properties() {
                     }
                     document.add_control(std::move(chart));
                     auto encoded = form_stream::encode_document(document);
-                    expect(encoded.ok(), "Chart enum must encode with neighboring properties");
+                    expect(encoded.ok(), encoded ? "" : std::string(spec.property) + "." + std::string(spec.members[ordinal]) + ": " + encoded.diagnostics().front().message);
                     const auto middle = std::size_t{18} + 11 * (series_count + point_count);
-                    expect(find_chart_record(encoded.value())->items[3].items[middle + spec.offset].atom == std::to_string(ordinal),
-                        "Chart enum native ordinal must match its domain");
+                    const auto enum_base = spec.base == model::detail::ChartEnumBase::middle ? middle : middle + 97 + 3 + 3 * series_count * point_count + (has_event ? 1 : 0);
+                    expect(find_chart_record(encoded.value())->items[3].items[enum_base + spec.offset].atom == std::to_string(ordinal),
+                        std::string(spec.property) + "." + std::string(spec.members[ordinal]) + ": Chart enum native ordinal must match its domain");
+                    if (spec.render_mirror) {
+                        const auto render = enum_base + 24 + (series_count + 1) + 21 + point_count + (series_count + 1);
+                        const auto& info = find_chart_record(encoded.value())->items[3];
+                        expect(list_stream::dump_compact(info.items[render + 30]) == "{0,0}", "Palette must preserve the unrelated render+30 counter record");
+                        expect(info.items[render + 31].items[1].atom == std::to_string(ordinal), "Palette uses native persisted render+31");
+                        expect(info.items[render + 32].items[1].atom == std::to_string(ordinal), "Palette mirror must use native render+32");
+                        auto broken_mirror = encoded.value();
+                        find_chart_record(broken_mirror)->items[3].items[render + 32].items[1] = list_stream::ListValue::raw_atom(std::to_string((ordinal + 1) % spec.members.size()));
+                        const auto projected = form_stream::decode_document(broken_mirror, "Main");
+                        expect(projected.ok() && projected.value().reconstruction_complete() && projected.value().get_prop_val(
+                            {model::ObjectCategory::control, model::ObjectId{2}}, model::PropertyId::from_name("ColorPalette")).value ==
+                            model::PropertyValue{model::EnumerationValue{std::string(spec.type_name), std::string(spec.members[ordinal])}},
+                            "valid runtime Palette projection cannot override the stored source value");
+                        auto broken_stored = encoded.value();
+                        find_chart_record(broken_stored)->items[3].items[render + 31].items[1] = list_stream::ListValue::raw_atom(std::to_string(spec.members.size()));
+                        expect(!form_stream::decode_document(broken_stored, "Main"), "invalid stored Palette rejects without falling back to current state");
+                        auto broken_current = encoded.value();
+                        find_chart_record(broken_current)->items[3].items[render + 32].items[1] = list_stream::ListValue::raw_atom(std::to_string(spec.members.size()));
+                        expect(!form_stream::decode_document(broken_current, "Main"), "out-of-range runtime Palette projection rejects");
+                    }
                     const auto decoded = form_stream::decode_document(encoded.value(), "Main");
                     expect(decoded.ok() && decoded.value().reconstruction_complete(), "Chart enum must decode completely");
                     const auto key = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}};
@@ -17510,7 +17531,7 @@ void test_chart_enum_properties() {
                     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
                         "Chart enum XML and native storage must rebuild without drift");
                     auto invalid = encoded.value();
-                    find_chart_record(invalid)->items[3].items[middle + spec.offset] = list_stream::ListValue::raw_atom(std::to_string(spec.members.size()));
+                    find_chart_record(invalid)->items[3].items[enum_base + spec.offset] = list_stream::ListValue::raw_atom(std::to_string(spec.members.size()));
                     expect(!form_stream::decode_document(invalid, "Main"), "unknown Chart enum ordinal must fail");
                 }
             }
@@ -19000,6 +19021,234 @@ void test_chart_scales_round_trip() {
     }
 }
 
+void test_chart_series_family_named_round_trip() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "SharedSeriesFamily";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    const model::PropertyValue bilingual = model::LocalizedStringValue{{{"ru", "Серия Ω"}, {"en", "Series Ω"}}};
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::ChartPayload payload;
+        model::ChartSeries series; series.id = model::ObjectId{2}; series.text = bilingual; payload.series.push_back(std::move(series));
+        for (std::uint64_t p = 0; p < (i % 3); ++p) { model::ChartPoint point; point.id = model::ObjectId{10 + p}; payload.points.push_back(point); payload.values.push_back({model::ObjectId{2}, point.id, model::DecimalValue{"1.5"}}); }
+        model::ControlNode control{model::ObjectId{100 + i}, "SeriesChart" + std::to_string(i), std::move(payload)};
+        control.position.width.set(160); control.position.height.set(120);
+        model::ColorValue back; back.kind = model::ColorKind::absolute; back.red = 37; back.green = 67; back.blue = 107;
+        control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back);
+        control.properties().set_explicit(model::PropertyId::from_name("AutoMaxValue"), false);
+        control.properties().set_explicit(model::PropertyId::from_name("AutoMinValue"), false);
+        control.properties().set_explicit(model::PropertyId::from_name("MaxValue"), model::DecimalValue{"15.5"});
+        control.properties().set_explicit(model::PropertyId::from_name("MinValue"), model::DecimalValue{"-1.5"});
+        control.properties().set_explicit(model::PropertyId::from_name("ColorPalette"), model::EnumerationValue{"ChartColorPalette", "Rich"});
+        document.add_control(std::move(control));
+    }
+    for (std::uint64_t i = 0; i < 12; ++i) for (const auto series_id : {model::ObjectId{2}, model::ObjectId{1}}) {
+        const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{100 + i}, model::ChartAreaKind::none, model::ChartScaleKind::none, series_id};
+        for (const auto& field : model::metamodel::chart_series_property_descriptors()) {
+            const auto initial = document.get_prop_val(key, field.id);
+            expect(initial.value.has_value(), "all 21 Series properties are readable on both owner types");
+            if (field.read_only) {
+                expect(document.set_prop_val(key, field.id, *initial.value) == model::PropertyMutationStatus::read_only && document.reset_prop_val(key, field.id) == model::PropertyMutationStatus::read_only, "computed summary flag and owned Trendlines are readonly");
+                continue;
+            }
+            const bool runtime_only = field.normal_runtime_only && series_id != model::ObjectId{1};
+            const auto applied = runtime_only ? model::PropertyMutationStatus::applied_runtime_only : model::PropertyMutationStatus::applied;
+            const auto reset = runtime_only ? model::PropertyMutationStatus::reset_runtime_only : model::PropertyMutationStatus::reset;
+            model::PropertyValue value = field.default_value;
+            if (field.value_codec == model::metamodel::ValueCodec::enumeration) {
+                for (const auto member : field.members) {
+                    model::PropertyValue variant = model::EnumerationValue{std::string(field.enumeration_type), std::string(member)};
+                    expect(document.set_prop_val(key, field.id, variant) == model::PropertyMutationStatus::applied && document.get_prop_val(key, field.id).value == variant, "every Series enum member applies through common adapters");
+                }
+                value = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[i % field.members.size()])};
+            } else if (field.value_codec == model::metamodel::ValueCodec::localized_text) value = bilingual;
+            else if (field.value_codec == model::metamodel::ValueCodec::string) value = std::string{"group Ω"};
+            else if (field.value_codec == model::metamodel::ValueCodec::boolean) value = i % 2 != 0;
+            else if (field.value_codec == model::metamodel::ValueCodec::typed_scalar) value = i % 2 ? model::PropertyValue{model::DecimalValue{"-2.5"}} : model::PropertyValue{model::UuidValue{"12345678-1234-1234-1234-123456789abc"}};
+            else if (field.value_codec == model::metamodel::ValueCodec::color) { model::ColorValue color; color.kind = model::ColorKind::style_reference; color.style = model::QualifiedName{i % 2 ? "WindowsColors.WindowBackground" : "WebColors.Red"}; value = color; }
+            else if (field.value_codec == model::metamodel::ValueCodec::line) value = model::LineValue{{"ChartLineType", "Dotted"}, 2, false};
+            expect(document.set_prop_val(key, field.id, value) == applied, "all mutable Series scalar properties apply");
+            const auto before = document.get_prop_val(key, field.id).value;
+            if (field.value_codec != model::metamodel::ValueCodec::typed_scalar)
+                expect(document.set_prop_val(key, field.id, model::NullValue{}) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, field.id).value == before, "Series invalid assignments are atomic");
+            expect(document.reset_prop_val(key, field.id) == reset, "all mutable Series properties reset");
+            expect(document.set_prop_val(key, field.id, value) == applied, "restore Series value");
+        }
+        const auto graph_id = model::PropertyId::from_name("GraphicalRepresentationType");
+        const auto indicator_id = model::PropertyId::from_name("Indicator");
+        expect(document.set_prop_val(key, indicator_id, true) == model::PropertyMutationStatus::applied && document.get_prop_val(key, graph_id).value == model::PropertyValue{model::EnumerationValue{"ChartSeriesGraphicalRepresentationType", "Line"}}, "Indicator true derives Line graph");
+        expect(document.set_prop_val(key, indicator_id, false) == model::PropertyMutationStatus::applied && document.get_prop_val(key, graph_id).value == model::PropertyValue{model::EnumerationValue{"ChartSeriesGraphicalRepresentationType", "Auto"}}, "Indicator false always derives Auto graph");
+        const auto trend = document.add_chart_trendline(key.id, series_id);
+        expect(trend.has_value() && document.chart_trendline_count(key.id, series_id) == std::optional<std::size_t>{1} && document.chart_trendline_at(key.id, series_id, 0) == trend && document.chart_trendline_index(*trend) == std::optional<std::int64_t>{0}, "Trendlines Add, Count, Get and IndexOf share runtime identity");
+        const model::OrdinaryFormDocument::ObjectKey trend_key{key.category, key.id, key.chart_area, key.chart_scale, series_id, trend->trendline};
+        for (const auto& field : model::metamodel::chart_trendline_property_descriptors()) {
+            const auto initial = document.get_prop_val(trend_key, field.id);
+            expect(initial.value.has_value(), "all 13 Trendline properties are readable");
+            if (field.value_codec == model::metamodel::ValueCodec::chart_equation_area) continue;
+            model::PropertyValue value = field.default_value;
+            if (field.value_codec == model::metamodel::ValueCodec::enumeration) {
+                for (const auto member : field.members) expect(document.set_prop_val(trend_key, field.id, model::EnumerationValue{std::string(field.enumeration_type), std::string(member)}) == model::PropertyMutationStatus::applied, "all Trendline enum members apply");
+                value = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[i % field.members.size()])};
+            } else if (field.value_codec == model::metamodel::ValueCodec::localized_text) value = bilingual;
+            else if (field.value_codec == model::metamodel::ValueCodec::integer32) value = std::int64_t{6};
+            else if (field.value_codec == model::metamodel::ValueCodec::typed_scalar) value = model::DecimalValue{"42.5"};
+            else if (field.value_codec == model::metamodel::ValueCodec::line) value = model::LineValue{{"ChartLineType", "Dashed"}, 2, false};
+            else if (field.value_codec == model::metamodel::ValueCodec::color) { model::ColorValue color; color.kind = model::ColorKind::style_reference; color.style = model::QualifiedName{"WebColors.Red"}; value = color; }
+            else if (field.value_codec == model::metamodel::ValueCodec::boolean) value = i % 2 != 0;
+            expect(document.set_prop_val(trend_key, field.id, value) == model::PropertyMutationStatus::applied, "Trendline named properties apply");
+        }
+        auto equation_key = trend_key; equation_key.chart_equation_area = true;
+        for (const auto& field : model::metamodel::chart_label_area_property_descriptors()) {
+            model::PropertyValue value = model::metamodel::chart_scale_property_default(field);
+            if (field.value_codec == model::metamodel::ValueCodec::enumeration) value = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[i % field.members.size()])};
+            else if (field.value_codec == model::metamodel::ValueCodec::decimal) value = model::DecimalValue{field.numeric_policy == model::metamodel::ChartScaleNumericPolicy::unit_decimal ? "0.25" : "-45.5"};
+            else if (field.value_codec == model::metamodel::ValueCodec::boolean) value = false;
+            expect(document.set_prop_val(equation_key, field.id, value) == model::PropertyMutationStatus::applied, "all 12 EquationArea fields use shared ChartLabelArea contract");
+        }
+        const auto equation_id = model::PropertyId::from_name("EquationArea");
+        const auto marker_id = model::PropertyId::from_name("Marker");
+        expect(document.set_prop_val(trend_key, marker_id, model::EnumerationValue{"ChartMarkerType", "Rect"}) == model::PropertyMutationStatus::applied &&
+            document.set_prop_val(equation_key, marker_id, model::EnumerationValue{"ChartMarkerType", "Circle"}) == model::PropertyMutationStatus::applied,
+            "Trendline and EquationArea store their independent Marker values");
+        const auto own_area = document.get_prop_val(trend_key, equation_id).value;
+        const auto retained_left = document.get_prop_val(equation_key, model::PropertyId::from_name("Left")).value;
+        const auto second = document.add_chart_trendline(key.id, series_id);
+        expect(second.has_value(), "second Trendline Add");
+        const model::ChartEquationAreaRef foreign_area{key.id, series_id, second->trendline};
+        for (const auto& supplied : std::array<model::PropertyValue, 3>{*own_area, foreign_area, model::UndefinedValue{}})
+            expect(document.set_prop_val(trend_key, equation_id, supplied) == model::PropertyMutationStatus::applied &&
+                document.get_prop_val(trend_key, equation_id).value == own_area && document.get_prop_val(equation_key, model::PropertyId::from_name("Left")).value == retained_left,
+                "EquationArea reference assignment retains own identity and content");
+        expect(document.reset_prop_val(trend_key, equation_id) == model::PropertyMutationStatus::reset && document.get_prop_val(equation_key, model::PropertyId::from_name("Left")).value == retained_left,
+            "reset EquationArea reference has the native no-op semantics");
+        expect(document.set_prop_val(trend_key, equation_id, true) == model::PropertyMutationStatus::invalid_value, "invalid EquationArea assignment rejects atomically");
+        for (const auto& argument : std::array<model::PropertyValue, 7>{std::int64_t{-1}, std::int64_t{0}, std::int64_t{99}, std::string{"1"}, true, model::UndefinedValue{}, *second}) {
+            const auto inserted = document.insert_chart_trendline(key.id, series_id, argument);
+            expect(inserted.value == model::PropertyValue{model::UndefinedValue{}} && document.chart_trendline_count(key.id, series_id) == std::optional<std::size_t>{2} &&
+                document.chart_trendline_at(key.id, series_id, 0) == trend && document.chart_trendline_at(key.id, series_id, 1) == second,
+                "Insert with a supplied argument returns Undefined without mutation");
+        }
+        expect(document.delete_chart_trendline(key.id, series_id, -1) == model::PropertyMutationStatus::invalid_value &&
+            document.delete_chart_trendline(key.id, series_id, 2) == model::PropertyMutationStatus::invalid_value, "Delete invalid bounds preserve collection");
+        expect(document.delete_chart_trendline(key.id, series_id, 1) == model::PropertyMutationStatus::applied &&
+            !document.chart_trendline_index(*second) && !document.chart_trendline_at(key.id, series_id, 1) && document.chart_trendline_at(key.id, series_id, 0) == trend,
+            "Delete invalidates removed identity and preserves the retained Trendline");
+        auto removed_key = trend_key; removed_key.chart_trendline = second->trendline;
+        expect(document.get_prop_val(removed_key, marker_id).status == model::PropertyReadStatus::unknown_owner &&
+            document.set_prop_val(trend_key, equation_id, foreign_area) == model::PropertyMutationStatus::invalid_reference,
+            "removed Trendline and EquationArea references reject");
+        auto ambiguous = trend_key; ambiguous.chart_area = model::ChartAreaKind::title;
+        expect(document.get_prop_val(ambiguous, marker_id).status == model::PropertyReadStatus::unknown_owner, "mixed area and series selectors reject");
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    auto fixture_copy = encoded.value();
+    const auto* first_chart = find_chart_record(fixture_copy);
+    expect(first_chart != nullptr, "Series family fixture contains Chart records");
+    const auto& first_info = first_chart->items[3];
+    const auto companion = std::ranges::find_if(first_info.items, [](const auto& item) {
+        return item.items.size() == 4 && item.items[2].atom == "1" && item.items[3].items.size() == 14;
+    });
+    expect(companion != first_info.items.end(), "Series family fixture contains a named Trendline companion");
+    const auto companion_index = static_cast<std::size_t>(std::distance(first_info.items.begin(), companion));
+    expect(first_info.items[companion_index - 1].atom == "2" && first_info.items[companion_index].items[0].atom == "0" &&
+        first_info.items[companion_index].items[1].atom == "1" && first_info.items[companion_index + 1].items[1].atom == "2",
+        "sparse Trendline table declares its nonempty owners in ascending Series ID order");
+    expect(first_info.items[companion_index + 2].items.size() == 2 && first_info.items[companion_index + 3].items.size() == 2,
+        "sparse Trendline records precede the unchanged Series visibility pairs");
+    for (const auto owner_count : {"0", "3"}) {
+        auto invalid = encoded.value();
+        find_chart_record(invalid)->items[3].items[companion_index - 1] = list_stream::ListValue::raw_atom(owner_count);
+        expect(!form_stream::decode_document(invalid, "SharedSeriesFamily"), "incorrect sparse Trendline owner count rejects");
+    }
+    for (const auto owner_id : {"1", "999"}) {
+        auto invalid = encoded.value();
+        find_chart_record(invalid)->items[3].items[companion_index + 1].items[1] = list_stream::ListValue::raw_atom(owner_id);
+        expect(!form_stream::decode_document(invalid, "SharedSeriesFamily"), "duplicate and unknown sparse Trendline owners reject");
+    }
+    {
+        auto invalid = encoded.value();
+        find_chart_record(invalid)->items[3].items[companion_index + 2].items[0] = list_stream::ListValue::raw_atom("999");
+        expect(!form_stream::decode_document(invalid, "SharedSeriesFamily"), "Series visibility remains a strict independent pair");
+    }
+    for (const auto field : {0U, 1U, 2U, 4U, 7U, 10U, 12U}) {
+        auto invalid = encoded.value();
+        auto& trend_record = find_chart_record(invalid)->items[3].items[companion_index].items[3];
+        trend_record.items[field] = list_stream::ListValue::raw_atom(field == 2 ? "0" : "999");
+        expect(!form_stream::decode_document(invalid, "SharedSeriesFamily"), "malformed Trendline version, enum, degree, and boolean fail strictly");
+    }
+    for (const auto field : {0U, 1U, 7U, 10U, 11U}) {
+        auto invalid = encoded.value();
+        auto& equation = find_chart_record(invalid)->items[3].items[companion_index].items[3].items[13];
+        equation.items[field] = list_stream::ListValue::raw_atom("999");
+        expect(!form_stream::decode_document(invalid, "SharedSeriesFamily"), "malformed EquationArea version, enum and boolean fail strictly");
+    }
+    for (const auto field : {0U, 1U, 2U}) {
+        auto invalid = encoded.value();
+        find_chart_record(invalid)->items[3].items[companion_index].items[field] = list_stream::ListValue::raw_atom("999");
+        expect(!form_stream::decode_document(invalid, "SharedSeriesFamily"), "malformed Trendline owner version, ID and count fail strictly");
+    }
+    {
+        auto explicit_default_border = encoded.value();
+        auto& border = find_chart_record(explicit_default_border)->items[3].items[companion_index].items[3].items[13].items[8];
+        expect(border.items.size() == 7 && border.items[4].atom == "1" && border.items[5].atom == "0", "EquationArea native default Border fixture");
+        border.items[5] = list_stream::ListValue::raw_atom("3");
+        const auto restored = form_stream::decode_document(explicit_default_border, "SharedSeriesFamily");
+        expect(restored.ok() && restored.value().reconstruction_complete(), "explicit native default Border state3 decodes completely");
+        const model::OrdinaryFormDocument::ObjectKey equation_key{model::ObjectCategory::control, model::ObjectId{100}, model::ChartAreaKind::none, model::ChartScaleKind::none, model::ObjectId{2}, model::ObjectId{1}, true};
+        model::BorderValue expected_border; expected_border.width = 1;
+        expect(restored.value().get_prop_val(equation_key, model::PropertyId::from_name("Border")).value == model::PropertyValue{expected_border}, "explicit native Border state3 retains its named default");
+        const auto normalized = form_stream::encode_document(restored.value());
+        expect(normalized.ok() && list_stream::dump_compact(normalized.value()) == list_stream::dump_compact(encoded.value()), "equivalent native Border state3 rebuilds the canonical named model");
+    }
+    {
+        auto runtime_priority = encoded.value();
+        find_chart_record(runtime_priority)->items[3].items[15] = list_stream::ListValue::raw_atom("1");
+        const auto restored = form_stream::decode_document(runtime_priority, "SharedSeriesFamily");
+        const model::OrdinaryFormDocument::ObjectKey normal{model::ObjectCategory::control, model::ObjectId{100}, model::ChartAreaKind::none, model::ChartScaleKind::none, model::ObjectId{2}};
+        expect(restored.ok() && restored.value().reconstruction_complete() && restored.value().get_prop_val(normal, model::PropertyId::from_name("ColorPriority")).value == model::PropertyValue{false},
+            "normal Series ColorPriority source flag is validated and restored to native default false");
+        find_chart_record(runtime_priority)->items[3].items[15] = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(runtime_priority, "SharedSeriesFamily"), "normal runtime-only ColorPriority still requires a strict boolean");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "SharedSeriesFamily");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ? "Series family is incomplete" : decoded.diagnostics().front().message);
+    const auto xml = source::serialize_form_xml(decoded.value()); expect(xml.ok(), "Series family XML");
+    expect(xml.value().find("<Trendline>") != std::string::npos && xml.value().find("<EquationArea>") != std::string::npos && xml.value().find("<Item language=\"en\">") != std::string::npos, "named Trendline and all text languages are retained");
+    for (const auto& replacement : {std::string{"<Trendline id=\"99\">"}, std::string{"<Trendline><Unknown>1</Unknown>"}}) {
+        auto invalid_xml = xml.value();
+        const auto at = invalid_xml.find("<Trendline>");
+        expect(at != std::string::npos, "Trendline XML fixture");
+        invalid_xml.replace(at, std::string_view{"<Trendline>"}.size(), replacement);
+        expect(!source::parse_form_xml(invalid_xml), "Trendline XML rejects synthetic IDs and unknown properties");
+    }
+    for (std::size_t cursor = 0; (cursor = xml.value().find("<ChartSeries ", cursor)) != std::string::npos;) {
+        const auto close = xml.value().find("</ChartSeries>", cursor);
+        expect(xml.value().substr(cursor, close - cursor).find("<ColorPriority>") == std::string::npos, "normal runtime ColorPriority is omitted from source XML");
+        cursor = close + 1;
+    }
+    {
+        auto invalid = xml.value(); const auto at = invalid.find("</ChartSeries>");
+        invalid.insert(at, "<ColorPriority>true</ColorPriority>");
+        expect(!source::parse_form_xml(invalid), "normal runtime ColorPriority cannot be authored in source XML");
+    }
+    const auto parsed = source::parse_form_xml(xml.value()); expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto binary = oof::save_form_bin(parsed.value()); expect(binary.ok(), "Series family Form.bin rebuild");
+    const auto loaded = oof::load_form_bin(binary.value(), "SharedSeriesFamily"); expect(loaded.ok() && loaded.value().reconstruction_complete(), "Series family Form.bin load");
+    const auto rebuilt = form_stream::encode_document(loaded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "full Series and Trendline family survives source and Form.bin");
+    for (const auto owner : {model::ObjectId{1}, model::ObjectId{2}}) {
+        expect(document.delete_chart_trendline(model::ObjectId{100}, owner, 0) == model::PropertyMutationStatus::applied, "remove the final Trendline for one sparse owner");
+        auto fewer = form_stream::encode_document(document);
+        expect(fewer.ok(), "reduced sparse Trendline ownership must encode");
+        const auto& info = find_chart_record(fewer.value())->items[3];
+        const auto count = owner == model::ObjectId{1} ? std::size_t{1} : std::size_t{0};
+        expect(info.items[companion_index - 1].atom == std::to_string(count) && info.items.size() == first_info.items.size() - (2 - count), "one native top-level record per nonempty Trendline owner");
+        if (count) expect(info.items[companion_index].items[1].atom == "2", "remaining sparse owner is the ordinary Series ID");
+        const auto read = form_stream::decode_document(fewer.value(), "SharedSeriesFamily");
+        expect(read.ok() && read.value().reconstruction_complete(), "zero and one sparse owner preserve all shifted Chart suffix properties");
+    }
+}
+
 void test_chart_named_integer_and_delimiter_properties() {
     for (const auto [series_count, point_count] : std::array{std::pair{0U, 0U}, std::pair{1U, 1U}, std::pair{2U, 3U}}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "ChartNumbers";
@@ -20086,7 +20335,7 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     expect(chart->series[0].color.red == 40 && chart->series[0].color.green == 90 && chart->series[0].color.blue == 120 &&
         chart->points[0].color.red == 20 && chart->points[0].color.green == 30 && chart->points[0].color.blue == 40,
         "Chart RGB channels must preserve platform blue-green-red packing order");
-    expect(chart->series[0].text == "Повтор" && chart->series[1].text == "Повтор" && chart->series[2].text.empty() && chart->points[0].text.empty(),
+    expect(chart->series[0].text == model::PropertyValue{std::string{"Повтор"}} && chart->series[1].text == model::PropertyValue{std::string{"Повтор"}} && std::get<std::string>(chart->series[2].text).empty() && chart->points[0].text.empty(),
         "duplicate and empty Chart captions must survive the stream");
     expect(chart->series[0].value == model::PropertyValue{std::string{"key"}} &&
         chart->series[1].value == model::PropertyValue{model::DecimalValue{"-12.5"}} &&
@@ -20285,9 +20534,9 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
             auto bad_cache = marker_encoded.value();
             find_chart_record(bad_cache)->items[3].items[7] = list_stream::ListValue::raw_atom("1");
             expect(!form_stream::decode_document(bad_cache, "Main"), "SummarySeries concrete Marker cache mismatch must fail");
-            auto unproven = marker_encoded.value();
-            find_chart_record(unproven)->items[3].items[164].items[1] = list_stream::ListValue::raw_atom("5");
-            expect(!form_stream::decode_document(unproven, "Main"), "unproven SummarySeries Alternation must fail");
+            auto bad_automatic_cache = marker_encoded.value();
+            find_chart_record(bad_automatic_cache)->items[3].items[164].items[1] = list_stream::ListValue::raw_atom("5");
+            expect(!form_stream::decode_document(bad_automatic_cache, "Main"), "SummarySeries Alternation requires its automatic native marker cache");
         }
     }
     const auto parsed = source::parse_form_xml(make_xml(false, true));
@@ -20303,13 +20552,11 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
     auto unknown_automatic_cache = form_stream::encode_document(automatic.value()).value();
     record = find_chart_record(unknown_automatic_cache);
     record->items[3].items[5].items[2].items[0] = list_stream::ListValue::raw_atom("1644953");
-    const auto partial_automatic = form_stream::decode_document(unknown_automatic_cache, "Main");
-    expect(partial_automatic.ok() && !partial_automatic.value().reconstruction_complete() &&
-        std::any_of(partial_automatic.diagnostics().begin(), partial_automatic.diagnostics().end(), [](const auto& diagnostic) {
-            return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
-        }) && std::get<model::ChartPayload>(partial_automatic.value().find_control(model::ObjectId{2})->payload).summary_series.color == model::ColorValue{},
-        "unrepresented automatic SummarySeries cache must warn while retaining named automatic Color");
-    expect(form_stream::encode_document(partial_automatic.value()).ok(), "incomplete automatic Chart must rebuild from named values");
+    const auto automatic_decoded = form_stream::decode_document(unknown_automatic_cache, "Main");
+    expect(automatic_decoded.ok() && automatic_decoded.value().reconstruction_complete() &&
+        std::get<model::ChartPayload>(automatic_decoded.value().find_control(model::ObjectId{2})->payload).summary_series.color == model::ColorValue{},
+        "automatic SummarySeries RGB is a derived cache and retains the named automatic Color");
+    expect(form_stream::encode_document(automatic_decoded.value()).ok(), "automatic Chart rebuilds its derived cache from the named model");
 
     auto optional_profile = encoded.value();
     record = find_chart_record(optional_profile);
@@ -20367,7 +20614,7 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
     record = find_chart_record(unsupported_style);
     record->items[3].items[164].items[0] = list_stream::parse("{4,3,{-22},3}");
     expect(!form_stream::decode_document(unsupported_style, "Main"),
-        "unproven SummarySeries style reference must remain unsupported");
+        "SummarySeries named Color mirror mismatch must be rejected");
 }
 
 void test_chart_empty_render_cache_normalization_and_guards() {
@@ -21292,10 +21539,11 @@ void test_embedded_chart_dynamic_back_color() {
                 }
                 owner_document.add_control(std::move(owner));
                 auto encoded = form_stream::encode_document(owner_document);
-                expect(encoded.ok(), "owner fixture must encode");
+                expect(encoded.ok(), encoded ? "owner fixture must encode" : encoded.diagnostics().front().message);
                 const auto guid = model::metamodel::descriptor_for(kind).guid;
                 auto* record = find_record_with_guid(encoded.value(), guid);
                 auto& embedded = record->items[2].items[1].items[2];
+                const auto mirror = 197 + 13 * series_count + 12 * point_count + 3 * series_count * point_count;
                 const auto flag = 112 + 11 * (series_count + point_count);
                 if (with_event) {
                     chart_info.items[flag] = list_stream::ListValue::raw_atom("1");
@@ -21310,6 +21558,9 @@ void test_embedded_chart_dynamic_back_color() {
                 const auto* back = result->properties().find(model::PropertyId::from_name("BackColor"));
                 expect(back && std::get<model::ColorValue>(back->value) == color && result->events.size() == (with_event ? 1U : 0U),
                     "dynamic embedded BackColor and owner event must survive");
+                auto bad_mirror = encoded.value();
+                find_record_with_guid(bad_mirror, guid)->items[2].items[1].items[2].items[mirror + (with_event ? 1 : 0)].items[1] = list_stream::ListValue::raw_atom("999");
+                expect(!form_stream::decode_document(bad_mirror, "Main"), "embedded Chart rejects a damaged Palette mirror");
                 auto broken = encoded.value();
                 const auto second = 214 + 13 * series_count + 12 * point_count + 4 * series_count * point_count + (with_event ? 1 : 0);
                 find_record_with_guid(broken, guid)->items[2].items[1].items[2].items[second] = list_stream::parse("{4,0,{123},0}");
@@ -21589,6 +21840,7 @@ int main() {
         test_chart_area_border_font_round_trip();
         test_chart_plot_area_formats_round_trip();
         test_chart_scales_round_trip();
+        test_chart_series_family_named_round_trip();
         test_chart_named_integer_and_delimiter_properties();
         test_chart_named_events();
         test_dendrogram_named_events();

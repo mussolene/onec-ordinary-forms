@@ -3055,8 +3055,8 @@ void test_chart_summary_series_color_xml() {
     auto default_marker = source::parse_form_xml(xml("<SummarySeries><Marker type=\"ChartMarkerType\" member=\"Auto\"/></SummarySeries>"));
     expect(default_marker.ok() && source::serialize_form_xml(default_marker.value()).value().find("<SummarySeries>") == std::string::npos,
         "default SummarySeries Auto Marker must be omitted");
-    expect(!source::parse_form_xml(xml("<SummarySeries><Marker type=\"ChartMarkerType\" member=\"Circle\"/></SummarySeries>")).ok(),
-        "unproven SummarySeries Marker must fail");
+    for (const auto member : {"None", "Rect", "Circle", "Rhomb", "Auto", "Alternation"})
+        expect(source::parse_form_xml(xml(std::string{"<SummarySeries><Marker type=\"ChartMarkerType\" member=\""} + member + "\"/></SummarySeries>")).ok(), "all six native SummarySeries Marker values parse");
     expect(!source::parse_form_xml(xml("<SummarySeries><Marker type=\"ChartMarkerType\" member=\"Rhomb\"/><Marker type=\"ChartMarkerType\" member=\"Rhomb\"/></SummarySeries>")).ok(),
         "duplicate SummarySeries Marker must fail");
     auto empty = source::parse_form_xml(xml("<SummarySeries/>"));
@@ -3285,6 +3285,27 @@ void test_named_style_color_defaults() {
     }
 }
 
+void test_chart_xml_document_resource_budget() {
+    const auto extra = source::parse_form_xml(R"XML(<Form id="1" name="Extra" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Chart"><Position/><Series/><Points/><Values><ChartValue seriesRef="2" pointRef="1"><Number>1</Number></ChartValue></Values></Chart></ChildItems></Form>)XML");
+    expect(!extra && !extra.diagnostics().empty() &&
+        extra.diagnostics().front().message == "Chart Values exceed the declared Series by Point matrix",
+        "XML rejects excess Values before allocating cells outside its declared matrix");
+    std::string xml = R"XML(<Form id="1" name="Budget" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Chart"><Position/><Series>)XML";
+    for (std::size_t i = 0; i < 999; ++i) {
+        xml += "<ChartSeries id=\"" + std::to_string(i + 2) + "\"><Text/><Color kind=\"automatic\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/>";
+        if (i == 0) xml += "<Trendlines><Trendline/><Trendline/></Trendlines>";
+        xml += "</ChartSeries>";
+    }
+    xml += "</Series><Points>";
+    for (std::size_t i = 0; i < 999; ++i)
+        xml += "<ChartPoint id=\"" + std::to_string(i + 1) + "\"><Text/><Color kind=\"automatic\"/></ChartPoint>";
+    xml += "</Points><Values/></Chart></ChildItems></Form>";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(!parsed && !parsed.diagnostics().empty() &&
+        parsed.diagnostics().front().message == "Chart collections exceed the document resource budget",
+        "XML dimensions and Trendlines must share one budget before dense matrix allocation");
+}
+
 }  // namespace
 
 int main() {
@@ -3301,6 +3322,7 @@ int main() {
         test_chart_type_xml();
         test_chart_summary_series_color_xml();
         test_complete_document_roundtrip();
+        test_chart_xml_document_resource_budget();
         test_xml_explicit_z_order_normalization();
         test_usual_group_named_xml_round_trip();
         test_root_page_tree_xml_roundtrip();

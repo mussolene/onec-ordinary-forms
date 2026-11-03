@@ -3766,6 +3766,43 @@ void test_chart_number_lexical_validation() {
         "Chart model validation must reject non-decimal numeric values such as NaN");
 }
 
+void test_chart_series_owner_persistence() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    Form form; form.id = ObjectId{1}; form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument document(std::move(form));
+    ChartPayload payload; ChartSeries series; series.id = ObjectId{2}; payload.series.push_back(series);
+    document.add_control(ControlNode{ObjectId{2}, "Chart", std::move(payload)});
+    const OrdinaryFormDocument::ObjectKey root{ObjectCategory::control, ObjectId{2}};
+    const OrdinaryFormDocument::ObjectKey normal{ObjectCategory::control, ObjectId{2}, ChartAreaKind::none, ChartScaleKind::none, ObjectId{2}};
+    auto summary = normal; summary.chart_series = ObjectId{1};
+    const auto reference_id = PropertyId::from_name("SummarySeries");
+    const auto* descriptor = find_property(ControlKind::chart, reference_id);
+    expect(descriptor && descriptor->api_access == ApiAccess::read_only && descriptor->persistence == PersistenceClass::persisted_readonly &&
+        descriptor->storage_codec == StorageCodec::control_info && descriptor->value_codec == ValueCodec::chart_series_reference && descriptor->default_value.kind == DefaultKind::none,
+        "root SummarySeries is a classified readonly owned reference");
+    const auto reference = document.get_prop_val(root, reference_id);
+    expect(reference.value == PropertyValue{ChartSeriesRef{ObjectId{2}, ObjectId{1}}} && document.get_prop_val(root, reference_id).value == reference.value,
+        "root SummarySeries reference is stable and uses its reserved owner-local identity");
+    expect(document.set_prop_val(root, reference_id, *reference.value) == PropertyMutationStatus::read_only &&
+        document.set_prop_val(root, reference_id, UndefinedValue{}) == PropertyMutationStatus::read_only && document.reset_prop_val(root, reference_id) == PropertyMutationStatus::read_only,
+        "root SummarySeries replacement and reset are readonly");
+    const auto priority = PropertyId::from_name("ColorPriority");
+    expect(document.set_prop_val(normal, priority, true) == PropertyMutationStatus::applied_runtime_only && document.get_prop_val(normal, priority).value == PropertyValue{true},
+        "ordinary Series ColorPriority is mutable runtime state");
+    expect(document.set_prop_val(normal, priority, std::string{"true"}) == PropertyMutationStatus::invalid_value && document.get_prop_val(normal, priority).value == PropertyValue{true},
+        "invalid runtime priority assignments are atomic");
+    expect(document.reset_prop_val(normal, priority) == PropertyMutationStatus::reset_runtime_only && document.get_prop_val(normal, priority).value == PropertyValue{false},
+        "ordinary Series ColorPriority reset has runtime-only status");
+    expect(document.set_prop_val(summary, priority, true) == PropertyMutationStatus::applied && document.get_prop_val(summary, priority).value == PropertyValue{true} &&
+        document.reset_prop_val(summary, priority) == PropertyMutationStatus::reset, "SummarySeries ColorPriority retains its persisted owner policy");
+    Form bad_form; bad_form.id = ObjectId{1}; bad_form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument bad(std::move(bad_form));
+    ControlNode duplicate{ObjectId{2}, "Chart", ChartPayload{}};
+    duplicate.properties().set_explicit(reference_id, ChartSeriesRef{ObjectId{2}, ObjectId{1}}); bad.add_control(std::move(duplicate));
+    expect(bad.validate().has(InvariantCode::invalid_property), "computed root SummarySeries cannot be duplicated in a scalar bag");
+}
+
 void test_chart_summary_series_color_invariants() {
     using namespace oof::model;
     const auto validate = [](ColorValue color, EnumerationValue marker = {"ChartMarkerType", "Auto"}) {
@@ -3776,7 +3813,8 @@ void test_chart_summary_series_color_invariants() {
         return document.validate();
     };
     expect(validate(ColorValue{}, {"ChartMarkerType", "Rhomb"}).ok(), "proven SummarySeries Rhomb must validate");
-    expect(!validate(ColorValue{}, {"ChartMarkerType", "Alternation"}).ok(), "unproven SummarySeries Marker must fail");
+    for (const auto member : {"None", "Rect", "Circle", "Rhomb", "Auto", "Alternation"})
+        expect(validate(ColorValue{}, {"ChartMarkerType", member}).ok(), "all six native SummarySeries Marker values validate");
     expect(!validate(ColorValue{}, {"OtherType", "Auto"}).ok(), "foreign SummarySeries Marker enum must fail");
     ColorValue color;
     expect(validate(color).ok(), "default SummarySeries Color must validate");
@@ -4042,6 +4080,61 @@ void test_current_page_is_runtime_only() {
         "runtime page selection must not alter Form.bin");
 }
 
+
+void test_chart_document_resource_budget() {
+    Form form; form.id = ObjectId{1}; form.name = "Budget";
+    form.children = {ControlRef{ObjectId{2}}, ControlRef{ObjectId{3}}};
+    OrdinaryFormDocument document(std::move(form));
+    ChartPayload first; first.points.resize(500);
+    for (std::size_t i = 0; i < first.points.size(); ++i) first.points[i].id = ObjectId{i + 1};
+    ChartTrendline trend; trend.id = ObjectId{1};
+    first.summary_series.trendlines.push_back(std::move(trend));
+    first.summary_series.next_trendline_id = 2;
+    document.add_control(ControlNode{ObjectId{2}, "First", std::move(first)});
+    document.add_control(ControlNode{ObjectId{3}, "Second", ChartPayload{}});
+    const OrdinaryFormDocument::ObjectKey second{ObjectCategory::control, ObjectId{3}};
+    expect(document.set_prop_val(second, PropertyId::from_name("SeriesCount"), std::int64_t{999500}) == PropertyMutationStatus::resource_limit,
+        "Trendlines contribute to the document budget before resize allocation");
+    expect(std::get<ChartPayload>(document.find_control(ObjectId{3})->payload).series.empty(),
+        "budget rejection leaves resized Chart unchanged");
+
+    Form bad; bad.id = ObjectId{1}; bad.name = "Oversized"; bad.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument oversized(std::move(bad));
+    ChartPayload payload; payload.series.resize(1000); payload.points.resize(1000);
+    oversized.add_control(ControlNode{ObjectId{2}, "Chart", std::move(payload)});
+    bool budget_violation = false;
+    for (const auto& violation : oversized.validate().violations)
+        if (violation.message == "Chart collections exceed the document resource budget") budget_violation = true;
+    expect(budget_violation, "direct oversized payload must report the document budget violation");
+    expect(!oversized.add_chart_trendline(ObjectId{2}, ObjectId{1}), "Add must reject an already oversized document");
+    const auto& summary = std::get<ChartPayload>(oversized.find_control(ObjectId{2})->payload).summary_series;
+    expect(summary.trendlines.empty() && summary.next_trendline_id == 1,
+        "rejected Add preserves the collection and its next identity");
+
+    Form degree_form; degree_form.id = ObjectId{1}; degree_form.name = "Degree";
+    degree_form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument degree_document(std::move(degree_form));
+    degree_document.add_control(ControlNode{ObjectId{2}, "Chart", ChartPayload{}});
+    const auto degree_trend = degree_document.add_chart_trendline(ObjectId{2}, ObjectId{1});
+    expect(degree_trend.has_value(), "create Trendline for degree validation");
+    const OrdinaryFormDocument::ObjectKey degree_owner{ObjectCategory::control, ObjectId{2}, ChartAreaKind::none,
+        ChartScaleKind::none, ObjectId{1}, degree_trend->trendline};
+    const auto degree = PropertyId::from_name("ApproximationDegree");
+    expect(degree_document.set_prop_val(degree_owner, degree, std::int64_t{7}) == PropertyMutationStatus::applied,
+        "set initial approximation degree");
+    for (const auto invalid : {std::int64_t{-2147483649LL}, std::int64_t{2147483649LL}}) {
+        expect(degree_document.set_prop_val(degree_owner, degree, invalid) == PropertyMutationStatus::invalid_value,
+            "degree outside signed 32-bit range must fail");
+        expect(degree_document.get_prop_val(degree_owner, degree).value == PropertyValue{std::int64_t{7}},
+            "rejected degree leaves previous value unchanged");
+    }
+    for (const auto& input : {DecimalValue{"-1"}, DecimalValue{"0"}, DecimalValue{"-0.5"}}) {
+        expect(degree_document.set_prop_val(degree_owner, degree, input) == PropertyMutationStatus::applied &&
+            degree_document.get_prop_val(degree_owner, degree).value == PropertyValue{std::int64_t{1}},
+            "small nonpositive degrees normalize to one");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -4058,6 +4151,7 @@ int main() {
         test_form_runtime_state_properties();
         test_chart_computed_counts();
         test_chart_owned_collections();
+        test_chart_document_resource_budget();
         test_chart_scale_lines();
         test_form_runtime_variant_values();
         test_window_options_aliases();
@@ -4106,6 +4200,7 @@ int main() {
         test_duplicate_bindings_rejected();
         test_page_position_invariants();
         test_chart_number_lexical_validation();
+        test_chart_series_owner_persistence();
         test_chart_summary_series_color_invariants();
         test_border_value_invariants();
         test_control_border_and_calendar_selection_descriptors();
