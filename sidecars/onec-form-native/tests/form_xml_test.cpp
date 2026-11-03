@@ -27,6 +27,131 @@ void expect(bool condition, std::string_view message) {
     }
 }
 
+void test_value_list_xml_contract() {
+    const std::string first = R"XML(<Item id="0"><Value><String>Первый</String></Value><Presentation><String>Строка</String></Presentation><Check>true</Check></Item>)XML";
+    const std::string second = R"XML(<Item id="1"><Value><Number>42.5</Number></Value><Presentation><String>Число</String></Presentation></Item>)XML";
+    const std::string third = R"XML(<Item id="2"><Value><Boolean>true</Boolean></Value><Presentation><String>Булево</String></Presentation></Item>)XML";
+    const std::string numeric_type = R"XML(<ValueType><Entry term="numeric" length="12" precision="3"/></ValueType>)XML";
+    const std::array<std::string, 12> values{
+        "<ValueList/>",
+        "<ValueList><Items>" + first + second + third + "</Items></ValueList>",
+        "<ValueList><Items>" + second + third + "</Items></ValueList>",
+        R"XML(<ValueList lastAssignedId="2"/>)XML",
+        std::string(R"XML(<ValueList><Items><Item id="3"><Value><String>Новый</String></Value><Presentation><String>Вставленный</String></Presentation><Check>true</Check></Item>)XML") + second + third + "</Items></ValueList>",
+        "<ValueList><Items>" + third + first + second + "</Items></ValueList>",
+        "<ValueList>" + numeric_type + R"XML(<Items><Item id="0"><Value><Number>-1.25</Number></Value><Check>true</Check></Item><Item id="1"><Value><Number>20.5</Number></Value></Item></Items></ValueList>)XML",
+        "<ValueList>" + numeric_type + "<AvailableValues><ValueList>" + numeric_type + R"XML(<Items><Item id="0"><Value><Number>10</Number></Value></Item><Item id="1"><Value><Number>20</Number></Value></Item></Items></ValueList></AvailableValues><Items><Item id="0"><Value><Number>10</Number></Value></Item><Item id="1"><Value><Number>20</Number></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>Строка</String></Value><Presentation><FormattedString formatted="true"><Value><String>До картинки &lt;img 0:448d6f55-d885-496c-870d-d1bd78374745/&gt; после картинки</String></Value></FormattedString></Presentation><Check>true</Check></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>Картинка</String></Value><Presentation><String>Библиотечная картинка</String></Presentation><Check>true</Check><Picture standardName="PictureLib.CloneListItem"/></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><Array><Item><String>Вложено</String></Item><Item><Number>17.25</Number></Item></Array></Value><Presentation><String>Измененное представление</String></Presentation><Check>true</Check></Item><Item id="1"><Value><Structure><Field name="Caption"><String>Заголовок</String></Field><Field name="Items"><Array><Item><String>Вложено</String></Item></Array></Field></Structure></Value><Check>true</Check></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><ValueType><Entry term="string" length="30"/></ValueType><AvailableValues><ValueList/></AvailableValues></ValueList>)XML"
+    };
+    const std::array<std::vector<std::uint64_t>, 12> ids{
+        std::vector<std::uint64_t>{}, {0, 1, 2}, {1, 2}, {}, {3, 1, 2}, {2, 0, 1}, {0, 1}, {0, 1}, {0}, {0}, {0, 1}, {}};
+    const std::array<std::int64_t, 12> history{-1, 2, 2, 2, 3, 2, 1, 1, 0, 0, 1, -1};
+    std::string xml = R"XML(<Form id="1" name="ValueLists" ordinaryFormVersion="2.1"><Attributes>)XML";
+    for (std::size_t index = 0; index < values.size(); ++index)
+        xml += "<Attribute id=\"" + std::to_string(100 + index) + "\" name=\"Numeric" + std::to_string(index) +
+            "\"><TypeDomain><Entry term=\"numeric\" length=\"12\" precision=\"3\"/></TypeDomain></Attribute>";
+    xml += "</Attributes><ChildItems>";
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        const auto& value = values[index];
+        xml += "<InputField id=\"" + std::to_string(200 + index) + "\" name=\"Input" + std::to_string(index) +
+            "\"><DataPath attributeId=\"" + std::to_string(100 + index) + "\"/><Position/><MaxValue>" + value +
+            "</MaxValue><MinValue>" + value + "</MinValue></InputField>";
+        xml += "<Chart id=\"" + std::to_string(300 + index) + "\" name=\"Chart" + std::to_string(index) +
+            "\"><Position/><Series><ChartSeries id=\"2\"><Text/><Color kind=\"automatic\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/>"
+            "<Value>" + value + "</Value><Details>" + value + "</Details></ChartSeries></Series><Points><ChartPoint id=\"1\"><Text/><Color kind=\"automatic\"/><Value>" + value +
+            "</Value></ChartPoint></Points><Values><ChartValue seriesRef=\"2\" pointRef=\"1\">" + value + "<Details>" + value +
+            "</Details></ChartValue></Values></Chart>";
+    }
+    xml += "</ChildItems></Form>";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "12 native ValueList variants must parse on 12 numeric fields and 12 Charts");
+    const auto inspect = [&](const model::OrdinaryFormDocument& document) {
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            const auto* input = document.find_control(model::ObjectId{200 + index});
+            const auto* chart = document.find_control(model::ObjectId{300 + index});
+            expect(input && chart, "ValueList owners must remain named controls");
+            const auto* minimum = input->properties().find(model::PropertyId::from_name("MinValue"));
+            const auto* maximum = input->properties().find(model::PropertyId::from_name("MaxValue"));
+            expect(minimum && maximum && minimum->value == maximum->value, "ValueList must roundtrip through both bounds");
+            const auto& list = std::get<model::ValueListValue>(minimum->value);
+            expect(list.items.size() == ids[index].size() && list.effective_last_assigned_id() == history[index],
+                "GetID history and cardinality must survive named XML independently of item position");
+            for (std::size_t position = 0; position < list.items.size(); ++position)
+                expect(list.items[position].id == ids[index][position], "ValueList Item id must preserve actual GetID order");
+            const auto& payload = std::get<model::ChartPayload>(chart->payload);
+            expect(payload.series.front().value == minimum->value && payload.points.front().value == minimum->value &&
+                payload.values.front().value == minimum->value && payload.values.front().details == minimum->value,
+                "all direct Chart typed-value surfaces must preserve the ValueList graph");
+            const auto* details = payload.series.front().properties.find(model::PropertyId::from_name("Details"));
+            expect(details && details->value == minimum->value, "ChartSeries Details must preserve ValueList through the shared codec");
+        }
+    };
+    inspect(parsed.value());
+    const auto written = source::serialize_form_xml(parsed.value());
+    expect(written.ok(), "ValueList named XML must serialize with existing typed, formatted and picture codecs");
+    const auto restored = source::parse_form_xml(written.value());
+    expect(restored.ok(), "canonical ValueList XML must parse again");
+    inspect(restored.value());
+    const auto canonical = source::serialize_form_xml(restored.value());
+    expect(canonical.ok() && canonical.value() == written.value(), "ValueList canonical XML must be stable");
+    const auto& no_available = std::get<model::ValueListValue>(parsed.value().find_control(model::ObjectId{200})->properties().find(model::PropertyId::from_name("MinValue"))->value);
+    const auto& empty_available = std::get<model::ValueListValue>(parsed.value().find_control(model::ObjectId{211})->properties().find(model::PropertyId::from_name("MinValue"))->value);
+    expect(no_available.available_values.empty() && empty_available.available_values.size() == 1 &&
+        empty_available.available_values.front().items.empty(), "absent AvailableValues and an explicit empty ValueList must remain distinct");
+    const auto& nested = std::get<model::ValueListValue>(parsed.value().find_control(model::ObjectId{210})->properties().find(model::PropertyId::from_name("MinValue"))->value);
+    auto copied = nested;
+    std::get<model::ArrayValue>(copied.items.front().value).items.front() = std::string{"Changed"};
+    expect(std::get<std::string>(std::get<model::ArrayValue>(nested.items.front().value).items.front()) == "Вложено",
+        "copying a ValueList must not share mutable nested item values");
+    const auto& formatted_list = std::get<model::ValueListValue>(parsed.value().find_control(model::ObjectId{208})->properties().find(model::PropertyId::from_name("MinValue"))->value);
+    const auto& formatted = std::get<model::FormattedStringValue>(formatted_list.items.front().presentation);
+    expect(formatted.formatted && std::get<std::string>(formatted.value).find("<img 0:448d6f55") != std::string::npos &&
+        written.value().find("&lt;img 0:448d6f55") != std::string::npos,
+        "formatted presentation keeps plain runtime markup as escaped XML text without invented languages");
+    const auto wrap = [](std::string_view value) {
+        return std::string(R"XML(<Form id="1" name="List" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series><ChartSeries id="2"><Text/><Color kind="automatic"/><Marker type="ChartMarkerType" member="Auto"/><Value>)XML") +
+            std::string(value) + "</Value></ChartSeries></Series><Points/><Values/></Chart></ChildItems></Form>";
+    };
+    const auto implicit = source::parse_form_xml(wrap(values[1]));
+    const auto explicit_default = source::parse_form_xml(wrap("<ValueList lastAssignedId=\"2\"><Items>" + first + second + third + "</Items></ValueList>"));
+    expect(implicit.ok() && explicit_default.ok(), "explicit default history must remain admissible");
+    const auto implicit_xml = source::serialize_form_xml(implicit.value());
+    const auto explicit_xml = source::serialize_form_xml(explicit_default.value());
+    expect(implicit_xml.ok() && explicit_xml.ok() && implicit_xml.value() == explicit_xml.value(),
+        "default lastAssignedId must be omitted while nondefault cleared history is preserved");
+    for (const auto invalid : {
+        R"XML(<ValueList lastAssignedId="-1"/>)XML",
+        R"XML(<ValueList lastAssignedId="9223372036854775808"/>)XML",
+        R"XML(<ValueList><Items><Item><Value><String>x</String></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value></Item><Item id="0"><Value><Number>1</Number></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="9223372036854775808"><Value><String>x</String></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList lastAssignedId="1"><Items><Item id="2"><Value><String>x</String></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><AvailableValues><ValueList/><ValueList/></AvailableValues></ValueList>)XML",
+        R"XML(<ValueList><Items/><ValueType/></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Presentation><String>x</String></Presentation></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><Number>1</Number></Value><Presentation><Number>2</Number></Presentation></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value><Presentation><FormattedString formatted="false"><Value><String>x</String></Value></FormattedString></Presentation></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value><Picture>7</Picture></Item></Items></ValueList>)XML",
+        R"XML(<FormattedString formatted="true"><Value><Item language="ru">x</Item></Value></FormattedString>)XML"})
+        expect(!source::parse_form_xml(wrap(invalid)).ok(), "ValueList must reject invalid ID history, cardinality, presentations and unsupported file pictures");
+    const auto plain_empty = source::parse_form_xml(wrap(R"XML(<FormattedString formatted="true"><Value><String/></Value></FormattedString>)XML"));
+    expect(plain_empty.ok(), "empty plain FormattedString must remain distinct from empty localized content");
+    std::string available = "<ValueList/>";
+    for (std::size_t depth = 0; depth < model::max_typed_value_depth; ++depth)
+        available = "<ValueList><AvailableValues>" + available + "</AvailableValues></ValueList>";
+    expect(source::parse_form_xml(wrap(available)).ok(), "AvailableValues recursion must admit a leaf at depth64");
+    const auto too_deep = source::parse_form_xml(wrap("<ValueList><AvailableValues>" + available + "</AvailableValues></ValueList>"));
+    expect(!too_deep.ok(), "AvailableValues must not bypass the shared typed-value depth limit");
+    model::ValueListValue one;
+    one.items.push_back({0, model::PropertyValue{std::string{"value"}}, model::PropertyValue{std::string{}}, false, std::nullopt});
+    model::TypedValueBudget budget{model::max_typed_value_nodes - 4};
+    expect(model::validate_typed_value(model::PropertyValue{one}, budget) && budget.nodes == model::max_typed_value_nodes,
+        "ValueList root, item, value and omitted presentation must all consume the shared node budget");
+}
+
 void test_recursive_typed_value_xml_contract() {
     const std::array<std::string_view, 12> values{
         R"XML(<Color kind="absolute" red="23" green="67" blue="101"/>)XML",
@@ -112,8 +237,8 @@ void test_recursive_typed_value_xml_contract() {
         R"XML(<Map><Entry><Key><String>x</String></Key><Key><String>y</String></Key><Value><Number>1</Number></Value></Entry></Map>)XML",
         R"XML(<Map><Entry><Key><String>x</String></Key><Value><Number>1</Number><Number>2</Number></Value></Entry></Map>)XML",
         R"XML(<Array><Item><ControlRef>2</ControlRef></Item></Array>)XML",
-        R"XML(<ValueList/>)XML"}) {
-        expect(!source::parse_form_xml(chart_xml(invalid)).ok(), "malformed typed pairs, wrappers, references and unsupported ValueList must be rejected");
+        R"XML(<ValueList><Items><Item id="0"/></Items></ValueList>)XML"}) {
+        expect(!source::parse_form_xml(chart_xml(invalid)).ok(), "malformed typed pairs, wrappers, references and incomplete ValueList must be rejected");
     }
     std::string nested = "<String>leaf</String>";
     for (std::size_t depth = 0; depth < model::max_typed_value_depth; ++depth)
@@ -3482,6 +3607,7 @@ void test_chart_xml_document_resource_budget() {
 
 int main() {
     try {
+        test_value_list_xml_contract();
         test_map_canonical_xml_order();
         test_recursive_typed_value_xml_contract();
         test_form_item_collection_xml_contract();

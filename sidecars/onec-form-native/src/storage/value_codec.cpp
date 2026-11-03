@@ -379,14 +379,31 @@ void write_formatted_string(
     list_stream::ListOutStream& out,
     const model::FormattedStringValue& value) {
     out.begin_list();
-    out.write_uint32(formatted_string_version);
-    write_localized_string(out, value.value);
-    out.write_bool(value.formatted);
+    if (const auto* text = std::get_if<std::string>(&value.value)) {
+        out.write_string("#");
+        out.write_guid("140b5ff4-37b1-4df5-b5ec-a0bfd2b94f8f");
+        out.write_bool(value.formatted);
+        out.write_string(*text);
+    } else {
+        out.write_uint32(formatted_string_version);
+        write_localized_string(out, std::get<model::LocalizedStringValue>(value.value));
+        out.write_bool(value.formatted);
+    }
     out.end_list();
 }
 
 model::FormattedStringValue read_formatted_string(list_stream::ListInStream& in) {
     in.begin_list();
+    const auto& first = in.peek_value();
+    if (!first.is_list && first.atom_kind == list_stream::ListValue::AtomKind::string && first.atom == "#") {
+        static_cast<void>(in.read_string());
+        if (in.read_guid() != "140b5ff4-37b1-4df5-b5ec-a0bfd2b94f8f")
+            throw std::runtime_error("FormattedString has an unknown runtime type");
+        const bool formatted = in.read_bool();
+        model::FormattedStringValue value{in.read_string(), formatted};
+        in.end_list();
+        return value;
+    }
     const std::uint32_t version = in.read_uint32();
     if (version != formatted_string_version) {
         throw std::runtime_error(
@@ -894,7 +911,9 @@ std::string encode_formatted_string(const model::FormattedStringValue& value) {
 
 model::FormattedStringValue decode_formatted_string(std::string_view text) {
     list_stream::ListInStream in(text);
-    return read_formatted_string(in);
+    const auto value = read_formatted_string(in);
+    if (in.has_next()) throw std::runtime_error("FormattedString stream contains trailing values");
+    return value;
 }
 
 std::string encode_composite_id(const model::CompositeIdValue& value) {

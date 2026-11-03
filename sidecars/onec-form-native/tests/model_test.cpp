@@ -618,13 +618,16 @@ void test_chart_owned_collections() {
             document.set_prop_val(owner, points_id, ChartCollectionRef{ObjectId{999}, ChartCollectionKind::points}) == PropertyMutationStatus::read_only &&
             document.reset_prop_val(owner, points_id) == PropertyMutationStatus::read_only, "collection assignment and reset must be readonly");
         for (const auto& [series_count, point_count] : {std::pair{3, 4}, std::pair{0, 0}, std::pair{2, 3}}) {
-            expect(document.set_prop_val(owner, PropertyId::from_name("SeriesCount"), std::int64_t{series_count}) == PropertyMutationStatus::applied_unclassified_storage &&
-                document.set_prop_val(owner, PropertyId::from_name("PointCount"), std::int64_t{point_count}) == PropertyMutationStatus::applied_unclassified_storage, "collection resize must succeed");
+            expect(document.set_prop_val(owner, PropertyId::from_name("SeriesCount"), std::int64_t{series_count}) == PropertyMutationStatus::applied &&
+                document.set_prop_val(owner, PropertyId::from_name("PointCount"), std::int64_t{point_count}) == PropertyMutationStatus::applied, "collection resize must succeed");
             expect(document.get_prop_val(owner, series_id).value == series.value && document.get_prop_val(owner, points_id).value == points.value, "saved collection references must remain stable");
             const auto* node = document.find_control(std::get<ChartCollectionRef>(*series.value).owner);
             const auto& chart = std::get<ChartPayload>(node->payload);
             expect(chart.series.size() == static_cast<std::size_t>(series_count) && chart.points.size() == static_cast<std::size_t>(point_count), "saved references resolve current collections");
         }
+        expect(document.reset_prop_val(owner, PropertyId::from_name("SeriesCount")) == PropertyMutationStatus::reset &&
+            document.reset_prop_val(owner, PropertyId::from_name("PointCount")) == PropertyMutationStatus::reset,
+            "classified chart counters reset their owned collections successfully");
     }
     expect(document.get_prop_val({ObjectCategory::control, ObjectId{999}}, PropertyId::from_name("Series")).status == PropertyReadStatus::unknown_owner,
         "missing Chart owner must fail");
@@ -2659,7 +2662,7 @@ void test_recursive_typed_values() {
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     };
-    static_assert(std::variant_size_v<PropertyValue::Variant> == 37);
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 38);
     [&]<std::size_t... Index>(std::index_sequence<Index...>) {
         ([&] {
             using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
@@ -2759,6 +2762,105 @@ void test_recursive_typed_values() {
         "type-description entries consume the shared resource budget");
 }
 
+void test_value_list_named_values() {
+    const auto valid = [](const PropertyValue& value) {
+        TypedValueBudget budget;
+        return validate_typed_value(value, budget);
+    };
+    const auto picture = PictureRef{{}, QualifiedName{"PictureLib.Write"}};
+    ValueListValue base;
+    base.items = {{0, std::string{"first"}, std::string{"Первый"}, true, {}},
+        {1, DecimalValue{"78.125"}, std::string{"Второй"}, false, {}},
+        {2, ArrayValue{{false, DecimalValue{"17.25"}}, false}, std::string{"Вложенный"}, true, {}}};
+    std::array<ValueListValue, 12> variants;
+    variants[1] = base; variants[1].items.erase(variants[1].items.begin() + 1); variants[1].last_assigned_id = 2;
+    variants[2].last_assigned_id = 2;
+    variants[3] = base; variants[3].items.front().id = 3; variants[3].last_assigned_id = 3;
+    variants[4] = base; std::swap(variants[4].items.front(), variants[4].items.back());
+    TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string.length = 40;
+    variants[5] = base; variants[5].value_type.entries.push_back(text);
+    variants[6] = base; variants[6].available_values.push_back(base);
+    variants[7] = base; variants[7].items.front().presentation = FormattedStringValue{std::string{"<b>Первый</b>"}, true};
+    variants[8] = base; variants[8].items.front().picture = picture;
+    variants[9] = base;
+    variants[9].items.front().value = StructureValue{{{"Items", MapValue{{{false, ArrayValue{{DecimalValue{"1.5"}}, true}}}, true}}}, true};
+    TypeDomainEntry number; number.term = TypeDomainTerm::numeric; number.numeric = {15, 2, false};
+    variants[10] = base; variants[10].value_type.entries.push_back(number);
+    variants[11].available_values.emplace_back();
+    for (const auto& value : variants) {
+        expect(valid(value), "twelve named ValueList states preserve histories, ordering, restrictions and available values without coercion");
+        auto copy = value;
+        expect(copy == value && copy.effective_last_assigned_id() == value.effective_last_assigned_id(),
+            "ValueList copies retain local item identity and effective allocator history");
+        copy.items.push_back(ValueListItem{99, false, std::string{"copy"}, false, {}});
+        expect(copy.items.size() == value.items.size() + 1, "ValueList item collections copy without shared storage");
+    }
+    expect(variants[0].effective_last_assigned_id() == -1 && variants[2].effective_last_assigned_id() == 2 && variants[0] != variants[2],
+        "a newly empty list differs from an empty list retaining allocation history");
+    auto explicit_default = base; explicit_default.last_assigned_id = 2;
+    expect(explicit_default == base, "explicit default and omitted ValueList history have the same effective meaning");
+    expect(variants[4].effective_last_assigned_id() == 2 && variants[4] != base,
+        "reordering preserves item IDs and allocator history but changes the ordered list value");
+    expect(variants[0] != variants[11], "absent AvailableValues differs from an explicitly empty available list");
+    auto nested_copy = variants[6];
+    std::get<ArrayValue>(nested_copy.available_values.front().items.back().value).items.front() = true;
+    expect(nested_copy != variants[6] && !std::get<bool>(std::get<ArrayValue>(variants[6].available_values.front().items.back().value).items.front()),
+        "AvailableValues and item values copy recursively without aliasing");
+
+    const FormattedStringValue localized{LocalizedStringValue{{LocalizedStringItem{"ru", "Локализовано"}}}, true};
+    expect(std::holds_alternative<LocalizedStringValue>(localized.value) &&
+        valid(FormattedStringValue{std::string{"<b>Текст</b>"}, true}) && !valid(localized),
+        "legacy localized formatter aggregates remain constructible while runtime typed values require plain markup text");
+    auto invalid = base; invalid.items.back().id = invalid.items.front().id;
+    expect(!valid(invalid), "ValueList item IDs must be unique within the owning list");
+    invalid = base; invalid.last_assigned_id = 1;
+    expect(!valid(invalid) && !(invalid == invalid), "invalid allocation history is rejected by validation and equality");
+    bool history_threw = false;
+    try { (void)invalid.effective_last_assigned_id(); } catch (const std::invalid_argument&) { history_threw = true; }
+    expect(history_threw, "the shared history helper reports invalid history explicitly");
+    constexpr auto maximum_id = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    ValueListValue boundary; ValueListItem boundary_item; boundary_item.id = maximum_id; boundary.items.push_back(std::move(boundary_item));
+    expect(valid(boundary) && boundary.effective_last_assigned_id() == std::numeric_limits<std::int64_t>::max(),
+        "ValueList permits the largest signed 64-bit ID");
+    boundary.items.front().id = maximum_id + 1;
+    expect(!valid(boundary), "ValueList rejects item IDs outside the signed 64-bit range");
+    boundary.items.clear(); boundary.last_assigned_id = maximum_id + 1;
+    expect(!valid(boundary), "empty ValueList history also obeys the signed 64-bit range");
+    invalid = base; invalid.available_values = {base, base};
+    expect(!valid(invalid), "AvailableValues has zero-or-one cardinality");
+    for (const auto& presentation : {PropertyValue{UndefinedValue{}}, PropertyValue{localized},
+            PropertyValue{FormattedStringValue{std::string{"plain"}, false}}, PropertyValue{std::string{"\xc0\x80", 2}}}) {
+        invalid = base; invalid.items.front().presentation = presentation;
+        expect(!valid(invalid), "ValueList rejects unproven presentation kinds, false formatter flags and invalid UTF-8");
+    }
+    for (const auto& unsupported_picture : {PictureRef{PictureAssetRef{ObjectId{7}}, {}}, PictureRef{},
+            PictureRef{{}, QualifiedName{"PictureLib.Unknown"}}}) {
+        invalid = base; invalid.items.front().picture = unsupported_picture;
+        expect(!valid(invalid), "ValueList pictures support existing named library pictures and reject file/context-dependent references explicitly");
+    }
+
+    ValueListValue counted;
+    counted.value_type.entries.push_back(number);
+    counted.items.push_back(ValueListItem{0, false, std::string{}, false, picture});
+    counted.available_values.emplace_back();
+    TypedValueBudget budget;
+    expect(validate_typed_value(counted, budget) && budget.nodes == 7,
+        "ValueList node accounting includes type entries, item records, default presentations, pictures and available-list roots");
+    TypedValueBudget exact{max_typed_value_nodes - 7};
+    expect(validate_typed_value(counted, exact) && exact.nodes == max_typed_value_nodes,
+        "ValueList accepts exactly the remaining shared node budget");
+    TypedValueBudget exhausted{max_typed_value_nodes - 3};
+    expect(!validate_typed_value(counted, exhausted), "ValueList rejects insufficient item budget before copying child values");
+
+    ValueListValue deep;
+    for (std::size_t depth = 0; depth < max_typed_value_depth; ++depth) {
+        ValueListValue outer; outer.available_values.push_back(std::move(deep)); deep = std::move(outer);
+    }
+    expect(valid(deep), "AvailableValues may reach the common semantic depth limit");
+    ValueListValue beyond; beyond.available_values.push_back(std::move(deep));
+    expect(!valid(beyond), "AvailableValues cannot bypass the common depth limit");
+}
+
 void test_typed_value_document_budget() {
     Form form; form.id = ObjectId{1}; form.name = "TypedBudget";
     form.children = {ControlRef{ObjectId{10}}, ControlRef{ObjectId{11}}};
@@ -2774,9 +2876,9 @@ void test_typed_value_document_budget() {
     }
     expect(document.validate().ok(), "typed trees across two controls may exactly consume the global node budget");
     const OrdinaryFormDocument::ObjectKey input{ObjectCategory::control, ObjectId{10}};
-    expect(document.set_prop_val(input, PropertyId::from_name("MaxValue"), true) == PropertyMutationStatus::applied_unclassified_storage &&
+    expect(document.set_prop_val(input, PropertyId::from_name("MaxValue"), true) == PropertyMutationStatus::applied &&
         !document.validate().ok(), "one additional typed field exceeds the aggregate budget although each field fits alone");
-    expect(document.reset_prop_val(input, PropertyId::from_name("MaxValue")) == PropertyMutationStatus::reset_unclassified_storage &&
+    expect(document.reset_prop_val(input, PropertyId::from_name("MaxValue")) == PropertyMutationStatus::reset &&
         document.validate().ok(), "removing the additional field restores the bounded document");
 
     Form chart_form; chart_form.id = ObjectId{1}; chart_form.children = {ControlRef{ObjectId{2}}};
@@ -3605,6 +3707,19 @@ void test_picture_property_model_api() {
     set_and_check(choice, "ChoiceButtonPicture", choice_button_asset);
     set_and_check(input, "Picture", input_asset);
     set_and_check(input, "ChoiceButtonPicture", input_button_standard);
+
+    const OrdinaryFormDocument::ObjectKey form_owner{ObjectCategory::form, ObjectId{1}};
+    const auto caption_picture = PropertyId::from_name("CaptionPicture");
+    expect(document.set_prop_val(form_owner, caption_picture, choice_standard) == PropertyMutationStatus::applied &&
+        document.get_prop_val(form_owner, caption_picture).value == PropertyValue{choice_standard},
+        "classified CaptionPicture reports persisted success and retains its named library reference");
+    expect(document.set_prop_val(form_owner, caption_picture, input_asset) == PropertyMutationStatus::invalid_value &&
+        document.get_prop_val(form_owner, caption_picture).value == PropertyValue{choice_standard},
+        "CaptionPicture classification does not permit file-asset assignment through the runtime setter");
+    expect(document.set_prop_val(form_owner, caption_picture, PictureRef{}) == PropertyMutationStatus::applied &&
+        document.get_prop_val(form_owner, caption_picture).value == PropertyValue{PictureRef{}} &&
+        document.reset_prop_val(form_owner, caption_picture) == PropertyMutationStatus::reset,
+        "clearing and resetting classified CaptionPicture retain the existing empty-picture semantics");
 
     expect(document.set_prop_val(choice, PropertyId::from_name("Picture"),
                PictureRef{PictureAssetRef{ObjectId{999}}, std::nullopt}) ==
@@ -4469,6 +4584,7 @@ int main() {
         test_property_default_semantics();
         test_typed_property_set();
         test_recursive_typed_values();
+        test_value_list_named_values();
         test_typed_value_document_budget();
         test_document_property_api();
         test_control_position_property_api();

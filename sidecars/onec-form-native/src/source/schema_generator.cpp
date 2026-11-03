@@ -438,7 +438,10 @@ void append_value_types(std::string& output) {
 
   <xs:complexType name="FormattedStringValueType">
     <xs:sequence>
-      <xs:element name="Value" type="LocalizedStringValueType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Value"><xs:complexType><xs:choice>
+        <xs:element name="String" type="xs:string"/>
+        <xs:sequence><xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="65536"/></xs:sequence>
+      </xs:choice></xs:complexType></xs:element>
     </xs:sequence>
     <xs:attribute name="formatted" type="xs:boolean" use="required"/>
   </xs:complexType>
@@ -901,6 +904,8 @@ void append_value_types(std::string& output) {
     <xs:element name="Font" type="FontValueType"/>
     <xs:element name="Border" type="BorderValueType"/>
     <xs:element name="TypeDescription" type="TypeDomainValueType"/>
+    <xs:element name="FormattedString" type="FormattedStringValueType"/>
+    <xs:element name="ValueList" type="ValueListValueType"/>
     <xs:element name="Array" type="TypedArrayValueType"/>
     <xs:element name="FixedArray" type="TypedArrayValueType"/>
     <xs:element name="Structure" type="TypedStructureValueType"/>
@@ -912,6 +917,20 @@ void append_value_types(std::string& output) {
   <xs:complexType name="TypedArrayValueType"><xs:sequence><xs:element name="Item" type="TypedValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
   <xs:complexType name="TypedStructureValueType"><xs:sequence><xs:element name="Field" minOccurs="0" maxOccurs="unbounded"><xs:complexType><xs:complexContent><xs:extension base="TypedValueType"><xs:attribute name="name" type="xs:string" use="required"/></xs:extension></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>
   <xs:complexType name="TypedMapValueType"><xs:sequence><xs:element name="Entry" minOccurs="0" maxOccurs="unbounded"><xs:complexType><xs:sequence><xs:element name="Key" type="TypedValueType"/><xs:element name="Value" type="TypedValueType"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType>
+  <xs:simpleType name="ValueListIdType"><xs:restriction base="xs:unsignedLong"><xs:maxInclusive value="9223372036854775807"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="ValueListPresentationType"><xs:choice><xs:element name="String" type="xs:string"/><xs:element name="FormattedString" type="FormattedStringValueType"/></xs:choice></xs:complexType>
+  <xs:complexType name="ValueListItemType"><xs:sequence>
+    <xs:element name="Value" type="TypedValueType"/>
+    <xs:element name="Presentation" type="ValueListPresentationType" minOccurs="0"/>
+    <xs:element name="Check" type="xs:boolean" minOccurs="0"/>
+    <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/>
+  </xs:sequence><xs:attribute name="id" type="ValueListIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ValueListItemsType"><xs:sequence><xs:element name="Item" type="ValueListItemType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ValueListValueType"><xs:sequence>
+    <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0"/>
+    <xs:element name="AvailableValues" minOccurs="0"><xs:complexType><xs:sequence><xs:element name="ValueList" type="ValueListValueType"/></xs:sequence></xs:complexType></xs:element>
+    <xs:element name="Items" type="ValueListItemsType" minOccurs="0"/>
+  </xs:sequence><xs:attribute name="lastAssignedId" type="ValueListIdType" use="optional"/></xs:complexType>
   <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Value" type="TypedValueType" minOccurs="0"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartValueType"><xs:sequence><xs:group ref="TypedValueGroup"/><xs:element name="Details" type="TypedValueType" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:sequence><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:simpleType name="ChartLastAssignedIdType"><xs:restriction base="xs:unsignedLong"><xs:maxInclusive value="9223372036854775807"/></xs:restriction></xs:simpleType>

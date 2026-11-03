@@ -1567,6 +1567,54 @@ void test_document_instances(xmlSchemaPtr schema) {
         "Page id must be rejected by the public schema");
 }
 
+void test_value_list_schema(const GeneratedSchemas& schemas, xmlSchemaPtr schema) {
+    const auto document = [](std::string_view value) {
+        return std::string(R"XML(<Form id="1" name="List" ordinaryFormVersion="2.1"><Attributes><Attribute id="10" name="Number"><TypeDomain><Entry term="numeric" length="12" precision="3"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="Input"><DataPath attributeId="10"/><Position/><MaxValue>)XML") +
+            std::string(value) + "</MaxValue><MinValue>" + std::string(value) +
+            R"XML(</MinValue></InputField><Chart id="3" name="Chart"><Position/><Series><ChartSeries id="2"><Text/><Color kind="automatic"/><Marker type="ChartMarkerType" member="Auto"/><Value>)XML" +
+            std::string(value) + "</Value><Details>" + std::string(value) + "</Details></ChartSeries></Series><Points/><Values/></Chart></ChildItems></Form>";
+    };
+    for (const auto value : {
+        R"XML(<ValueList/>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>Первый</String></Value></Item><Item id="1"><Value><Number>42.5</Number></Value></Item><Item id="2"><Value><Boolean>true</Boolean></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="1"><Value><Number>42.5</Number></Value></Item><Item id="2"><Value><Boolean>true</Boolean></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList lastAssignedId="2"/>)XML",
+        R"XML(<ValueList><Items><Item id="3"><Value><String>Inserted</String></Value></Item><Item id="1"><Value><Number>1</Number></Value></Item><Item id="2"><Value><Number>2</Number></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="2"><Value><Number>2</Number></Value></Item><Item id="0"><Value><Number>0</Number></Value></Item><Item id="1"><Value><Number>1</Number></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><ValueType><Entry term="numeric" length="12" precision="3"/></ValueType><Items><Item id="0"><Value><Number>-1.25</Number></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><ValueType><Entry term="numeric" length="12" precision="3"/></ValueType><AvailableValues><ValueList><Items><Item id="0"><Value><Number>10</Number></Value></Item></Items></ValueList></AvailableValues><Items><Item id="0"><Value><Number>10</Number></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value><Presentation><FormattedString formatted="true"><Value><String>До &lt;img 0:448d6f55-d885-496c-870d-d1bd78374745/&gt; после</String></Value></FormattedString></Presentation><Check>true</Check></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value><Picture standardName="PictureLib.CloneListItem"/></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><Array><Item><Structure><Field name="Nested"><String>Значение</String></Field></Structure></Item></Array></Value><Presentation><String>Представление</String></Presentation><Check>true</Check></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><ValueType><Entry term="string" length="30"/></ValueType><AvailableValues><ValueList/></AvailableValues></ValueList>)XML"})
+        expect(validate_document(schema, document(value)) == 0, "ValueList schema must cover twelve native-shaped variants on both property families");
+    for (const auto value : {
+        R"XML(<ValueList lastAssignedId="-1"/>)XML",
+        R"XML(<ValueList lastAssignedId="9223372036854775808"/>)XML",
+        R"XML(<ValueList><Items><Item><Value><String>x</String></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="9223372036854775808"><Value><String>x</String></Value></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"/></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><Number>1</Number></Value><Presentation><Number>2</Number></Presentation></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><AvailableValues><ValueList/><ValueList/></AvailableValues></ValueList>)XML",
+        R"XML(<ValueList><AvailableValues><Undefined>undefined</Undefined></AvailableValues></ValueList>)XML",
+        R"XML(<ValueList><Items/><ValueType/></ValueList>)XML",
+        R"XML(<ValueList unknownSlot2="0"/>)XML"})
+        expect(validate_document(schema, document(value)) != 0, "ValueList XSD must reject malformed IDs, wrappers and unnamed implementation slots");
+    std::string formatted_schema = schemas.ordinary_form_xsd;
+    const auto end = formatted_schema.rfind("</xs:schema>");
+    expect(end != std::string::npos, "generated schema must have its named closing element");
+    formatted_schema.insert(end, R"XML(<xs:element name="FormattedFixture" type="FormattedStringValueType"/>)XML");
+    Schema compiled = compile_schema(formatted_schema, "FormattedFixture.xsd");
+    expect(compiled != nullptr, "existing formatted-string type must compile with both value alternatives");
+    for (const auto value : {
+        R"XML(<FormattedFixture formatted="true"><Value><String/></Value></FormattedFixture>)XML",
+        R"XML(<FormattedFixture formatted="false"><Value/></FormattedFixture>)XML",
+        R"XML(<FormattedFixture formatted="true"><Value><Item language="ru">Текст</Item><Item language="en">Text</Item></Value></FormattedFixture>)XML"})
+        expect(validate_document(compiled.get(), value) == 0, "plain and legacy localized FormattedString XML must remain structurally distinct and valid");
+    expect(validate_document(compiled.get(), R"XML(<FormattedFixture formatted="true"><Value><String>x</String><Item language="ru">y</Item></Value></FormattedFixture>)XML") != 0,
+        "formatted Value cannot combine plain String and localized Item alternatives");
+}
+
 void test_recursive_typed_value_schema(xmlSchemaPtr schema) {
     const auto document = [](std::string_view value) {
         return std::string(R"XML(<Form id="1" name="Typed" ordinaryFormVersion="2.1"><Attributes><Attribute id="10" name="Number"><TypeDomain><Entry term="numeric" length="12" precision="3"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="Input"><DataPath attributeId="10"/><Position/><MaxValue>)XML") +
@@ -1598,9 +1646,9 @@ void test_recursive_typed_value_schema(xmlSchemaPtr schema) {
         R"XML(<Map><Entry><Value><String>x</String></Value><Key><String>y</String></Key></Entry></Map>)XML",
         R"XML(<Map><Entry><Key><Number>1</Number></Key><Value><String>x</String><String>y</String></Value></Entry></Map>)XML",
         R"XML(<Array><Item><ControlRef>2</ControlRef></Item></Array>)XML",
-        R"XML(<ValueList/>)XML"}) {
+        R"XML(<ValueList><Items><Item id="0"/></Items></ValueList>)XML"}) {
         expect(validate_document(schema, document(value)) != 0,
-            "typed schema must reject malformed pairs and wrappers, references and unsupported ValueList");
+            "typed schema must reject malformed pairs and wrappers, references and incomplete ValueList");
     }
 }
 
@@ -1746,6 +1794,7 @@ int main() {
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
+        test_value_list_schema(schemas, compiled_form.get());
         test_recursive_typed_value_schema(compiled_form.get());
         test_document_instances(compiled_form.get());
         test_spreadsheet_document_instances(compiled_form.get());

@@ -448,6 +448,13 @@ constexpr std::string_view typed_structure_guid = "4238019d-7e49-4fc9-91db-b6b95
 constexpr std::string_view typed_fixed_structure_guid = "3ee983d7-ace7-40f9-bb7e-2e916fcddd56";
 constexpr std::string_view typed_map_guid = "3d48feae-a9c6-4c5a-a099-9eb6477630c6";
 constexpr std::string_view typed_fixed_map_guid = "220455ea-6c85-4513-996f-bbe79ed07774";
+constexpr std::string_view typed_value_list_guid = "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3";
+constexpr std::string_view typed_formatted_string_guid = "140b5ff4-37b1-4df5-b5ec-a0bfd2b94f8f";
+constexpr std::string_view value_list_item_factory = "1e512aab-1b41-4ef6-9375-f0137be9dd91";
+
+LV encode_value_list_body(const model::ValueListValue& value, std::string_view path);
+model::ValueListValue decode_value_list_body(const LV& value, std::string_view path,
+    std::size_t depth, model::TypedValueBudget& budget);
 
 LV wrap_typed_object(std::string_view guid, LV payload) {
     std::vector<LV> envelope;
@@ -479,6 +486,10 @@ LV encode_typed_value_node(const model::PropertyValue& value, std::string_view p
         return list({string_value("#"), raw(std::string(typed_border_guid)), raw("1"), encode_control_border(*border, path, model::ControlKind::chart), raw("0")});
     if (const auto* description = std::get_if<model::TypeDomainPatternValue>(&value))
         return wrap_typed_object(typed_description_guid, list_stream::parse(value_codec::encode_type_domain(*description)));
+    if (const auto* formatted = std::get_if<model::FormattedStringValue>(&value))
+        return list_stream::parse(value_codec::encode_formatted_string(*formatted));
+    if (const auto* value_list = std::get_if<model::ValueListValue>(&value))
+        return wrap_typed_object(typed_value_list_guid, encode_value_list_body(*value_list, path));
     if (const auto* array = std::get_if<model::ArrayValue>(&value)) {
         std::vector<LV> items{raw(std::to_string(array->items.size()))};
         items.reserve(array->items.size() + 1);
@@ -518,11 +529,15 @@ LV encoded_typed_value(const model::PropertyValue& value, std::string_view path)
     return encode_typed_value_node(value, path);
 }
 
-std::optional<model::PropertyValue> decode_typed_value_node(const LV& value, std::string_view path,
-    std::size_t depth, model::TypedValueBudget& budget) {
+void consume_typed_storage_budget(std::string_view path, std::size_t depth, model::TypedValueBudget& budget) {
     if (depth > model::max_typed_value_depth || budget.nodes >= model::max_typed_value_nodes)
         fail("OOF1122", std::string(path), "bounded named value tree", {}, "Typed value exceeds the resource budget");
     ++budget.nodes;
+}
+
+std::optional<model::PropertyValue> decode_typed_value_node(const LV& value, std::string_view path,
+    std::size_t depth, model::TypedValueBudget& budget) {
+    consume_typed_storage_budget(path, depth, budget);
     require_list(value, path);
     if (value.items.empty()) fail("OOF1114", std::string(path), "typed Chart key", "empty", "Chart key is empty");
     const auto kind = string_atom(value.items[0], child_path(path, 0));
@@ -559,6 +574,17 @@ std::optional<model::PropertyValue> decode_typed_value_node(const LV& value, std
             require_raw_constant(value.items[4], "0", child_path(path, 4));
             if (type == typed_font_guid) return model::PropertyValue{decode_control_font(value.items[3], child_path(path, 3))};
             return model::PropertyValue{decode_control_border(value.items[3], child_path(path, 3), model::ControlKind::chart)};
+        }
+        if (type == typed_formatted_string_guid) {
+            require_arity(value, 4, path);
+            try { return model::PropertyValue{value_codec::decode_formatted_string(list_stream::dump_compact(value))}; }
+            catch (const std::exception& error) {
+                fail("OOF1114", std::string(path), "runtime FormattedString", error.what(), "FormattedString value is malformed");
+            }
+        }
+        if (type == typed_value_list_guid) {
+            require_arity(value, 3, path);
+            return model::PropertyValue{decode_value_list_body(value.items[2], child_path(path, 2), depth, budget)};
         }
         const bool array = type == typed_array_guid || type == typed_fixed_array_guid;
         const bool structure = type == typed_structure_guid || type == typed_fixed_structure_guid;
@@ -4029,6 +4055,140 @@ std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, s
     if (!format) fail("OOF1114", child_path(path, 7), "GIF, PNG, JPEG, or BMP image bytes", "unknown signature", "Button picture format is unsupported");
     picture.format = *format;
     return picture;
+}
+
+LV encode_value_list_body(const model::ValueListValue& value, std::string_view path) {
+    std::vector<LV> items;
+    items.reserve(value.items.size() + 1);
+    items.push_back(raw(std::to_string(value.items.size())));
+    for (const auto& item : value.items) {
+        std::string presentation;
+        std::string markup;
+        bool formatted = false;
+        if (const auto* text = std::get_if<std::string>(&item.presentation)) presentation = *text;
+        else {
+            const auto& rich_text = std::get<model::FormattedStringValue>(item.presentation);
+            formatted = rich_text.formatted;
+            markup = std::get<std::string>(rich_text.value);
+        }
+        auto picture = canonical_button_picture();
+        picture.items[6] = raw("0");
+        if (item.picture) {
+            if (!item.picture->standard_name || item.picture->asset.id())
+                fail("OOF1122", std::string(path), "empty or library ValueList picture", {}, "ValueList file pictures require document asset context");
+            const auto* descriptor = model::metamodel::find_standard_picture(item.picture->standard_name->value);
+            if (!descriptor) fail("OOF1122", std::string(path), "known library picture", {}, "Unknown ValueList picture");
+            picture = encode_standard_button_picture(*descriptor);
+        }
+        std::vector<LV> fields;
+        fields.reserve(7);
+        fields.push_back(string_value(std::move(presentation)));
+        fields.push_back(raw(item.checked ? "1" : "0"));
+        fields.push_back(encode_typed_value_node(item.value, path));
+        fields.push_back(std::move(picture));
+        fields.push_back(raw(std::to_string(item.id)));
+        fields.push_back(raw(formatted ? "1" : "0"));
+        fields.push_back(string_value(std::move(markup)));
+        std::vector<LV> record;
+        record.push_back(raw(std::string(value_list_item_factory)));
+        record.push_back(list(std::move(fields)));
+        items.push_back(list(std::move(record)));
+    }
+    std::vector<LV> body;
+    body.reserve(value.available_values.empty() ? 8 : 9);
+    body.push_back(raw("6"));
+    body.push_back(raw(std::string(value_list_item_factory)));
+    body.push_back(raw("0"));
+    body.push_back(raw("0"));
+    body.push_back(list(std::move(items)));
+    body.push_back(list_stream::parse(value_codec::encode_type_domain(value.value_type)));
+    body.push_back(raw(value.available_values.empty() ? "0" : "1"));
+    if (!value.available_values.empty()) body.push_back(encode_value_list_body(value.available_values.front(), path));
+    body.push_back(raw(std::to_string(value.effective_last_assigned_id())));
+    return list(std::move(body));
+}
+
+model::ValueListValue decode_value_list_body(const LV& value, std::string_view path,
+    std::size_t depth, model::TypedValueBudget& budget) {
+    require_list(value, path);
+    require_raw_constant(at(value, 0, path), "6", child_path(path, 0));
+    require_raw_constant(at(value, 1, path), value_list_item_factory, child_path(path, 1));
+    require_raw_constant(at(value, 2, path), "0", child_path(path, 2));
+    require_raw_constant(at(value, 3, path), "0", child_path(path, 3));
+    const bool available = bool_atom(at(value, 6, path), child_path(path, 6));
+    require_arity(value, available ? 9 : 8, path);
+    const auto& records = value.items[4];
+    const auto records_path = child_path(path, 4);
+    const auto count = integer_atom<std::size_t>(at(records, 0, records_path), child_path(records_path, 0));
+    if (count > (model::max_typed_value_nodes - budget.nodes) / 3)
+        fail("OOF1122", records_path, "bounded ValueList item count", {}, "ValueList exceeds the resource budget");
+    require_arity(records, count + 1, records_path);
+    const auto& pattern = value.items[5];
+    require_list(pattern, child_path(path, 5));
+    const auto type_entries = pattern.items.empty() ? 0 : pattern.items.size() - 1;
+    if (type_entries > model::max_typed_value_nodes - budget.nodes)
+        fail("OOF1122", child_path(path, 5), "bounded ValueType", {}, "ValueList type description exceeds the resource budget");
+    budget.nodes += type_entries;
+    model::ValueListValue result;
+    result.value_type = type_domain(pattern, child_path(path, 5));
+    if (count > (model::max_typed_value_nodes - budget.nodes) / 3)
+        fail("OOF1122", records_path, "bounded ValueList item count", {}, "ValueList items exceed the remaining resource budget");
+    result.items.reserve(count);
+    std::int64_t max_id = -1;
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto item_path = child_path(records_path, index + 1);
+        consume_typed_storage_budget(item_path, depth + 1, budget);
+        const auto& record = records.items[index + 1];
+        require_arity(record, 2, item_path);
+        require_raw_constant(record.items[0], value_list_item_factory, child_path(item_path, 0));
+        const auto& fields = record.items[1];
+        const auto fields_path = child_path(item_path, 1);
+        require_arity(fields, 7, fields_path);
+        model::ValueListItem item;
+        const auto id = integer_atom<std::int64_t>(fields.items[4], child_path(fields_path, 4));
+        if (id < 0) fail("OOF1114", child_path(fields_path, 4), "nonnegative item ID", {}, "ValueList item ID is negative");
+        item.id = static_cast<std::uint64_t>(id);
+        max_id = std::max(max_id, id);
+        item.checked = bool_atom(fields.items[1], child_path(fields_path, 1));
+        auto decoded = decode_typed_value_node(fields.items[2], child_path(fields_path, 2), depth + 2, budget);
+        if (!decoded) fail("OOF1122", child_path(fields_path, 2), "supported nested value", {}, "ValueList contains an unsupported value type");
+        item.value = std::move(*decoded);
+        consume_typed_storage_budget(fields_path, depth + 2, budget);
+        const bool formatted = bool_atom(fields.items[5], child_path(fields_path, 5));
+        if (formatted) {
+            require_exact(fields.items[0], string_value(""), child_path(fields_path, 0), "Formatted presentation must not carry a second plain text");
+            item.presentation = model::FormattedStringValue{string_atom(fields.items[6], child_path(fields_path, 6)), true};
+        } else {
+            require_exact(fields.items[6], string_value(""), child_path(fields_path, 6), "Plain presentation must not carry formatted text");
+            item.presentation = string_atom(fields.items[0], child_path(fields_path, 0));
+        }
+        const auto& picture_record = fields.items[3];
+        const auto picture_path = child_path(fields_path, 3);
+        const auto picture_kind = integer_atom<std::uint32_t>(at(picture_record, 1, picture_path), child_path(picture_path, 1));
+        if (picture_kind != 0 && picture_kind != 1)
+            fail("OOF1122", picture_path, "empty or library ValueList picture", {}, "ValueList file pictures require document asset context");
+        if (picture_kind == 0) {
+            auto empty = canonical_button_picture();
+            empty.items[6] = raw("0");
+            require_exact(picture_record, empty, picture_path, "ValueList empty picture contains unsupported fields");
+        } else {
+            consume_typed_storage_budget(picture_path, depth + 2, budget);
+            const auto picture = decode_button_picture(picture_record, picture_path);
+            if (!picture || !picture->standard_name)
+                fail("OOF1122", picture_path, "library picture", {}, "ValueList file picture is unsupported");
+            item.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}};
+        }
+        result.items.push_back(std::move(item));
+    }
+    if (available) {
+        consume_typed_storage_budget(child_path(path, 7), depth + 1, budget);
+        result.available_values.push_back(decode_value_list_body(value.items[7], child_path(path, 7), depth + 1, budget));
+    }
+    const auto last_id = integer_atom<std::int64_t>(value.items.back(), child_path(path, value.items.size() - 1));
+    if (last_id < max_id)
+        fail("OOF1114", std::string(path), "history covering all live item IDs", {}, "ValueList history precedes a live item ID");
+    if (last_id != max_id) result.last_assigned_id = static_cast<std::uint64_t>(last_id);
+    return result;
 }
 
 LV encode_named_control_picture(

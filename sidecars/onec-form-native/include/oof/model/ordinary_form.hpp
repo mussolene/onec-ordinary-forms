@@ -262,7 +262,7 @@ struct LocalizedStringValue {
 };
 
 struct FormattedStringValue {
-    LocalizedStringValue value;
+    std::variant<std::string, LocalizedStringValue> value{LocalizedStringValue{}};
     bool formatted = false;
 
     friend bool operator==(const FormattedStringValue&, const FormattedStringValue&) = default;
@@ -529,6 +529,7 @@ struct CommandBarButton {
 struct PropertyValue;
 struct StructureEntry;
 struct MapEntry;
+struct ValueListItem;
 
 struct ArrayValue {
     std::vector<PropertyValue> items;
@@ -546,6 +547,15 @@ struct MapValue {
     std::vector<MapEntry> entries;
     bool fixed = false;
     friend bool operator==(const MapValue&, const MapValue&);
+};
+
+struct ValueListValue {
+    std::vector<ValueListItem> items;
+    TypeDomainPatternValue value_type;
+    std::vector<ValueListValue> available_values;
+    std::optional<std::uint64_t> last_assigned_id;
+    [[nodiscard]] std::int64_t effective_last_assigned_id() const;
+    friend bool operator==(const ValueListValue&, const ValueListValue&);
 };
 
 using PropertyValueVariant = std::variant<
@@ -585,7 +595,8 @@ using PropertyValueVariant = std::variant<
     CommandBarButtonRef,
     ArrayValue,
     StructureValue,
-    MapValue>;
+    MapValue,
+    ValueListValue>;
 
 struct PropertyValue : PropertyValueVariant {
     using Variant = PropertyValueVariant;
@@ -603,6 +614,15 @@ struct MapEntry {
     PropertyValue key;
     PropertyValue value;
     friend bool operator==(const MapEntry&, const MapEntry&) = default;
+};
+
+struct ValueListItem {
+    std::uint64_t id = 0;
+    PropertyValue value{UndefinedValue{}};
+    PropertyValue presentation{std::string{}};
+    bool checked = false;
+    std::optional<PictureRef> picture;
+    friend bool operator==(const ValueListItem&, const ValueListItem&) = default;
 };
 
 inline constexpr std::size_t max_typed_value_depth = 64;

@@ -100,6 +100,18 @@ void test_formatted_string() {
         encoded == "{1,{1,1,{\"ru\",\"Текст\"}},1}",
         "formatted string must match the proven platform fixture");
     expect(codec::decode_formatted_string(encoded) == value, "formatted string must round-trip");
+    for (const bool formatted : {false, true}) {
+        const model::FormattedStringValue runtime{std::string{"До <img 0:448d6f55-d885-496c-870d-d1bd78374745/> после"}, formatted};
+        const auto text = codec::encode_formatted_string(runtime);
+        expect(codec::decode_formatted_string(text) == runtime,
+            "plain runtime FormattedString must retain its text and format flag without a localization sentinel");
+    }
+    expect_rejected([] { static_cast<void>(codec::decode_formatted_string(
+        R"VALUE({"#",00000000-0000-0000-0000-000000000001,1,"text"})VALUE")); },
+        "runtime FormattedString must reject a different type factory");
+    expect_rejected([] { static_cast<void>(codec::decode_formatted_string(
+        R"VALUE({"#",140b5ff4-37b1-4df5-b5ec-a0bfd2b94f8f,2,"text"})VALUE")); },
+        "runtime FormattedString must reject a nonboolean format flag");
     expect_rejected(
         [] { static_cast<void>(codec::decode_formatted_string("{2,{1,0},0}")); },
         "unknown FormattedString version must be rejected");

@@ -515,6 +515,17 @@ public:
         return frame.index < frame.value->items.size();
     }
 
+    [[nodiscard]] const ListValue& peek_value() const {
+        if (stack_.empty()) {
+            if (root_consumed_) throw std::runtime_error("ListInStream root already consumed");
+            return root_;
+        }
+        const Frame& frame = stack_.back();
+        if (frame.index >= frame.value->items.size())
+            throw std::runtime_error("ListInStream unexpected end of list");
+        return frame.value->items[frame.index];
+    }
+
     std::uint32_t read_uint32() {
         const ListValue& value = take_raw_atom("uint32");
         return detail::parse_integer<std::uint32_t>(value.atom, "uint32");
@@ -580,18 +591,13 @@ private:
     }
 
     const ListValue& take_value() {
+        const ListValue& value = peek_value();
         if (stack_.empty()) {
-            if (root_consumed_) {
-                throw std::runtime_error("ListInStream root already consumed");
-            }
             root_consumed_ = true;
-            return root_;
+        } else {
+            ++stack_.back().index;
         }
-        Frame& frame = stack_.back();
-        if (frame.index >= frame.value->items.size()) {
-            throw std::runtime_error("ListInStream unexpected end of list");
-        }
-        return frame.value->items[frame.index++];
+        return value;
     }
 
     ListValue root_;

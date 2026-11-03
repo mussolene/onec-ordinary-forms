@@ -487,22 +487,26 @@ model::LocalizedStringValue parse_localized_string(xmlNodePtr node) {
     return value;
 }
 
-model::FormattedStringValue parse_formatted_string(xmlNodePtr node) {
+model::FormattedStringValue parse_formatted_string(xmlNodePtr node, bool runtime_value = false) {
     const auto children = element_children(node);
     if (children.size() != 1 || node_name(children.front()) != "Value") {
-        fail(
-            "OOF2003",
-            node,
-            {},
-            {},
-            "one Value element",
-            std::to_string(children.size()),
+        fail("OOF2003", node, {}, {}, "one Value element", std::to_string(children.size()),
             "Formatted string does not contain its typed Value");
     }
-    return {
-        parse_localized_string(children.front()),
-        parse_boolean(required_attribute(node, "formatted"), node, "formatted"),
-    };
+    const auto fields = element_children(children.front());
+    model::FormattedStringValue result;
+    result.formatted = parse_boolean(required_attribute(node, "formatted"), node, "formatted");
+    if (fields.size() == 1 && node_name(fields.front()) == "String") {
+        if (fields.front()->properties || !element_children(fields.front()).empty())
+            fail("OOF2003", fields.front(), {}, "String", "plain string", "structured content",
+                "Formatted string text cannot contain attributes or child elements");
+        result.value = node_text(fields.front());
+    } else {
+        if (runtime_value) fail("OOF2003", node, {}, "FormattedString", "plain Value/String", "localized value",
+            "Runtime formatted strings require plain string content");
+        result.value = parse_localized_string(children.front());
+    }
+    return result;
 }
 
 model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
@@ -1004,9 +1008,9 @@ void consume_typed_value_budget(model::TypedValueBudget& budget, std::size_t dep
     ++budget.nodes;
 }
 
-void require_typed_container(xmlNodePtr node, std::string_view owner, bool named_field = false) {
+void require_typed_container(xmlNodePtr node, std::string_view owner, std::string_view allowed_attribute = {}) {
     for (auto* attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
-        if (!named_field || std::string_view(reinterpret_cast<const char*>(attribute->name)) != "name")
+        if (allowed_attribute.empty() || std::string_view(reinterpret_cast<const char*>(attribute->name)) != allowed_attribute)
             fail("OOF2003", node, std::string(owner), node_name(node), "named typed value content", "attribute",
                 "Typed value container has an unsupported attribute");
     }
@@ -1018,8 +1022,8 @@ void require_typed_container(xmlNodePtr node, std::string_view owner, bool named
     }
 }
 
-xmlNodePtr single_typed_child(xmlNodePtr node, std::string_view owner, bool named_field = false) {
-    require_typed_container(node, owner, named_field);
+xmlNodePtr single_typed_child(xmlNodePtr node, std::string_view owner, std::string_view allowed_attribute = {}) {
+    require_typed_container(node, owner, allowed_attribute);
     xmlNodePtr field = nullptr;
     for (auto* child = node->children; child != nullptr; child = child->next) {
         if (child->type != XML_ELEMENT_NODE) continue;
@@ -1039,6 +1043,7 @@ model::PropertyValue parse_typed_node(xmlNodePtr field, std::string_view owner,
     if (kind == "Color") return parse_color(field);
     if (kind == "Font") return parse_font(field);
     if (kind == "Border") return parse_border(field);
+    if (kind == "FormattedString") return parse_formatted_string(field, true);
     if (kind == "TypeDescription") {
         for (auto* child = field->children; child != nullptr; child = child->next) {
             if (child->type != XML_ELEMENT_NODE) continue;
@@ -1048,6 +1053,104 @@ model::PropertyValue parse_typed_node(xmlNodePtr field, std::string_view owner,
             ++budget.nodes;
         }
         return parse_type_domain(field);
+    }
+    if (kind == "ValueList") {
+        require_typed_container(field, owner, "lastAssignedId");
+        model::ValueListValue value;
+        constexpr auto id_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+        if (const auto last = optional_attribute(field, "lastAssignedId")) {
+            const auto id = parse_integer<std::uint64_t>(*last, field, "lastAssignedId", owner);
+            if (id > id_limit) fail("OOF2003", field, std::string(owner), kind, "signed 64-bit history ID", *last,
+                "ValueList history ID is out of range");
+            value.last_assigned_id = id;
+        }
+        unsigned stage = 0;
+        for (auto* child = field->children; child != nullptr; child = child->next) {
+            if (child->type != XML_ELEMENT_NODE) continue;
+            const auto name = node_name(child);
+            if (name == "ValueType" && stage == 0) {
+                for (auto* entry = child->children; entry != nullptr; entry = entry->next) {
+                    if (entry->type != XML_ELEMENT_NODE) continue;
+                    if (budget.nodes >= model::max_typed_value_nodes)
+                        fail("OOF2003", child, std::string(owner), name, "bounded TypeDomain", {},
+                            "ValueList ValueType exceeds the document resource budget");
+                    ++budget.nodes;
+                }
+                value.value_type = parse_type_domain(child);
+                stage = 1;
+            } else if (name == "AvailableValues" && stage <= 1) {
+                auto* nested = single_typed_child(child, owner);
+                if (node_name(nested) != "ValueList") fail("OOF2003", nested, std::string(owner), name, "one ValueList", node_name(nested),
+                    "AvailableValues requires a named ValueList");
+                auto parsed = parse_typed_node(nested, owner, budget, depth + 1);
+                value.available_values.push_back(std::get<model::ValueListValue>(std::move(parsed)));
+                stage = 2;
+            } else if (name == "Items" && stage <= 2) {
+                require_typed_container(child, owner);
+                std::set<std::uint64_t> ids;
+                for (auto* item_node = child->children; item_node != nullptr; item_node = item_node->next) {
+                    if (item_node->type != XML_ELEMENT_NODE) continue;
+                    consume_typed_value_budget(budget, depth + 1, item_node, owner);
+                    if (node_name(item_node) != "Item") fail("OOF2003", item_node, std::string(owner), name, "Item", node_name(item_node),
+                        "ValueList Items requires named Item elements");
+                    require_typed_container(item_node, owner, "id");
+                    model::ValueListItem item;
+                    item.id = parse_integer<std::uint64_t>(required_attribute(item_node, "id", owner), item_node, "id", owner);
+                    if (item.id > id_limit || !ids.insert(item.id).second)
+                        fail("OOF2003", item_node, std::string(owner), "id", "unique signed 64-bit item ID", std::to_string(item.id),
+                            "ValueList item ID is duplicated or out of range");
+                    bool value_seen = false;
+                    bool presentation_seen = false;
+                    unsigned item_stage = 0;
+                    for (auto* part = item_node->children; part != nullptr; part = part->next) {
+                        if (part->type != XML_ELEMENT_NODE) continue;
+                        const auto property = node_name(part);
+                        if (property == "Value" && item_stage == 0) {
+                            item.value = parse_typed_node(single_typed_child(part, owner), owner, budget, depth + 2);
+                            value_seen = true;
+                            item_stage = 1;
+                        } else if (property == "Presentation" && value_seen && item_stage <= 1) {
+                            auto* presentation = single_typed_child(part, owner);
+                            const auto presentation_kind = node_name(presentation);
+                            if (presentation_kind != "String" && presentation_kind != "FormattedString")
+                                fail("OOF2003", presentation, std::string(owner), property, "String or FormattedString", presentation_kind,
+                                    "ValueList Presentation requires a string value");
+                            item.presentation = parse_typed_node(presentation, owner, budget, depth + 2);
+                            if (const auto* formatted = std::get_if<model::FormattedStringValue>(&item.presentation);
+                                formatted && !formatted->formatted)
+                                fail("OOF2003", presentation, std::string(owner), property, "formatted=true", "false",
+                                    "ValueList formatted Presentation must retain its formatted kind");
+                            presentation_seen = true;
+                            item_stage = 2;
+                        } else if (property == "Check" && value_seen && item_stage <= 2) {
+                            item.checked = parse_boolean(node_text(part), part, property, owner);
+                            item_stage = 3;
+                        } else if (property == "Picture" && value_seen && item_stage <= 3) {
+                            consume_typed_value_budget(budget, depth + 2, part, owner);
+                            auto picture = parse_picture_reference(part, property, owner);
+                            if (!picture.standard_name)
+                                fail("OOF2003", part, std::string(owner), property, "named standard Picture", "file reference",
+                                    "ValueList Picture file references are not supported");
+                            item.picture = std::move(picture);
+                            item_stage = 4;
+                        } else fail("OOF2003", part, std::string(owner), property, "ordered Value, Presentation, Check, Picture", property,
+                            "ValueList Item has a duplicate, missing, or out-of-order property");
+                    }
+                    if (!value_seen) fail("OOF2003", item_node, std::string(owner), "Value", "required typed value", "missing",
+                        "ValueList Item requires a Value");
+                    if (!presentation_seen) consume_typed_value_budget(budget, depth + 2, item_node, owner);
+                    value.items.push_back(std::move(item));
+                }
+                stage = 3;
+            } else fail("OOF2003", child, std::string(owner), kind, "ordered ValueType, AvailableValues, Items", name,
+                "ValueList has a duplicate or out-of-order field");
+        }
+        std::uint64_t max_id = 0;
+        for (const auto& item : value.items) max_id = std::max(max_id, item.id);
+        if (value.last_assigned_id && !value.items.empty() && *value.last_assigned_id < max_id)
+            fail("OOF2003", field, std::string(owner), "lastAssignedId", "at least the largest item ID", std::to_string(*value.last_assigned_id),
+                "ValueList history cannot precede a live item ID");
+        return model::PropertyValue{std::move(value)};
     }
     if (kind == "Array" || kind == "FixedArray") {
         require_typed_container(field, owner);
@@ -1070,7 +1173,7 @@ model::PropertyValue parse_typed_node(xmlNodePtr field, std::string_view owner,
             if (child->type != XML_ELEMENT_NODE) continue;
             if (node_name(child) != "Field") fail("OOF2003", child, std::string(owner), kind, "Field", node_name(child),
                 "Structure requires named Field wrappers");
-            auto* nested = single_typed_child(child, owner, true);
+            auto* nested = single_typed_child(child, owner, "name");
             auto parsed = parse_typed_node(nested, owner, budget, depth + 1);
             auto name = required_attribute(child, "name", owner);
             if (name.empty() || !names.insert(name).second)
@@ -3479,6 +3582,58 @@ private:
         writer_.text(element_name, object_id_text(reference.asset.id()));
     }
 
+    void write_formatted_string(std::string_view name, const model::FormattedStringValue& value, std::string_view owner) {
+        writer_.open(name, {{"formatted", value.formatted ? "true" : "false"}});
+        std::visit([&](const auto& content) {
+            using Content = std::decay_t<decltype(content)>;
+            if constexpr (std::is_same_v<Content, std::string>) {
+                writer_.open("Value");
+                writer_.text("String", content);
+                writer_.close("Value");
+            } else write_localized("Value", content, owner);
+        }, value.value);
+        writer_.close(name);
+    }
+
+    void write_value_list(const model::ValueListValue& value, std::string_view owner) {
+        std::int64_t default_last = -1;
+        for (const auto& entry : value.items) default_last = std::max(default_last, static_cast<std::int64_t>(entry.id));
+        XmlAttributes attributes;
+        const auto effective_last = value.effective_last_assigned_id();
+        if (effective_last != default_last) attributes.emplace_back("lastAssignedId", std::to_string(effective_last));
+        if (value.items.empty() && value.value_type.entries.empty() && value.available_values.empty()) {
+            writer_.empty("ValueList", attributes);
+        } else {
+            writer_.open("ValueList", attributes);
+            if (!value.value_type.entries.empty()) write_type_domain("ValueType", value.value_type, owner);
+            if (!value.available_values.empty()) {
+                writer_.open("AvailableValues");
+                write_value_list(value.available_values.front(), owner);
+                writer_.close("AvailableValues");
+            }
+            if (!value.items.empty()) {
+                writer_.open("Items");
+                for (const auto& entry : value.items) {
+                    writer_.open("Item", {{"id", std::to_string(entry.id)}});
+                    writer_.open("Value");
+                    write_typed_value_node(entry.value, owner);
+                    writer_.close("Value");
+                    const auto* plain = std::get_if<std::string>(&entry.presentation);
+                    if (!plain || !plain->empty()) {
+                        writer_.open("Presentation");
+                        write_typed_value_node(entry.presentation, owner);
+                        writer_.close("Presentation");
+                    }
+                    if (entry.checked) writer_.text("Check", "true");
+                    if (entry.picture) write_picture_reference("Picture", *entry.picture, owner);
+                    writer_.close("Item");
+                }
+                writer_.close("Items");
+            }
+            writer_.close("ValueList");
+        }
+    }
+
     void write_typed_value_node(const model::PropertyValue& value, std::string_view owner) {
         if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
         else if (std::holds_alternative<model::NullValue>(value)) writer_.empty("Null");
@@ -3494,10 +3649,12 @@ private:
         else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
         else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
         else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
+        else if (const auto* item = std::get_if<model::FormattedStringValue>(&value)) write_formatted_string("FormattedString", *item, owner);
         else if (const auto* item = std::get_if<model::ColorValue>(&value)) write_color("Color", *item, owner);
         else if (const auto* item = std::get_if<model::FontValue>(&value)) write_font("Font", *item, owner);
         else if (const auto* item = std::get_if<model::BorderValue>(&value)) write_border("Border", *item, owner);
         else if (const auto* item = std::get_if<model::TypeDomainPatternValue>(&value)) write_type_domain("TypeDescription", *item, owner);
+        else if (const auto* item = std::get_if<model::ValueListValue>(&value)) write_value_list(*item, owner);
         else if (const auto* item = std::get_if<model::ArrayValue>(&value)) {
             const std::string_view name = item->fixed ? "FixedArray" : "Array";
             writer_.open(name);
@@ -3608,9 +3765,7 @@ private:
                 return;
             case mm::ValueCodec::formatted_string: {
                 const auto& formatted = require_value<model::FormattedStringValue>(value, object_id, name, "formatted string");
-                writer_.open(name, {{"formatted", formatted.formatted ? "true" : "false"}});
-                write_localized("Value", formatted.value, object_id);
-                writer_.close(name);
+                write_formatted_string(name, formatted, object_id);
                 return;
             }
             case mm::ValueCodec::date:

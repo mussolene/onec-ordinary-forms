@@ -767,6 +767,7 @@ void apply_proven_storage_overrides(
     for (const auto name : {"SeriesCount", "PointCount"}) {
         auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
         if (property == chart_properties.end()) throw std::logic_error("missing Chart count descriptor");
+        property->persistence = PersistenceClass::persisted_editable;
         property->value_codec = ValueCodec::integer;
         property->storage_codec = StorageCodec::collection_record;
         property->default_value = {DefaultKind::integer, "0"};
@@ -1343,6 +1344,7 @@ void apply_proven_storage_overrides(
     for (const auto name : {"MinValue", "MaxValue"}) {
         auto property = std::ranges::find(input_field, name, &PropertyDescriptor::api_name);
         if (property == input_field.end()) throw std::logic_error("missing InputField bound");
+        property->persistence = PersistenceClass::persisted_editable;
         property->value_codec = ValueCodec::typed_value;
         property->storage_codec = StorageCodec::control_info;
         property->default_value = {DefaultKind::undefined, "undefined"};
@@ -1492,6 +1494,7 @@ void apply_proven_storage_overrides(
     }
     if (auto property = std::ranges::find(form_properties, "CaptionPicture", &PropertyDescriptor::api_name);
         property != form_properties.end()) {
+        property->persistence = PersistenceClass::persisted_editable;
         property->storage_codec = StorageCodec::root_record;
         property->default_value = {DefaultKind::none, {}};
     }

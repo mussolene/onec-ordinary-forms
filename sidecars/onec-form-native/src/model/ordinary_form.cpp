@@ -21,6 +21,26 @@
 
 namespace oof::model {
 
+std::int64_t ValueListValue::effective_last_assigned_id() const {
+    constexpr auto limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    std::int64_t maximum = -1;
+    for (const auto& item : items) {
+        if (item.id > limit) throw std::invalid_argument("ValueList item ID exceeds the signed 64-bit range");
+        maximum = std::max(maximum, static_cast<std::int64_t>(item.id));
+    }
+    if (!last_assigned_id) return maximum;
+    if (*last_assigned_id > limit || static_cast<std::int64_t>(*last_assigned_id) < maximum)
+        throw std::invalid_argument("ValueList lastAssignedId must cover all item IDs in the signed 64-bit range");
+    return static_cast<std::int64_t>(*last_assigned_id);
+}
+
+bool operator==(const ValueListValue& left, const ValueListValue& right) {
+    try {
+        if (left.effective_last_assigned_id() != right.effective_last_assigned_id()) return false;
+    } catch (const std::invalid_argument&) { return false; }
+    return left.items == right.items && left.value_type == right.value_type && left.available_values == right.available_values;
+}
+
 bool valid_border_value(const BorderValue& value) noexcept {
     if (static_cast<unsigned>(value.border_type) > static_cast<unsigned>(ControlBorderType::rounded) ||
         value.width > 5) return false;
@@ -163,7 +183,11 @@ bool property_value_matches(
                        (expected == metamodel::ValueCodec::localized_text &&
                         valid_localized_string(typed_value));
             } else if constexpr (std::is_same_v<Value, FormattedStringValue>) {
-                return expected == metamodel::ValueCodec::formatted_string;
+                if (expected != metamodel::ValueCodec::formatted_string) return false;
+                try {
+                    (void)storage::value_codec::encode_formatted_string(typed_value);
+                    return true;
+                } catch (...) { return false; }
             } else if constexpr (std::is_same_v<Value, DateValue>) {
                 return expected == metamodel::ValueCodec::date;
             } else if constexpr (std::is_same_v<Value, UuidValue>) {
@@ -745,6 +769,43 @@ bool valid_typed_utf8(std::string_view name) noexcept {
 }
 
 
+bool validate_typed_description(const TypeDomainPatternValue& value, TypedValueBudget& budget) {
+    if (value.entries.size() > max_typed_value_nodes - budget.nodes) return false;
+    budget.nodes += value.entries.size();
+    return storage::value_codec::decode_type_domain(storage::value_codec::encode_type_domain(value)) == value;
+}
+
+bool validate_typed_value_node(const PropertyValue& value, TypedValueBudget& budget, std::size_t depth);
+
+bool validate_value_list_contents(const ValueListValue& value, TypedValueBudget& budget, std::size_t depth) {
+    if (value.available_values.size() > 1 || value.items.size() > (max_typed_value_nodes - budget.nodes) / 3) return false;
+    const auto minimum_item_nodes = value.items.size() * 3;
+    (void)value.effective_last_assigned_id();
+    if (value.value_type.entries.size() > max_typed_value_nodes - budget.nodes - minimum_item_nodes ||
+        !validate_typed_description(value.value_type, budget)) return false;
+    std::set<std::uint64_t> ids;
+    for (const auto& item : value.items) {
+        if (depth + 2 > max_typed_value_depth || budget.nodes >= max_typed_value_nodes || !ids.insert(item.id).second) return false;
+        ++budget.nodes;
+        const auto* formatted = std::get_if<FormattedStringValue>(&item.presentation);
+        if (!std::holds_alternative<std::string>(item.presentation) &&
+            !(formatted && formatted->formatted && std::holds_alternative<std::string>(formatted->value))) return false;
+        if (!validate_typed_value_node(item.value, budget, depth + 2) ||
+            !validate_typed_value_node(item.presentation, budget, depth + 2)) return false;
+        if (item.picture) {
+            if (budget.nodes >= max_typed_value_nodes || item.picture->asset.id() || !item.picture->standard_name ||
+                !metamodel::find_standard_picture(item.picture->standard_name->value)) return false;
+            ++budget.nodes;
+        }
+    }
+    for (const auto& available : value.available_values) {
+        if (depth >= max_typed_value_depth || budget.nodes >= max_typed_value_nodes) return false;
+        ++budget.nodes;
+        if (!validate_value_list_contents(available, budget, depth + 1)) return false;
+    }
+    return true;
+}
+
 bool validate_typed_value_node(const PropertyValue& value, TypedValueBudget& budget, std::size_t depth) {
     if (depth > max_typed_value_depth || budget.nodes >= max_typed_value_nodes) return false;
     ++budget.nodes;
@@ -753,6 +814,10 @@ bool validate_typed_value_node(const PropertyValue& value, TypedValueBudget& bud
         if constexpr (std::is_same_v<Value, UndefinedValue> || std::is_same_v<Value, NullValue> ||
             std::is_same_v<Value, bool> || std::is_same_v<Value, std::int64_t>) return true;
         else if constexpr (std::is_same_v<Value, std::string>) return valid_typed_utf8(item);
+        else if constexpr (std::is_same_v<Value, FormattedStringValue>) {
+            const auto* text = std::get_if<std::string>(&item.value);
+            return text && valid_typed_utf8(*text);
+        }
         else if constexpr (std::is_same_v<Value, DecimalValue>) return storage::value_codec::canonical_decimal(item.canonical) == item.canonical;
         else if constexpr (std::is_same_v<Value, DateValue>) {
             (void)storage::value_codec::date_to_platform(item.canonical);
@@ -777,9 +842,9 @@ bool validate_typed_value_node(const PropertyValue& value, TypedValueBudget& bud
             const auto* name = std::get_if<QualifiedName>(&item.style);
             return name && name->value == "StyleBorders.ControlBorder";
         } else if constexpr (std::is_same_v<Value, TypeDomainPatternValue>) {
-            if (item.entries.size() > max_typed_value_nodes - budget.nodes) return false;
-            budget.nodes += item.entries.size();
-            return storage::value_codec::decode_type_domain(storage::value_codec::encode_type_domain(item)) == item;
+            return validate_typed_description(item, budget);
+        } else if constexpr (std::is_same_v<Value, ValueListValue>) {
+            return validate_value_list_contents(item, budget, depth);
         } else if constexpr (std::is_same_v<Value, ArrayValue>) {
             if (item.items.size() > max_typed_value_nodes - budget.nodes) return false;
             for (const auto& child : item.items)
@@ -2064,7 +2129,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (picture.standard_name) properties->set_explicit(descriptor->id, std::move(value));
         else properties->unset(descriptor->id);
         remove_unreferenced_caption_asset(old_asset);
-        return PropertyMutationStatus::applied_unclassified_storage;
+        return PropertyMutationStatus::applied;
     }
     if (!property_value_references_resolve(*this, value)) {
         return PropertyMutationStatus::invalid_reference;
@@ -2319,7 +2384,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("SeriesCount") || property == PropertyId::from_name("PointCount"))) {
             const auto status = resize_chart(owner.id, property, std::int64_t{0});
-            return status == PropertyMutationStatus::applied_unclassified_storage ? PropertyMutationStatus::reset_unclassified_storage : status;
+            return status == PropertyMutationStatus::applied ? PropertyMutationStatus::reset : status;
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
@@ -2423,7 +2488,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
         if (typed_values_valid && !validate_typed_value(value, typed_budget)) typed_values_valid = false;
     };
     const auto check_composite_value = [&](const PropertyValue& value) {
-        if (std::holds_alternative<ArrayValue>(value) || std::holds_alternative<StructureValue>(value) || std::holds_alternative<MapValue>(value))
+        if (std::holds_alternative<ArrayValue>(value) || std::holds_alternative<StructureValue>(value) || std::holds_alternative<MapValue>(value) ||
+            std::holds_alternative<ValueListValue>(value))
             check_typed_value(value);
     };
     const auto check_property_values = [&](const PropertySet& properties, auto&& resolve) {
@@ -3694,7 +3760,7 @@ PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyI
         if (std::ranges::any_of(report.violations, [id](const InvariantViolation& violation) { return violation.source == id; }))
             return PropertyMutationStatus::unsupported_surface;
         const auto old_count = series_axis ? chart->series.size() : chart->points.size();
-        if (requested == old_count) return PropertyMutationStatus::applied_unclassified_storage;
+        if (requested == old_count) return PropertyMutationStatus::applied;
         std::uint64_t last_series = chart->last_series_id.value_or(1);
         std::uint64_t last_point = chart->last_point_id.value_or(0);
         for (const auto& series : chart->series) last_series = std::max(last_series, series.id.value());
@@ -3752,7 +3818,7 @@ PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyI
             }
         }
         *chart = std::move(result);
-        return PropertyMutationStatus::applied_unclassified_storage;
+        return PropertyMutationStatus::applied;
     } catch (const std::bad_alloc&) { return PropertyMutationStatus::resource_limit; }
       catch (const std::length_error&) { return PropertyMutationStatus::resource_limit; }
 }

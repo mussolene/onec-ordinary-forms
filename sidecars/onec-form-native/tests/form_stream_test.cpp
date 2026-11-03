@@ -2334,8 +2334,8 @@ void test_chart_count_mutation() {
         const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
         const auto series_count = model::PropertyId::from_name("SeriesCount");
         const auto point_count = model::PropertyId::from_name("PointCount");
-        expect(document.set_prop_val(owner, series_count, std::string{" +002,9 "}) == model::PropertyMutationStatus::applied_unclassified_storage &&
-            document.set_prop_val(owner, point_count, model::DecimalValue{"2.9"}) == model::PropertyMutationStatus::applied_unclassified_storage, "count coercion must truncate");
+        expect(document.set_prop_val(owner, series_count, std::string{" +002,9 "}) == model::PropertyMutationStatus::applied &&
+            document.set_prop_val(owner, point_count, model::DecimalValue{"2.9"}) == model::PropertyMutationStatus::applied, "count coercion must truncate");
         const auto& grown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
         expect(grown.series.size() == 2 && grown.points.size() == 2 && grown.series[1].id.value() == 5 && grown.points[1].id.value() == 4 &&
             grown.series[1].text == model::PropertyValue{std::string{"Серия 2"}} && grown.points[1].text == "Точка 2" && grown.values.size() == 4, "growth must preserve history and generate labels");
@@ -2345,14 +2345,14 @@ void test_chart_count_mutation() {
         else expect(std::holds_alternative<model::DecimalValue>(grown.values[1].value), "sample new cells are numeric");
         const auto before = source::serialize_form_xml(document);
         expect(before.ok(), "grown chart must serialize XML");
-        expect(document.set_prop_val(owner, point_count, std::int64_t{2}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+        expect(document.set_prop_val(owner, point_count, std::int64_t{2}) == model::PropertyMutationStatus::applied &&
             source::serialize_form_xml(document).value() == before.value(), "assigning same count must be a no-op");
         for (const model::PropertyValue& invalid : {model::PropertyValue{model::DecimalValue{"-0.5"}}, model::PropertyValue{std::string{"1 000"}}, model::PropertyValue{model::UndefinedValue{}}})
             expect(document.set_prop_val(owner, series_count, invalid) == model::PropertyMutationStatus::invalid_value, "invalid counts must fail");
         expect(document.set_prop_val(owner, series_count, std::int64_t{1000001}) == model::PropertyMutationStatus::resource_limit &&
             source::serialize_form_xml(document).value() == before.value(), "resource failure is atomic");
-        expect(document.reset_prop_val(owner, series_count) == model::PropertyMutationStatus::reset_unclassified_storage &&
-            document.set_prop_val(owner, series_count, true) == model::PropertyMutationStatus::applied_unclassified_storage, "reset then bool regrowth");
+        expect(document.reset_prop_val(owner, series_count) == model::PropertyMutationStatus::reset &&
+            document.set_prop_val(owner, series_count, true) == model::PropertyMutationStatus::applied, "reset then bool regrowth");
         const auto& regrown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
         expect(regrown.series.size() == 1 && regrown.series[0].id.value() == 6 && regrown.points.size() == 2 &&
             regrown.data_mode == (i % 2 ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values), "regrowth retains allocator and mode");
@@ -2371,11 +2371,11 @@ void test_chart_count_mutation() {
     document.add_control(model::ControlNode{model::ObjectId{2}, "Chart", std::move(chart)});
     const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
     const auto series_count = model::PropertyId::from_name("SeriesCount"), point_count = model::PropertyId::from_name("PointCount");
-    expect(document.set_prop_val(owner, series_count, std::int64_t{1}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+    expect(document.set_prop_val(owner, series_count, std::int64_t{1}) == model::PropertyMutationStatus::applied &&
         document.get_prop_val(owner, model::PropertyId::from_name("ActiveSeries")).value == model::PropertyValue{model::ChartSeriesRef{model::ObjectId{2}, model::ObjectId{2}}}, "shrink must clamp active series");
-    expect(document.set_prop_val(owner, series_count, std::int64_t{2}) == model::PropertyMutationStatus::applied_unclassified_storage &&
-        document.reset_prop_val(owner, point_count) == model::PropertyMutationStatus::reset_unclassified_storage &&
-        document.set_prop_val(owner, point_count, std::int64_t{1}) == model::PropertyMutationStatus::applied_unclassified_storage, "regrowth must succeed");
+    expect(document.set_prop_val(owner, series_count, std::int64_t{2}) == model::PropertyMutationStatus::applied &&
+        document.reset_prop_val(owner, point_count) == model::PropertyMutationStatus::reset &&
+        document.set_prop_val(owner, point_count, std::int64_t{1}) == model::PropertyMutationStatus::applied, "regrowth must succeed");
     const auto& regrown = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
     expect(regrown.series.back().id.value() == 4 && regrown.points.back().id.value() == 2 && std::get<std::string>(regrown.series.back().text).empty() && regrown.points.back().text.empty() &&
         std::holds_alternative<model::UndefinedValue>(regrown.values.back().value), "regrowth respects counters and disabled labels");
@@ -6192,9 +6192,9 @@ void test_caption_picture_asset_lifecycle() {
         const auto old_id = std::get<model::PictureRef>(*old_picture.value).asset.id();
         expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{old_id}}) == model::PropertyMutationStatus::invalid_value &&
             document.find_asset(old_id) != nullptr, "rejected caption asset assignment must preserve source asset");
-        if (action == 0) expect(document.reset_prop_val(owner, id) == model::PropertyMutationStatus::reset_unclassified_storage, "caption reset");
-        else if (action == 1) expect(document.set_prop_val(owner, id, model::PictureRef{}) == model::PropertyMutationStatus::applied_unclassified_storage, "caption empty assignment");
-        else expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.AccountingRegister"}}) == model::PropertyMutationStatus::applied_unclassified_storage, "caption library assignment");
+        if (action == 0) expect(document.reset_prop_val(owner, id) == model::PropertyMutationStatus::reset, "caption reset");
+        else if (action == 1) expect(document.set_prop_val(owner, id, model::PictureRef{}) == model::PropertyMutationStatus::applied, "caption empty assignment");
+        else expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.AccountingRegister"}}) == model::PropertyMutationStatus::applied, "caption library assignment");
         expect((document.find_asset(old_id) != nullptr) == shared, "only unshared caption asset may be removed");
         const auto* other_picture = document.find_control(model::ObjectId{3})->properties().find(model::PropertyId::from_name("Picture"));
         const auto* other_asset = document.find_asset(std::get<model::PictureRef>(other_picture->value).asset.id());
@@ -6248,7 +6248,7 @@ void test_form_caption_picture() {
         const auto id = model::PropertyId::from_name("CaptionPicture");
         expect(document.get_prop_val(owner, id).value == model::PropertyValue{model::PictureRef{}}, "caption picture default is empty");
         const model::PictureRef picture{model::PictureAssetRef{}, model::QualifiedName{std::string(descriptor->runtime_name)}};
-        expect(document.set_prop_val(owner, id, picture) == model::PropertyMutationStatus::applied_unclassified_storage, "library caption picture accepted");
+        expect(document.set_prop_val(owner, id, picture) == model::PropertyMutationStatus::applied, "library caption picture accepted");
         const auto encoded = form_stream::encode_document(document);
         expect(encoded.ok(), "caption picture must encode");
         const auto decoded = form_stream::decode_document(encoded.value(), "CaptionPicture");
@@ -6264,10 +6264,10 @@ void test_form_caption_picture() {
         auto unknown = encoded.value();
         unknown.items[13].items[2].items[2] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000001")});
         expect(!form_stream::decode_document(unknown, "CaptionPicture").ok(), "unknown library identity must fail");
-        expect(document.set_prop_val(owner, id, model::PictureRef{}) == model::PropertyMutationStatus::applied_unclassified_storage &&
+        expect(document.set_prop_val(owner, id, model::PictureRef{}) == model::PropertyMutationStatus::applied &&
             document.get_prop_val(owner, id).value == model::PropertyValue{model::PictureRef{}}, "empty assignment restores caption default");
-        expect(document.set_prop_val(owner, id, picture) == model::PropertyMutationStatus::applied_unclassified_storage &&
-            document.reset_prop_val(owner, id) == model::PropertyMutationStatus::reset_unclassified_storage &&
+        expect(document.set_prop_val(owner, id, picture) == model::PropertyMutationStatus::applied &&
+            document.reset_prop_val(owner, id) == model::PropertyMutationStatus::reset &&
             document.get_prop_val(owner, id).value == model::PropertyValue{model::PictureRef{}}, "caption reset restores default");
     }
 }
@@ -14064,8 +14064,21 @@ void test_shared_recursive_typed_values() {
     model::StructureValue fixed_structure = structure; fixed_structure.fixed = true;
     model::MapValue map{{{false, structure}, {model::DecimalValue{"17"}, array}, {std::string{"Title"}, std::string{"value"}}}, false};
     model::MapValue fixed_map = map; fixed_map.fixed = true;
+    model::ValueListValue value_list;
+    model::ValueListItem list_item;
+    list_item.id = 3;
+    list_item.value = array;
+    list_item.presentation = model::FormattedStringValue{std::string{"До <img 0:448d6f55-d885-496c-870d-d1bd78374745/> после"}, true};
+    list_item.checked = true;
+    list_item.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.CloneListItem"}};
+    value_list.items.push_back(std::move(list_item));
+    model::ValueListItem plain_item;
+    plain_item.id = 4;
+    plain_item.value = std::string{"second"};
+    value_list.items.push_back(std::move(plain_item));
+    value_list.last_assigned_id = 6;
     const std::array<model::PropertyValue, 12> values{rgb, named, font, border, array, structure,
-        fixed_array, fixed_structure, map, fixed_map, model::TypeDomainPatternValue{{text, numeric}}, model::ArrayValue{}};
+        fixed_array, fixed_structure, map, fixed_map, model::TypeDomainPatternValue{{text, numeric}}, value_list};
     model::Form form; form.id = model::ObjectId{1}; form.name = "SharedValues";
     for (std::uint64_t index = 0; index < values.size(); ++index) {
         form.children.emplace_back(model::ControlRef{model::ObjectId{100 + index}});
@@ -14091,6 +14104,24 @@ void test_shared_recursive_typed_values() {
     }
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), "one shared typed-value codec must encode twelve fields and twelve charts");
+    bool checked_empty_picture = false;
+    const auto check_list_pictures = [&](const auto& self, const list_stream::ListValue& node) -> void {
+        if (node.is_list && node.items.size() == 3 && node.items[0].atom == "#" &&
+            node.items[1].atom == "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3") {
+            const auto& records = node.items[2].items[4].items;
+            for (std::size_t index = 1; index < records.size(); ++index) {
+                const auto& picture = records[index].items[1].items[3];
+                if (picture.items[1].atom == "0") {
+                    expect(list_stream::dump_compact(picture) == R"PICTURE({4,0,{0},"",-1,-1,0,0,""})PICTURE",
+                        "ValueList empty picture must use its native default rather than the Button default");
+                    checked_empty_picture = true;
+                }
+            }
+        }
+        for (const auto& child : node.items) self(self, child);
+    };
+    check_list_pictures(check_list_pictures, encoded.value());
+    expect(checked_empty_picture, "the recursive typed-value fixture exercises an empty ValueList picture");
     const auto decoded = form_stream::decode_document(encoded.value(), "SharedValues");
     expect(decoded.ok() && decoded.value().reconstruction_complete(), "recursive values must decode completely");
     for (std::uint64_t index = 0; index < values.size(); ++index) {
@@ -14162,8 +14193,8 @@ void test_input_field_typed_bounds() {
         const auto min = model::PropertyId::from_name("MinValue");
         const auto max = model::PropertyId::from_name("MaxValue");
         expect(document.get_prop_val(owner, min).value == model::PropertyValue{model::UndefinedValue{}}, "default input minimum is Undefined");
-        expect(document.set_prop_val(owner, min, values[i % values.size()]) == model::PropertyMutationStatus::applied_unclassified_storage &&
-               document.set_prop_val(owner, max, model::DecimalValue{"25.5"}) == model::PropertyMutationStatus::applied_unclassified_storage, "input bounds are partial typed scalars");
+        expect(document.set_prop_val(owner, min, values[i % values.size()]) == model::PropertyMutationStatus::applied &&
+               document.set_prop_val(owner, max, model::DecimalValue{"25.5"}) == model::PropertyMutationStatus::applied, "input bounds use the proven persisted typed-value codec");
         const auto encoded = form_stream::encode_document(document);
         expect(encoded.ok(), "numeric input bounds must encode");
         const auto decoded = form_stream::decode_document(encoded.value(), "Bounds");
@@ -14187,7 +14218,7 @@ void test_input_field_typed_bounds() {
         }
         expect(document.set_prop_val(owner, min, model::ControlRef{model::ObjectId{2}}) == model::PropertyMutationStatus::invalid_value &&
             document.get_prop_val(owner, min).value == values[i % values.size()], "unsupported value must preserve prior bound");
-        expect(document.reset_prop_val(owner, min) == model::PropertyMutationStatus::reset_unclassified_storage &&
+        expect(document.reset_prop_val(owner, min) == model::PropertyMutationStatus::reset &&
             document.get_prop_val(owner, min).value == model::PropertyValue{model::UndefinedValue{}}, "supported bound reset restores Undefined");
     }
     for (const auto context : {0, 1, 2, 3}) {
