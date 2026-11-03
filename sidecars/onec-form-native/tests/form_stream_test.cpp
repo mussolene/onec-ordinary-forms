@@ -15840,6 +15840,55 @@ void test_canonical_unbound_input_fields_round_trip() {
         }), "the observed residual precision in an unbound String InputField must remain explicitly incomplete");
 }
 
+void test_input_field_masks() {
+    using namespace model;
+    constexpr std::array<std::string_view, 6> masks{"!999", "NNNN", "@@.@@", "99-99", "9;99", "\\@"};
+    Form form; form.id = ObjectId{1}; form.name = "InputMasks";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    const auto mask = PropertyId::from_name("Mask");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string = {64, i % 2 == 0};
+        ControlNode input{ObjectId{100 + i}, "Input" + std::to_string(i), InputFieldPayload{}};
+        if (i < 6) {
+            document.add_attribute(Attribute{ObjectId{900 + i}, "Text" + std::to_string(i), TypeDomainPatternValue{{text}}});
+            input.data_path = DataPath{AttributeRef{ObjectId{900 + i}}, {}};
+        } else input.extension_properties.set_explicit(PropertyId::from_name("ValueType"), TypeDomainPatternValue{{text}});
+        document.add_control(std::move(input));
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        expect(document.set_prop_val(owner, mask, std::string(masks[i % masks.size()])) == PropertyMutationStatus::applied &&
+            document.get_prop_val(owner, PropertyId::from_name("Wrap")).value == PropertyValue{false},
+            "Mask uses the supported String editor and disables Wrap like the platform");
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "twelve bound and unbound masked InputFields must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "InputMasks");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "named Mask profiles must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<Mask>!999</Mask>") != std::string::npos, "Mask must have a named XML property");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named Mask XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(encoded.value()) == list_stream::dump_compact(rebuilt.value()),
+        "Mask XML must rebuild both copies and the masked editor length");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        expect(decoded.value().get_prop_val(owner, mask).value == PropertyValue{std::string(masks[i % masks.size()])},
+            "all twelve masks retain escaping, separators and special characters");
+        expect(document.reset_prop_val(owner, mask) == PropertyMutationStatus::reset &&
+            document.get_prop_val(owner, mask).value == PropertyValue{std::string{}} &&
+            document.get_prop_val(owner, PropertyId::from_name("Wrap")).value == PropertyValue{false},
+            "Mask reset clears the property without restoring the previous Wrap value");
+    }
+    auto mismatch = encoded.value();
+    auto& info = mismatch.items[1].items[2].items[2].items[1].items[2];
+    info.items[3].items[1].items[1].items[4] = list_stream::ListValue::string_atom("different");
+    expect(!form_stream::decode_document(mismatch, "InputMasks").ok(), "mismatched Mask copies must be rejected");
+    auto wrong_length = encoded.value();
+    wrong_length.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[14] = list_stream::ListValue::raw_atom("64");
+    expect(!form_stream::decode_document(wrong_length, "InputMasks").ok(), "unproven masked editor length must not normalize silently");
+}
+
 void test_unbound_numeric_input_bounds() {
     using namespace model;
     const ArrayValue array{{std::string{"Вложенный текст"}, DecimalValue{"-12.75"}, true, UndefinedValue{}}, false};
@@ -22136,6 +22185,7 @@ int main() {
         test_two_input_fields_round_trip();
         test_canonical_unbound_input_fields_round_trip();
         test_unbound_numeric_input_bounds();
+        test_input_field_masks();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_root_pages_round_trip_with_page_local_control_order();
         test_owned_panel_colors_and_repeated_background();

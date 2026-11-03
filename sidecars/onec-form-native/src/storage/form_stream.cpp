@@ -2125,6 +2125,7 @@ bool is_single_track_bar_type_domain(const model::TypeDomainPatternValue& value)
 struct InputFieldTextValues {
     model::PropertyValue tool_tip{std::string{}};
     std::string format;
+    std::string mask{};
 };
 
 struct InputFieldLayoutValues {
@@ -2216,6 +2217,11 @@ LV canonical_input_field_info(
         if (mapping.paired_slot != no_paired_slot) {
             value.items[3].items[1].items[1].items[mapping.paired_slot] = raw(encoded ? "1" : "0");
         }
+    }
+    if (!text_values.mask.empty()) {
+        value.items[2].items[0].items[14] = raw("0");
+        value.items[2].items[0].items[21] = string_value(text_values.mask);
+        value.items[3].items[1].items[1].items[4] = string_value(text_values.mask);
     }
     if (bool_atom(value.items[9], "$/InputField/ListChoiceMode")) {
         value.items[3] = parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}");
@@ -9964,9 +9970,20 @@ DecodedControl decode_input_field(
     const auto base_info_path = child_path(payload_path, 0);
     require_arity(base_info, 21, base_info_path);
     require_raw_constant(base_info.items[0], "19", child_path(base_info_path, 0));
+    const auto mask = string_atom(payload.items[21], child_path(payload_path, 21));
+    const bool list_choice_mode = bool_atom(info.items[9], child_path(info_path, 9));
+    if (!mask.empty() && (!is_single_string_type_domain(control_type) || list_choice_mode))
+        fail("OOF1122", child_path(payload_path, 21), "Mask on a single-string InputField without ListChoiceMode", {},
+            "InputField Mask is unavailable for this editor");
+    if (!list_choice_mode) {
+        const auto& paired_mask = at(at(at(info.items[3], 1, child_path(info_path, 3)), 1,
+            child_path(child_path(info_path, 3), 1)), 4, child_path(child_path(child_path(info_path, 3), 1), 1));
+        if (string_atom(paired_mask, info_path) != mask)
+            fail("OOF1114", info_path, "matching InputField Mask copies", {}, "InputField Mask copies differ");
+    }
     const auto stored_length = integer_atom<std::uint32_t>(payload.items[14], child_path(payload_path, 14));
     if (is_single_string_type_domain(control_type) &&
-        stored_length != control_type.entries.front().string.length) {
+        stored_length != (mask.empty() ? control_type.entries.front().string.length : 0)) {
         fail("OOF1114", info_path, "String length matching the named ValueType", {},
             "InputField payload length differs from its named String type");
     }
@@ -10012,14 +10029,13 @@ DecodedControl decode_input_field(
         fail("OOF1114", child_path(payload_path, 37), "IncompleteChoiceMode storage value 0 or 1",
             std::to_string(incomplete_choice_mode), "InputField.IncompleteChoiceMode storage value is unsupported");
     }
-    const bool list_choice_mode = bool_atom(info.items[9], child_path(info_path, 9));
     if (list_choice_mode) {
         require_exact(info.items[3], parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}"),
             child_path(info_path, 3), "InputField list choice record is unsupported");
     }
     const auto input_field_flags = decode_input_field_flags(info, info_path,
         list_choice_mode ? InputFieldPairMode::payload_only : InputFieldPairMode::require_matching_pair);
-    const InputFieldTextValues text_values{tool_tip, format};
+    const InputFieldTextValues text_values{tool_tip, format, mask};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width,
         incomplete_choice_mode};
     auto named_events = decode_control_event_collection(info.items[4], child_path(info_path, 4),
@@ -10083,6 +10099,7 @@ DecodedControl decode_input_field(
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     if (shortcut != model::ShortcutValue{}) control.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
     if (!format.empty()) control.properties().set_explicit(model::PropertyId::from_name("Format"), format);
+    if (!mask.empty()) control.properties().set_explicit(model::PropertyId::from_name("Mask"), mask);
     if (horizontal_align != 4) {
         constexpr std::array<std::string_view, 5> members{"Left", "Center", "Right", "Justify", "Auto"};
         control.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
@@ -11664,7 +11681,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask"}, "$/InputField");
     const auto* attribute = control.data_path ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
     if (control.data_path && attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -11693,7 +11710,12 @@ LV encode_input_field(
     const InputFieldTextValues text_values{
         explicit_localized_text(control.properties(), "ToolTip", "$/InputField"),
         explicit_string(control.properties(), "Format"),
+        explicit_string(control.properties(), "Mask"),
     };
+    if (!text_values.mask.empty() && (!is_single_string_type_domain(*effective_type) ||
+        explicit_bool(control.properties(), "ListChoiceMode", false)))
+        fail("OOF1122", "$/InputField/Mask", "single-string InputField without ListChoiceMode", {},
+            "InputField Mask is unavailable for this editor");
     const InputFieldLayoutValues layout_values{
         explicit_enum_storage_value(control.properties(), "InputField", "HorizontalAlign", "HorizontalAlign", 4,
             {{"Left", 0}, {"Center", 1}, {"Right", 2}, {"Justify", 3}, {"Auto", 4}}),

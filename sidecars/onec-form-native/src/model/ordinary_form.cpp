@@ -1676,6 +1676,10 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             if (type == nullptr || type->entries.size() != 1)
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             const auto term = type->entries.front().term;
+            const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
+            if (is_string_input_property(*descriptor) && list_mode &&
+                std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value))
+                return {PropertyReadStatus::unsupported_surface, std::nullopt};
             if (descriptor->api_name == "TypeRestriction") {
                 if (term != TypeDomainTerm::string && term != TypeDomainTerm::numeric && term != TypeDomainTerm::date)
                     return {PropertyReadStatus::unsupported_surface, std::nullopt};
@@ -2079,7 +2083,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (is_string_input_property(*descriptor)) {
             const auto* type = effective_input_type(*this, control);
-            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string)
+            const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
+            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string ||
+                (list_mode && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
                 return PropertyMutationStatus::unsupported_surface;
         }
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage") {
@@ -2303,6 +2309,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     }
 
     if (owner.category == ObjectCategory::control && descriptor->control_kind == ControlKind::input_field &&
+        descriptor->api_name == "Mask" && !std::get<std::string>(value).empty())
+        properties->set_explicit(PropertyId::from_name("Wrap"), false);
+    if (owner.category == ObjectCategory::control && descriptor->control_kind == ControlKind::input_field &&
         descriptor->api_name == "ListChoiceMode") {
         properties->set_explicit(PropertyId::from_name("ChoiceListButton"), std::get<bool>(value));
     }
@@ -2525,7 +2534,9 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (is_string_input_property(*descriptor)) {
             const auto* type = effective_input_type(*this, control);
-            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string)
+            const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
+            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string ||
+                (list_mode && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
                 return PropertyMutationStatus::unsupported_surface;
         }
         if (control.kind() == ControlKind::panel && descriptor->api_name == "CurrentPage")

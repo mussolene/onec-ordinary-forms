@@ -1099,6 +1099,22 @@ void test_input_property_availability() {
         }
         expect(document.find_control(id)->properties().empty(), "availability reads and rejected writes cannot change stored properties");
     }
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string = {64, true};
+        const ObjectId id{300 + index};
+        ControlNode input{id, "ListInput" + std::to_string(index), InputFieldPayload{}};
+        input.extension_properties.set_explicit(value_type, TypeDomainPatternValue{{text}});
+        input.properties().set_explicit(PropertyId::from_name("ListChoiceMode"), true);
+        document.add_control(std::move(input));
+        for (const auto name : {"Mask", "MultiLine", "ExtendedEdit", "PasswordMode"}) {
+            const auto property = PropertyId::from_name(name);
+            expect(document.get_prop_val(key(id.value()), property).status == PropertyReadStatus::unsupported_surface &&
+                document.set_prop_val(key(id.value()), property, std::string_view(name) == "Mask" ? PropertyValue{std::string{"!999"}} : PropertyValue{true}) == PropertyMutationStatus::unsupported_surface &&
+                document.reset_prop_val(key(id.value()), property) == PropertyMutationStatus::unsupported_surface,
+                "ListChoiceMode has no String editor properties even with String ValueType");
+        }
+        expect(document.find_control(id)->properties().size() == 1, "rejected list editor writes must leave only ListChoiceMode");
+    }
     ControlNode dangling{ObjectId{200}, "Dangling", InputFieldPayload{}};
     TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string = {20, true};
     dangling.extension_properties.set_explicit(value_type, TypeDomainPatternValue{{text}});
