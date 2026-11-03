@@ -2188,6 +2188,11 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             }
             return PropertyMutationStatus::applied;
         }
+        if (control.kind() == ControlKind::input_field && descriptor->api_name == "TypeRestriction") {
+            TypedValueBudget budget;
+            if (!std::holds_alternative<TypeDomainPatternValue>(value) || !validate_typed_value(value, budget))
+                return PropertyMutationStatus::invalid_value;
+        }
         if (descriptor->api_name == "Data") return PropertyMutationStatus::unsupported_surface;
         if (descriptor->api_name == "ValueType") {
             if (control.data_path) return PropertyMutationStatus::read_only;

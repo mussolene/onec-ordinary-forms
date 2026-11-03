@@ -2328,7 +2328,6 @@
       <xs:element name="Mask" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MinValue" type="TypedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="TypeRestriction" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>

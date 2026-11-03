@@ -885,6 +885,12 @@ void test_binding_target_and_manual_roundtrip() {
 
 void test_typed_values_and_canonicalization() {
     expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Restriction\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<InputField id=\"2\" name=\"Input\"><ValueType><Entry term=\"string\" length=\"64\"/></ValueType>"
+        "<Position/><TypeRestriction><Entry term=\"string\" length=\"8\"/></TypeRestriction>"
+        "</InputField></ChildItems></Form>"), "OOF2002",
+        "runtime TypeRestriction must not be accepted as persisted XML state");
+    expect_code(source::parse_form_xml(
         "<Form id=\"1\" name=\"Mask\" ordinaryFormVersion=\"2.1\"><ChildItems>"
         "<Button id=\"2\" name=\"Legacy\"><Position/><Font kind=\"automatic\" mask=\"0\"/>"
         "</Button></ChildItems></Form>"), "OOF2002",
@@ -907,9 +913,6 @@ void test_typed_values_and_canonicalization() {
       <ChoiceListHeight>0007</ChoiceListHeight>
       <HorizontalAlign type="HorizontalAlign" member="Right"/>
       <Picture>3</Picture>
-      <TypeRestriction>
-        <Entry term="numeric" length="15" precision="3" nonNegative="true"/>
-      </TypeRestriction>
       <BorderColor kind="absolute" red="18" green="52" blue="86" alpha="255"/>
       <Font kind="styleReference" styleName="StyleFonts.TextFont"/>
     </InputField>

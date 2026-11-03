@@ -1371,6 +1371,8 @@ void apply_proven_storage_overrides(
     if (mask == input_field.end() || restriction == input_field.end() || type_link_item == input_field.end())
         throw std::logic_error("missing InputField editor descriptor");
     classify_property(input_field, "Mask", StorageCodec::control_info, DefaultKind::string, "");
+    restriction->persistence = PersistenceClass::runtime_only;
+    restriction->storage_codec = StorageCodec::none;
     restriction->default_value = {DefaultKind::none, {}};
     type_link_item->value_kind = ValueKind::number;
     type_link_item->value_codec = ValueCodec::integer;

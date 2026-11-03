@@ -1125,6 +1125,61 @@ void test_input_property_availability() {
             "a dangling binding cannot fall back to the local type when deciding property availability");
 }
 
+void test_input_type_restriction_runtime() {
+    Form form; form.id = ObjectId{1}; form.name = "RuntimeRestrictions";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string = {8, true};
+    TypeDomainEntry numeric; numeric.term = TypeDomainTerm::numeric; numeric.numeric = {5, 1, false};
+    TypeDomainEntry date; date.term = TypeDomainTerm::date;
+    TypeDomainEntry generic_text; generic_text.term = TypeDomainTerm::string;
+    TypeDomainEntry generic_numeric; generic_numeric.term = TypeDomainTerm::numeric;
+    const std::array descriptions{TypeDomainPatternValue{{text}}, TypeDomainPatternValue{{numeric}},
+        TypeDomainPatternValue{{date}}, TypeDomainPatternValue{{generic_text, generic_numeric, date}}, TypeDomainPatternValue{}};
+    const auto property = PropertyId::from_name("TypeRestriction"), value_type = PropertyId::from_name("ValueType");
+    const auto* descriptor = metamodel::find_property(ControlKind::input_field, property);
+    expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+        descriptor->storage_codec == metamodel::StorageCodec::none, "TypeRestriction has no persisted property value");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        TypeDomainEntry entry;
+        entry.term = i % 3 == 0 ? TypeDomainTerm::string : i % 3 == 1 ? TypeDomainTerm::numeric : TypeDomainTerm::date;
+        if (entry.term == TypeDomainTerm::string) entry.string = {64, true};
+        else if (entry.term == TypeDomainTerm::numeric) entry.numeric = {12, 3, false};
+        else entry.date = {true, false};
+        const TypeDomainPatternValue type{{entry}};
+        ControlNode input{ObjectId{100 + i}, "Input" + std::to_string(i), InputFieldPayload{}};
+        if (i % 2 == 0) {
+            document.add_attribute(Attribute{ObjectId{900 + i}, "Data" + std::to_string(i), type});
+            input.data_path = DataPath{AttributeRef{ObjectId{900 + i}}, {}};
+        } else input.extension_properties.set_explicit(value_type, type);
+        document.add_control(std::move(input));
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        for (const auto& description : descriptions) {
+            expect(document.set_prop_val(owner, property, description) == PropertyMutationStatus::applied_runtime_only &&
+                document.get_prop_val(owner, property).value == PropertyValue{description} &&
+                document.get_prop_val(owner, value_type).value == PropertyValue{type},
+                "runtime restriction preserves each assigned description without changing the original ValueType");
+            expect(!oof::source::serialize_form_xml(document).ok(),
+                "an explicitly assigned runtime restriction must fail the public XML boundary, including an empty description");
+        }
+        expect(document.set_prop_val(owner, property, std::string{"wrong"}) == PropertyMutationStatus::invalid_value,
+            "TypeRestriction must reject a value that is not a type description");
+        expect(document.set_prop_val(owner, property, descriptions.front()) == PropertyMutationStatus::applied_runtime_only,
+            "a valid restriction remains usable before testing invalid input");
+        TypeDomainEntry invalid_object; invalid_object.term = TypeDomainTerm::object;
+        expect(document.set_prop_val(owner, property, TypeDomainPatternValue{{invalid_object}}) == PropertyMutationStatus::invalid_value &&
+            document.get_prop_val(owner, property).value == PropertyValue{descriptions.front()},
+            "an object description without its type UUID must not replace the live restriction");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset_runtime_only &&
+            document.get_prop_val(owner, property).value == PropertyValue{TypeDomainPatternValue{}},
+            "reset clears the runtime restriction and restores the empty computed description");
+    }
+    expect(oof::source::serialize_form_xml(document).ok(), "reset runtime restrictions leave a serializable named model");
+    TypedValueBudget exhausted{max_typed_value_nodes - 1};
+    expect(!validate_typed_value(PropertyValue{descriptions.front()}, exhausted),
+        "the shared description validator enforces its entry budget before encoding a type description");
+}
+
 void test_binding_property_getters() {
     using namespace oof::model::metamodel;
     Form form; form.id = ObjectId{1}; form.name = "BindingProperties";
@@ -4878,6 +4933,7 @@ int main() {
         test_data_api_preserves_binding_until_supported();
         test_binding_property_getters();
         test_input_property_availability();
+        test_input_type_restriction_runtime();
         test_control_name_property();
         test_form_runtime_state_properties();
         test_chart_computed_counts();
