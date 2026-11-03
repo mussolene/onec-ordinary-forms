@@ -395,21 +395,30 @@ void test_z_order_reorders_siblings() {
         document.add_control(ControlNode{ObjectId{10 + index}, "Control" + std::to_string(index), payloads[index]});
     const auto z = PropertyId::from_name("ZOrder");
     const auto tab = PropertyId::from_name("TabOrder");
+    const auto* descriptor = metamodel::find_property(ControlKind::input_field, z);
+    expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::persisted_editable &&
+        descriptor->storage_codec == metamodel::StorageCodec::position_record &&
+        descriptor->value_codec == metamodel::ValueCodec::integer32 && descriptor->default_value.kind == metamodel::DefaultKind::none,
+        "ZOrder must describe the geometry ordinal derived from ChildItems");
     const auto owner = [](std::uint64_t id) { return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}}; };
     for (std::uint64_t id = 10; id < 22; ++id) {
-        expect(document.set_prop_val(owner(id), z, std::int64_t{0}) == PropertyMutationStatus::applied_unclassified_storage &&
+        expect(document.set_prop_val(owner(id), z, std::int64_t{0}) == PropertyMutationStatus::applied &&
                 document.get_prop_val(owner(id), z).value == PropertyValue{std::int64_t{1}},
             "ZOrder below range must move each control to the first position");
         for (std::uint64_t sibling = 10; sibling < 22; ++sibling)
             expect(document.get_prop_val(owner(sibling), tab).value == PropertyValue{static_cast<std::int64_t>(sibling - 9)},
                 "ZOrder must preserve every sibling TabOrder");
     }
-    expect(document.set_prop_val(owner(10), z, std::int64_t{99999}) == PropertyMutationStatus::applied_unclassified_storage &&
+    expect(document.set_prop_val(owner(10), z, std::int64_t{99999}) == PropertyMutationStatus::applied &&
             document.get_prop_val(owner(10), z).value == PropertyValue{std::int64_t{12}},
         "ZOrder above range must move the control to the last position");
-    expect(document.set_prop_val(owner(10), z, DecimalValue{"1.5"}) == PropertyMutationStatus::applied_unclassified_storage &&
+    expect(document.set_prop_val(owner(10), z, DecimalValue{"1.5"}) == PropertyMutationStatus::applied &&
             document.get_prop_val(owner(10), z).value == PropertyValue{std::int64_t{1}},
         "fractional ZOrder must truncate");
+    expect(document.set_prop_val(owner(10), z, std::int64_t{1}) == PropertyMutationStatus::applied &&
+        document.reset_prop_val(owner(10), z) == PropertyMutationStatus::unsupported_surface &&
+        document.get_prop_val(owner(10), z).value == PropertyValue{std::int64_t{1}},
+        "same ZOrder is applied; no scalar default is invented for reset");
     expect(document.set_prop_val(owner(10), z, std::string{"1"}) == PropertyMutationStatus::invalid_value,
         "ZOrder must reject nonnumeric values");
 
@@ -426,7 +435,7 @@ void test_z_order_reorders_siblings() {
         nested.add_control(std::move(panel));
         nested.add_control(ControlNode{first_id, "First" + std::to_string(index), LabelDecorationPayload{}});
         nested.add_control(ControlNode{second_id, "Second" + std::to_string(index), LabelDecorationPayload{}});
-        expect(nested.set_prop_val({ObjectCategory::control, second_id}, z, std::int64_t{1}) == PropertyMutationStatus::applied_unclassified_storage &&
+        expect(nested.set_prop_val({ObjectCategory::control, second_id}, z, std::int64_t{1}) == PropertyMutationStatus::applied &&
                 nested.get_prop_val({ObjectCategory::control, first_id}, z).value == PropertyValue{std::int64_t{2}} &&
                 nested.get_prop_val({ObjectCategory::control, second_id}, z).value == PropertyValue{std::int64_t{1}} &&
                 nested.get_prop_val({ObjectCategory::control, first_id}, tab).value == PropertyValue{std::int64_t{1}} &&
@@ -455,7 +464,7 @@ void test_z_order_reorders_siblings() {
         };
         const auto move = [&](std::size_t item, std::int64_t target) {
             expect(sequence.set_prop_val({ObjectCategory::control, ids[item]}, z, target) ==
-                    PropertyMutationStatus::applied_unclassified_storage,
+                    PropertyMutationStatus::applied,
                 "nested ZOrder assignment must succeed");
         };
         check_order({1, 2, 3, 4});
@@ -687,6 +696,17 @@ void test_form_runtime_variant_values() {
     Form form; form.id = ObjectId{1}; form.name = "RuntimeVariants";
     OrdinaryFormDocument document(std::move(form));
     const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto current = PropertyId::from_name("CurrentControl");
+    const auto* current_descriptor = metamodel::find_form_property(current);
+    expect(current_descriptor && current_descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+        current_descriptor->storage_codec == metamodel::StorageCodec::none &&
+        current_descriptor->value_kind == metamodel::ValueKind::object &&
+        current_descriptor->value_codec == metamodel::ValueCodec::unclassified,
+        "proven CurrentControl persistence must remain distinct from its unfinished live reference codec");
+    expect(document.get_prop_val(owner, current).status == PropertyReadStatus::unsupported_surface &&
+        document.set_prop_val(owner, current, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+        document.reset_prop_val(owner, current) == PropertyMutationStatus::unsupported_surface,
+        "unfinished CurrentControl API must not manufacture an undefined scalar value");
     const auto original_xml = oof::source::serialize_form_xml(document);
     const auto original_bin = oof::save_form_bin(document);
     expect(original_xml.ok() && original_bin.ok(), "form with runtime variants must serialize");
@@ -999,6 +1019,40 @@ void test_form_runtime_state_properties() {
     expect(document.reset_prop_val(owner, modified) == PropertyMutationStatus::reset_runtime_only &&
             oof::source::serialize_form_xml(document).ok(),
         "resetting Modified must remove runtime state before serialization");
+}
+
+void test_control_name_property() {
+    Form form; form.id = ObjectId{1}; form.name = "ControlNames";
+    OrdinaryFormDocument document(form);
+    const auto name_property = PropertyId::from_name("Name");
+    [&]<std::size_t... Index>(std::index_sequence<Index...>) {
+        ([&] {
+            using Payload = std::variant_alternative_t<Index, ControlPayload>;
+            if constexpr (!std::is_same_v<Payload, ActiveXControlPayload>) {
+                const ObjectId id{100 + Index};
+                const auto name = "Элемент_Ω_" + std::to_string(Index);
+                document.add_control(ControlNode{id, name, Payload{}});
+                const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+                const auto* descriptor = metamodel::find_property(payload_kind(ControlPayload{Payload{}}), name_property);
+                expect(descriptor && descriptor->api_access == metamodel::ApiAccess::read_only &&
+                    descriptor->persistence == metamodel::PersistenceClass::persisted_readonly &&
+                    descriptor->storage_codec == metamodel::StorageCodec::control_info &&
+                    descriptor->default_value.kind == metamodel::DefaultKind::none,
+                    "every supported control exposes its stored name with the target platform readonly contract");
+                const auto result = document.get_prop_val(owner, name_property);
+                expect(result.status == PropertyReadStatus::computed_value && result.value == PropertyValue{name},
+                    "Name getter reads the authoritative named object for every control kind");
+                for (const auto& value : {PropertyValue{name}, PropertyValue{std::string{"Renamed"}}, PropertyValue{UndefinedValue{}}})
+                    expect(document.set_prop_val(owner, name_property, value) == PropertyMutationStatus::read_only,
+                        "runtime Name rejects every assignment, including its existing name");
+                expect(document.reset_prop_val(owner, name_property) == PropertyMutationStatus::read_only &&
+                    document.find_control(id)->name == name && !document.find_control(id)->extension_properties.contains(name_property),
+                    "Name mutation must preserve the object and never create a shadow property");
+            }
+        }(), ...);
+    }(std::make_index_sequence<std::variant_size_v<ControlPayload>>{});
+    expect(document.get_prop_val({ObjectCategory::control, ObjectId{999}}, name_property).status == PropertyReadStatus::unknown_owner,
+        "Name does not manufacture an unknown owner");
 }
 
 void test_data_api_preserves_binding_until_supported() {
@@ -4675,6 +4729,7 @@ int main() {
         test_current_page_is_runtime_only();
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
+        test_control_name_property();
         test_form_runtime_state_properties();
         test_chart_computed_counts();
         test_chart_owned_collections();

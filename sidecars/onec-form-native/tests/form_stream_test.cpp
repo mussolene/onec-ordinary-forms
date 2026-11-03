@@ -9560,7 +9560,7 @@ void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() 
     auto api_reordered = ordered;
     expect(api_reordered.set_prop_val({model::ObjectCategory::control, model::ObjectId{17}},
                model::PropertyId::from_name("ZOrder"), std::int64_t{1}) ==
-               model::PropertyMutationStatus::applied_unclassified_storage,
+               model::PropertyMutationStatus::applied,
         "ZOrder API must move the group member without changing the tab order");
     const auto api_encoded = form_stream::encode_document(api_reordered);
     expect(api_encoded.ok() && list_stream::dump_compact(api_encoded.value()) == list_stream::dump_compact(z_reordered.value()),

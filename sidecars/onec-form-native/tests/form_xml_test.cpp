@@ -3392,6 +3392,8 @@ void test_chart_summary_series_color_xml() {
 }
 
 void test_runtime_properties_are_not_public_xml() {
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><CurrentControl/></Form>)XML"),
+        "runtime CurrentControl must be excluded from public XML before its reference API is implemented");
     for (const auto fragment : {
              R"XML(<CalendarField id="2" name="C"><Position/><CurrentDate>2026-12-25T00:00:00</CurrentDate></CalendarField>)XML",
              R"XML(<CalendarField id="2" name="C"><Position/><SelectedDates/></CalendarField>)XML",

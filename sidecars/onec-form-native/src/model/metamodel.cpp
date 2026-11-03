@@ -584,6 +584,12 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
         property->persistence = PersistenceClass::persisted_editable;
         property->storage_codec = StorageCodec::control_info;
     }
+    auto control_name = std::ranges::find(descriptors, "Name", &PropertyDescriptor::api_name);
+    if (control_name == descriptors.end()) throw std::logic_error("missing control Name");
+    control_name->api_access = ApiAccess::read_only;
+    control_name->persistence = PersistenceClass::persisted_readonly;
+    control_name->storage_codec = StorageCodec::control_info;
+    control_name->default_value = {DefaultKind::none, {}};
     const auto auto_context = std::ranges::find(descriptors, std::string_view{"AutoContextMenu"}, &PropertyDescriptor::api_name);
     const auto context = std::ranges::find(descriptors, std::string_view{"ContextMenu"}, &PropertyDescriptor::api_name);
     if (auto_context == descriptors.end() || context == descriptors.end()) {
@@ -1119,6 +1125,7 @@ void apply_proven_storage_overrides(
     classify_property(panel, "TabOrder", StorageCodec::position_record, DefaultKind::none, "");
     std::ranges::find(panel, "TabOrder", &PropertyDescriptor::api_name)->surface = PropertySurface::panel_placement;
     classify_property(panel_placement_properties, "TabOrder", StorageCodec::position_record, DefaultKind::none, "");
+    classify_property(panel_placement_properties, "ZOrder", StorageCodec::position_record, DefaultKind::none, "");
     for (const auto name : {"Picture", "PanelPictureLocation", "PictureSize"}) {
         auto property = std::ranges::find(panel, name, &PropertyDescriptor::api_name);
         if (property == panel.end()) throw std::logic_error("missing Panel picture property");
@@ -1489,7 +1496,7 @@ void apply_proven_storage_overrides(
 
     for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode", "ThisForm",
                             "AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow",
-                            "ReadOnly", "MultipleChoice", "WindowOptionsName", "WindowOptionsKey", "UniqueKey", "ChoiceInitialValue"}) {
+                            "ReadOnly", "MultipleChoice", "WindowOptionsName", "WindowOptionsKey", "UniqueKey", "ChoiceInitialValue", "CurrentControl"}) {
         auto property = std::ranges::find(form_properties, name, &PropertyDescriptor::api_name);
         if (property == form_properties.end()) throw std::logic_error("missing runtime Form property");
         property->persistence = PersistenceClass::runtime_only;
@@ -1500,6 +1507,7 @@ void apply_proven_storage_overrides(
                 ? DefaultValue{DefaultKind::boolean, "false"} :
             (name == std::string_view{"WindowOptionsName"} || name == std::string_view{"WindowOptionsKey"})
                 ? DefaultValue{DefaultKind::string, ""} : DefaultValue{DefaultKind::none, {}};
+        if (name == std::string_view{"CurrentControl"}) property->value_kind = ValueKind::object;
     }
     if (auto property = std::ranges::find(form_properties, "CaptionPicture", &PropertyDescriptor::api_name);
         property != form_properties.end()) {

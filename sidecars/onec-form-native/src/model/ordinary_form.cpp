@@ -1549,6 +1549,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
     const ControlNode* position_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        if (property == PropertyId::from_name("CurrentControl"))
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (property == PropertyId::from_name("Controls"))
             return {PropertyReadStatus::computed_value, PropertyValue{FormItemCollectionRef{form_.id, FormItemCollectionKind::controls}}};
         if (property == PropertyId::from_name("ThisForm"))
@@ -1641,6 +1643,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (descriptor->api_name == "Name")
+            return {PropertyReadStatus::computed_value, PropertyValue{control.name}};
         if (descriptor->value_codec == metamodel::ValueCodec::typed_value) {
             const auto* attribute = control.data_path ? find_attribute(control.data_path->attribute.id()) : nullptr;
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
@@ -1903,6 +1907,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("CurrentControl")) return PropertyMutationStatus::unsupported_surface;
         if (property == PropertyId::from_name("Controls")) return PropertyMutationStatus::read_only;
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
             if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
@@ -2050,7 +2055,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             } else return PropertyMutationStatus::invalid_value;
             const auto bounded = std::clamp(requested, std::int64_t{1}, static_cast<std::int64_t>(group->ids.size()));
             const auto target = static_cast<std::size_t>(bounded - 1);
-            if (target == group->target_index) return PropertyMutationStatus::applied_unclassified_storage;
+            if (target == group->target_index) return PropertyMutationStatus::applied;
             std::vector<ChildItemRef>* siblings = nullptr;
             const auto consider = [&](std::vector<ChildItemRef>& children) {
                 if (std::ranges::any_of(children, [&](const ChildItemRef& item) {
@@ -2079,7 +2084,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 if (ordinal == static_cast<std::int32_t>(index + 1)) tab.reset();
                 else tab.set(std::optional<std::int32_t>{ordinal});
             }
-            return PropertyMutationStatus::applied_unclassified_storage;
+            return PropertyMutationStatus::applied;
         }
         if (descriptor->api_name == "TabOrder") {
             const auto group = tab_order_group(*this, control.id);
@@ -2398,6 +2403,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("CurrentControl")) return PropertyMutationStatus::unsupported_surface;
         if (property == PropertyId::from_name("Controls")) return PropertyMutationStatus::read_only;
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
             runtime_form_values_.unset(property);
