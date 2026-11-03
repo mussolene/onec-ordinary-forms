@@ -4834,6 +4834,7 @@ DecodedControl decode_default_complex_control(
     model::ColorValue border_color;
     std::int32_t output = 0;
     auto back_color = chart_back_color_default();
+    std::int32_t pivot_chart_type = 1;
     if (kind == model::ControlKind::graphical_schema_field) {
         require_arity(record.items[2], 6, child_path(path, 2));
         require_arity(record.items[2].items[0], 21, child_path(child_path(path, 2), 0));
@@ -4858,6 +4859,12 @@ DecodedControl decode_default_complex_control(
         require_raw_constant(renderer.items[0], "75", child_path(renderer_path, 0));
         require_raw_constant(renderer.items[4], "4", child_path(renderer_path, 4));
         require_raw_constant(renderer.items[61], "4", child_path(renderer_path, 61));
+        pivot_chart_type = integer_atom<std::int32_t>(normalized_info.items[6], child_path(child_path(path, 2), 6));
+        if (pivot_chart_type < 0 || pivot_chart_type > 1)
+            fail("OOF1114", child_path(child_path(path, 2), 6), "PivotChartType ordinal 0 or 1", {}, "Unknown PivotChartType");
+        require_raw_constant(renderer.items[108], pivot_chart_type == 0 ? "4" : "6", child_path(renderer_path, 108));
+        normalized_info.items[6] = raw("1");
+        normalized_info.items[1].items[2].items[108] = raw("6");
         back_color = decode_chart_back_color(renderer, 127, 378, renderer_path);
         encode_chart_back_color(normalized_info.items[1].items[2], 127, 378, {}, "$/PivotChart/BackColor");
         if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_default_pivot_chart_info()))
@@ -4907,6 +4914,9 @@ DecodedControl decode_default_complex_control(
     }
     if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     if (kind == model::ControlKind::pivot_chart && back_color != chart_back_color_default()) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
+    if (kind == model::ControlKind::pivot_chart && pivot_chart_type == 0)
+        control.properties().set_explicit(model::PropertyId::from_name("PivotChartType"),
+            model::EnumerationValue{"PivotChartType", "Column"});
     control.position = std::move(geometry.position);
     return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
@@ -11498,7 +11508,7 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
         fail("OOF1122", path, "named default complex control without DataPath, unsupported events, or children", control.name,
             "Default complex control uses an unsupported storage concept");
     if (control.kind() == model::ControlKind::pivot_chart) {
-        require_allowed_properties(control.properties(), {"BackColor"}, path);
+        require_allowed_properties(control.properties(), {"BackColor", "PivotChartType"}, path);
     } else {
         require_allowed_properties(control.properties(), {"BorderColor", "Output"}, path);
     }
@@ -11511,6 +11521,10 @@ LV encode_default_complex_control(const model::OrdinaryFormDocument& document, c
             "GraphicalSchemaField", "Output", "Output", 0, {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}})));
     } else if (control.kind() == model::ControlKind::pivot_chart) {
         fields.push_back(canonical_default_pivot_chart_info());
+        const auto type = explicit_enum_storage_value(control.properties(), "PivotChart", "PivotChartType", "PivotChartType", 1,
+            {{"Column", 0}, {"Column3D", 1}});
+        fields.back().items[6] = raw(std::to_string(type));
+        fields.back().items[1].items[2].items[108] = raw(type == 0 ? "4" : "6");
         encode_chart_back_color(fields.back().items[1].items[2], 127, 378, control.properties(), path + "/BackColor");
     } else {
         fields.push_back(canonical_geographical_schema_field_info());

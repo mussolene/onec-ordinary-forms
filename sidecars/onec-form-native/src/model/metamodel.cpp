@@ -1073,6 +1073,10 @@ void apply_proven_storage_overrides(
     for (const auto name : {"TitleLocation", "HorizontalAlign", "VerticalAlign"})
         std::ranges::find(radio_button, name, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
 
+    auto& pivot_chart = properties[static_cast<std::size_t>(ControlKind::pivot_chart)];
+    classify_property(pivot_chart, "PivotChartType", StorageCodec::control_info,
+        DefaultKind::enumeration, "PivotChartType.Column3D");
+
     auto& html_document_field = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
     classify_property(
         html_document_field,

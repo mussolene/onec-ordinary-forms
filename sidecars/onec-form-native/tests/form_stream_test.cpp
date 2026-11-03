@@ -21941,6 +21941,59 @@ void test_embedded_chart_dynamic_back_color() {
     }
 }
 
+void test_pivot_chart_types() {
+    using namespace model;
+    Form form; form.id = ObjectId{1}; form.name = "PivotTypes";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    const auto property = PropertyId::from_name("PivotChartType");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const ObjectId id{100 + i};
+        document.add_control(ControlNode{id, "Pivot" + std::to_string(i), PivotChartPayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        expect(document.get_prop_val(owner, property).value == PropertyValue{EnumerationValue{"PivotChartType", "Column3D"}},
+            "the proven initial PivotChartType is Column3D");
+        expect(document.set_prop_val(owner, property, EnumerationValue{"PivotChartType", i % 2 == 0 ? "Column" : "Column3D"}) == PropertyMutationStatus::applied,
+            "both native PivotChartType members must be editable");
+        expect(document.set_prop_val(owner, property, EnumerationValue{"PivotChartType", "Pie"}) == PropertyMutationStatus::invalid_value,
+            "unknown PivotChartType members must not change the chart");
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "twelve named PivotChartType profiles must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "PivotTypes");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "both named PivotChartType profiles must decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<PivotChartType type=\"PivotChartType\" member=\"Column\"") != std::string::npos,
+        "nondefault PivotChartType must use the named XML enumeration");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "PivotChartType XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "named PivotChartType must rebuild both paired type fields");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        expect(decoded.value().get_prop_val(owner, property).value == PropertyValue{EnumerationValue{"PivotChartType", i % 2 == 0 ? "Column" : "Column3D"}},
+            "every pivot chart retains its type");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset &&
+            document.get_prop_val(owner, property).value == PropertyValue{EnumerationValue{"PivotChartType", "Column3D"}},
+            "PivotChartType reset restores Column3D");
+    }
+    const auto guid = metamodel::descriptor_for(ControlKind::pivot_chart).guid;
+    auto mismatched = encoded.value();
+    find_record_with_guid(mismatched, guid)->items[2].items[1].items[2].items[108] = list_stream::ListValue::raw_atom("6");
+    expect(!form_stream::decode_document(mismatched, "PivotTypes").ok(), "mismatched pivot and renderer types must be rejected");
+    auto unknown_state = encoded.value();
+    find_record_with_guid(unknown_state, guid)->items[2].items[1].items[2].items[275] = list_stream::ListValue::raw_atom("1334441");
+    const auto partial = form_stream::decode_document(unknown_state, "PivotTypes");
+    expect(partial.ok() && !partial.value().reconstruction_complete() &&
+        std::ranges::any_of(partial.diagnostics(), [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
+        "the observed unknown renderer field must remain explicitly incomplete, without normalization");
+    const auto partial_output = form_stream::encode_document(partial.value());
+    expect(partial_output.ok() && std::ranges::any_of(partial_output.diagnostics(),
+        [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
+        "the existing incomplete reconstruction contract must retain its warning during rebuild");
+}
+
 void test_complex_chart_back_color_pairs() {
     for (const auto kind : {model::ControlKind::gantt_chart, model::ControlKind::dendrogram,
                             model::ControlKind::pivot_chart}) {
@@ -22005,7 +22058,7 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
     const auto rebuilt = form_stream::encode_document(decoded.value());
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
         "Named default Pivot must rebuild exactly without a baseline");
-    for (const auto slot : {3u, 4u, 5u, 6u, 7u, 8u, 9u, 12u}) {
+    for (const auto slot : {3u, 4u, 5u, 7u, 8u, 9u, 12u}) {
         auto changed = encoded.value();
         changed.items[1].items[2].items[2].items[1].items[2].items[slot] = list_stream::ListValue::raw_atom("99");
         const auto partial = form_stream::decode_document(changed, "DefaultPivot");
@@ -22017,6 +22070,10 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
                    partial_pivot->position.left.value() == 40,
             "valid unknown Pivot profile data must warn and preserve identity and position");
     }
+    auto invalid_type = encoded.value();
+    invalid_type.items[1].items[2].items[2].items[1].items[2].items[6] = list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(invalid_type, "DefaultPivot"),
+        "the now classified PivotChartType must reject unknown enumeration ordinals");
     auto changed_renderer = encoded.value();
     changed_renderer.items[1].items[2].items[2].items[1].items[2].items[1].items[2].items[4] = list_stream::ListValue::raw_atom("0");
     expect(!form_stream::decode_document(changed_renderer, "DefaultPivot"),
@@ -22029,6 +22086,7 @@ int main() {
     try {
         test_data_processor_form_extension_named_round_trip_and_guards();
         test_embedded_chart_dynamic_back_color();
+        test_pivot_chart_types();
         test_complex_chart_back_color_pairs();
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();

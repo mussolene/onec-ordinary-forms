@@ -227,6 +227,9 @@ bool property_value_matches(
                     return typed_value.type_name == "TimeScaleUnitType" &&
                         std::ranges::find(members, typed_value.member) != members.end();
                 }
+                if (descriptor.control_kind == ControlKind::pivot_chart && descriptor.api_name == "PivotChartType")
+                    return typed_value.type_name == "PivotChartType" &&
+                        (typed_value.member == "Column" || typed_value.member == "Column3D");
                 if (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ChartType") {
                     return typed_value.type_name == "ChartType" &&
                         std::ranges::any_of(detail::chart_type_members, [&](const auto& member) { return member.first == typed_value.member; });
@@ -393,6 +396,7 @@ bool property_api_enumeration_matches(
     if ((descriptor.control_kind == ControlKind::chart &&
             (descriptor.api_name == "ChartType" || std::ranges::find(detail::chart_enum_specs, descriptor.api_name,
                 &detail::ChartEnumSpec::property) != detail::chart_enum_specs.end())) ||
+        (descriptor.control_kind == ControlKind::pivot_chart && descriptor.api_name == "PivotChartType") ||
         (descriptor.control_kind == ControlKind::table &&
             std::ranges::find(detail::table_enum_specs, descriptor.api_name, &detail::TableEnumSpec::property) != detail::table_enum_specs.end()) ||
         (descriptor.control_kind == ControlKind::spreadsheet_document_field && descriptor.api_name == "ShowSelection") ||
