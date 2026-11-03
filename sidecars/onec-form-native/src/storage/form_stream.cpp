@@ -431,7 +431,34 @@ model::PropertyValue decoded_spreadsheet_cell_value(const LV& value, std::string
         "SpreadsheetDocumentField typed cell value kind is unsupported");
 }
 
-LV encoded_typed_scalar(const model::PropertyValue& value, std::string_view path) {
+LV encode_control_color(const model::ColorValue& value, std::string_view path);
+model::ColorValue decode_control_color(const LV& value, std::string_view path);
+LV encode_control_font(const model::FontValue& value, std::string_view path);
+model::FontValue decode_control_font(const LV& value, std::string_view path);
+LV encode_control_border(const model::BorderValue& value, std::string_view path, std::optional<model::ControlKind> owner);
+model::BorderValue decode_control_border(const LV& value, std::string_view path, std::optional<model::ControlKind> owner);
+
+constexpr std::string_view typed_color_guid = "9cd510c7-abfc-11d4-9434-004095e12fc7";
+constexpr std::string_view typed_font_guid = "9cd510c8-abfc-11d4-9434-004095e12fc7";
+constexpr std::string_view typed_border_guid = "4d10ca00-111a-4d43-9c96-92cd773716de";
+constexpr std::string_view typed_description_guid = "f5c65050-3bbb-11d5-b988-0050bae0a95d";
+constexpr std::string_view typed_array_guid = "51e7a0d2-530b-11d4-b98a-008048da3034";
+constexpr std::string_view typed_fixed_array_guid = "4500381b-db30-4a10-9db4-990038032acf";
+constexpr std::string_view typed_structure_guid = "4238019d-7e49-4fc9-91db-b6b951d5cf8e";
+constexpr std::string_view typed_fixed_structure_guid = "3ee983d7-ace7-40f9-bb7e-2e916fcddd56";
+constexpr std::string_view typed_map_guid = "3d48feae-a9c6-4c5a-a099-9eb6477630c6";
+constexpr std::string_view typed_fixed_map_guid = "220455ea-6c85-4513-996f-bbe79ed07774";
+
+LV wrap_typed_object(std::string_view guid, LV payload) {
+    std::vector<LV> envelope;
+    envelope.reserve(3);
+    envelope.push_back(string_value("#"));
+    envelope.push_back(raw(std::string(guid)));
+    envelope.push_back(std::move(payload));
+    return list(std::move(envelope));
+}
+
+LV encode_typed_value_node(const model::PropertyValue& value, std::string_view path) {
     if (std::holds_alternative<model::UndefinedValue>(value)) return list({string_value("U")});
     if (std::holds_alternative<model::NullValue>(value)) return list({string_value("L")});
     if (const auto* type = std::get_if<model::PlatformTypeValue>(&value)) {
@@ -444,11 +471,58 @@ LV encoded_typed_scalar(const model::PropertyValue& value, std::string_view path
         const auto canonical = uuid_atom(raw(uuid->canonical), path).canonical;
         return list({string_value("#"), raw("fc01b5df-97fe-449b-83d4-218a090e681e"), raw(canonical)});
     }
+    if (const auto* color = std::get_if<model::ColorValue>(&value))
+        return list({string_value("#"), raw(std::string(typed_color_guid)), raw("2"), encode_control_color(*color, path)});
+    if (const auto* font = std::get_if<model::FontValue>(&value))
+        return list({string_value("#"), raw(std::string(typed_font_guid)), raw("1"), encode_control_font(*font, path), raw("0")});
+    if (const auto* border = std::get_if<model::BorderValue>(&value))
+        return list({string_value("#"), raw(std::string(typed_border_guid)), raw("1"), encode_control_border(*border, path, model::ControlKind::chart), raw("0")});
+    if (const auto* description = std::get_if<model::TypeDomainPatternValue>(&value))
+        return wrap_typed_object(typed_description_guid, list_stream::parse(value_codec::encode_type_domain(*description)));
+    if (const auto* array = std::get_if<model::ArrayValue>(&value)) {
+        std::vector<LV> items{raw(std::to_string(array->items.size()))};
+        items.reserve(array->items.size() + 1);
+        for (const auto& item : array->items) items.push_back(encode_typed_value_node(item, path));
+        return wrap_typed_object(array->fixed ? typed_fixed_array_guid : typed_array_guid, list(std::move(items)));
+    }
+    if (const auto* structure = std::get_if<model::StructureValue>(&value)) {
+        std::vector<LV> fields{raw(std::to_string(structure->fields.size()))};
+        fields.reserve(structure->fields.size() + 1);
+        for (const auto& field : structure->fields) {
+            std::vector<LV> pair;
+            pair.push_back(list({string_value("S"), string_value(field.name)}));
+            pair.push_back(encode_typed_value_node(field.value, path));
+            fields.push_back(list(std::move(pair)));
+        }
+        return wrap_typed_object(structure->fixed ? typed_fixed_structure_guid : typed_structure_guid, list(std::move(fields)));
+    }
+    if (const auto* map = std::get_if<model::MapValue>(&value)) {
+        std::vector<LV> entries{raw(std::to_string(map->entries.size()))};
+        entries.reserve(map->entries.size() + 1);
+        for (const auto& entry : map->entries) {
+            std::vector<LV> pair;
+            pair.push_back(encode_typed_value_node(entry.key, path));
+            pair.push_back(encode_typed_value_node(entry.value, path));
+            entries.push_back(list(std::move(pair)));
+        }
+        return wrap_typed_object(map->fixed ? typed_fixed_map_guid : typed_map_guid, list(std::move(entries)));
+    }
     if (const auto* integer = std::get_if<std::int64_t>(&value)) return list({string_value("N"), raw(std::to_string(*integer))});
     return encoded_spreadsheet_cell_value(value, path);
 }
 
-std::optional<model::PropertyValue> decoded_typed_scalar(const LV& value, std::string_view path) {
+LV encoded_typed_value(const model::PropertyValue& value, std::string_view path) {
+    model::TypedValueBudget budget;
+    if (!model::validate_typed_value(value, budget))
+        fail("OOF1122", std::string(path), "supported bounded named value", {}, "Typed value is invalid or exceeds the resource budget");
+    return encode_typed_value_node(value, path);
+}
+
+std::optional<model::PropertyValue> decode_typed_value_node(const LV& value, std::string_view path,
+    std::size_t depth, model::TypedValueBudget& budget) {
+    if (depth > model::max_typed_value_depth || budget.nodes >= model::max_typed_value_nodes)
+        fail("OOF1122", std::string(path), "bounded named value tree", {}, "Typed value exceeds the resource budget");
+    ++budget.nodes;
     require_list(value, path);
     if (value.items.empty()) fail("OOF1114", std::string(path), "typed Chart key", "empty", "Chart key is empty");
     const auto kind = string_atom(value.items[0], child_path(path, 0));
@@ -469,14 +543,97 @@ std::optional<model::PropertyValue> decoded_typed_scalar(const LV& value, std::s
         return model::PropertyValue{model::PlatformTypeValue{std::string(it->name)}};
     }
     if (kind == "#") {
+        const auto type = uuid_atom(at(value, 1, path), child_path(path, 1)).canonical;
+        if (type == "fc01b5df-97fe-449b-83d4-218a090e681e") {
+            require_arity(value, 3, path);
+            return model::PropertyValue{uuid_atom(value.items[2], child_path(path, 2))};
+        }
+        if (type == typed_color_guid) {
+            require_arity(value, 4, path);
+            require_raw_constant(value.items[2], "2", child_path(path, 2));
+            return model::PropertyValue{decode_control_color(value.items[3], child_path(path, 3))};
+        }
+        if (type == typed_font_guid || type == typed_border_guid) {
+            require_arity(value, 5, path);
+            require_raw_constant(value.items[2], "1", child_path(path, 2));
+            require_raw_constant(value.items[4], "0", child_path(path, 4));
+            if (type == typed_font_guid) return model::PropertyValue{decode_control_font(value.items[3], child_path(path, 3))};
+            return model::PropertyValue{decode_control_border(value.items[3], child_path(path, 3), model::ControlKind::chart)};
+        }
+        const bool array = type == typed_array_guid || type == typed_fixed_array_guid;
+        const bool structure = type == typed_structure_guid || type == typed_fixed_structure_guid;
+        const bool map = type == typed_map_guid || type == typed_fixed_map_guid;
+        if (type != typed_description_guid && !array && !structure && !map) return std::nullopt;
         require_arity(value, 3, path);
-        const auto type = uuid_atom(value.items[1], child_path(path, 1)).canonical;
-        if (type != "fc01b5df-97fe-449b-83d4-218a090e681e") return std::nullopt;
-        return model::PropertyValue{uuid_atom(value.items[2], child_path(path, 2))};
+        const auto& payload = value.items[2];
+        const auto payload_path = child_path(path, 2);
+        if (type == typed_description_guid) {
+            require_list(payload, payload_path);
+            const auto entries = payload.items.empty() ? 0 : payload.items.size() - 1;
+            if (entries > model::max_typed_value_nodes - budget.nodes)
+                fail("OOF1122", payload_path, "bounded TypeDescription", {}, "TypeDescription exceeds the resource budget");
+            budget.nodes += entries;
+            return model::PropertyValue{type_domain(payload, payload_path)};
+        }
+        const auto count = integer_atom<std::size_t>(at(payload, 0, payload_path), child_path(payload_path, 0));
+        if (count > model::max_typed_value_nodes - budget.nodes ||
+            (map && count > (model::max_typed_value_nodes - budget.nodes) / 2))
+            fail("OOF1122", payload_path, "bounded collection size", {}, "Typed collection exceeds the resource budget");
+        require_arity(payload, count + 1, payload_path);
+        if (array) {
+            model::ArrayValue result; result.fixed = type == typed_fixed_array_guid;
+            result.items.reserve(count);
+            for (std::size_t index = 0; index < count; ++index) {
+                auto item = decode_typed_value_node(payload.items[index + 1], child_path(payload_path, index + 1), depth + 1, budget);
+                if (!item) fail("OOF1122", child_path(payload_path, index + 1), "supported nested value", {}, "Array contains an unsupported value type");
+                result.items.push_back(std::move(*item));
+            }
+            return model::PropertyValue{std::move(result)};
+        }
+        if (structure) {
+            model::StructureValue result; result.fixed = type == typed_fixed_structure_guid;
+            result.fields.reserve(count);
+            for (std::size_t index = 0; index < count; ++index) {
+                const auto& pair = payload.items[index + 1];
+                const auto pair_path = child_path(payload_path, index + 1);
+                require_arity(pair, 2, pair_path);
+                require_arity(pair.items[0], 2, child_path(pair_path, 0));
+                if (string_atom(pair.items[0].items[0], pair_path) != "S")
+                    fail("OOF1114", pair_path, "string Structure field name", {}, "Structure field key is not a string");
+                auto item = decode_typed_value_node(pair.items[1], child_path(pair_path, 1), depth + 1, budget);
+                if (!item) fail("OOF1122", child_path(pair_path, 1), "supported nested value", {}, "Structure contains an unsupported value type");
+                result.fields.push_back({string_atom(pair.items[0].items[1], pair_path), std::move(*item)});
+            }
+            return model::PropertyValue{std::move(result)};
+        }
+        model::MapValue result; result.fixed = type == typed_fixed_map_guid;
+        result.entries.reserve(count);
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto& pair = payload.items[index + 1];
+            const auto pair_path = child_path(payload_path, index + 1);
+            require_arity(pair, 2, pair_path);
+            auto key = decode_typed_value_node(pair.items[0], child_path(pair_path, 0), depth + 1, budget);
+            if (!key) fail("OOF1122", child_path(pair_path, 0), "supported nested key", {}, "Map contains an unsupported key type");
+            auto item = decode_typed_value_node(pair.items[1], child_path(pair_path, 1), depth + 1, budget);
+            if (!item) fail("OOF1122", child_path(pair_path, 1), "supported nested value", {}, "Map contains an unsupported value type");
+            result.entries.push_back({std::move(*key), std::move(*item)});
+        }
+        return model::PropertyValue{std::move(result)};
     }
     if (kind == "S" || kind == "N" || kind == "B" || kind == "D")
         return decoded_spreadsheet_cell_value(value, path);
     return std::nullopt;
+}
+
+std::optional<model::PropertyValue> decoded_typed_value(const LV& value, std::string_view path) {
+    model::TypedValueBudget budget;
+    auto result = decode_typed_value_node(value, path, 0, budget);
+    if (result) {
+        model::TypedValueBudget validation_budget;
+        if (!model::validate_typed_value(*result, validation_budget))
+            fail("OOF1114", std::string(path), "supported bounded named value", {}, "Typed value contains invalid named fields");
+    }
+    return result;
 }
 
 bool spreadsheet_cell_value_is_default(const model::SpreadsheetDocumentCellValue& typed) {
@@ -6782,7 +6939,7 @@ LV encode_chart_family_property(const model::PropertyValue& value, const model::
             if (const auto* text = std::get_if<std::string>(&value)) return string_value(*text);
             break;
         case ValueCodec::localized_text: return encoded_localized_text(value, path, false);
-        case ValueCodec::typed_scalar: return encoded_typed_scalar(value, path);
+        case ValueCodec::typed_value: return encoded_typed_value(value, path);
         case ValueCodec::color:
             if (const auto* color = std::get_if<model::ColorValue>(&value)) return encode_control_color(*color, path);
             break;
@@ -6813,9 +6970,9 @@ model::PropertyValue decode_chart_family_property(const LV& record, const model:
         }
         case ValueCodec::string: return string_atom(record, path);
         case ValueCodec::localized_text: return decoded_localized_text(record, path, false);
-        case ValueCodec::typed_scalar: {
-            const auto value = decoded_typed_scalar(record, path);
-            if (!value) fail("OOF1115", std::string(path), "named typed scalar", {}, "Unsupported chart family scalar");
+        case ValueCodec::typed_value: {
+            const auto value = decoded_typed_value(record, path);
+            if (!value) fail("OOF1115", std::string(path), "named typed value", {}, "Unsupported chart family scalar");
             return *value;
         }
         case ValueCodec::color: return decode_control_color(record, path);
@@ -6916,7 +7073,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         row[3] = encoded_localized_text(item.text, "$/Chart/Series/Text", false);
         row[4] = raw("1");
         row[7] = raw(std::to_string(item.id.value()));
-        row[9] = encoded_typed_scalar(item.value, "$/Chart/Series/Value");
+        row[9] = encoded_typed_value(item.value, "$/Chart/Series/Value");
         rows.insert(rows.end(), row.begin(), row.end());
     }
     append(std::move(rows));
@@ -6925,7 +7082,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         summary_row[3] = encoded_localized_text(*chart.summary_series.text, "$/Chart/SummarySeries/Text");
         summary_row[4] = raw("1");
     }
-    summary_row[9] = encoded_typed_scalar(chart.summary_series.value, "$/Chart/SummarySeries/Value");
+    summary_row[9] = encoded_typed_value(chart.summary_series.value, "$/Chart/SummarySeries/Value");
     constexpr std::array line_color_types{0, 1, 14, 15, 26, 33, 35, 43, 44};
     if (std::ranges::find(line_color_types, chart_type) != line_color_types.end()) {
         summary_row[0].items[2].items[0] = raw("8874375");
@@ -6939,7 +7096,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     for (std::size_t index = 0; index < point_count; ++index) {
         const auto& item = chart.points[index];
         const auto row = canonical_chart_series_defaults();
-        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_resolved_color(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], encoded_typed_scalar(item.value, "$/Chart/Points/Value"), raw("0")});
+        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_resolved_color(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], encoded_typed_value(item.value, "$/Chart/Points/Value"), raw("0")});
     }
     auto middle = canonical_chart_middle_defaults();
     middle[2] = raw(std::to_string(chart_type));
@@ -6955,8 +7112,8 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
         for (const auto& point : chart.points) {
             const auto found = value_index.find(ChartValueKey{series.id.value(), point.id.value()});
             if (found == value_index.end()) fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", "missing pair", "Chart matrix contains a missing pair");
-            append({encoded_typed_scalar(found->second->value, "$/Chart/Values/Value"),
-                encoded_typed_scalar(found->second->details, "$/Chart/Values/Details"),
+            append({encoded_typed_value(found->second->value, "$/Chart/Values/Value"),
+                encoded_typed_value(found->second->details, "$/Chart/Values/Details"),
                 string_value(found->second->tooltip)});
         }
     }
@@ -7386,7 +7543,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         model::ChartSeries series;
         series.id = model::ObjectId{series_id};
         series.text = decoded_localized_text(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3), false);
-        if (auto value = decoded_typed_scalar(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) series.value = std::move(*value);
+        if (auto value = decoded_typed_value(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) series.value = std::move(*value);
         payload.series.push_back(std::move(series));
     }
     const auto points_start = points_count_offset + 1;
@@ -7396,7 +7553,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         model::ChartPoint point;
         point.id = model::ObjectId{point_id};
         point.text = decoded_single_language_text(at(info, row_offset, info_path), child_path(info_path, row_offset));
-        if (auto value = decoded_typed_scalar(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) point.value = std::move(*value);
+        if (auto value = decoded_typed_value(at(info, row_offset + 9, info_path), child_path(info_path, row_offset + 9))) point.value = std::move(*value);
         payload.points.push_back(std::move(point));
     }
     std::uint64_t max_series_id = 1;
@@ -7431,8 +7588,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             value.tooltip = string_atom(at(info, cell_offset + 2, info_path), child_path(info_path, cell_offset + 2));
             value.series_ref = payload.series[series].id;
             value.point_ref = payload.points[point].id;
-            const auto cell_value = decoded_typed_scalar(at(info, cell_offset, info_path), child_path(info_path, cell_offset));
-            const auto details = decoded_typed_scalar(at(info, cell_offset + 1, info_path), child_path(info_path, cell_offset + 1));
+            const auto cell_value = decoded_typed_value(at(info, cell_offset, info_path), child_path(info_path, cell_offset));
+            const auto details = decoded_typed_value(at(info, cell_offset + 1, info_path), child_path(info_path, cell_offset + 1));
             value.value = cell_value.value_or(model::PropertyValue{model::UndefinedValue{}});
             value.details = details.value_or(model::PropertyValue{model::UndefinedValue{}});
             payload.values.push_back(std::move(value));
@@ -7524,7 +7681,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     if (explicit_summary_text) payload.summary_series.text = summary_text;
     else require_exact(at(info, summary_offset + 3, info_path), canonical_chart_series_defaults()[3],
         child_path(info_path, summary_offset + 3), "Implicit SummarySeries Text must match the native default");
-    const auto summary_value = decoded_typed_scalar(at(info, summary_offset + 9, info_path), child_path(info_path, summary_offset + 9));
+    const auto summary_value = decoded_typed_value(at(info, summary_offset + 9, info_path), child_path(info_path, summary_offset + 9));
     if (!summary_value) fail("OOF1122", child_path(info_path, summary_offset + 9), "supported SummarySeries Value", "unsupported", "SummarySeries Value type is unsupported");
     payload.summary_series.value = *summary_value;
     for (std::size_t index = 0; index <= series_size; ++index) {
@@ -7940,17 +8097,17 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
         for (const auto offset : {std::size_t{0}, std::size_t{1}}) {
             const auto slot = data_start + cell * 3 + offset;
-            if (!decoded_typed_scalar(info.items[slot], child_path(info_path, slot)))
+            if (!decoded_typed_value(info.items[slot], child_path(info_path, slot)))
                 shape_info.items[slot] = normalized_expected_info.items[slot];
         }
     }
     for (std::size_t i = 0; i < series_count; ++i) {
         const auto slot = std::size_t{5} + i * 11 + 9;
-        if (!decoded_typed_scalar(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
+        if (!decoded_typed_value(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
     }
     for (std::size_t i = 0; i < point_count; ++i) {
         const auto slot = points_start + i * 11 + 9;
-        if (!decoded_typed_scalar(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
+        if (!decoded_typed_value(info.items[slot], child_path(info_path, slot))) shape_info.items[slot] = normalized_expected_info.items[slot];
     }
     for (const auto offset : {std::size_t{31}, std::size_t{32}, std::size_t{33}}) {
         const auto index = middle_start + offset;
@@ -9713,11 +9870,12 @@ DecodedControl decode_input_field(
         for (std::size_t index = 0; index < input_bounds.size(); ++index) {
             const auto& primary = at(payload, 19 + index, payload_path);
             const auto& secondary = at(pair, 1 + index, child_path(child_path(child_path(info_path, 3), 1), 1));
+            input_bounds[index] = decoded_typed_value(primary, info_path);
+            const auto secondary_value = decoded_typed_value(secondary, info_path);
+            if (!input_bounds[index] || !secondary_value)
+                fail("OOF1122", info_path, "supported named InputField bound", {}, "Unsupported InputField bound value");
             if (list_stream::dump_compact(primary) != list_stream::dump_compact(secondary))
                 fail("OOF1114", info_path, "matching InputField bound copies", {}, "InputField bound copies differ");
-            input_bounds[index] = decoded_typed_scalar(primary, info_path);
-            if (!input_bounds[index])
-                fail("OOF1122", info_path, "supported named InputField bound", {}, "Unsupported InputField bound value");
         }
     }
     LV normalized_info = info;
@@ -11387,7 +11545,7 @@ LV encode_input_field(
         if (bound == nullptr) continue;
         if (!is_supported_input_numeric_type_domain(attribute->type) || explicit_bool(control.properties(), "ListChoiceMode", false))
             fail("OOF1122", "$/InputField/" + std::string(name), "numeric InputField with paired bounds", {}, "InputField bound is outside supported profile");
-        const auto value = encoded_typed_scalar(bound->value, "$/InputField/" + std::string(name));
+        const auto value = encoded_typed_value(bound->value, "$/InputField/" + std::string(name));
         input_info.items[2].items[0].items[19 + index] = value;
         input_info.items[3].items[1].items[1].items[1 + index] = value;
     }

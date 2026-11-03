@@ -526,7 +526,29 @@ struct CommandBarButton {
     friend bool operator==(const CommandBarButton&, const CommandBarButton&) = default;
 };
 
-using PropertyValue = std::variant<
+struct PropertyValue;
+struct StructureEntry;
+struct MapEntry;
+
+struct ArrayValue {
+    std::vector<PropertyValue> items;
+    bool fixed = false;
+    friend bool operator==(const ArrayValue&, const ArrayValue&) = default;
+};
+
+struct StructureValue {
+    std::vector<StructureEntry> fields;
+    bool fixed = false;
+    friend bool operator==(const StructureValue&, const StructureValue&) = default;
+};
+
+struct MapValue {
+    std::vector<MapEntry> entries;
+    bool fixed = false;
+    friend bool operator==(const MapValue&, const MapValue&);
+};
+
+using PropertyValueVariant = std::variant<
     UndefinedValue,
     NullValue,
     bool,
@@ -560,7 +582,38 @@ using PropertyValue = std::variant<
     ChartEquationAreaRef,
     ChartCollectionRef,
     FormItemCollectionRef,
-    CommandBarButtonRef>;
+    CommandBarButtonRef,
+    ArrayValue,
+    StructureValue,
+    MapValue>;
+
+struct PropertyValue : PropertyValueVariant {
+    using Variant = PropertyValueVariant;
+    using Variant::Variant;
+    using Variant::operator=;
+};
+
+struct StructureEntry {
+    std::string name;
+    PropertyValue value;
+    friend bool operator==(const StructureEntry&, const StructureEntry&) = default;
+};
+
+struct MapEntry {
+    PropertyValue key;
+    PropertyValue value;
+    friend bool operator==(const MapEntry&, const MapEntry&) = default;
+};
+
+inline constexpr std::size_t max_typed_value_depth = 64;
+inline constexpr std::size_t max_typed_value_nodes = 1000000;
+
+struct TypedValueBudget {
+    std::size_t nodes = 0;
+};
+
+[[nodiscard]] bool validate_typed_value(const PropertyValue& value, TypedValueBudget& budget) noexcept;
+[[nodiscard]] std::optional<std::string> typed_map_key(const PropertyValue& value);
 
 struct PropertyEntry {
     PropertyId id{};

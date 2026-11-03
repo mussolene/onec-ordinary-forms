@@ -996,37 +996,147 @@ model::PictureRef parse_picture_reference(
         parse_object_id(node_text(node), node, property, object_id)}, std::nullopt};
 }
 
-model::PropertyValue parse_typed_scalar(xmlNodePtr field, std::string_view owner) {
-        const auto kind = node_name(field);
-        if (kind == "String") return node_text(field);
-        if (kind == "Number") return model::DecimalValue{canonical_decimal(node_text(field), field, kind, owner)};
-        if (kind == "Boolean") return parse_boolean(node_text(field), field, kind, owner);
-        if (kind == "Date") { const auto text = std::string(trim_ascii(node_text(field))); (void)storage::value_codec::date_to_platform(text); return model::DateValue{text}; }
-        if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
-        if (kind == "Null" && node_text(field).empty()) return model::NullValue{};
-        if (kind == "UUID") return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(field))))};
-        if (kind == "Type") {
-            const auto name = std::string(trim_ascii(node_text(field)));
-            const auto descriptors = mm::platform_value_type_descriptors();
-            if (std::ranges::find(descriptors, name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
-                fail("OOF2003", field, std::string(owner), "Type", "known platform type", name, "Unsupported platform type value");
-            return model::PlatformTypeValue{name};
+void consume_typed_value_budget(model::TypedValueBudget& budget, std::size_t depth,
+    xmlNodePtr node, std::string_view owner) {
+    if (depth > model::max_typed_value_depth || budget.nodes >= model::max_typed_value_nodes)
+        fail("OOF2003", node, std::string(owner), "Value", "bounded typed value graph", {},
+            "Typed values exceed the document resource budget");
+    ++budget.nodes;
+}
+
+void require_typed_container(xmlNodePtr node, std::string_view owner, bool named_field = false) {
+    for (auto* attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
+        if (!named_field || std::string_view(reinterpret_cast<const char*>(attribute->name)) != "name")
+            fail("OOF2003", node, std::string(owner), node_name(node), "named typed value content", "attribute",
+                "Typed value container has an unsupported attribute");
+    }
+    for (auto* child = node->children; child != nullptr; child = child->next) {
+        if ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) && child->content &&
+            !trim_ascii(reinterpret_cast<const char*>(child->content)).empty())
+            fail("OOF2003", node, std::string(owner), node_name(node), "typed child elements", "text",
+                "Typed value container cannot contain direct text");
+    }
+}
+
+xmlNodePtr single_typed_child(xmlNodePtr node, std::string_view owner, bool named_field = false) {
+    require_typed_container(node, owner, named_field);
+    xmlNodePtr field = nullptr;
+    for (auto* child = node->children; child != nullptr; child = child->next) {
+        if (child->type != XML_ELEMENT_NODE) continue;
+        if (field) fail("OOF2003", node, std::string(owner), node_name(node), "one typed value", "multiple",
+            "Typed value wrapper requires exactly one child");
+        field = child;
+    }
+    if (!field) fail("OOF2003", node, std::string(owner), node_name(node), "one typed value", "missing",
+        "Typed value wrapper requires exactly one child");
+    return field;
+}
+
+model::PropertyValue parse_typed_node(xmlNodePtr field, std::string_view owner,
+    model::TypedValueBudget& budget, std::size_t depth = 0) {
+    consume_typed_value_budget(budget, depth, field, owner);
+    const auto kind = node_name(field);
+    if (kind == "Color") return parse_color(field);
+    if (kind == "Font") return parse_font(field);
+    if (kind == "Border") return parse_border(field);
+    if (kind == "TypeDescription") {
+        for (auto* child = field->children; child != nullptr; child = child->next) {
+            if (child->type != XML_ELEMENT_NODE) continue;
+            if (budget.nodes >= model::max_typed_value_nodes)
+                fail("OOF2003", field, std::string(owner), kind, "bounded TypeDescription", {},
+                    "TypeDescription exceeds the document resource budget");
+            ++budget.nodes;
         }
-
-        fail("OOF2003", field, std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", kind, "Unsupported Chart value type");
+        return parse_type_domain(field);
     }
-
-model::PropertyValue parse_typed_value(xmlNodePtr node, std::string_view owner) {
-        const auto fields = element_children(node);
-        if (fields.size() != 1) fail("OOF2003", node, std::string(owner), "Value", "one typed value", std::to_string(fields.size()), "Chart key requires one typed value");
-        return parse_typed_scalar(fields.front(), owner);
+    if (kind == "Array" || kind == "FixedArray") {
+        require_typed_container(field, owner);
+        model::ArrayValue value;
+        value.fixed = kind == "FixedArray";
+        for (auto* child = field->children; child != nullptr; child = child->next) {
+            if (child->type != XML_ELEMENT_NODE) continue;
+            if (node_name(child) != "Item") fail("OOF2003", child, std::string(owner), kind, "Item", node_name(child),
+                "Array requires named Item wrappers");
+            value.items.push_back(parse_typed_node(single_typed_child(child, owner), owner, budget, depth + 1));
+        }
+        return model::PropertyValue{std::move(value)};
     }
+    if (kind == "Structure" || kind == "FixedStructure") {
+        require_typed_container(field, owner);
+        model::StructureValue value;
+        value.fixed = kind == "FixedStructure";
+        std::set<std::string> names;
+        for (auto* child = field->children; child != nullptr; child = child->next) {
+            if (child->type != XML_ELEMENT_NODE) continue;
+            if (node_name(child) != "Field") fail("OOF2003", child, std::string(owner), kind, "Field", node_name(child),
+                "Structure requires named Field wrappers");
+            auto* nested = single_typed_child(child, owner, true);
+            auto parsed = parse_typed_node(nested, owner, budget, depth + 1);
+            auto name = required_attribute(child, "name", owner);
+            if (name.empty() || !names.insert(name).second)
+                fail("OOF2003", child, std::string(owner), kind, "unique nonempty field name", name,
+                    "Structure fields require unique nonempty names");
+            value.fields.push_back({std::move(name), std::move(parsed)});
+        }
+        return model::PropertyValue{std::move(value)};
+    }
+    if (kind == "Map" || kind == "FixedMap") {
+        require_typed_container(field, owner);
+        model::MapValue value;
+        value.fixed = kind == "FixedMap";
+        for (auto* child = field->children; child != nullptr; child = child->next) {
+            if (child->type != XML_ELEMENT_NODE) continue;
+            if (node_name(child) != "Entry") fail("OOF2003", child, std::string(owner), kind, "Entry", node_name(child),
+                "Map requires named Entry wrappers");
+            require_typed_container(child, owner);
+            xmlNodePtr key = nullptr;
+            xmlNodePtr mapped = nullptr;
+            for (auto* part = child->children; part != nullptr; part = part->next) {
+                if (part->type != XML_ELEMENT_NODE) continue;
+                if (!key && node_name(part) == "Key") key = part;
+                else if (key && !mapped && node_name(part) == "Value") mapped = part;
+                else fail("OOF2003", part, std::string(owner), kind, "one Key followed by one Value", node_name(part),
+                    "Map Entry requires an ordered Key and Value pair");
+            }
+            if (!key || !mapped) fail("OOF2003", child, std::string(owner), kind, "Key and Value", "missing",
+                "Map Entry requires both Key and Value");
+            auto parsed_key = parse_typed_node(single_typed_child(key, owner), owner, budget, depth + 1);
+            auto parsed_value = parse_typed_node(single_typed_child(mapped, owner), owner, budget, depth + 1);
+            value.entries.push_back({std::move(parsed_key), std::move(parsed_value)});
+        }
+        return model::PropertyValue{std::move(value)};
+    }
+    if (field->properties || !element_children(field).empty())
+        fail("OOF2003", field, std::string(owner), kind, "plain typed scalar", "structured content",
+            "Primitive typed value cannot contain attributes or children");
+    if (kind == "String") return node_text(field);
+    if (kind == "Number") return model::DecimalValue{canonical_decimal(node_text(field), field, kind, owner)};
+    if (kind == "Boolean") return parse_boolean(node_text(field), field, kind, owner);
+    if (kind == "Date") { const auto text = std::string(trim_ascii(node_text(field))); (void)storage::value_codec::date_to_platform(text); return model::DateValue{text}; }
+    if (kind == "Undefined" && node_text(field) == "undefined") return model::UndefinedValue{};
+    if (kind == "Null" && node_text(field).empty()) return model::NullValue{};
+    if (kind == "UUID") return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(field))))};
+    if (kind == "Type") {
+        const auto name = std::string(trim_ascii(node_text(field)));
+        const auto descriptors = mm::platform_value_type_descriptors();
+        if (std::ranges::find(descriptors, name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
+            fail("OOF2003", field, std::string(owner), "Type", "known platform type", name, "Unsupported platform type value");
+        return model::PlatformTypeValue{name};
+    }
+    fail("OOF2003", field, std::string(owner), "Value", "supported named typed value", kind,
+        "Unsupported typed value kind");
+}
+
+model::PropertyValue parse_typed_value(xmlNodePtr node, std::string_view owner, model::TypedValueBudget& budget) {
+    return parse_typed_node(single_typed_child(node, owner), owner, budget);
+}
 
 
 model::PropertyValue parse_property_value(
     xmlNodePtr node,
     mm::ValueCodec codec,
-    std::string_view object_id
+    std::string_view object_id,
+    model::TypedValueBudget& typed_budget
 ) {
     const std::string property = node_name(node);
     switch (codec) {
@@ -1039,8 +1149,8 @@ model::PropertyValue parse_property_value(
                 "Runtime page selection cannot be parsed from XML");
         case mm::ValueCodec::owned_panel:
             fail("OOF2003", node, std::string(object_id), property, "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
-        case mm::ValueCodec::typed_scalar:
-            return parse_typed_value(node, object_id);
+        case mm::ValueCodec::typed_value:
+            return parse_typed_value(node, object_id, typed_budget);
         case mm::ValueCodec::unclassified:
             fail("OOF2003", node, std::string(object_id), property, "classified value codec", "unclassified", "Unclassified properties are not admitted to the product model");
         case mm::ValueCodec::boolean:
@@ -1405,7 +1515,7 @@ bool valid_picture_path(std::string_view path, model::PictureFormat format) {
     return false;
 }
 
-model::ChartTrendline parse_chart_trendline(xmlNodePtr node, model::ObjectId id, std::string_view owner) {
+model::ChartTrendline parse_chart_trendline(xmlNodePtr node, model::ObjectId id, std::string_view owner, model::TypedValueBudget& typed_budget) {
     if (node->properties) fail("OOF2003", node, std::string(owner), "Trendline", "ordered named Trendline without attributes", {}, "Trendline does not expose runtime identity attributes");
     model::ChartTrendline trend; trend.id = id;
     std::set<std::string> seen;
@@ -1422,9 +1532,9 @@ model::ChartTrendline parse_chart_trendline(xmlNodePtr node, model::ObjectId id,
                 const auto equation_fields = mm::chart_label_area_property_descriptors();
                 const auto definition = std::ranges::find(equation_fields, property_name, &mm::ChartScalePropertyDescriptor::name);
                 if (definition == equation_fields.end() || !equation_seen.insert(property_name).second) fail("OOF2003", property, std::string(owner), property_name, "unique named EquationArea property", {}, "Invalid EquationArea property");
-                trend.equation_area.set_explicit(definition->id, parse_property_value(property, definition->value_codec, owner));
+                trend.equation_area.set_explicit(definition->id, parse_property_value(property, definition->value_codec, owner, typed_budget));
             }
-        } else trend.properties.set_explicit(field->id, parse_property_value(child, field->value_codec, owner));
+        } else trend.properties.set_explicit(field->id, parse_property_value(child, field->value_codec, owner, typed_budget));
     }
     return trend;
 }
@@ -1433,7 +1543,7 @@ void consume_chart_budget(std::size_t& budget, std::size_t count, xmlNodePtr nod
         fail("OOF2003", node, std::string(owner), "Chart", "bounded document Chart collections", {}, "Chart collections exceed the document resource budget");
     budget += count;
 }
-void parse_chart_series_fields(xmlNodePtr node, mm::ChartSeriesObject object, std::string_view owner, std::size_t& budget) {
+void parse_chart_series_fields(xmlNodePtr node, mm::ChartSeriesObject object, std::string_view owner, std::size_t& budget, model::TypedValueBudget& typed_budget) {
     std::set<std::string> seen;
     for (auto* child : element_children(node)) {
         const auto name = node_name(child);
@@ -1450,12 +1560,12 @@ void parse_chart_series_fields(xmlNodePtr node, mm::ChartSeriesObject object, st
                     if (item->trendlines.size() >= model::max_chart_collection_items) fail("OOF2003", element, std::string(owner), name, "bounded Trendlines collection", {}, "Trendlines exceeds supported collection size");
                     consume_chart_budget(budget, 1, element, owner);
                     const auto id = model::ObjectId{item->next_trendline_id++};
-                    item->trendlines.push_back(parse_chart_trendline(element, id, owner));
+                    item->trendlines.push_back(parse_chart_trendline(element, id, owner, typed_budget));
                 }
             }, object);
         } else {
             if (field->storage == mm::ChartSeriesStorage::computed) fail("OOF2003", child, std::string(owner), name, "derived Series property", {}, "Computed Series properties are reconstructed from the named owner and GraphicalRepresentationType");
-            mm::set_chart_series_property_value(object, *field, parse_property_value(child, field->value_codec, owner));
+            mm::set_chart_series_property_value(object, *field, parse_property_value(child, field->value_codec, owner, typed_budget));
         }
     }
 }
@@ -1497,7 +1607,7 @@ public:
                     if (descriptor == nullptr || descriptor->surface != mm::PropertySurface::control_payload ||
                         descriptor->persistence != mm::PersistenceClass::persisted_editable)
                         fail("OOF2003", property, form_id, property_name, "supported main Panel property", property_name, "Unsupported main Panel property");
-                    auto value = parse_property_value(property, descriptor->value_codec, form_id);
+                    auto value = parse_property_value(property, descriptor->value_codec, form_id, typed_budget_);
                     if (!equals_descriptor_default(*descriptor, value))
                         form.panel.properties.set_explicit(descriptor->id, std::move(value));
                 }
@@ -1517,7 +1627,7 @@ public:
                     fail("OOF2003", child, form_id, name, "declared Form property", name, "Form property is not declared by the executable metamodel");
                 }
                 model::PropertyValue value =
-                    parse_property_value(child, descriptor->value_codec, form_id);
+                    parse_property_value(child, descriptor->value_codec, form_id, typed_budget_);
                 if (!equals_descriptor_default(*descriptor, value)) {
                     form.properties.set_explicit(descriptor->id, std::move(value));
                 }
@@ -1902,7 +2012,7 @@ private:
                                     const auto definition = std::ranges::find(fields, title_name, &mm::ChartScalePropertyDescriptor::name);
                                     if (definition == fields.end() || !title_seen.insert(title_name).second)
                                         fail("OOF2003", title_node, id_text, title_name, "unique named ChartLabelArea property", {}, "Invalid ChartLabelArea property");
-                                    auto value = parse_property_value(title_node, definition->value_codec, id_text);
+                                    auto value = parse_property_value(title_node, definition->value_codec, id_text, typed_budget_);
                                     mm::set_chart_scale_property_value(scale, *definition, std::move(value));
                                 }
                                 continue;
@@ -1919,7 +2029,7 @@ private:
                                 if (node_name(children[0]) == "Line") value = parse_line(children[0]);
                                 else if (node_name(children[0]) == "Undefined" && node_text(children[0]) == "undefined") value = model::UndefinedValue{};
                                 else fail("OOF2003", value_node, id_text, value_name, "Line or Undefined", {}, "Invalid nullable Line");
-                            } else value = parse_property_value(value_node, definition->value_codec, id_text);
+                            } else value = parse_property_value(value_node, definition->value_codec, id_text, typed_budget_);
                             if (const auto* n = std::get_if<model::DecimalValue>(&value); n && definition->numeric_policy == mm::ChartScaleNumericPolicy::nonnegative_decimal && n->canonical.starts_with('-'))
                                 fail("OOF2003", value_node, id_text, value_name, "nonnegative decimal", n->canonical, "Negative ScaleStep");
                             if (definition->value_codec == mm::ValueCodec::enumeration) {
@@ -1931,7 +2041,7 @@ private:
                             mm::set_chart_scale_property_value(scale, *definition, std::move(value));
                         }
                     } else if (kind == model::ChartAreaKind::title && field_name == "Text") {
-                        auto text = parse_property_value(field, mm::ValueCodec::localized_text, id_text);
+                        auto text = parse_property_value(field, mm::ValueCodec::localized_text, id_text, typed_budget_);
                         control.properties().set_explicit(model::PropertyId::from_name("Title"), std::move(text));
                     } else if (field_name == "Placement") {
                         parsed.placement = node_text(field);
@@ -1952,7 +2062,7 @@ private:
                             (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
                             parsed.explicit_geometry[1 + descriptor->coordinate_offset] = true;
                         } else if (const auto* descriptor = kind == model::ChartAreaKind::plot ? mm::find_chart_plot_format(id) : nullptr) {
-                            auto value = parse_property_value(field, descriptor->value_codec, id_text);
+                            auto value = parse_property_value(field, descriptor->value_codec, id_text, typed_budget_);
                             if (descriptor->text) parsed.*(descriptor->text) = std::move(value);
                             else {
                                 const auto& enumeration = std::get<model::EnumerationValue>(value);
@@ -1973,7 +2083,7 @@ private:
                 if (chart_summary_series_seen) fail("OOF2003", child, id_text, name, "one SummarySeries", name, "Duplicate SummarySeries");
                 chart_summary_series_seen = true;
                 auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
-                parse_chart_series_fields(child, mm::ChartSeriesObject{&summary}, id_text, chart_budget_);
+                parse_chart_series_fields(child, mm::ChartSeriesObject{&summary}, id_text, chart_budget_, typed_budget_);
             } else if (descriptor->kind == model::ControlKind::chart &&
                        (name == "Series" || name == "Points" || name == "Values")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
@@ -1996,7 +2106,7 @@ private:
                         consume_chart_budget(chart_budget_, 1 + chart.points.size(), item, id_text);
                         model::ChartSeries series;
                         series.id = parse_object_id(required_attribute(item, "id"), item);
-                        parse_chart_series_fields(item, mm::ChartSeriesObject{&series}, id_text, chart_budget_);
+                        parse_chart_series_fields(item, mm::ChartSeriesObject{&series}, id_text, chart_budget_, typed_budget_);
                         chart.series.push_back(std::move(series));
                     } else if (name == "Points" && node_name(item) == "ChartPoint") {
                         consume_chart_budget(chart_budget_, 1 + chart.series.size(), item, id_text);
@@ -2006,7 +2116,7 @@ private:
                             const std::string field_name = node_name(field);
                             if (field_name == "Text") point.text = node_text(field);
                             else if (field_name == "Color") point.color = parse_color(field);
-                            else if (field_name == "Value") point.value = parse_typed_value(field, id_text);
+                            else if (field_name == "Value") point.value = parse_typed_value(field, id_text, typed_budget_);
                             else fail("OOF2003", field, id_text, field_name, "Text or Color", field_name, "Unknown ChartPoint field");
                         }
                         chart.points.push_back(std::move(point));
@@ -2019,10 +2129,10 @@ private:
                         const auto fields = element_children(item);
                         if (fields.empty())
                             fail("OOF2003", item, id_text, "ChartValue", "typed value", "empty", "ChartValue requires a typed value");
-                        value.value = parse_typed_scalar(fields.front(), id_text);
+                        value.value = parse_typed_node(fields.front(), id_text, typed_budget_);
                         for (std::size_t i = 1; i < fields.size(); ++i) {
                             const auto field_name = node_name(fields[i]);
-                            if (field_name == "Details") value.details = parse_typed_value(fields[i], id_text);
+                            if (field_name == "Details") value.details = parse_typed_value(fields[i], id_text, typed_budget_);
                             else if (field_name == "ToolTip") value.tooltip = node_text(fields[i]);
                             else fail("OOF2003", fields[i], id_text, field_name, "Details or ToolTip", field_name, "Unknown ChartValue field");
                         }
@@ -2120,7 +2230,8 @@ private:
                                 term == model::TypeDomainTerm::date ? mm::ValueCodec::date : mm::ValueCodec::unclassified;
                             if (codec == mm::ValueCodec::unclassified)
                                 fail("OOF2003", value_node, id_text, "ValueType", "String, Number, Boolean, or Date", "unsupported type entry", "Spreadsheet Cell typed value kind is unsupported");
-                            typed_value = parse_property_value(value_node, codec, id_text);
+                            consume_typed_value_budget(typed_budget_, 0, value_node, id_text);
+                            typed_value = parse_property_value(value_node, codec, id_text, typed_budget_);
                             if (std::holds_alternative<model::UndefinedValue>(*typed_value))
                                 fail("OOF2003", value_node, id_text, "Value", "defined String, Number, Boolean, or Date", "undefined", "Undefined Spreadsheet Cell values are unsupported");
                             value_seen = true;
@@ -2144,7 +2255,7 @@ private:
                                     fail("OOF2003", property_node, id_text, "ReadOnly", "one plain Boolean ReadOnly", "unsupported property", "Unsupported Cell.Control property");
                                 const auto* property = metamodel_.property(model::ControlKind::input_field, "ReadOnly");
                                 cell_control->properties.set_explicit(property->id,
-                                    parse_property_value(property_node, property->value_codec, id_text));
+                                    parse_property_value(property_node, property->value_codec, id_text, typed_budget_));
                                 read_only_seen = true;
                             }
                             content_stage = 5;
@@ -2304,7 +2415,7 @@ private:
                         "Property is unavailable on the ordinary-form platform owner");
                 }
                 model::PropertyValue value =
-                    parse_property_value(child, property->value_codec, id_text);
+                    parse_property_value(child, property->value_codec, id_text, typed_budget_);
                 if (equals_descriptor_default(*property, value)) {
                     continue;
                 }
@@ -2474,7 +2585,7 @@ private:
                                 "Table Column editor property is not declared by its typed owner");
                         }
                         const model::PropertyValue value = parse_property_value(
-                            property_node, descriptor->value_codec, owner);
+                            property_node, descriptor->value_codec, owner, typed_budget_);
                         if (!valid_table_column_editor_property(column.control.kind, *descriptor, value)) {
                             fail("OOF2003", property_node, std::string(owner), property_name,
                                 "a supported typed property value", node_text(property_node),
@@ -2812,6 +2923,7 @@ private:
     const mm::Metamodel& metamodel_;
     ParsedObjects objects_;
     std::size_t chart_budget_ = 0;
+    model::TypedValueBudget typed_budget_;
 };
 
 using XmlAttributes = std::vector<std::pair<std::string, std::string>>;
@@ -3367,22 +3479,71 @@ private:
         writer_.text(element_name, object_id_text(reference.asset.id()));
     }
 
-    void write_typed_scalar(const model::PropertyValue& value, std::string_view owner) {
-                if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
-                else if (std::holds_alternative<model::NullValue>(value)) writer_.empty("Null");
-                else if (const auto* item = std::get_if<model::UuidValue>(&value)) writer_.text("UUID", canonical_uuid(item->canonical));
-                else if (const auto* item = std::get_if<model::PlatformTypeValue>(&value)) {
-                    const auto descriptors = mm::platform_value_type_descriptors();
-                    if (std::ranges::find(descriptors, item->name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
-                        serialization_fail(std::string(owner), "Type", "known platform type", item->name, "Unsupported platform type value");
-                    writer_.text("Type", item->name);
-                }
-                else if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
-                else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
-                else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
-                else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
-                else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
-                else serialization_fail(std::string(owner), "Value", "String, Number, Boolean, Date, Null, UUID or Undefined", "unsupported", "Unsupported Chart value type");
+    void write_typed_value_node(const model::PropertyValue& value, std::string_view owner) {
+        if (std::holds_alternative<model::UndefinedValue>(value)) writer_.text("Undefined", "undefined");
+        else if (std::holds_alternative<model::NullValue>(value)) writer_.empty("Null");
+        else if (const auto* item = std::get_if<model::UuidValue>(&value)) writer_.text("UUID", canonical_uuid(item->canonical));
+        else if (const auto* item = std::get_if<model::PlatformTypeValue>(&value)) {
+            const auto descriptors = mm::platform_value_type_descriptors();
+            if (std::ranges::find(descriptors, item->name, &mm::PlatformValueTypeDescriptor::name) == descriptors.end())
+                serialization_fail(std::string(owner), "Type", "known platform type", item->name, "Unsupported platform type value");
+            writer_.text("Type", item->name);
+        }
+        else if (const auto* item = std::get_if<std::string>(&value)) writer_.text("String", *item);
+        else if (const auto* item = std::get_if<model::DecimalValue>(&value)) writer_.text("Number", canonical_decimal(item->canonical, nullptr, "Value", owner));
+        else if (const auto* item = std::get_if<std::int64_t>(&value)) writer_.text("Number", std::to_string(*item));
+        else if (const auto* item = std::get_if<bool>(&value)) writer_.text("Boolean", *item ? "true" : "false");
+        else if (const auto* item = std::get_if<model::DateValue>(&value)) { (void)storage::value_codec::date_to_platform(item->canonical); writer_.text("Date", item->canonical); }
+        else if (const auto* item = std::get_if<model::ColorValue>(&value)) write_color("Color", *item, owner);
+        else if (const auto* item = std::get_if<model::FontValue>(&value)) write_font("Font", *item, owner);
+        else if (const auto* item = std::get_if<model::BorderValue>(&value)) write_border("Border", *item, owner);
+        else if (const auto* item = std::get_if<model::TypeDomainPatternValue>(&value)) write_type_domain("TypeDescription", *item, owner);
+        else if (const auto* item = std::get_if<model::ArrayValue>(&value)) {
+            const std::string_view name = item->fixed ? "FixedArray" : "Array";
+            writer_.open(name);
+            for (const auto& nested : item->items) {
+                writer_.open("Item");
+                write_typed_value_node(nested, owner);
+                writer_.close("Item");
+            }
+            writer_.close(name);
+        } else if (const auto* item = std::get_if<model::StructureValue>(&value)) {
+            const std::string_view name = item->fixed ? "FixedStructure" : "Structure";
+            writer_.open(name);
+            for (const auto& field : item->fields) {
+                writer_.open("Field", {{"name", field.name}});
+                write_typed_value_node(field.value, owner);
+                writer_.close("Field");
+            }
+            writer_.close(name);
+        } else if (const auto* item = std::get_if<model::MapValue>(&value)) {
+            struct OrderedEntry {
+                std::string key;
+                const model::MapEntry* entry;
+            };
+            std::vector<OrderedEntry> ordered;
+            ordered.reserve(item->entries.size());
+            for (const auto& entry : item->entries) {
+                auto key = model::typed_map_key(entry.key);
+                if (!key) serialization_fail(std::string(owner), "Key", "supported canonical Map key", "unsupported",
+                    "Map key cannot be written in canonical XML");
+                ordered.push_back({std::move(*key), &entry});
+            }
+            std::ranges::sort(ordered, {}, &OrderedEntry::key);
+            const std::string_view name = item->fixed ? "FixedMap" : "Map";
+            writer_.open(name);
+            for (const auto& view : ordered) {
+                writer_.open("Entry");
+                writer_.open("Key");
+                write_typed_value_node(view.entry->key, owner);
+                writer_.close("Key");
+                writer_.open("Value");
+                write_typed_value_node(view.entry->value, owner);
+                writer_.close("Value");
+                writer_.close("Entry");
+            }
+            writer_.close(name);
+        } else serialization_fail(std::string(owner), "Value", "supported named typed value", "unsupported", "Unsupported typed value kind");
     }
 
     void write_property(
@@ -3394,9 +3555,9 @@ private:
         switch (descriptor.value_codec) {
             case mm::ValueCodec::owned_panel:
                 serialization_fail(std::string(object_id), std::string(name), "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
-            case mm::ValueCodec::typed_scalar:
+            case mm::ValueCodec::typed_value:
                 writer_.open(name);
-                write_typed_scalar(value, object_id);
+                write_typed_value_node(value, object_id);
                 writer_.close(name);
                 return;
             case mm::ValueCodec::unclassified:
@@ -4275,7 +4436,7 @@ private:
             const auto write_chart_key = [&](std::string_view name, const model::PropertyValue& value, std::string_view owner) {
                 if (std::holds_alternative<model::UndefinedValue>(value)) return;
                 writer_.open(name);
-                write_typed_scalar(value, owner);
+                write_typed_value_node(value, owner);
                 writer_.close(name);
             };
             std::uint64_t max_series_id = 1;
@@ -4319,7 +4480,7 @@ private:
             else writer_.open("Values");
             for (const auto& item : chart->values) {
                 writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
-                write_typed_scalar(item.value, object_id_text(item.series_ref));
+                write_typed_value_node(item.value, object_id_text(item.series_ref));
                 write_chart_key("Details", item.details, object_id_text(item.series_ref));
                 if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
                 writer_.close("ChartValue");

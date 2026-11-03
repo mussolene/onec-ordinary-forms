@@ -14047,6 +14047,104 @@ void test_input_field_date_only_type_domain_round_trip() {
         "$/1/2/2/1/2/1", "Date-only InputField TypeDomain must still match its linked Attribute");
 }
 
+void test_shared_recursive_typed_values() {
+    model::ColorValue rgb; rgb.kind = model::ColorKind::absolute;
+    rgb.red = 23; rgb.green = 67; rgb.blue = 101;
+    model::ColorValue named; named.kind = model::ColorKind::style_reference;
+    named.style = model::QualifiedName{"WebColors.Red"};
+    model::FontValue font; font.kind = model::FontKind::absolute;
+    font.face_name = "Arial"; font.height = 13; font.bold = true; font.italic = true;
+    font.underline = true; font.strikeout = false; font.scale = 120; font.scale_override = true;
+    model::BorderValue border; border.border_type = model::ControlBorderType::double_line; border.width = 2;
+    model::TypeDomainEntry numeric; numeric.term = model::TypeDomainTerm::numeric; numeric.numeric = {12, 3, false};
+    model::TypeDomainEntry text; text.term = model::TypeDomainTerm::string; text.string = {40, true};
+    model::ArrayValue array{{std::string{"nested"}, model::DecimalValue{"-12.75"}, true, model::UndefinedValue{}, rgb}, false};
+    model::ArrayValue fixed_array = array; fixed_array.fixed = true;
+    model::StructureValue structure{{{"Caption", std::string{"value"}}, {"Nested", array}, {"Amount", model::DecimalValue{"123.45"}}}, false};
+    model::StructureValue fixed_structure = structure; fixed_structure.fixed = true;
+    model::MapValue map{{{false, structure}, {model::DecimalValue{"17"}, array}, {std::string{"Title"}, std::string{"value"}}}, false};
+    model::MapValue fixed_map = map; fixed_map.fixed = true;
+    const std::array<model::PropertyValue, 12> values{rgb, named, font, border, array, structure,
+        fixed_array, fixed_structure, map, fixed_map, model::TypeDomainPatternValue{{text, numeric}}, model::ArrayValue{}};
+    model::Form form; form.id = model::ObjectId{1}; form.name = "SharedValues";
+    for (std::uint64_t index = 0; index < values.size(); ++index) {
+        form.children.emplace_back(model::ControlRef{model::ObjectId{100 + index}});
+        form.children.emplace_back(model::ControlRef{model::ObjectId{200 + index}});
+    }
+    model::OrdinaryFormDocument document(std::move(form));
+    const auto min = model::PropertyId::from_name("MinValue"), max = model::PropertyId::from_name("MaxValue");
+    const auto details = model::PropertyId::from_name("Details");
+    for (std::uint64_t index = 0; index < values.size(); ++index) {
+        const model::ObjectId attribute_id{300 + index};
+        document.add_attribute(model::Attribute{attribute_id, "Number" + std::to_string(index), model::TypeDomainPatternValue{{numeric}}});
+        model::ControlNode input{model::ObjectId{100 + index}, "Input" + std::to_string(index), model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{attribute_id}, {}};
+        input.properties().set_explicit(min, values[index]); input.properties().set_explicit(max, values[index]);
+        document.add_control(std::move(input));
+        model::ChartPayload chart; chart.data_mode = model::ChartDataMode::explicit_values;
+        model::ChartSeries series; series.id = model::ObjectId{2}; series.text = "Series";
+        series.properties.set_explicit(details, values[index]);
+        model::ChartPoint point; point.id = model::ObjectId{1}; point.text = "Point";
+        chart.series.push_back(std::move(series)); chart.points.push_back(std::move(point));
+        chart.values.push_back({model::ObjectId{2}, model::ObjectId{1}, model::DecimalValue{"1"}, "", values[index]});
+        document.add_control(model::ControlNode{model::ObjectId{200 + index}, "Chart" + std::to_string(index), std::move(chart)});
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "one shared typed-value codec must encode twelve fields and twelve charts");
+    const auto decoded = form_stream::decode_document(encoded.value(), "SharedValues");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "recursive values must decode completely");
+    for (std::uint64_t index = 0; index < values.size(); ++index) {
+        const model::OrdinaryFormDocument::ObjectKey input{model::ObjectCategory::control, model::ObjectId{100 + index}};
+        expect(decoded.value().get_prop_val(input, min).value == values[index] && decoded.value().get_prop_val(input, max).value == values[index],
+            "both physical bounds must restore the same named recursive value");
+        const auto& chart = std::get<model::ChartPayload>(decoded.value().find_control(model::ObjectId{200 + index})->payload);
+        expect(chart.series.front().properties.find(details)->value == values[index] && chart.values.front().details == values[index],
+            "series and cell Details must share the recursive value contract");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "all named recursive values must serialize to public XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "all named recursive values must parse from public XML");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "recursive values must survive named XML and binary rebuild without raw preservation");
+
+    auto malformed = encoded.value();
+    auto& record = malformed.items[1].items[2].items[2].items[1].items[2];
+    const auto bad_array = list_stream::parse(R"VALUE({"#",51e7a0d2-530b-11d4-b98a-008048da3034,{1000001}})VALUE");
+    record.items[2].items[0].items[19] = bad_array;
+    record.items[3].items[1].items[1].items[1] = bad_array;
+    expect(!form_stream::decode_document(malformed, "SharedValues").ok(), "collection size must be rejected before allocating children");
+    const auto unknown = list_stream::parse(R"VALUE({"#",51e7a0d2-530b-11d4-b98a-008048da3034,{1,{"#",00000000-0000-0000-0000-000000000001,0}}})VALUE");
+    record.items[2].items[0].items[19] = unknown;
+    record.items[3].items[1].items[1].items[1] = unknown;
+    expect(!form_stream::decode_document(malformed, "SharedValues").ok(), "unknown nested values cannot be replaced with Undefined");
+
+    auto invalid_chart = encoded.value();
+    auto* chart_record = find_chart_record(invalid_chart);
+    expect(chart_record != nullptr, "shared-value fixture contains a Chart record");
+    auto& chart_info = chart_record->items[3];
+    bool replaced_details = false;
+    for (std::size_t index = 0; index + 2 < chart_info.items.size(); ++index) {
+        const auto& number = chart_info.items[index];
+        const auto& details_value = chart_info.items[index + 1];
+        const auto& tooltip = chart_info.items[index + 2];
+        if (number.is_list && number.items.size() == 2 && number.items[0].atom == "N" && number.items[1].atom == "1" &&
+            details_value.is_list && details_value.items.size() == 4 && details_value.items[0].atom == "#" &&
+            details_value.items[1].atom == "9cd510c7-abfc-11d4-9434-004095e12fc7" && !tooltip.is_list &&
+            tooltip.atom_kind == list_stream::ListValue::AtomKind::string && tooltip.atom.empty()) {
+            chart_info.items[index + 1] = unknown;
+            replaced_details = true;
+            break;
+        }
+    }
+    expect(replaced_details, "negative fixture must replace the typed cell Details rather than a style field");
+    const auto rejected_chart = form_stream::decode_document(invalid_chart, "SharedValues");
+    expect(!rejected_chart.ok() && !rejected_chart.diagnostics().empty() &&
+        rejected_chart.diagnostics().front().message == "Array contains an unsupported value type",
+        "Chart cell Details must reject unknown nested values instead of producing a partial Undefined value");
+}
+
 void test_input_field_typed_bounds() {
     const std::array<model::PropertyValue, 8> values{model::DecimalValue{"-10.25"}, std::string{"abc"}, true,
         model::DateValue{"2024-02-29T00:00:00"}, model::NullValue{}, model::UndefinedValue{},
@@ -14087,7 +14185,7 @@ void test_input_field_typed_bounds() {
                 expect(!form_stream::decode_document(unknown, "Bounds").ok(), "unknown scalar must be rejected even when copies match");
             }
         }
-        expect(document.set_prop_val(owner, min, model::FontValue{}) == model::PropertyMutationStatus::invalid_value &&
+        expect(document.set_prop_val(owner, min, model::ControlRef{model::ObjectId{2}}) == model::PropertyMutationStatus::invalid_value &&
             document.get_prop_val(owner, min).value == values[i % values.size()], "unsupported value must preserve prior bound");
         expect(document.reset_prop_val(owner, min) == model::PropertyMutationStatus::reset_unclassified_storage &&
             document.get_prop_val(owner, min).value == model::PropertyValue{model::UndefinedValue{}}, "supported bound reset restores Undefined");
@@ -19063,12 +19161,12 @@ void test_chart_series_family_named_round_trip() {
             } else if (field.value_codec == model::metamodel::ValueCodec::localized_text) value = bilingual;
             else if (field.value_codec == model::metamodel::ValueCodec::string) value = std::string{"group Ω"};
             else if (field.value_codec == model::metamodel::ValueCodec::boolean) value = i % 2 != 0;
-            else if (field.value_codec == model::metamodel::ValueCodec::typed_scalar) value = i % 2 ? model::PropertyValue{model::DecimalValue{"-2.5"}} : model::PropertyValue{model::UuidValue{"12345678-1234-1234-1234-123456789abc"}};
+            else if (field.value_codec == model::metamodel::ValueCodec::typed_value) value = i % 2 ? model::PropertyValue{model::DecimalValue{"-2.5"}} : model::PropertyValue{model::UuidValue{"12345678-1234-1234-1234-123456789abc"}};
             else if (field.value_codec == model::metamodel::ValueCodec::color) { model::ColorValue color; color.kind = model::ColorKind::style_reference; color.style = model::QualifiedName{i % 2 ? "WindowsColors.WindowBackground" : "WebColors.Red"}; value = color; }
             else if (field.value_codec == model::metamodel::ValueCodec::line) value = model::LineValue{{"ChartLineType", "Dotted"}, 2, false};
             expect(document.set_prop_val(key, field.id, value) == applied, "all mutable Series scalar properties apply");
             const auto before = document.get_prop_val(key, field.id).value;
-            if (field.value_codec != model::metamodel::ValueCodec::typed_scalar)
+            if (field.value_codec != model::metamodel::ValueCodec::typed_value)
                 expect(document.set_prop_val(key, field.id, model::NullValue{}) == model::PropertyMutationStatus::invalid_value && document.get_prop_val(key, field.id).value == before, "Series invalid assignments are atomic");
             expect(document.reset_prop_val(key, field.id) == reset, "all mutable Series properties reset");
             expect(document.set_prop_val(key, field.id, value) == applied, "restore Series value");
@@ -19090,7 +19188,7 @@ void test_chart_series_family_named_round_trip() {
                 value = model::EnumerationValue{std::string(field.enumeration_type), std::string(field.members[i % field.members.size()])};
             } else if (field.value_codec == model::metamodel::ValueCodec::localized_text) value = bilingual;
             else if (field.value_codec == model::metamodel::ValueCodec::integer32) value = std::int64_t{6};
-            else if (field.value_codec == model::metamodel::ValueCodec::typed_scalar) value = model::DecimalValue{"42.5"};
+            else if (field.value_codec == model::metamodel::ValueCodec::typed_value) value = model::DecimalValue{"42.5"};
             else if (field.value_codec == model::metamodel::ValueCodec::line) value = model::LineValue{{"ChartLineType", "Dashed"}, 2, false};
             else if (field.value_codec == model::metamodel::ValueCodec::color) { model::ColorValue color; color.kind = model::ColorKind::style_reference; color.style = model::QualifiedName{"WebColors.Red"}; value = color; }
             else if (field.value_codec == model::metamodel::ValueCodec::boolean) value = i % 2 != 0;
@@ -21800,6 +21898,7 @@ int main() {
         test_input_field_date_only_type_domain_round_trip();
         test_input_field_numeric_type_domain_round_trip();
         test_input_field_typed_bounds();
+        test_shared_recursive_typed_values();
         test_input_field_shortcut_round_trip();
         test_input_field_text_edit_round_trip();
         test_input_field_tooltip_and_format_round_trip();

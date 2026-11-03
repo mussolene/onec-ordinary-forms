@@ -3,6 +3,7 @@
 #include <array>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string_view>
@@ -2653,6 +2654,141 @@ void test_property_default_semantics() {
         "reset must recover the factory default");
 }
 
+void test_recursive_typed_values() {
+    const auto valid = [](const PropertyValue& value) {
+        TypedValueBudget budget;
+        return validate_typed_value(value, budget);
+    };
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 37);
+    [&]<std::size_t... Index>(std::index_sequence<Index...>) {
+        ([&] {
+            using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
+            PropertyValue value{Value{}};
+            expect(std::get_if<Value>(&value) && std::holds_alternative<Value>(value), "derived variant retains typed access for every alternative");
+            std::visit([&](const auto& item) {
+                using Item = std::remove_cvref_t<decltype(item)>;
+                expect((std::is_same_v<Value, Item>), "derived variant visits the active alternative");
+            }, value);
+            const auto copy = value;
+            expect(copy == value && !(copy != value), "all default alternatives retain deep equality");
+        }(), ...);
+    }(std::make_index_sequence<std::variant_size_v<PropertyValue::Variant>>{});
+    PropertyValue assigned = false;
+    assigned = std::string{"value"};
+    expect(std::get<std::string>(assigned) == "value", "inherited string assignment retains the selected type");
+    assigned = std::int64_t{7};
+    expect(std::get<std::int64_t>(assigned) == 7, "inherited numeric assignment retains the selected type");
+
+    const StructureValue structure{{{"Имя", std::string{"nested"}}, {"Δοκιμή", false}, {"字段", std::int64_t{9}}}, true};
+    const MapValue map{{{std::string{"data"}, structure}, {std::int64_t{7}, ArrayValue{{true, DecimalValue{"1.25"}}, false}}}, true};
+    PropertyValue tree = ArrayValue{{map, ArrayValue{{false}, false}}, true};
+    expect(valid(tree), "named fixed kinds are preserved independently without emulating platform constructors");
+    auto copied = tree;
+    std::get<StructureValue>(std::get<MapValue>(std::get<ArrayValue>(copied).items.front()).entries.front().value).fields.front().value = std::string{"changed"};
+    expect(copied != tree &&
+        std::get<std::string>(std::get<StructureValue>(std::get<MapValue>(std::get<ArrayValue>(tree).items.front()).entries.front().value).fields.front().value) == "nested",
+        "nested arrays, maps and structures copy values deeply");
+    auto fixed_kind = tree;
+    std::get<ArrayValue>(fixed_kind).fixed = false;
+    expect(fixed_kind != tree, "fixed and mutable collection kinds remain distinct values");
+    const PropertyEntry entry{PropertyId::from_name("Value"), PropertyState::explicit_value, tree};
+    expect(entry == PropertyEntry{entry}, "defaulted owner equality compares recursive values deeply");
+
+    FontValue font; font.kind = FontKind::absolute; font.face_name = "Arial"; font.height = 12.5; font.bold = true;
+    FontValue styled_font; styled_font.kind = FontKind::style_reference; styled_font.style = QualifiedName{"StyleFonts.TextFont"};
+    ColorValue color; color.kind = ColorKind::absolute; color.red = 7; color.green = 8; color.blue = 9;
+    ColorValue styled_color; styled_color.kind = ColorKind::style_reference; styled_color.style = QualifiedName{"StyleColors.ButtonTextColor"};
+    BorderValue border; border.border_type = ControlBorderType::single; border.width = 2;
+    BorderValue styled_border; styled_border.kind = BorderKind::style_reference; styled_border.style = QualifiedName{"StyleBorders.ControlBorder"};
+    TypeDomainEntry number; number.term = TypeDomainTerm::numeric; number.numeric = {15, 2, false};
+    const TypeDomainPatternValue type{{number}};
+    for (const auto& value : {PropertyValue{UndefinedValue{}}, PropertyValue{NullValue{}}, PropertyValue{true}, PropertyValue{std::int64_t{-7}},
+            PropertyValue{DecimalValue{"12.5"}}, PropertyValue{std::string{"Привет 世界"}}, PropertyValue{DateValue{"2026-11-04T12:30:00"}},
+            PropertyValue{UuidValue{"514cd709-d736-4801-9061-13350de142ee"}}, PropertyValue{PlatformTypeValue{"Number"}},
+            PropertyValue{color}, PropertyValue{styled_color}, PropertyValue{font}, PropertyValue{styled_font}, PropertyValue{border},
+            PropertyValue{styled_border}, PropertyValue{type}})
+        expect(valid(value), "the common typed value validator accepts established primitive, style and type-description values");
+    ColorValue invalid_color = color; invalid_color.alpha = 1;
+    FontValue invalid_font = font; invalid_font.height = std::numeric_limits<double>::quiet_NaN();
+    BorderValue invalid_border = border; invalid_border.width = 6;
+    ColorValue unknown_color = styled_color; unknown_color.style = QualifiedName{"StyleColors.Unknown"};
+    TypeDomainPatternValue invalid_type = type; invalid_type.entries.front().numeric = {0, 2, false};
+    for (const auto& value : {PropertyValue{DecimalValue{"01"}}, PropertyValue{DateValue{"2026-02-30T00:00:00"}},
+            PropertyValue{UuidValue{"514CD709-D736-4801-9061-13350DE142EE"}}, PropertyValue{PlatformTypeValue{"Unknown"}},
+            PropertyValue{std::string{"\xc0\x80", 2}}, PropertyValue{invalid_color}, PropertyValue{unknown_color}, PropertyValue{invalid_font},
+            PropertyValue{invalid_border}, PropertyValue{invalid_type}, PropertyValue{ControlRef{ObjectId{2}}}, PropertyValue{PageRef{ObjectId{3}}},
+            PropertyValue{ChartSeriesRef{ObjectId{2}, ObjectId{4}}}, PropertyValue{PictureRef{}}, PropertyValue{LocalizedStringValue{}}})
+        expect(!valid(value), "invalid primitives, unknown styles and runtime object references are rejected explicitly");
+    expect(!valid(StructureValue{{{"", false}}, false}) && !valid(StructureValue{{{"name", false}, {"name", true}}, false}) &&
+        !valid(StructureValue{{{std::string{"\xed\xa0\x80", 3}, false}}, false}),
+        "structure names must be nonempty valid UTF-8 and exact string keys must be unique");
+    expect(valid(MapValue{{{std::string{"7"}, false}, {std::int64_t{7}, true}}, false}) &&
+        !valid(MapValue{{{std::int64_t{7}, false}, {DecimalValue{"7"}, true}}, false}) &&
+        !valid(MapValue{{{ArrayValue{}, false}}, false}),
+        "Map distinguishes string and number keys, merges numeric identity and rejects unverified object keys");
+    const MapValue ordered{{{std::string{"second"}, false}, {std::int64_t{7}, std::string{"value"}}}, false};
+    const MapValue reversed{{{DecimalValue{"7"}, std::string{"value"}}, {std::string{"second"}, false}}, false};
+    expect(ordered == reversed && reversed == ordered,
+        "Map equality ignores entry order and shares numeric key identity across int64 and Decimal");
+    auto different_kind = reversed; different_kind.fixed = true;
+    auto different_value = reversed; different_value.entries.front().value = std::string{"changed"};
+    expect(ordered != different_kind && ordered != different_value,
+        "Map equality preserves fixed kinds and compares associated values deeply");
+    const MapValue nested_left{{{false, ordered}, {true, ArrayValue{{ordered}, false}}}, true};
+    const MapValue nested_right{{{true, ArrayValue{{reversed}, false}}, {false, reversed}}, true};
+    expect(PropertyValue{nested_left} == PropertyValue{nested_right}, "nested maps compare independently of every entry order");
+    const MapValue unsupported_keys{{{ArrayValue{}, false}}, false};
+    const MapValue duplicate_keys{{{std::int64_t{7}, false}, {DecimalValue{"7"}, true}}, false};
+    expect(!(unsupported_keys == unsupported_keys) && !(duplicate_keys == duplicate_keys),
+        "Map equality rejects unsupported object keys and duplicate canonical primitive keys");
+    expect(typed_map_key(std::int64_t{7}) == typed_map_key(DecimalValue{"7"}) && !typed_map_key(ArrayValue{}),
+        "the exported map key helper provides the same canonical identities used by validation and equality");
+
+    PropertyValue deep = false;
+    for (std::size_t depth = 0; depth < max_typed_value_depth; ++depth) {
+        ArrayValue outer; outer.items.push_back(std::move(deep)); deep = std::move(outer);
+    }
+    expect(valid(deep), "a typed value at the documented depth limit is accepted");
+    ArrayValue beyond; beyond.items.push_back(std::move(deep));
+    expect(!valid(beyond), "one level beyond the typed value depth limit is rejected before recursive copying");
+    TypedValueBudget accumulated{max_typed_value_nodes - 3};
+    expect(validate_typed_value(MapValue{{{false, true}}, false}, accumulated) && accumulated.nodes == max_typed_value_nodes &&
+        !validate_typed_value(false, accumulated), "shared node accounting includes Map keys and cannot exceed its limit");
+    TypedValueBudget description_budget;
+    expect(validate_typed_value(type, description_budget) && description_budget.nodes == 2,
+        "type-description entries consume the shared resource budget");
+}
+
+void test_typed_value_document_budget() {
+    Form form; form.id = ObjectId{1}; form.name = "TypedBudget";
+    form.children = {ControlRef{ObjectId{10}}, ControlRef{ObjectId{11}}};
+    OrdinaryFormDocument document(std::move(form));
+    TypeDomainEntry number; number.term = TypeDomainTerm::numeric; number.numeric = {15, 2, false};
+    document.add_attribute(Attribute{ObjectId{3}, "Number", TypeDomainPatternValue{{number}}});
+    for (const auto id : {ObjectId{10}, ObjectId{11}}) {
+        ControlNode input{id, "Input" + std::to_string(id.value()), InputFieldPayload{}};
+        input.data_path = DataPath{AttributeRef{ObjectId{3}}, {}};
+        ArrayValue values; values.items.resize(max_typed_value_nodes / 2 - 1, PropertyValue{false});
+        input.properties().set_explicit(PropertyId::from_name("MinValue"), std::move(values));
+        document.add_control(std::move(input));
+    }
+    expect(document.validate().ok(), "typed trees across two controls may exactly consume the global node budget");
+    const OrdinaryFormDocument::ObjectKey input{ObjectCategory::control, ObjectId{10}};
+    expect(document.set_prop_val(input, PropertyId::from_name("MaxValue"), true) == PropertyMutationStatus::applied_unclassified_storage &&
+        !document.validate().ok(), "one additional typed field exceeds the aggregate budget although each field fits alone");
+    expect(document.reset_prop_val(input, PropertyId::from_name("MaxValue")) == PropertyMutationStatus::reset_unclassified_storage &&
+        document.validate().ok(), "removing the additional field restores the bounded document");
+
+    Form chart_form; chart_form.id = ObjectId{1}; chart_form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument invalid(std::move(chart_form));
+    ChartPayload chart;
+    ChartSeries series; series.id = ObjectId{2}; chart.series.push_back(std::move(series));
+    ChartPoint point; point.id = ObjectId{1}; chart.points.push_back(std::move(point));
+    chart.values.push_back(ChartValue{ObjectId{2}, ObjectId{1}, DecimalValue{"1"}, {}, ControlRef{ObjectId{2}}});
+    invalid.add_control(ControlNode{ObjectId{2}, "Chart", std::move(chart)});
+    expect(!invalid.validate().ok(), "Chart cell Details cannot bypass common typed value validation");
+}
+
 void test_typed_property_set() {
     PropertySet properties;
     constexpr PropertyId read_only = PropertyId::from_name("ReadOnly");
@@ -4332,6 +4468,8 @@ int main() {
         test_variant_coverage();
         test_property_default_semantics();
         test_typed_property_set();
+        test_recursive_typed_values();
+        test_typed_value_document_budget();
         test_document_property_api();
         test_control_position_property_api();
         test_id_lookup();

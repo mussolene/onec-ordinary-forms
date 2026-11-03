@@ -96,8 +96,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "xs:int";
         case ValueCodec::decimal:
             return "xs:decimal";
-        case ValueCodec::typed_scalar:
-            return "TypedScalarValueType";
+        case ValueCodec::typed_value:
+            return "TypedValueType";
         case ValueCodec::string:
             return "xs:string";
         case ValueCodec::localized_text:
@@ -888,9 +888,32 @@ void append_value_types(std::string& output) {
     output += "\n";
 
     output += R"XSD(  <xs:simpleType name="ChartValueTypeName"><xs:restriction base="xs:string"><xs:enumeration value="String"/><xs:enumeration value="Number"/><xs:enumeration value="Boolean"/><xs:enumeration value="Date"/><xs:enumeration value="UUID"/><xs:enumeration value="Array"/><xs:enumeration value="Structure"/><xs:enumeration value="Map"/><xs:enumeration value="ValueTable"/><xs:enumeration value="Color"/><xs:enumeration value="Font"/><xs:enumeration value="Type"/></xs:restriction></xs:simpleType>
-  <xs:complexType name="TypedScalarValueType"><xs:choice><xs:element name="String" type="xs:string"/><xs:element name="Number" type="xs:decimal"/><xs:element name="Boolean" type="xs:boolean"/><xs:element name="Date" type="LocalDateValueType"/><xs:element name="Undefined" type="UndefinedValueType"/><xs:element name="Null" type="xs:string"/><xs:element name="UUID" type="UuidValueType"/><xs:element name="Type" type="ChartValueTypeName"/></xs:choice></xs:complexType>
-  <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Value" type="TypedScalarValueType" minOccurs="0"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
-  <xs:complexType name="ChartValueType"><xs:sequence><xs:choice><xs:element name="String" type="xs:string"/><xs:element name="Number" type="xs:decimal"/><xs:element name="Boolean" type="xs:boolean"/><xs:element name="Date" type="LocalDateValueType"/><xs:element name="Undefined" type="UndefinedValueType"/><xs:element name="Null" type="xs:string"/><xs:element name="UUID" type="UuidValueType"/><xs:element name="Type" type="ChartValueTypeName"/></xs:choice><xs:element name="Details" type="TypedScalarValueType" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:sequence><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:group name="TypedValueGroup"><xs:choice>
+    <xs:element name="String" type="xs:string"/>
+    <xs:element name="Number" type="xs:decimal"/>
+    <xs:element name="Boolean" type="xs:boolean"/>
+    <xs:element name="Date" type="LocalDateValueType"/>
+    <xs:element name="Undefined" type="UndefinedValueType"/>
+    <xs:element name="Null" type="xs:string"/>
+    <xs:element name="UUID" type="UuidValueType"/>
+    <xs:element name="Type" type="ChartValueTypeName"/>
+    <xs:element name="Color" type="ColorValueType"/>
+    <xs:element name="Font" type="FontValueType"/>
+    <xs:element name="Border" type="BorderValueType"/>
+    <xs:element name="TypeDescription" type="TypeDomainValueType"/>
+    <xs:element name="Array" type="TypedArrayValueType"/>
+    <xs:element name="FixedArray" type="TypedArrayValueType"/>
+    <xs:element name="Structure" type="TypedStructureValueType"/>
+    <xs:element name="FixedStructure" type="TypedStructureValueType"/>
+    <xs:element name="Map" type="TypedMapValueType"/>
+    <xs:element name="FixedMap" type="TypedMapValueType"/>
+  </xs:choice></xs:group>
+  <xs:complexType name="TypedValueType"><xs:group ref="TypedValueGroup"/></xs:complexType>
+  <xs:complexType name="TypedArrayValueType"><xs:sequence><xs:element name="Item" type="TypedValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="TypedStructureValueType"><xs:sequence><xs:element name="Field" minOccurs="0" maxOccurs="unbounded"><xs:complexType><xs:complexContent><xs:extension base="TypedValueType"><xs:attribute name="name" type="xs:string" use="required"/></xs:extension></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>
+  <xs:complexType name="TypedMapValueType"><xs:sequence><xs:element name="Entry" minOccurs="0" maxOccurs="unbounded"><xs:complexType><xs:sequence><xs:element name="Key" type="TypedValueType"/><xs:element name="Value" type="TypedValueType"/></xs:sequence></xs:complexType></xs:element></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Value" type="TypedValueType" minOccurs="0"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartValueType"><xs:sequence><xs:group ref="TypedValueGroup"/><xs:element name="Details" type="TypedValueType" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:sequence><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:simpleType name="ChartLastAssignedIdType"><xs:restriction base="xs:unsignedLong"><xs:maxInclusive value="9223372036854775807"/></xs:restriction></xs:simpleType>
   <xs:complexType name="ChartSeriesCollectionType"><xs:sequence><xs:element name="ChartSeries" type="ChartSeriesType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="lastAssignedId" type="ChartLastAssignedIdType" use="optional"/></xs:complexType>
   <xs:complexType name="ChartPointCollectionType"><xs:sequence><xs:element name="ChartPoint" type="ChartPointType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="lastAssignedId" type="ChartLastAssignedIdType" use="optional"/></xs:complexType>

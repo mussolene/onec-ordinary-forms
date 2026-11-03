@@ -1020,7 +1020,7 @@ void test_control_surfaces_and_property_order(
             expect(series_fields.size() == 4 && attribute(series_fields[0], "name") == "Text" &&
                 attribute(series_fields[1], "name") == "Color" && attribute(series_fields[1], "type") == "ColorValueType" &&
                 attribute(series_fields[2], "name") == "Marker" && attribute(series_fields[2], "type") == "EnumerationValueType" &&
-                attribute(series_fields[3], "name") == "Value" && attribute(series_fields[3], "type") == "TypedScalarValueType",
+                attribute(series_fields[3], "name") == "Value" && attribute(series_fields[3], "type") == "TypedValueType",
                 "ChartSeries schema must expose named Text, Color, Marker, and typed Value fields");
             expect(attribute(series_fields[0], "type") == "LocalizedTextValueType", "Series Text preserves all languages");
             const auto trendline_fields = direct_children(sequence_for_type(schema, "ChartTrendlineType"), "element");
@@ -1035,7 +1035,7 @@ void test_control_surfaces_and_property_order(
             const auto point_fields = direct_children(sequence_for_type(schema, "ChartPointType"), "element");
             expect(point_fields.size() == 3 && attribute(point_fields[0], "name") == "Text" &&
                 attribute(point_fields[1], "name") == "Color" && attribute(point_fields[1], "type") == "ColorValueType" &&
-                attribute(point_fields[2], "name") == "Value" && attribute(point_fields[2], "type") == "TypedScalarValueType",
+                attribute(point_fields[2], "name") == "Value" && attribute(point_fields[2], "type") == "TypedValueType",
                 "ChartPoint schema must expose named Text, Color, and typed Value fields");
         } else {
             if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
@@ -1567,6 +1567,43 @@ void test_document_instances(xmlSchemaPtr schema) {
         "Page id must be rejected by the public schema");
 }
 
+void test_recursive_typed_value_schema(xmlSchemaPtr schema) {
+    const auto document = [](std::string_view value) {
+        return std::string(R"XML(<Form id="1" name="Typed" ordinaryFormVersion="2.1"><Attributes><Attribute id="10" name="Number"><TypeDomain><Entry term="numeric" length="12" precision="3"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="Input"><DataPath attributeId="10"/><Position/><MaxValue>)XML") +
+            std::string(value) + "</MaxValue><MinValue>" + std::string(value) +
+            R"XML(</MinValue></InputField><Chart id="3" name="Chart"><Position/><Series><ChartSeries id="2"><Text/><Color kind="automatic"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text/><Color kind="automatic"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1">)XML" +
+            std::string(value) + "<Details>" + std::string(value) + "</Details></ChartValue></Values></Chart></ChildItems></Form>";
+    };
+    for (const auto value : {
+        R"XML(<Color kind="absolute" red="23" green="67" blue="101"/>)XML",
+        R"XML(<Color kind="styleReference" styleName="WebColors.Red"/>)XML",
+        R"XML(<Font kind="absolute" faceName="Arial" height="13" bold="true"/>)XML",
+        R"XML(<Border kind="absolute" borderType="Double" width="2"/>)XML",
+        R"XML(<TypeDescription><Entry term="numeric" length="12" precision="3"/><Entry term="string" length="40"/></TypeDescription>)XML",
+        R"XML(<Array><Item><String>Первый</String></Item><Item><Number>1.25</Number></Item></Array>)XML",
+        R"XML(<FixedArray><Item><Array/></Item></FixedArray>)XML",
+        R"XML(<Structure><Field name="Заголовок"><Array><Item><Boolean>true</Boolean></Item></Array></Field></Structure>)XML",
+        R"XML(<FixedStructure><Field name="Ключ"><Null/></Field></FixedStructure>)XML",
+        R"XML(<Map><Entry><Key><Number>17</Number></Key><Value><Array/></Value></Entry></Map>)XML",
+        R"XML(<FixedMap><Entry><Key><String>Ключ</String></Key><Value><FixedStructure/></Value></Entry></FixedMap>)XML",
+        R"XML(<Array><Item><FixedMap><Entry><Key><UUID>00112233-4455-6677-8899-aabbccddeeff</UUID></Key><Value><Type>String</Type></Value></Entry></FixedMap></Item></Array>)XML"}) {
+        expect(validate_document(schema, document(value)) == 0,
+            "Input bounds, direct Chart values and Details must share the recursive TypedValueGroup");
+    }
+    for (const auto value : {
+        R"XML(<Array><Item/></Array>)XML",
+        R"XML(<Array><Item><String>x</String><Number>1</Number></Item></Array>)XML",
+        R"XML(<Structure><Field><String>x</String></Field></Structure>)XML",
+        R"XML(<Map><Entry><Key><String>x</String></Key></Entry></Map>)XML",
+        R"XML(<Map><Entry><Value><String>x</String></Value><Key><String>y</String></Key></Entry></Map>)XML",
+        R"XML(<Map><Entry><Key><Number>1</Number></Key><Value><String>x</String><String>y</String></Value></Entry></Map>)XML",
+        R"XML(<Array><Item><ControlRef>2</ControlRef></Item></Array>)XML",
+        R"XML(<ValueList/>)XML"}) {
+        expect(validate_document(schema, document(value)) != 0,
+            "typed schema must reject malformed pairs and wrappers, references and unsupported ValueList");
+    }
+}
+
 void test_schema_structure_coverage_does_not_imply_codec_coverage(
     const Metamodel& metamodel,
     xmlSchemaPtr schema
@@ -1709,6 +1746,7 @@ int main() {
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
+        test_recursive_typed_value_schema(compiled_form.get());
         test_document_instances(compiled_form.get());
         test_spreadsheet_document_instances(compiled_form.get());
         test_date_values(compiled_form.get());

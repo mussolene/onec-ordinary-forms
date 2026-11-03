@@ -123,35 +123,14 @@ bool property_value_matches(
     const metamodel::PropertyDescriptor& descriptor,
     const PropertyValue& value
 ) noexcept {
+    if (descriptor.value_codec == metamodel::ValueCodec::typed_value) {
+        TypedValueBudget budget;
+        return validate_typed_value(value, budget);
+    }
     return std::visit(
         [&descriptor](const auto& typed_value) {
             const auto expected = descriptor.value_codec;
             using Value = std::remove_cvref_t<decltype(typed_value)>;
-            if (expected == metamodel::ValueCodec::typed_scalar) {
-                if constexpr (std::is_same_v<Value, UndefinedValue> || std::is_same_v<Value, NullValue> ||
-                    std::is_same_v<Value, bool> || std::is_same_v<Value, std::int64_t> ||
-                    std::is_same_v<Value, std::string>) return true;
-                else if constexpr (std::is_same_v<Value, UuidValue>) {
-                    if (typed_value.canonical.size() != 36) return false;
-                    for (std::size_t i = 0; i < 36; ++i) {
-                        const char c = typed_value.canonical[i];
-                        if (i == 8 || i == 13 || i == 18 || i == 23) { if (c != '-') return false; }
-                        else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
-                    }
-                    return true;
-                }
-                else if constexpr (std::is_same_v<Value, DecimalValue>) {
-                    try { return storage::value_codec::canonical_decimal(typed_value.canonical) == typed_value.canonical; }
-                    catch (const std::exception&) { return false; }
-                } else if constexpr (std::is_same_v<Value, DateValue>) {
-                    try { (void)storage::value_codec::date_to_platform(typed_value.canonical); return true; }
-                    catch (const std::exception&) { return false; }
-                }
-                else if constexpr (std::is_same_v<Value, PlatformTypeValue>) {
-                    const auto types = metamodel::platform_value_type_descriptors();
-                    return std::ranges::find(types, typed_value.name, &metamodel::PlatformValueTypeDescriptor::name) != types.end();
-                } else return false;
-            }
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
                 return expected == metamodel::ValueCodec::date ||
                        expected == metamodel::ValueCodec::action_source_reference ||
@@ -732,7 +711,145 @@ std::optional<ConstPositionPropertyRef> find_position_property(
     return std::nullopt;
 }
 
+bool valid_typed_uuid(std::string_view uuid) noexcept {
+    if (uuid.size() != 36) return false;
+    for (std::size_t index = 0; index < uuid.size(); ++index) {
+        const char character = uuid[index];
+        if (index == 8 || index == 13 || index == 18 || index == 23) {
+            if (character != '-') return false;
+        } else if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f'))) return false;
+    }
+    return true;
+}
+
+bool valid_typed_utf8(std::string_view name) noexcept {
+    for (std::size_t offset = 0; offset < name.size();) {
+        const auto first = static_cast<unsigned char>(name[offset++]);
+        if (first < 0x80) continue;
+        std::uint32_t code_point = 0;
+        std::size_t remaining = 0;
+        std::uint32_t minimum = 0;
+        if (first >= 0xc2 && first <= 0xdf) { code_point = first & 0x1f; remaining = 1; minimum = 0x80; }
+        else if (first >= 0xe0 && first <= 0xef) { code_point = first & 0x0f; remaining = 2; minimum = 0x800; }
+        else if (first >= 0xf0 && first <= 0xf4) { code_point = first & 0x07; remaining = 3; minimum = 0x10000; }
+        else return false;
+        if (remaining > name.size() - offset) return false;
+        while (remaining-- != 0) {
+            const auto next = static_cast<unsigned char>(name[offset++]);
+            if ((next & 0xc0) != 0x80) return false;
+            code_point = (code_point << 6) | (next & 0x3f);
+        }
+        if (code_point < minimum || code_point > 0x10ffff || (code_point >= 0xd800 && code_point <= 0xdfff)) return false;
+    }
+    return true;
+}
+
+
+bool validate_typed_value_node(const PropertyValue& value, TypedValueBudget& budget, std::size_t depth) {
+    if (depth > max_typed_value_depth || budget.nodes >= max_typed_value_nodes) return false;
+    ++budget.nodes;
+    return std::visit([&](const auto& item) -> bool {
+        using Value = std::remove_cvref_t<decltype(item)>;
+        if constexpr (std::is_same_v<Value, UndefinedValue> || std::is_same_v<Value, NullValue> ||
+            std::is_same_v<Value, bool> || std::is_same_v<Value, std::int64_t>) return true;
+        else if constexpr (std::is_same_v<Value, std::string>) return valid_typed_utf8(item);
+        else if constexpr (std::is_same_v<Value, DecimalValue>) return storage::value_codec::canonical_decimal(item.canonical) == item.canonical;
+        else if constexpr (std::is_same_v<Value, DateValue>) {
+            (void)storage::value_codec::date_to_platform(item.canonical);
+            return true;
+        } else if constexpr (std::is_same_v<Value, UuidValue>) return valid_typed_uuid(item.canonical);
+        else if constexpr (std::is_same_v<Value, PlatformTypeValue>) {
+            const auto types = metamodel::platform_value_type_descriptors();
+            return std::ranges::find(types, item.name, &metamodel::PlatformValueTypeDescriptor::name) != types.end();
+        } else if constexpr (std::is_same_v<Value, ColorValue>) {
+            if (item.alpha != 255) return false;
+            if (item.kind == ColorKind::absolute) return std::holds_alternative<std::monostate>(item.style);
+            if (item.red != 0 || item.green != 0 || item.blue != 0) return false;
+            if (item.kind == ColorKind::automatic) return std::holds_alternative<std::monostate>(item.style);
+            const auto* name = std::get_if<QualifiedName>(&item.style);
+            return item.kind == ColorKind::style_reference && name && metamodel::find_named_color(name->value);
+        } else if constexpr (std::is_same_v<Value, FontValue>) {
+            (void)storage::value_codec::encode_font(item);
+            return true;
+        } else if constexpr (std::is_same_v<Value, BorderValue>) {
+            if (!valid_border_value(item)) return false;
+            if (item.kind == BorderKind::absolute) return true;
+            const auto* name = std::get_if<QualifiedName>(&item.style);
+            return name && name->value == "StyleBorders.ControlBorder";
+        } else if constexpr (std::is_same_v<Value, TypeDomainPatternValue>) {
+            if (item.entries.size() > max_typed_value_nodes - budget.nodes) return false;
+            budget.nodes += item.entries.size();
+            return storage::value_codec::decode_type_domain(storage::value_codec::encode_type_domain(item)) == item;
+        } else if constexpr (std::is_same_v<Value, ArrayValue>) {
+            if (item.items.size() > max_typed_value_nodes - budget.nodes) return false;
+            for (const auto& child : item.items)
+                if (!validate_typed_value_node(child, budget, depth + 1)) return false;
+            return true;
+        } else if constexpr (std::is_same_v<Value, StructureValue>) {
+            if (item.fields.size() > max_typed_value_nodes - budget.nodes) return false;
+            std::set<std::string> names;
+            for (const auto& field : item.fields) {
+                if (field.name.empty() || !valid_typed_utf8(field.name) || !names.insert(field.name).second || !validate_typed_value_node(field.value, budget, depth + 1)) return false;
+            }
+            return true;
+        } else if constexpr (std::is_same_v<Value, MapValue>) {
+            if (item.entries.size() > (max_typed_value_nodes - budget.nodes) / 2) return false;
+            std::set<std::string> keys;
+            for (const auto& entry : item.entries) {
+                if (!validate_typed_value_node(entry.key, budget, depth + 1)) return false;
+                const auto key = typed_map_key(entry.key);
+                if (!key || !keys.insert(*key).second || !validate_typed_value_node(entry.value, budget, depth + 1)) return false;
+            }
+            return true;
+        } else return false;
+    }, value);
+}
+
 }  // namespace
+
+std::optional<std::string> typed_map_key(const PropertyValue& value) {
+    return std::visit([](const auto& item) -> std::optional<std::string> {
+        using Value = std::remove_cvref_t<decltype(item)>;
+        if constexpr (std::is_same_v<Value, UndefinedValue>) return "U";
+        else if constexpr (std::is_same_v<Value, NullValue>) return "L";
+        else if constexpr (std::is_same_v<Value, bool>) return item ? "B1" : "B0";
+        else if constexpr (std::is_same_v<Value, std::int64_t>) return "N" + std::to_string(item);
+        else if constexpr (std::is_same_v<Value, DecimalValue>) return "N" + item.canonical;
+        else if constexpr (std::is_same_v<Value, std::string>) return "S" + item;
+        else if constexpr (std::is_same_v<Value, DateValue>) return "D" + item.canonical;
+        else if constexpr (std::is_same_v<Value, UuidValue>) return "#" + item.canonical;
+        else if constexpr (std::is_same_v<Value, PlatformTypeValue>) return "T" + item.name;
+        else return std::nullopt;
+    }, value);
+}
+
+bool operator==(const MapValue& left, const MapValue& right) {
+    if (left.fixed != right.fixed || left.entries.size() != right.entries.size()) return false;
+    const auto index_entries = [](const MapValue& value, std::map<std::string, const PropertyValue*>& index) {
+        for (const auto& entry : value.entries) {
+            const auto key = typed_map_key(entry.key);
+            TypedValueBudget budget;
+            if (!key || !validate_typed_value(entry.key, budget) || !index.emplace(*key, &entry.value).second) return false;
+        }
+        return true;
+    };
+    std::map<std::string, const PropertyValue*> left_index, right_index;
+    if (!index_entries(left, left_index) || !index_entries(right, right_index)) return false;
+    auto right_entry = right_index.begin();
+    for (const auto& [key, value] : left_index) {
+        if (key != right_entry->first || *value != *right_entry->second) return false;
+        ++right_entry;
+    }
+    return true;
+}
+
+bool validate_typed_value(const PropertyValue& value, TypedValueBudget& budget) noexcept {
+    try {
+        return validate_typed_value_node(value, budget, 0);
+    } catch (...) {
+        return false;
+    }
+}
 
 const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
     const auto found = entries_.find(id);
@@ -1079,19 +1196,10 @@ bool valid_chart_style(metamodel::ValueCodec codec, const PropertyValue& value) 
             (void)storage::value_codec::encode_line(*line);
             return true;
         }
-        if (codec == metamodel::ValueCodec::font) {
-            const auto* font = std::get_if<FontValue>(&value);
-            if (!font) return false;
-            (void)storage::value_codec::encode_font(*font);
-            return true;
-        }
-        const auto* color = std::get_if<ColorValue>(&value);
-        if (!color || color->alpha != 255) return false;
-        const bool no_channels = color->red == 0 && color->green == 0 && color->blue == 0;
-        if (color->kind == ColorKind::absolute) return std::holds_alternative<std::monostate>(color->style);
-        if (color->kind == ColorKind::automatic) return no_channels && std::holds_alternative<std::monostate>(color->style);
-        const auto* name = std::get_if<QualifiedName>(&color->style);
-        return color->kind == ColorKind::style_reference && no_channels && name && metamodel::find_named_color(name->value);
+        if ((codec == metamodel::ValueCodec::font && !std::holds_alternative<FontValue>(value)) ||
+            (codec != metamodel::ValueCodec::font && !std::holds_alternative<ColorValue>(value))) return false;
+        TypedValueBudget budget;
+        return validate_typed_value(value, budget);
     } catch (const std::exception&) { return false; }
 }
 
@@ -1204,9 +1312,9 @@ bool normalize_chart_series_property_value(const metamodel::ChartSeriesPropertyD
     if (field.value_codec == metamodel::ValueCodec::string) return std::holds_alternative<std::string>(value);
     if (field.value_codec == metamodel::ValueCodec::localized_text)
         return std::holds_alternative<std::string>(value) || (std::holds_alternative<LocalizedStringValue>(value) && valid_localized_string(std::get<LocalizedStringValue>(value)));
-    if (field.value_codec == metamodel::ValueCodec::typed_scalar) {
+    if (field.value_codec == metamodel::ValueCodec::typed_value) {
         metamodel::PropertyDescriptor scalar;
-        scalar.value_codec = metamodel::ValueCodec::typed_scalar;
+        scalar.value_codec = metamodel::ValueCodec::typed_value;
         return property_value_matches(scalar, value);
     }
     return false;
@@ -1424,7 +1532,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
-        if (descriptor->value_codec == metamodel::ValueCodec::typed_scalar) {
+        if (descriptor->value_codec == metamodel::ValueCodec::typed_value) {
             const auto* attribute = control.data_path ? find_attribute(control.data_path->attribute.id()) : nullptr;
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
             if (attribute == nullptr || !control.data_path->members.empty() || attribute->type.entries.size() != 1 ||
@@ -1919,7 +2027,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         descriptor->persistence == metamodel::PersistenceClass::version_specific) {
         return PropertyMutationStatus::unsupported_surface;
     }
-    if (descriptor->value_codec == metamodel::ValueCodec::typed_scalar && property_control != nullptr) {
+    if (descriptor->value_codec == metamodel::ValueCodec::typed_value && property_control != nullptr) {
         const auto* attribute = property_control->data_path ? find_attribute(property_control->data_path->attribute.id()) : nullptr;
         const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
         if (attribute == nullptr || !property_control->data_path->members.empty() || attribute->type.entries.size() != 1 ||
@@ -2256,7 +2364,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         return PropertyMutationStatus::unsupported_surface;
     }
 
-    if (descriptor->value_codec == metamodel::ValueCodec::typed_scalar && property_control != nullptr) {
+    if (descriptor->value_codec == metamodel::ValueCodec::typed_value && property_control != nullptr) {
         const auto* attribute = property_control->data_path ? find_attribute(property_control->data_path->attribute.id()) : nullptr;
         const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
         if (attribute == nullptr || !property_control->data_path->members.empty() || attribute->type.entries.size() != 1 ||
@@ -2309,6 +2417,81 @@ ValidationReport OrdinaryFormDocument::validate() const {
     ValidationReport report;
     if (!chart_budget_fits(collections_.controls))
         add_violation(report, InvariantCode::invalid_property, form_.id, {}, "Chart collections exceed the document resource budget");
+    TypedValueBudget typed_budget;
+    bool typed_values_valid = true;
+    const auto check_typed_value = [&](const PropertyValue& value) {
+        if (typed_values_valid && !validate_typed_value(value, typed_budget)) typed_values_valid = false;
+    };
+    const auto check_composite_value = [&](const PropertyValue& value) {
+        if (std::holds_alternative<ArrayValue>(value) || std::holds_alternative<StructureValue>(value) || std::holds_alternative<MapValue>(value))
+            check_typed_value(value);
+    };
+    const auto check_property_values = [&](const PropertySet& properties, auto&& resolve) {
+        properties.for_each_explicit([&](const PropertyEntry& entry) {
+            const auto* descriptor = resolve(entry.id);
+            if (descriptor && descriptor->value_codec == metamodel::ValueCodec::typed_value) check_typed_value(entry.value);
+            else check_composite_value(entry.value);
+        });
+    };
+    check_property_values(form_.properties, [](PropertyId id) { return metamodel::find_form_property(id); });
+    check_property_values(form_.panel.properties, [](PropertyId id) { return metamodel::find_property(ControlKind::panel, id); });
+    for (const auto& control : collections_.controls) {
+        const auto resolve = [&](PropertyId id) { return metamodel::find_property(control.kind(), id); };
+        check_property_values(control.properties(), resolve);
+        check_property_values(control.extension_properties, resolve);
+        if (const auto* chart = std::get_if<ChartPayload>(&control.payload)) {
+            const auto check_series = [&](const auto& series) {
+                check_typed_value(series.value);
+                const auto fields = metamodel::chart_series_property_descriptors();
+                check_property_values(series.properties, [&](PropertyId id) -> const metamodel::ChartSeriesPropertyDescriptor* {
+                    const auto found = std::ranges::find(fields, id, &metamodel::ChartSeriesPropertyDescriptor::id);
+                    return found == fields.end() ? nullptr : &*found;
+                });
+                for (const auto& trend : series.trendlines) {
+                    const auto trend_fields = metamodel::chart_trendline_property_descriptors();
+                    check_property_values(trend.properties, [&](PropertyId id) -> const metamodel::ChartSeriesPropertyDescriptor* {
+                        const auto found = std::ranges::find(trend_fields, id, &metamodel::ChartSeriesPropertyDescriptor::id);
+                        return found == trend_fields.end() ? nullptr : &*found;
+                    });
+                    trend.equation_area.for_each_explicit([&](const PropertyEntry& entry) { check_composite_value(entry.value); });
+                }
+            };
+            check_series(chart->summary_series);
+            if (chart->summary_series.text) check_composite_value(*chart->summary_series.text);
+            for (const auto& series : chart->series) {
+                check_series(series);
+                check_composite_value(series.text);
+            }
+            for (const auto& point : chart->points) check_typed_value(point.value);
+            for (const auto& cell : chart->values) {
+                check_typed_value(cell.value);
+                check_typed_value(cell.details);
+            }
+            for (const auto* area : {chart->plot_area ? &*chart->plot_area : nullptr, chart->title_area ? &*chart->title_area : nullptr,
+                    chart->legend_area ? &*chart->legend_area : nullptr}) {
+                if (!area) continue;
+                if (area->data_table_format) check_composite_value(*area->data_table_format);
+                for (const auto* scale : {&area->points_scale, &area->values_scale, &area->additional_values_scale, &area->series_scale}) {
+                    for (const auto* value : {&scale->scale_step, &scale->title_text, &scale->label_format})
+                        if (*value) check_composite_value(**value);
+                    scale->properties.for_each_explicit([&](const PropertyEntry& entry) { check_composite_value(entry.value); });
+                }
+            }
+        } else if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
+            for (const auto& cell : spreadsheet->cells) {
+                if (cell.typed_value) check_typed_value(cell.typed_value->value);
+                if (cell.control) check_property_values(cell.control->properties,
+                    [&](PropertyId id) { return metamodel::find_property(cell.control->kind, id); });
+            }
+        } else if (const auto* table = std::get_if<TablePayload>(&control.payload)) {
+            for (const auto& column : table->columns) check_property_values(column.control.properties,
+                [&](PropertyId id) { return metamodel::find_property(column.control.kind, id); });
+        }
+    }
+    if (!typed_values_valid) {
+        add_violation(report, InvariantCode::invalid_property, form_.id, {}, "Typed values are invalid or exceed the document depth or node budget");
+        return report;
+    }
     std::unordered_set<ObjectKey, ObjectKeyHash> seen;
 
     const auto record_id = [&](ObjectId id, ObjectCategory category) {
@@ -3208,7 +3391,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 !(std::holds_alternative<LocalizedStringValue>(*chart->summary_series.text) && valid_localized_string(std::get<LocalizedStringValue>(*chart->summary_series.text))))
                 invalid_chart("Chart SummarySeries Text must be plain or localized text");
             metamodel::PropertyDescriptor scalar_descriptor;
-            scalar_descriptor.value_codec = metamodel::ValueCodec::typed_scalar;
+            scalar_descriptor.value_codec = metamodel::ValueCodec::typed_value;
             if (!property_value_matches(scalar_descriptor, chart->summary_series.value))
                 invalid_chart("Chart SummarySeries Value must be a supported typed scalar");
             const auto validate_series_object = [&](metamodel::ConstChartSeriesObject object) {

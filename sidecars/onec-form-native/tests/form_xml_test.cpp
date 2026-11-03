@@ -27,6 +27,144 @@ void expect(bool condition, std::string_view message) {
     }
 }
 
+void test_recursive_typed_value_xml_contract() {
+    const std::array<std::string_view, 12> values{
+        R"XML(<Color kind="absolute" red="23" green="67" blue="101"/>)XML",
+        R"XML(<Color kind="styleReference" styleName="WebColors.Red"/>)XML",
+        R"XML(<Font kind="absolute" faceName="Arial" height="13" bold="true" italic="true" scale="120"/>)XML",
+        R"XML(<Border kind="absolute" borderType="Double" width="2"/>)XML",
+        R"XML(<Array><Item><String>Вложенный текст</String></Item><Item><Number>-12.75</Number></Item><Item><Null/></Item></Array>)XML",
+        R"XML(<FixedArray><Item><Array><Item><Boolean>true</Boolean></Item></Array></Item></FixedArray>)XML",
+        R"XML(<Structure><Field name="Заголовок"><String>Значение</String></Field><Field name="Nested"><Array><Item><Undefined>undefined</Undefined></Item></Array></Field></Structure>)XML",
+        R"XML(<FixedStructure><Field name="Nested"><Structure><Field name="Дата"><Date>2024-01-02T03:04:05</Date></Field></Structure></Field></FixedStructure>)XML",
+        R"XML(<Map><Entry><Key><Number>17</Number></Key><Value><Array><Item><String>Вложено</String></Item></Array></Value></Entry><Entry><Key><Boolean>false</Boolean></Key><Value><Number>123.45</Number></Value></Entry></Map>)XML",
+        R"XML(<FixedMap><Entry><Key><String>Ключ</String></Key><Value><FixedArray><Item><Array/></Item></FixedArray></Value></Entry></FixedMap>)XML",
+        R"XML(<TypeDescription><Entry term="numeric" length="12" precision="3"/><Entry term="string" length="40"/></TypeDescription>)XML",
+        R"XML(<Array><Item><FixedStructure><Field name="Описание"><TypeDescription><Entry term="boolean"/></TypeDescription></Field><Field name="Карта"><Map><Entry><Key><UUID>00112233-4455-6677-8899-aabbccddeeff</UUID></Key><Value><Type>String</Type></Value></Entry></Map></Field></FixedStructure></Item></Array>)XML"
+    };
+    std::string xml = R"XML(<Form id="1" name="TypedValues" ordinaryFormVersion="2.1"><Attributes>)XML";
+    for (std::size_t index = 0; index < values.size(); ++index)
+        xml += "<Attribute id=\"" + std::to_string(100 + index) + "\" name=\"Numeric" + std::to_string(index) +
+            "\"><TypeDomain><Entry term=\"numeric\" length=\"12\" precision=\"3\"/></TypeDomain></Attribute>";
+    xml += "</Attributes><ChildItems>";
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        const std::string value(values[index]);
+        xml += "<InputField id=\"" + std::to_string(200 + index) + "\" name=\"Input" + std::to_string(index) +
+            "\"><DataPath attributeId=\"" + std::to_string(100 + index) + "\"/><Position/><MaxValue>" + value +
+            "</MaxValue><MinValue>" + value + "</MinValue></InputField>";
+        xml += "<Chart id=\"" + std::to_string(300 + index) + "\" name=\"Chart" + std::to_string(index) +
+            "\"><Position/><SummarySeries><Value>" + value + "</Value></SummarySeries><Series><ChartSeries id=\"2\"><Text/>"
+            "<Color kind=\"automatic\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/><Value>" + value +
+            "</Value><Trendlines><Trendline><Details>" + value + "</Details></Trendline></Trendlines><Details>" + value +
+            "</Details></ChartSeries></Series><Points><ChartPoint id=\"1\"><Text/><Color kind=\"automatic\"/><Value>" +
+            value + "</Value></ChartPoint></Points><Values><ChartValue seriesRef=\"2\" pointRef=\"1\">" + value +
+            "<Details>" + value + "</Details></ChartValue></Values></Chart>";
+    }
+    xml += "</ChildItems></Form>";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "12 numeric fields and 12 Charts must share the recursive typed-value XML contract");
+    const auto inspect = [&](const model::OrdinaryFormDocument& document) {
+        for (std::size_t index = 0; index < values.size(); ++index) {
+            const auto* input = document.find_control(model::ObjectId{200 + index});
+            const auto* chart = document.find_control(model::ObjectId{300 + index});
+            expect(input && chart, "typed-value fixtures must retain both control families");
+            const auto* minimum = input->properties().find(model::PropertyId::from_name("MinValue"));
+            const auto* maximum = input->properties().find(model::PropertyId::from_name("MaxValue"));
+            expect(minimum && maximum && minimum->value == maximum->value, "both bounds must preserve the same named value");
+            const auto& payload = std::get<model::ChartPayload>(chart->payload);
+            expect(payload.series.size() == 1 && payload.points.size() == 1 && payload.values.size() == 1,
+                "typed Chart fixture must retain its declared matrix");
+            const auto& expected = minimum->value;
+            expect(payload.summary_series.value == expected && payload.series.front().value == expected &&
+                payload.points.front().value == expected && payload.values.front().value == expected &&
+                payload.values.front().details == expected, "all fixed Chart value surfaces must use the same recursive value graph");
+            const auto* details = payload.series.front().properties.find(model::PropertyId::from_name("Details"));
+            const auto& trends = payload.series.front().trendlines;
+            expect(details && details->value == expected && trends.size() == 1, "series Details and Trendlines must preserve the shared value");
+            const auto* trend_details = trends.front().properties.find(model::PropertyId::from_name("Details"));
+            expect(trend_details && trend_details->value == expected, "trendline Details must use the recursive value parser");
+        }
+    };
+    inspect(parsed.value());
+    const auto written = source::serialize_form_xml(parsed.value());
+    expect(written.ok(), "recursive named values must serialize through existing Color, Font, Border and TypeDomain writers");
+    const auto reparsed = source::parse_form_xml(written.value());
+    expect(reparsed.ok(), "recursive typed XML must parse after canonical serialization");
+    inspect(reparsed.value());
+    const auto rewritten = source::serialize_form_xml(reparsed.value());
+    expect(rewritten.ok() && rewritten.value() == written.value(), "typed graphs must preserve each fixed or mutable node kind in canonical XML");
+    const auto& fixed = std::get<model::ArrayValue>(parsed.value().find_control(model::ObjectId{205})->properties().find(
+        model::PropertyId::from_name("MinValue"))->value);
+    expect(fixed.fixed && !std::get<model::ArrayValue>(fixed.items.front()).fixed,
+        "FixedArray XML must preserve an explicitly mutable descendant rather than emulate a platform constructor");
+    const auto chart_xml = [](std::string_view value) {
+        return std::string(R"XML(<Form id="1" name="InvalidValue" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series><ChartSeries id="2"><Text/><Color kind="automatic"/><Marker type="ChartMarkerType" member="Auto"/><Value>)XML") +
+            std::string(value) + "</Value></ChartSeries></Series><Points/><Values/></Chart></ChildItems></Form>";
+    };
+    for (const auto invalid : {
+        R"XML(<Array><Item/></Array>)XML",
+        R"XML(<Array><Item><String>a</String><Number>1</Number></Item></Array>)XML",
+        R"XML(<Structure><Field><String>x</String></Field></Structure>)XML",
+        R"XML(<Structure><Field name=""><String>x</String></Field></Structure>)XML",
+        R"XML(<Structure><Field name="Same"><String>x</String></Field><Field name="Same"><String>y</String></Field></Structure>)XML",
+        R"XML(<Map><Entry><Key><String>x</String></Key></Entry></Map>)XML",
+        R"XML(<Map><Entry><Value><String>x</String></Value><Key><Number>1</Number></Key></Entry></Map>)XML",
+        R"XML(<Map><Entry><Key><String>x</String></Key><Key><String>y</String></Key><Value><Number>1</Number></Value></Entry></Map>)XML",
+        R"XML(<Map><Entry><Key><String>x</String></Key><Value><Number>1</Number><Number>2</Number></Value></Entry></Map>)XML",
+        R"XML(<Array><Item><ControlRef>2</ControlRef></Item></Array>)XML",
+        R"XML(<ValueList/>)XML"}) {
+        expect(!source::parse_form_xml(chart_xml(invalid)).ok(), "malformed typed pairs, wrappers, references and unsupported ValueList must be rejected");
+    }
+    std::string nested = "<String>leaf</String>";
+    for (std::size_t depth = 0; depth < model::max_typed_value_depth; ++depth)
+        nested = "<Array><Item>" + nested + "</Item></Array>";
+    expect(source::parse_form_xml(chart_xml(nested)).ok(), "typed root depth zero must admit a leaf exactly at depth 64");
+    const auto overflow = source::parse_form_xml(chart_xml("<Array><Item>" + nested + "</Item></Array>"));
+    expect(!overflow.ok() && !overflow.diagnostics().empty() &&
+        overflow.diagnostics().front().message == "Typed values exceed the document resource budget",
+        "XML must reject excess recursive depth before appending a nested value");
+    model::TypedValueBudget shared_budget{model::max_typed_value_nodes - 1};
+    expect(model::validate_typed_value(model::PropertyValue{std::string{"first"}}, shared_budget) &&
+        !model::validate_typed_value(model::PropertyValue{std::string{"second"}}, shared_budget),
+        "one pre-used document node budget must reject a later typed value without allocating a million nodes");
+}
+
+void test_map_canonical_xml_order() {
+    const std::string numeric = R"XML(<Entry><Key><Number>17</Number></Key><Value><Array><Item><String>Вложенное значение</String></Item></Array></Value></Entry>)XML";
+    const std::string boolean = R"XML(<Entry><Key><Boolean>false</Boolean></Key><Value><Structure><Field name="Caption"><String>Заголовок</String></Field></Structure></Value></Entry>)XML";
+    const std::string text = R"XML(<Entry><Key><String>Title</String></Key><Value><String>Значение</String></Value></Entry>)XML";
+    for (const auto kind : {"Map", "FixedMap"}) {
+        const auto make_xml = [&](const std::string& entries) {
+            return std::string(R"XML(<Form id="1" name="CanonicalMap" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Chart"><Position/><Series><ChartSeries id="2"><Text/><Color kind="automatic"/><Marker type="ChartMarkerType" member="Auto"/><Value><Array><Item><)XML") +
+                kind + ">" + entries + "</" + kind + "></Item></Array></Value></ChartSeries></Series><Points/><Values/></Chart></ChildItems></Form>";
+        };
+        const auto first = source::parse_form_xml(make_xml(numeric + boolean + text));
+        const auto second = source::parse_form_xml(make_xml(text + numeric + boolean));
+        expect(first.ok() && second.ok(), "both native Map enumeration orders must parse");
+        const auto map_value = [](const model::OrdinaryFormDocument& document) -> const model::MapValue& {
+            const auto& chart = std::get<model::ChartPayload>(document.find_control(model::ObjectId{2})->payload);
+            return std::get<model::MapValue>(std::get<model::ArrayValue>(chart.series.front().value).items.front());
+        };
+        const auto& first_map = map_value(first.value());
+        const auto& second_map = map_value(second.value());
+        const auto& first_chart = std::get<model::ChartPayload>(first.value().find_control(model::ObjectId{2})->payload);
+        const auto& second_chart = std::get<model::ChartPayload>(second.value().find_control(model::ObjectId{2})->payload);
+        expect(first_map == second_map && first_chart.series.front().value == second_chart.series.front().value,
+            "Map deep equality must compare key/value associations independently of enumeration order");
+        expect(std::holds_alternative<model::DecimalValue>(first_map.entries.front().key) &&
+            std::holds_alternative<std::string>(second_map.entries.front().key), "parser must preserve each supplied wire order");
+        const auto first_xml = source::serialize_form_xml(first.value());
+        const auto second_xml = source::serialize_form_xml(second.value());
+        expect(first_xml.ok() && second_xml.ok() && first_xml.value() == second_xml.value(),
+            "Map and FixedMap must emit the same canonical XML for equivalent entry orders, including nested values");
+        expect(std::holds_alternative<model::DecimalValue>(first_map.entries.front().key) &&
+            std::holds_alternative<std::string>(second_map.entries.front().key), "canonical XML writer must not mutate either model entry order");
+        const auto reparsed = source::parse_form_xml(first_xml.value());
+        expect(reparsed.ok() && map_value(reparsed.value()) == first_map,
+            "canonical Map XML must preserve the complete key/value graph");
+    }
+}
+
 void test_form_item_collection_xml_contract() {
     using namespace model;
     const FormItemCollectionRef controls{ObjectId{1}, FormItemCollectionKind::controls};
@@ -3344,6 +3482,8 @@ void test_chart_xml_document_resource_budget() {
 
 int main() {
     try {
+        test_map_canonical_xml_order();
+        test_recursive_typed_value_xml_contract();
         test_form_item_collection_xml_contract();
         test_named_style_color_defaults();
         test_border_and_calendar_selection_xml_contract();

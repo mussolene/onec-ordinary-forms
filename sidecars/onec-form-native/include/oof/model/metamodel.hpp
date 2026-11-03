@@ -83,7 +83,7 @@ enum class ValueCodec : std::uint8_t {
     integer,
     integer32,
     decimal,
-    typed_scalar,
+    typed_value,
     string,
     localized_string,
     formatted_string,

@@ -1343,7 +1343,7 @@ void apply_proven_storage_overrides(
     for (const auto name : {"MinValue", "MaxValue"}) {
         auto property = std::ranges::find(input_field, name, &PropertyDescriptor::api_name);
         if (property == input_field.end()) throw std::logic_error("missing InputField bound");
-        property->value_codec = ValueCodec::typed_scalar;
+        property->value_codec = ValueCodec::typed_value;
         property->storage_codec = StorageCodec::control_info;
         property->default_value = {DefaultKind::undefined, "undefined"};
     }
@@ -2368,7 +2368,7 @@ std::span<const ChartSeriesPropertyDescriptor> chart_series_property_descriptors
         ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowGraphicalDataRepresentationInChartLegend"), "ShowGraphicalDataRepresentationInChartLegend", u8"ОтображатьГрафическоеПредставлениеДанныхВЛегендеДиаграммы", ValueCodec::enumeration, u8"ОтображениеВЛегендеДиаграммы", ChartSeriesStorage::companion, 0, ChartSeriesFixed::none, "ShowInChartLegend", visibility, PropertyValue{EnumerationValue{"ShowInChartLegend", "Auto"}}, false},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("Trendlines"), "Trendlines", u8"ЛинииТренда", ValueCodec::chart_trendlines, u8"ЛинииТрендаДиаграммы", ChartSeriesStorage::computed, 0, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}, true},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowGraphicalDataRepresentationInChart"), "ShowGraphicalDataRepresentationInChart", u8"ОтображатьГрафическоеПредставлениеДанныхВДиаграмме", ValueCodec::enumeration, u8"ОтображениеВДиаграмме", ChartSeriesStorage::companion, 1, ChartSeriesFixed::none, "ShowInChart", visibility, PropertyValue{EnumerationValue{"ShowInChart", "Auto"}}, false},
-        ChartSeriesPropertyDescriptor{PropertyId::from_name("Details"), "Details", u8"Расшифровка", ValueCodec::typed_scalar, u8"Произвольный", ChartSeriesStorage::row, 8, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Details"), "Details", u8"Расшифровка", ValueCodec::typed_value, u8"Произвольный", ChartSeriesStorage::row, 8, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}, false},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("LabelPercentFormat"), "LabelPercentFormat", u8"ФорматПроцентовВПодписях", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::style, 7, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}, false},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("Text"), "Text", u8"Текст", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::row, 3, ChartSeriesFixed::text, {}, {}, PropertyValue{std::string{}}, false},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("LabelValueFormat"), "LabelValueFormat", u8"ФорматЗначенийВПодписях", ValueCodec::localized_text, u8"Строка", ChartSeriesStorage::style, 6, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}, false},
@@ -2383,7 +2383,7 @@ std::span<const ChartSeriesPropertyDescriptor> chart_series_property_descriptors
         ChartSeriesPropertyDescriptor{PropertyId::from_name("Indicator"), "Indicator", u8"Индикатор", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::computed, 0, ChartSeriesFixed::none, {}, {}, PropertyValue{false}, false},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("ValuesEditMode"), "ValuesEditMode", u8"РежимРедактированияЗначений", ValueCodec::enumeration, u8"РежимРедактированияЗначенийДиаграммы", ChartSeriesStorage::style, 9, ChartSeriesFixed::none, "ChartValuesEditMode", edit, PropertyValue{EnumerationValue{"ChartValuesEditMode", "Auto"}}, false},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("StackGroup"), "StackGroup", u8"ГруппаНакопления", ValueCodec::string, u8"Строка", ChartSeriesStorage::style, 5, ChartSeriesFixed::none, {}, {}, PropertyValue{std::string{}}, false},
-        ChartSeriesPropertyDescriptor{PropertyId::from_name("Value"), "Value", u8"Значение", ValueCodec::typed_scalar, u8"Произвольный", ChartSeriesStorage::row, 9, ChartSeriesFixed::value, {}, {}, PropertyValue{UndefinedValue{}}, false},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Value"), "Value", u8"Значение", ValueCodec::typed_value, u8"Произвольный", ChartSeriesStorage::row, 9, ChartSeriesFixed::value, {}, {}, PropertyValue{UndefinedValue{}}, false},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("ColorPriority"), "ColorPriority", u8"ПриоритетЦвета", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 10, ChartSeriesFixed::none, {}, {}, PropertyValue{false}, false, true},
     };
     return descriptors;
@@ -2404,7 +2404,7 @@ std::span<const ChartSeriesPropertyDescriptor> chart_trendline_property_descript
         ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowEquation"), "ShowEquation", u8"ОтображатьУравнение", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 8, ChartSeriesFixed::none, {}, {}, PropertyValue{false}},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("ShowDeterminationFactor"), "ShowDeterminationFactor", u8"ОтображатьКоэффициентДетерминации", ValueCodec::boolean, u8"Булево", ChartSeriesStorage::row, 9, ChartSeriesFixed::none, {}, {}, PropertyValue{false}},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("Marker"), "Marker", u8"Маркер", ValueCodec::enumeration, u8"ТипМаркераДиаграммы", ChartSeriesStorage::row, 10, ChartSeriesFixed::none, "ChartMarkerType", markers, PropertyValue{EnumerationValue{"ChartMarkerType", "Auto"}}},
-        ChartSeriesPropertyDescriptor{PropertyId::from_name("Details"), "Details", u8"Расшифровка", ValueCodec::typed_scalar, u8"Произвольный", ChartSeriesStorage::row, 11, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}},
+        ChartSeriesPropertyDescriptor{PropertyId::from_name("Details"), "Details", u8"Расшифровка", ValueCodec::typed_value, u8"Произвольный", ChartSeriesStorage::row, 11, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("StockChartUsedPointValue"), "StockChartUsedPointValue", u8"ИспользуемоеЗначениеТочкиБиржевойДиаграммы", ValueCodec::enumeration, u8"ИспользуемоеЗначениеТочкиБиржевойДиаграммы", ChartSeriesStorage::row, 12, ChartSeriesFixed::none, "StockChartUsedPointValue", stock, PropertyValue{EnumerationValue{"StockChartUsedPointValue", "OpenCloseAverage"}}},
         ChartSeriesPropertyDescriptor{PropertyId::from_name("EquationArea"), "EquationArea", u8"ОбластьУравнения", ValueCodec::chart_equation_area, u8"ОбластьПодписиДиаграммы", ChartSeriesStorage::row, 13, ChartSeriesFixed::none, {}, {}, PropertyValue{UndefinedValue{}}},
     };
@@ -2739,8 +2739,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "integer32";
         case ValueCodec::decimal:
             return "decimal";
-        case ValueCodec::typed_scalar:
-            return "typed-scalar";
+        case ValueCodec::typed_value:
+            return "typed-value";
         case ValueCodec::string:
             return "string";
         case ValueCodec::localized_text:
