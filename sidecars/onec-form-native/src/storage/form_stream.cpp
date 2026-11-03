@@ -2669,7 +2669,7 @@ void decode_control_metadata(const LV& metadata, std::string_view path, model::C
 LV encode_control_metadata(const model::ControlNode& control, std::string_view path, std::uint32_t action_source = std::numeric_limits<std::uint32_t>::max()) {
     if (control.kind() == model::ControlKind::command_bar)
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "ActionSource"}, path);
-    else if (control.kind() == model::ControlKind::radio_button)
+    else if (control.kind() == model::ControlKind::radio_button || control.kind() == model::ControlKind::input_field)
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "ValueType"}, path);
     else if (control.kind() == model::ControlKind::button)
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "DefaultButton"}, path);
@@ -9927,7 +9927,7 @@ LV encode_spreadsheet_document_field(
 DecodedControl decode_input_field(
     const LV& record,
     std::string_view path,
-    const AttributeRecord& linked_attribute,
+    const AttributeRecord* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -9945,7 +9945,7 @@ DecodedControl decode_input_field(
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
     const bool supported_type = is_single_string_type_domain(control_type) || is_supported_input_numeric_type_domain(control_type) ||
         is_single_date_only_type_domain(control_type);
-    if (!supported_type || control_type != linked_attribute.type) {
+    if (!supported_type || (linked_attribute != nullptr && control_type != linked_attribute->type)) {
         fail(
             "OOF1122",
             child_path(info_path, 1),
@@ -10036,6 +10036,9 @@ DecodedControl decode_input_field(
                 fail("OOF1122", info_path, "supported named InputField bound", {}, "Unsupported InputField bound value");
             if (list_stream::dump_compact(primary) != list_stream::dump_compact(secondary))
                 fail("OOF1114", info_path, "matching InputField bound copies", {}, "InputField bound copies differ");
+            if (linked_attribute == nullptr && !std::holds_alternative<model::UndefinedValue>(*input_bounds[index]))
+                fail("OOF1122", info_path, "bound numeric InputField for nondefault MinValue or MaxValue", {},
+                    "Unbound InputField bounds are outside the supported profile");
         }
     }
     LV normalized_info = info;
@@ -10073,6 +10076,8 @@ DecodedControl decode_input_field(
     std::vector<DecodedControl::PicturePropertyAsset> decoded_picture_assets;
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
     decode_control_metadata(metadata, metadata_path, control);
+    if (linked_attribute == nullptr)
+        control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), control_type);
     apply_common_control_base(control.properties(), common);
     for (std::size_t index = 0; index < input_bounds.size(); ++index) {
         if (input_bounds[index] && !std::holds_alternative<model::UndefinedValue>(*input_bounds[index]))
@@ -11651,26 +11656,40 @@ LV encode_input_field(
         control.id.value() == 0) {
         fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at its ChildItems index", control.name, "InputField is outside the supported profile");
     }
-    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
         !control.children.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/InputField", "named InputField with direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
+        fail("OOF1122", "$/InputField", "named InputField with optional direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
         "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue"}, "$/InputField");
-    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
-    if (attribute == nullptr) {
+    const auto* attribute = control.data_path ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
+    if (control.data_path && attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
     }
-    if (!is_single_string_type_domain(attribute->type) && !is_supported_input_numeric_type_domain(attribute->type) &&
-        !is_single_date_only_type_domain(attribute->type)) {
-        fail("OOF1122", "$/InputField/DataPath", "linked single-string, single-numeric, or Date-only Attribute",
-            attribute->name, "InputField type is outside the supported profile");
+    const auto* local_type_entry = control.extension_properties.find(model::PropertyId::from_name("ValueType"));
+    const auto* local_type = local_type_entry == nullptr ? nullptr :
+        std::get_if<model::TypeDomainPatternValue>(&local_type_entry->value);
+    if (local_type_entry != nullptr && local_type == nullptr)
+        fail("OOF1122", "$/InputField/ValueType", "TypeDomainPattern", "different value kind",
+            "InputField ValueType must be a TypeDomainPattern");
+    if (attribute != nullptr && local_type != nullptr && *local_type != attribute->type)
+        fail("OOF1122", "$/InputField/ValueType", "ValueType matching linked Attribute", {},
+            "InputField ValueType differs from its linked Attribute type");
+    const auto* effective_type = attribute != nullptr ? &attribute->type : local_type;
+    if (effective_type == nullptr)
+        fail("OOF1122", "$/InputField/ValueType", "explicit local ValueType for an unbound InputField", "absent",
+            "Unbound InputField requires an explicit ValueType");
+    if (!is_single_string_type_domain(*effective_type) && !is_supported_input_numeric_type_domain(*effective_type) &&
+        !is_single_date_only_type_domain(*effective_type)) {
+        fail("OOF1122", attribute != nullptr ? "$/InputField/DataPath" : "$/InputField/ValueType",
+            "single-string, single-numeric, or Date-only TypeDomainPattern", {},
+            "InputField type is outside the supported profile");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);
@@ -11697,13 +11716,13 @@ LV encode_input_field(
         input_field_flags[index] = explicit_bool(control.properties(), mapping.name, mapping.default_value);
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
-    auto input_info = canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags,
+    auto input_info = canonical_input_field_info(*effective_type, enabled, read_only, input_field_flags,
         text_values, layout_values, &font, &border_color, shortcut);
     for (std::size_t index = 0; index < 2; ++index) {
         const auto name = index == 0 ? "MinValue" : "MaxValue";
         const auto* bound = control.properties().find(model::PropertyId::from_name(name));
         if (bound == nullptr) continue;
-        if (!is_supported_input_numeric_type_domain(attribute->type) || explicit_bool(control.properties(), "ListChoiceMode", false))
+        if (attribute == nullptr || !is_supported_input_numeric_type_domain(*effective_type) || explicit_bool(control.properties(), "ListChoiceMode", false))
             fail("OOF1122", "$/InputField/" + std::string(name), "numeric InputField with paired bounds", {}, "InputField bound is outside supported profile");
         const auto value = encoded_typed_value(bound->value, "$/InputField/" + std::string(name));
         input_info.items[2].items[0].items[19 + index] = value;
@@ -12783,7 +12802,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                         const bool calendar_field_guid = guid == calendar_descriptor.guid;
                         const bool track_bar_guid = guid == track_bar_descriptor.guid;
                         const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid &&
-                            !radio_button_guid && !calendar_field_guid && !track_bar_guid && guid != label_descriptor.guid;
+                            !radio_button_guid && !calendar_field_guid && !track_bar_guid && guid != label_descriptor.guid &&
+                            guid != input_descriptor.guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
                             "DataPath link for each required linked control", std::to_string(candidate_id),
                             "Linked control has no attribute link");
@@ -12822,9 +12842,11 @@ Result<model::OrdinaryFormDocument> decode_document(
                         } else if (radio_button_guid) {
                             child = decode_radio_button(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                         } else if (guid == input_descriptor.guid) {
-                            child = decode_input_field(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
-                            child.control.data_path = model::DataPath{model::AttributeRef{
-                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                            child = decode_input_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
+                            if (linked_attribute != nullptr) {
+                                child.control.data_path = model::DataPath{model::AttributeRef{
+                                    model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                            }
                         } else if (guid == checkbox_descriptor.guid) {
                             child = decode_check_box(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                             child.control.data_path = model::DataPath{model::AttributeRef{

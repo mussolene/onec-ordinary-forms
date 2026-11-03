@@ -1055,6 +1055,83 @@ void test_control_name_property() {
         "Name does not manufacture an unknown owner");
 }
 
+void test_binding_property_getters() {
+    using namespace oof::model::metamodel;
+    Form form; form.id = ObjectId{1}; form.name = "BindingProperties";
+    OrdinaryFormDocument document(form);
+    TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string = {64, true};
+    TypeDomainEntry number; number.term = TypeDomainTerm::numeric; number.numeric = {12, 3, false};
+    const TypeDomainPatternValue text_type{{text}}, number_type{{number}};
+    Attribute text_attribute; text_attribute.id = ObjectId{900}; text_attribute.name = "Текст"; text_attribute.type = text_type;
+    Attribute numeric_attribute; numeric_attribute.id = ObjectId{23}; numeric_attribute.name = "Число"; numeric_attribute.type = number_type;
+    Attribute empty_attribute; empty_attribute.id = ObjectId{501}; empty_attribute.name = "ПустойТип";
+    document.add_attribute(numeric_attribute);
+    document.add_attribute(empty_attribute);
+    document.add_attribute(text_attribute);
+    const auto data = PropertyId::from_name("Data"), type = PropertyId::from_name("ValueType");
+    const auto* data_descriptor = find_property(ControlKind::input_field, data);
+    const auto* type_descriptor = find_property(ControlKind::input_field, type);
+    expect(data_descriptor && data_descriptor->persistence == PersistenceClass::persisted_editable &&
+        data_descriptor->storage_codec == StorageCodec::binding_record && type_descriptor &&
+        type_descriptor->persistence == PersistenceClass::persisted_editable && type_descriptor->storage_codec == StorageCodec::control_info,
+        "Data and ValueType classify their existing binding and type records");
+    const auto key = [](std::uint64_t id) { return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}}; };
+    for (std::uint64_t id = 100; id < 112; ++id) {
+        const auto& attribute = id % 2 ? text_attribute : numeric_attribute;
+        ControlNode control{ObjectId{id}, "Field" + std::to_string(id), id % 2 ? ControlPayload{ChoiceFieldPayload{}} : ControlPayload{InputFieldPayload{}}};
+        control.data_path = DataPath{AttributeRef{attribute.id}, {}};
+        document.add_control(std::move(control));
+        expect(document.get_prop_val(key(id), data).value == PropertyValue{attribute.name} &&
+            document.get_prop_val(key(id), type).value == PropertyValue{attribute.type},
+            "twelve getters resolve sparse Attribute IDs and their authoritative names and qualifiers");
+        for (const auto& value : {PropertyValue{attribute.type}, PropertyValue{text_type}, PropertyValue{UndefinedValue{}}})
+            expect(document.set_prop_val(key(id), type, value) == PropertyMutationStatus::read_only,
+                "bound ValueType is readonly before value conversion");
+        expect(document.reset_prop_val(key(id), type) == PropertyMutationStatus::read_only &&
+            document.set_prop_val(key(id), data, std::string{"Число"}) == PropertyMutationStatus::unsupported_surface &&
+            document.reset_prop_val(key(id), data) == PropertyMutationStatus::unsupported_surface,
+            "unfinished Data side effects cannot be replaced with a bare binding assignment");
+        const auto* actual = document.find_control(ObjectId{id});
+        expect(actual->data_path->attribute.id() == attribute.id && actual->extension_properties.empty(),
+            "binding getters and rejected setters never create shadow properties or change another owner");
+    }
+    ControlNode empty_bound{ObjectId{200}, "EmptyBound", ChoiceFieldPayload{}};
+    empty_bound.data_path = DataPath{AttributeRef{empty_attribute.id}, {}};
+    document.add_control(std::move(empty_bound));
+    document.add_control(ControlNode{ObjectId{201}, "Unbound", ChoiceFieldPayload{}});
+    expect(document.get_prop_val(key(200), type).value == PropertyValue{TypeDomainPatternValue{}} &&
+        document.set_prop_val(key(200), type, number_type) == PropertyMutationStatus::read_only,
+        "bound empty type must not be confused with an unbound ChoiceField");
+    for (const auto& value : {text_type, number_type, TypeDomainPatternValue{}})
+        expect(document.set_prop_val(key(201), type, value) == PropertyMutationStatus::applied &&
+            document.get_prop_val(key(201), type).value == PropertyValue{TypeDomainPatternValue{}},
+            "unbound ChoiceField accepts a type description without changing its empty type");
+    expect(document.get_prop_val(key(201), data).value == PropertyValue{std::string{}} &&
+        document.set_prop_val(key(201), type, UndefinedValue{}) == PropertyMutationStatus::invalid_value &&
+        document.find_control(ObjectId{201})->extension_properties.empty(),
+        "unbound ChoiceField type rejection must not create stored state");
+    expect(document.set_prop_val(key(201), type, TypeDomainPatternValue{{TypeDomainEntry{.term = TypeDomainTerm::object}}}) == PropertyMutationStatus::invalid_value &&
+        document.get_prop_val(key(201), type).value == PropertyValue{TypeDomainPatternValue{}},
+        "ignored type assignment must still validate the type description before accepting it");
+    ControlNode local{ObjectId{202}, "LocalType", InputFieldPayload{}};
+    local.extension_properties.set_explicit(type, text_type);
+    document.add_control(std::move(local));
+    expect(document.get_prop_val(key(202), type).value == PropertyValue{text_type},
+        "unbound InputField reads its named local type");
+    ControlNode nested{ObjectId{203}, "Nested", InputFieldPayload{}};
+    nested.data_path = DataPath{AttributeRef{text_attribute.id}, {"Member"}};
+    document.add_control(std::move(nested));
+    expect(document.get_prop_val(key(203), data).status == PropertyReadStatus::unsupported_surface &&
+        document.get_prop_val(key(203), type).status == PropertyReadStatus::unsupported_surface,
+        "a nested member cannot be reported as the root attribute or its type");
+    document.add_control(ControlNode{ObjectId{204}, "MissingType", InputFieldPayload{}});
+    expect(document.get_prop_val(key(204), type).status == PropertyReadStatus::unsupported_surface,
+        "missing local type must not invent a standalone InputField default");
+    document.add_control(ControlNode{ObjectId{205}, "RadioMember", RadioButtonPayload{}});
+    expect(document.get_prop_val(key(205), data).status == PropertyReadStatus::unsupported_surface,
+        "missing RadioButton link must not guess whether the group inherits another owner's data");
+}
+
 void test_data_api_preserves_binding_until_supported() {
     const std::array<ControlPayload, 10> payloads{
         CalendarFieldPayload{}, ChoiceFieldPayload{}, CheckBoxPayload{}, RadioButtonPayload{},
@@ -4729,6 +4806,7 @@ int main() {
         test_current_page_is_runtime_only();
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();
+        test_binding_property_getters();
         test_control_name_property();
         test_form_runtime_state_properties();
         test_chart_computed_counts();

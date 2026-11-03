@@ -15706,6 +15706,136 @@ void test_spreadsheet_document_field_round_trip() {
         "SpreadsheetDocumentField must reject a selection count without complete rectangle records");
 }
 
+void test_canonical_unbound_input_fields_round_trip() {
+    const auto value_type = model::PropertyId::from_name("ValueType");
+    const auto make_type = [](std::size_t index) {
+        model::TypeDomainEntry entry;
+        if (index % 3 == 0) {
+            entry.term = model::TypeDomainTerm::string;
+            entry.string = model::LengthQualifiers{static_cast<std::uint32_t>(20 + index), index % 2 == 0};
+        } else if (index % 3 == 1) {
+            entry.term = model::TypeDomainTerm::numeric;
+            entry.numeric = model::NumericQualifiers{12, 3, false};
+        } else {
+            entry.term = model::TypeDomainTerm::date;
+            entry.date = model::DateQualifiers{true, false};
+        }
+        return model::TypeDomainPatternValue{{entry}};
+    };
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "UnboundInput";
+    for (std::uint64_t index = 0; index < 12; ++index)
+        form.children.push_back(model::ControlRef{model::ObjectId{20 + index}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t reverse = 12; reverse > 0; --reverse) {
+        const auto index = reverse - 1;
+        const auto type = make_type(index);
+        model::ControlNode input{model::ObjectId{20 + index}, "Input" + std::to_string(index), model::InputFieldPayload{}};
+        if (index % 2 == 0) {
+            const model::ObjectId attribute_id{100 + index};
+            document.add_attribute(model::Attribute{attribute_id, "Data" + std::to_string(index), type});
+            input.data_path = model::DataPath{model::AttributeRef{attribute_id}, {}};
+        } else input.extension_properties.set_explicit(value_type, type);
+        document.add_control(std::move(input));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "mixed bound and unbound InputFields must encode" : encoded.diagnostics().front().message);
+    const auto& links = encoded.value().items[2].items[3];
+    expect(links.items.size() == 7 && links.items[0].atom == "6",
+        "only the six bound InputFields may produce AttributeLinks");
+    for (std::size_t index = 1; index < links.items.size(); ++index)
+        expect(links.items[index].items[0].atom == std::to_string(20 + 2 * (index - 1)),
+            "unbound InputFields must not acquire fake AttributeLinks");
+    const auto decoded = form_stream::decode_document(encoded.value(), "UnboundInput");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ?
+        "all twelve canonical InputField profiles must decode completely" : decoded.diagnostics().front().message);
+    for (std::size_t index = 0; index < 12; ++index) {
+        const auto* input = decoded.value().find_control(model::ObjectId{20 + index});
+        expect(input != nullptr, "every mixed InputField must retain its identity");
+        const auto* local_type = input->extension_properties.find(value_type);
+        if (index % 2 == 0) {
+            expect(input->data_path && input->data_path->attribute.id() == model::ObjectId{100 + index} &&
+                local_type == nullptr, "bound InputFields must use their Attribute type without a shadow local type");
+        } else expect(!input->data_path && local_type &&
+                std::get<model::TypeDomainPatternValue>(local_type->value) == make_type(index),
+            "unbound InputFields must retain their explicit local type");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "mixed InputFields must serialize as named XML");
+    const auto reparsed = source::parse_form_xml(xml.value());
+    expect(reparsed.ok(), "mixed InputField XML must parse");
+    const auto rebuilt = form_stream::encode_document(reparsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "mixed bound and unbound InputFields must rebuild the exact canonical stream through XML");
+    const auto repeated_xml = source::serialize_form_xml(reparsed.value());
+    expect(repeated_xml.ok() && repeated_xml.value() == xml.value(),
+        "mixed bound and unbound InputFields must have stable canonical XML");
+
+    const auto make_standalone = [&](std::optional<model::TypeDomainPatternValue> type) {
+        model::Form standalone_form;
+        standalone_form.id = model::ObjectId{1};
+        standalone_form.name = "StandaloneInput";
+        standalone_form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument standalone(std::move(standalone_form));
+        model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+        if (type) input.extension_properties.set_explicit(value_type, *type);
+        standalone.add_control(std::move(input));
+        return standalone;
+    };
+    const auto standalone = form_stream::encode_document(make_standalone(make_type(0)));
+    expect(standalone.ok(), "an unbound InputField must encode without any Attribute");
+    const auto standalone_decoded = form_stream::decode_document(standalone.value(), "StandaloneInput");
+    expect(standalone_decoded.ok() && standalone_decoded.value().reconstruction_complete() &&
+        standalone_decoded.value().collections().attributes.empty() &&
+        !standalone_decoded.value().find_control(model::ObjectId{2})->data_path,
+        "standalone local ValueType must not invent an Attribute or DataPath");
+    expect_failure(form_stream::encode_document(make_standalone(std::nullopt)), "OOF1122", "$/InputField/ValueType",
+        "an unbound InputField without an explicit type must not invent a default");
+    auto value_without_type = make_standalone(std::nullopt);
+    const_cast<model::ControlNode*>(value_without_type.find_control(model::ObjectId{2}))->extension_properties.set_explicit(
+        model::PropertyId::from_name("Value"), std::string{"text"});
+    expect(!form_stream::encode_document(value_without_type), "Value must not substitute for an absent local ValueType");
+    auto dangling = make_standalone(make_type(0));
+    const_cast<model::ControlNode*>(dangling.find_control(model::ObjectId{2}))->data_path =
+        model::DataPath{model::AttributeRef{model::ObjectId{999}}, {}};
+    expect(!form_stream::encode_document(dangling), "a dangling binding must not fall back to a local ValueType");
+    auto nested = document;
+    const_cast<model::ControlNode*>(nested.find_control(model::ObjectId{20}))->data_path->members = {"Member"};
+    expect_failure(form_stream::encode_document(nested), "OOF1122", "$/InputField",
+        "InputField nested DataPath members must remain unsupported");
+    auto conflicting = document;
+    const_cast<model::ControlNode*>(conflicting.find_control(model::ObjectId{20}))->extension_properties.set_explicit(value_type, make_type(1));
+    expect_failure(form_stream::encode_document(conflicting), "OOF1122", "$/InputField/ValueType",
+        "a local type must not override a bound Attribute type");
+    for (const auto& unsupported : {model::TypeDomainPatternValue{},
+            model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::boolean}}},
+            model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::date, .date = {true, true}}}},
+            model::TypeDomainPatternValue{{make_type(0).entries.front(), make_type(1).entries.front()}}}) {
+        expect(!form_stream::encode_document(make_standalone(unsupported)),
+            "unbound InputField must retain the existing supported-domain boundary");
+        auto unsupported_stream = standalone.value();
+        unsupported_stream.items[1].items[2].items[2].items[1].items[2].items[1] =
+            list_stream::parse(value_codec::encode_type_domain(unsupported));
+        expect_failure(form_stream::decode_document(unsupported_stream, "StandaloneInput"), "OOF1122", "$/1/2/2/1/2/1",
+            "unbound InputField decoder must reject unsupported local domains");
+    }
+    auto residual_precision = standalone.value();
+    auto unbound_with_bounds = form_stream::encode_document(make_standalone(make_type(1))).value();
+    auto& unbound_info = unbound_with_bounds.items[1].items[2].items[2].items[1].items[2];
+    unbound_info.items[2].items[0].items[19] = list_stream::parse(R"({"N",1})");
+    unbound_info.items[3].items[1].items[1].items[1] = list_stream::parse(R"({"N",1})");
+    expect_failure(form_stream::decode_document(unbound_with_bounds, "StandaloneInput"), "OOF1122", "$/1/2/2/1/2",
+        "unbound nondefault bounds must not decode as complete when the encoder cannot rebuild them");
+    residual_precision.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[15] =
+        list_stream::ListValue::raw_atom("3");
+    const auto partial = form_stream::decode_document(residual_precision, "StandaloneInput");
+    expect(partial.ok() && !partial.value().reconstruction_complete() &&
+        std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1140" && diagnostic.path == "$/1/2/2/1/2";
+        }), "the observed residual precision in an unbound String InputField must remain explicitly incomplete");
+}
+
 void test_two_input_fields_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -15800,8 +15930,12 @@ void test_two_input_fields_round_trip() {
     auto missing_link = encoded.value();
     missing_link.items[2].items[3].items.pop_back();
     missing_link.items[2].items[3].items[0] = list_stream::ListValue::raw_atom("1");
-    expect_failure(form_stream::decode_document(missing_link, "Main"), "OOF1122", "$/2/3",
-        "an InputField without a DataPath link must be rejected");
+    const auto missing_link_decoded = form_stream::decode_document(missing_link, "Main");
+    expect(missing_link_decoded.ok() && missing_link_decoded.value().reconstruction_complete() &&
+        !missing_link_decoded.value().find_control(model::ObjectId{12})->data_path &&
+        missing_link_decoded.value().find_control(model::ObjectId{12})->extension_properties.contains(
+            model::PropertyId::from_name("ValueType")),
+        "an InputField without a DataPath link must retain its stored type as a local ValueType");
 
     auto leftover_link = encoded.value();
     auto extra_link = leftover_link.items[2].items[3].items[1];
@@ -21945,6 +22079,7 @@ int main() {
         test_spreadsheet_document_field_named_properties_and_events();
         test_spreadsheet_document_field_round_trip();
         test_two_input_fields_round_trip();
+        test_canonical_unbound_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_root_pages_round_trip_with_page_local_control_order();
         test_owned_panel_colors_and_repeated_background();

@@ -590,6 +590,15 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
     control_name->persistence = PersistenceClass::persisted_readonly;
     control_name->storage_codec = StorageCodec::control_info;
     control_name->default_value = {DefaultKind::none, {}};
+    const auto data = std::ranges::find(descriptors, "Data", &PropertyDescriptor::api_name);
+    const auto value_type = std::ranges::find(descriptors, "ValueType", &PropertyDescriptor::api_name);
+    if (data == descriptors.end() || value_type == descriptors.end()) throw std::logic_error("missing control binding descriptor");
+    data->persistence = PersistenceClass::persisted_editable;
+    data->storage_codec = StorageCodec::binding_record;
+    data->default_value = {DefaultKind::string, ""};
+    value_type->persistence = PersistenceClass::persisted_editable;
+    value_type->storage_codec = StorageCodec::control_info;
+    value_type->default_value = {DefaultKind::none, {}};
     const auto auto_context = std::ranges::find(descriptors, std::string_view{"AutoContextMenu"}, &PropertyDescriptor::api_name);
     const auto context = std::ranges::find(descriptors, std::string_view{"ContextMenu"}, &PropertyDescriptor::api_name);
     if (auto_context == descriptors.end() || context == descriptors.end()) {

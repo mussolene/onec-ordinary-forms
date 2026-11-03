@@ -1677,7 +1677,31 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             if (!group) return {PropertyReadStatus::unsupported_surface, std::nullopt};
             return {PropertyReadStatus::computed_value, PropertyValue{static_cast<std::int64_t>(group->orders[group->target_index])}};
         }
-        if (descriptor->api_name == "Data") return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        if (descriptor->api_name == "Data") {
+            if (!control.data_path && control.kind() == ControlKind::radio_button)
+                return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            if (!control.data_path) return {PropertyReadStatus::computed_value, PropertyValue{std::string{}}};
+            const auto* attribute = find_attribute(control.data_path->attribute.id());
+            if (!attribute || attribute->name.empty() || !control.data_path->members.empty())
+                return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            return {PropertyReadStatus::computed_value, PropertyValue{attribute->name}};
+        }
+        if (descriptor->api_name == "ValueType") {
+            if (control.data_path) {
+                const auto* attribute = find_attribute(control.data_path->attribute.id());
+                if (!attribute || !control.data_path->members.empty())
+                    return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                return {PropertyReadStatus::computed_value, PropertyValue{attribute->type}};
+            }
+            if (control.kind() == ControlKind::choice_field)
+                return {PropertyReadStatus::computed_value, PropertyValue{TypeDomainPatternValue{}}};
+            if (control.kind() == ControlKind::input_field || control.kind() == ControlKind::radio_button) {
+                const auto* local = control.extension_properties.find(property);
+                if (local && std::holds_alternative<TypeDomainPatternValue>(local->value))
+                    return {PropertyReadStatus::computed_value, local->value};
+            }
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (is_typed_collection_property(*descriptor)) {
@@ -2119,6 +2143,14 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             return PropertyMutationStatus::applied;
         }
         if (descriptor->api_name == "Data") return PropertyMutationStatus::unsupported_surface;
+        if (descriptor->api_name == "ValueType") {
+            if (control.data_path) return PropertyMutationStatus::read_only;
+            if (control.kind() != ControlKind::choice_field) return PropertyMutationStatus::unsupported_surface;
+            TypedValueBudget budget;
+            if (!std::holds_alternative<TypeDomainPatternValue>(value) || !validate_typed_value(value, budget))
+                return PropertyMutationStatus::invalid_value;
+            return PropertyMutationStatus::applied;
+        }
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
@@ -2461,6 +2493,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             return status == PropertyMutationStatus::applied ? PropertyMutationStatus::reset : status;
         }
         if (descriptor->api_name == "Data") return PropertyMutationStatus::unsupported_surface;
+        if (descriptor->api_name == "ValueType")
+            return control.data_path ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
