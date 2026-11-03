@@ -1952,7 +1952,6 @@
       <xs:element name="CurrentControl" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Controls" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ThisForm" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
@@ -2036,8 +2035,6 @@
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeparateByPage" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ScrollPageMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Pages" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CurrentPage" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

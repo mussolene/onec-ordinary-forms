@@ -9,6 +9,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
@@ -23,6 +24,39 @@ namespace source = oof::source;
 void expect(bool condition, std::string_view message) {
     if (!condition) {
         throw std::runtime_error(std::string(message));
+    }
+}
+
+void test_form_item_collection_xml_contract() {
+    using namespace model;
+    const FormItemCollectionRef controls{ObjectId{1}, FormItemCollectionKind::controls};
+    std::string xml = R"XML(<Form id="1" name="Collections" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    std::vector<ChildItemRef> expected;
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto panel = std::to_string(100 + index);
+        const auto label = std::to_string(200 + index);
+        xml += "<Panel id=\"" + panel + "\" name=\"Panel" + std::to_string(index) +
+            "\"><Position/><ChildItems><Page name=\"First\"><ChildItems><LabelDecoration id=\"" + label +
+            "\" name=\"Label" + std::to_string(index) + "\"><Position/></LabelDecoration></ChildItems></Page></ChildItems></Panel>";
+        expected.emplace_back(ControlRef{ObjectId{100 + index}});
+        expected.emplace_back(ControlRef{ObjectId{200 + index}});
+    }
+    xml += "</ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok() && parsed.value().form_item_refs(controls) == expected,
+        "XML parsing must expose native Controls preorder independently of object insertion order");
+    const auto written = source::serialize_form_xml(parsed.value());
+    expect(written.ok() && written.value().find("<Controls") == std::string::npos &&
+        written.value().find("<Pages") == std::string::npos && written.value().find("<CurrentPage") == std::string::npos,
+        "collection handles and runtime selection must not duplicate named ChildItems in XML");
+    const auto reparsed = source::parse_form_xml(written.value());
+    expect(reparsed.ok() && reparsed.value().form_item_refs(controls) == expected,
+        "Controls references and preorder must survive named XML roundtrip");
+    for (const auto invalid : {
+        R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><Controls/></Form>)XML",
+        R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><ChildItems><Panel id="2" name="Tabs"><Position/><Pages/></Panel></ChildItems></Form>)XML",
+        R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><ChildItems><Panel id="2" name="Tabs"><Position/><CurrentPage>3</CurrentPage></Panel></ChildItems></Form>)XML"}) {
+        expect(!source::parse_form_xml(invalid).ok(), "duplicate collections and runtime page references must be rejected");
     }
 }
 
@@ -3310,6 +3344,7 @@ void test_chart_xml_document_resource_budget() {
 
 int main() {
     try {
+        test_form_item_collection_xml_contract();
         test_named_style_color_defaults();
         test_border_and_calendar_selection_xml_contract();
         test_typed_defaults_for_existing_codecs();

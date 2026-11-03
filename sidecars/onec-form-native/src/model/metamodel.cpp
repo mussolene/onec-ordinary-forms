@@ -936,6 +936,27 @@ void apply_proven_storage_overrides(
     main_panel->value_codec = ValueCodec::owned_panel;
     main_panel->persistence = PersistenceClass::persisted_editable;
     main_panel->storage_codec = StorageCodec::root_record;
+    auto& panel_properties = properties[static_cast<std::size_t>(ControlKind::panel)];
+    auto form_controls = std::ranges::find(form_properties, "Controls", &PropertyDescriptor::api_name);
+    auto panel_pages = std::ranges::find(panel_properties, "Pages", &PropertyDescriptor::api_name);
+    auto current_page = std::ranges::find(panel_properties, "CurrentPage", &PropertyDescriptor::api_name);
+    if (form_controls == form_properties.end() || panel_pages == panel_properties.end() || current_page == panel_properties.end())
+        throw std::logic_error("missing form item collection or current page descriptor");
+    for (const auto& [collection, codec] : {
+            std::pair{&*form_controls, ValueCodec::form_controls},
+            std::pair{&*panel_pages, ValueCodec::panel_pages}}) {
+        collection->value_kind = ValueKind::collection;
+        collection->api_access = ApiAccess::read_only;
+        collection->persistence = PersistenceClass::persisted_readonly;
+        collection->storage_codec = StorageCodec::collection_record;
+        collection->value_codec = codec;
+        collection->default_value = {DefaultKind::none, {}};
+    }
+    current_page->value_kind = ValueKind::object;
+    current_page->persistence = PersistenceClass::runtime_only;
+    current_page->storage_codec = StorageCodec::none;
+    current_page->value_codec = ValueCodec::page_reference;
+    current_page->default_value = {DefaultKind::none, {}};
     auto& command_bar = properties[static_cast<std::size_t>(ControlKind::command_bar)];
     classify_property(command_bar, "AutoFill", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(command_bar, "Border", StorageCodec::control_base, DefaultKind::border, "WithoutBorder:0");
@@ -2700,6 +2721,10 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "command-bar-buttons";
         case ValueCodec::owned_panel:
             return "owned-panel";
+        case ValueCodec::form_controls:
+            return "form-controls";
+        case ValueCodec::panel_pages:
+            return "panel-pages";
         case ValueCodec::dendrogram_items:
             return "dendrogram-items";
         case ValueCodec::dendrogram_links:
@@ -2763,6 +2788,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
         case ValueCodec::chart_equation_area: return "chart-equation-area";
         case ValueCodec::control_reference:
             return "control-reference";
+        case ValueCodec::page_reference:
+            return "page-reference";
         case ValueCodec::form_reference:
             return "form-reference";
         case ValueCodec::attribute_reference:

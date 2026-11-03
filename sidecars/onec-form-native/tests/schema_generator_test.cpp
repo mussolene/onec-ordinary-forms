@@ -702,6 +702,7 @@ std::size_t expect_property_sequence(
 ) {
     std::size_t cursor = offset;
     for (const auto& property : properties) {
+        if (property.value_codec == ValueCodec::form_controls || property.value_codec == ValueCodec::panel_pages) continue;
         if (omit_runtime_only && property.persistence == PersistenceClass::runtime_only) continue;
         expect(cursor < elements.size(), "property sequence is incomplete");
         expect_property_element(property, elements[cursor++]);
@@ -1045,6 +1046,7 @@ void test_control_surfaces_and_property_order(
                     expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
                 } else if (descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only ||
                            descriptor.persistence == oof::model::metamodel::PersistenceClass::unsupported_by_platform ||
+                           descriptor.value_codec == ValueCodec::panel_pages ||
                            descriptor.surface == oof::model::metamodel::PropertySurface::panel_placement) {
                     continue;
                 } else {
@@ -1687,6 +1689,10 @@ int main() {
         Schema compiled_palette =
             compile_schema(schemas.ordinary_form_palette_xsd, "OrdinaryFormPalette.xsd");
         expect(compiled_palette != nullptr, "palette XSD must compile");
+        expect(validate_document(compiled_form.get(), R"XML(<Form id="1" name="Collections" ordinaryFormVersion="2.1"><Controls/></Form>)XML") != 0 &&
+               validate_document(compiled_form.get(), R"XML(<Form id="1" name="Collections" ordinaryFormVersion="2.1"><ChildItems><Panel id="2" name="Tabs"><Position/><Pages/></Panel></ChildItems></Form>)XML") != 0 &&
+               validate_document(compiled_form.get(), R"XML(<Form id="1" name="Collections" ordinaryFormVersion="2.1"><ChildItems><Panel id="2" name="Tabs"><Position/><CurrentPage>3</CurrentPage></Panel></ChildItems></Form>)XML") != 0,
+            "owned form collections use ChildItems and runtime CurrentPage has no XML element");
         expect(validate_document(compiled_form.get(), R"XML(<Form id="1" name="RootBorder" ordinaryFormVersion="2.1"><Panel><Border kind="absolute" borderType="Single" width="2"/></Panel></Form>)XML") != 0,
             "control Border support must not introduce an unproven root form panel property");
 

@@ -336,11 +336,16 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::control_reference ||
                        expected == metamodel::ValueCodec::action_source_reference ||
                        expected == metamodel::ValueCodec::context_menu_reference;
+            } else if constexpr (std::is_same_v<Value, PageRef>) {
+                return expected == metamodel::ValueCodec::page_reference;
             } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
                 return expected == metamodel::ValueCodec::context_menu_reference;
             } else if constexpr (std::is_same_v<Value, ChartCollectionRef>) {
                 return (expected == metamodel::ValueCodec::chart_series_collection && typed_value.kind == ChartCollectionKind::series) ||
                     (expected == metamodel::ValueCodec::chart_points_collection && typed_value.kind == ChartCollectionKind::points);
+            } else if constexpr (std::is_same_v<Value, FormItemCollectionRef>) {
+                return (expected == metamodel::ValueCodec::form_controls && typed_value.kind == FormItemCollectionKind::controls) ||
+                    (expected == metamodel::ValueCodec::panel_pages && typed_value.kind == FormItemCollectionKind::pages);
             } else if constexpr (std::is_same_v<Value, ChartSeriesRef>) {
                 return expected == metamodel::ValueCodec::chart_series_reference;
             } else if constexpr (std::is_same_v<Value, FormRef>) {
@@ -493,6 +498,8 @@ bool is_typed_collection_property(const metamodel::PropertyDescriptor& descripto
     return descriptor.value_kind == metamodel::ValueKind::collection ||
         descriptor.value_codec == ValueCodec::command_bar_buttons ||
         descriptor.value_codec == ValueCodec::owned_panel ||
+        descriptor.value_codec == ValueCodec::form_controls ||
+        descriptor.value_codec == ValueCodec::panel_pages ||
         descriptor.value_codec == ValueCodec::chart_plot_area ||
         descriptor.value_codec == ValueCodec::chart_title_area ||
         descriptor.value_codec == ValueCodec::chart_legend_area ||
@@ -987,6 +994,57 @@ std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
     return index_.size();
 }
 
+std::optional<std::vector<ChildItemRef>> OrdinaryFormDocument::form_item_refs(FormItemCollectionRef reference) const {
+    const ControlNode* panel = nullptr;
+    if (reference.kind == FormItemCollectionKind::controls) {
+        if (!form_.id || reference.owner != form_.id) return std::nullopt;
+    } else if (reference.kind == FormItemCollectionKind::pages) {
+        panel = find_control(reference.owner);
+        if (panel == nullptr || panel->kind() != ControlKind::panel) return std::nullopt;
+    } else {
+        return std::nullopt;
+    }
+
+    std::vector<ChildItemRef> pending(form_.children.rbegin(), form_.children.rend());
+    std::unordered_set<ObjectKey, ObjectKeyHash> visited;
+    std::vector<ChildItemRef> controls;
+    std::size_t page_count = 0;
+    while (!pending.empty()) {
+        const auto child = pending.back();
+        pending.pop_back();
+        const std::vector<ChildItemRef>* children = nullptr;
+        auto policy = metamodel::ChildPolicy::ordered_controls;
+        if (const auto* control_ref = std::get_if<ControlRef>(&child)) {
+            const auto* control = find_control(control_ref->id());
+            if (control == nullptr || !control->id ||
+                !visited.insert({ObjectCategory::control, control->id}).second) return std::nullopt;
+            controls.push_back(child);
+            children = &control->children;
+            policy = metamodel::descriptor_for(control->kind()).child_policy;
+        } else {
+            const auto page_ref = std::get<PageRef>(child);
+            const auto* page = find_page(page_ref.id());
+            if (page == nullptr || !page->id ||
+                !visited.insert({ObjectCategory::page, page->id}).second) return std::nullopt;
+            ++page_count;
+            children = &page->children;
+        }
+        if ((policy == metamodel::ChildPolicy::forbidden && !children->empty()) ||
+            (policy == metamodel::ChildPolicy::ordered_controls &&
+                std::ranges::any_of(*children, [](const ChildItemRef& item) { return std::holds_alternative<PageRef>(item); })))
+            return std::nullopt;
+        pending.insert(pending.end(), children->rbegin(), children->rend());
+    }
+    if (controls.size() != collections_.controls.size() || page_count != collections_.pages.size()) return std::nullopt;
+    if (reference.kind == FormItemCollectionKind::controls) return controls;
+
+    std::vector<ChildItemRef> pages;
+    for (const auto& child : panel->children)
+        if (std::holds_alternative<PageRef>(child)) pages.push_back(child);
+    if (pages.empty()) return std::nullopt;
+    return pages;
+}
+
 namespace {
 bool table_tree_property_available(const OrdinaryFormDocument& document, const ControlNode& control) {
     if (!control.data_path || !control.data_path->members.empty()) return false;
@@ -1286,6 +1344,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
     const ControlNode* position_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        if (property == PropertyId::from_name("Controls"))
+            return {PropertyReadStatus::computed_value, PropertyValue{FormItemCollectionRef{form_.id, FormItemCollectionKind::controls}}};
         if (property == PropertyId::from_name("ThisForm"))
             return {PropertyReadStatus::computed_value, PropertyValue{FormRef{form_.id}}};
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
@@ -1335,6 +1395,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
         const auto& control = collections_.controls[location->index];
+        if (control.kind() == ControlKind::panel && property == PropertyId::from_name("Pages"))
+            return {PropertyReadStatus::computed_value, PropertyValue{FormItemCollectionRef{control.id, FormItemCollectionKind::pages}}};
         if (control.kind() == ControlKind::chart && property == PropertyId::from_name("SummarySeries"))
             return {PropertyReadStatus::computed_value, PropertyValue{ChartSeriesRef{owner.id, ObjectId{1}}}};
         if (control.kind() == ControlKind::chart &&
@@ -1624,6 +1686,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("Controls")) return PropertyMutationStatus::read_only;
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
             if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
                 if (!canonical_chart_decimal(decimal->canonical)) return PropertyMutationStatus::invalid_value;
@@ -1828,7 +1891,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
-            return (descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
+            return (descriptor->value_codec == metamodel::ValueCodec::panel_pages || descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
                 descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area || descriptor->api_name == "SummarySeries") ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
@@ -2109,6 +2172,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        if (property == PropertyId::from_name("Controls")) return PropertyMutationStatus::read_only;
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
             runtime_form_values_.unset(property);
             return PropertyMutationStatus::reset_runtime_only;
@@ -2163,7 +2227,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
-            return (descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
+            return (descriptor->value_codec == metamodel::ValueCodec::panel_pages || descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
                 descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area || descriptor->api_name == "SummarySeries") ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
@@ -2464,6 +2528,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
             } else if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform) {
                 add_violation(report, InvariantCode::invalid_property, source, {},
                     "property is unavailable on the ordinary-form platform owner");
+            } else if (descriptor->value_codec == metamodel::ValueCodec::form_controls ||
+                descriptor->value_codec == metamodel::ValueCodec::panel_pages) {
+                add_violation(report, InvariantCode::invalid_property, source, {},
+                    "form item collections are owned objects and cannot be stored as properties");
             } else if (!property_value_matches(*descriptor, property.value)) {
                 add_violation(
                     report,

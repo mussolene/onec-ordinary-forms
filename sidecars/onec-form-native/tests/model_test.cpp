@@ -3010,12 +3010,12 @@ void test_document_property_api() {
                PropertyId::from_name("Visible")).status == PropertyReadStatus::unsupported_surface,
         "Page properties must report unsupported_surface in this API slice");
     expect(document.get_prop_val(form_caption, PropertyId::from_name("Controls")).status ==
-               PropertyReadStatus::unsupported_surface &&
+               PropertyReadStatus::computed_value &&
                document.set_prop_val(form_caption, PropertyId::from_name("Controls"), false) ==
-                   PropertyMutationStatus::unsupported_surface &&
+                   PropertyMutationStatus::read_only &&
                document.reset_prop_val(form_caption, PropertyId::from_name("Controls")) ==
-                   PropertyMutationStatus::unsupported_surface,
-        "typed Form collections must report unsupported_surface for reads and mutations");
+                   PropertyMutationStatus::read_only,
+        "Form.Controls exposes its owned handle and rejects replacement or reset");
     expect(document.get_prop_val(menu, PropertyId::from_name("Buttons")).status ==
                PropertyReadStatus::unsupported_surface,
         "typed collection payloads must report unsupported_surface");
@@ -3982,6 +3982,154 @@ void test_control_border_and_calendar_selection_descriptors() {
         "CalendarField SelectedDates must remain a runtime-only unclassified collection without a default");
 }
 
+void test_form_item_collections() {
+    using namespace oof::model::metamodel;
+    const auto controls_id = PropertyId::from_name("Controls"), pages_id = PropertyId::from_name("Pages");
+    const auto current_page_id = PropertyId::from_name("CurrentPage");
+    const auto* controls_descriptor = find_form_property("Controls");
+    const auto* pages_descriptor = find_property(ControlKind::panel, "Pages");
+    for (const auto& [descriptor, codec] : {std::pair{controls_descriptor, ValueCodec::form_controls},
+            std::pair{pages_descriptor, ValueCodec::panel_pages}}) {
+        expect(descriptor && descriptor->value_kind == ValueKind::collection && descriptor->api_access == ApiAccess::read_only &&
+            descriptor->persistence == PersistenceClass::persisted_readonly && descriptor->storage_codec == StorageCodec::collection_record &&
+            descriptor->value_codec == codec && descriptor->default_value.kind == DefaultKind::none,
+            "form item collections expose persisted readonly descriptors without invented defaults");
+    }
+    const auto* current_page_descriptor = find_property(ControlKind::panel, "CurrentPage");
+    expect(current_page_descriptor && current_page_descriptor->value_kind == ValueKind::object &&
+        current_page_descriptor->api_access == ApiAccess::read_write && current_page_descriptor->persistence == PersistenceClass::runtime_only &&
+        current_page_descriptor->storage_codec == StorageCodec::none && current_page_descriptor->value_codec == ValueCodec::page_reference &&
+        current_page_descriptor->default_value.kind == DefaultKind::none, "CurrentPage has a typed runtime reference descriptor");
+    expect(value_codec_name(ValueCodec::form_controls) == "form-controls" && value_codec_name(ValueCodec::panel_pages) == "panel-pages" &&
+        value_codec_name(ValueCodec::page_reference) == "page-reference", "form item codecs have distinct public names");
+
+    Form form; form.id = ObjectId{1}; form.name = "Collections";
+    std::vector<ChildItemRef> expected_controls;
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        form.children.push_back(ControlRef{ObjectId{100 + i}});
+        expected_controls.push_back(ControlRef{ObjectId{100 + i}});
+        expected_controls.push_back(ControlRef{ObjectId{200 + i}});
+    }
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t remaining = 12; remaining != 0; --remaining) {
+        const auto i = remaining - 1;
+        const auto count = i % 3 + 1;
+        ControlNode panel{ObjectId{100 + i}, "Panel" + std::to_string(i), PanelPayload{}};
+        for (std::uint64_t p = 0; p < count; ++p) panel.children.push_back(PageRef{ObjectId{1000 + i * 3 + p}});
+        for (std::uint64_t p = count; p != 0; --p) {
+            Page page; page.id = ObjectId{1000 + i * 3 + p - 1};
+            page.name = "Panel" + std::to_string(i) + "Page" + std::to_string(p - 1);
+            if (p == 1) page.children.push_back(ControlRef{ObjectId{200 + i}});
+            document.add_page(std::move(page));
+        }
+        document.add_control(ControlNode{ObjectId{200 + i}, "Panel" + std::to_string(i) + "Label0", LabelDecorationPayload{}});
+        document.add_control(std::move(panel));
+    }
+    expect(document.validate().ok() && document.collections().controls.size() == 24 && document.collections().pages.size() == 24,
+        "twelve panels with reversed storage insertion form a valid tree of 24 controls and 24 pages");
+    const OrdinaryFormDocument::ObjectKey form_owner{ObjectCategory::form, ObjectId{1}};
+    const FormItemCollectionRef controls_ref{ObjectId{1}, FormItemCollectionKind::controls};
+    const auto controls = document.get_prop_val(form_owner, controls_id);
+    expect(controls.status == PropertyReadStatus::computed_value && controls.value == PropertyValue{controls_ref} &&
+        document.get_prop_val(form_owner, controls_id).value == controls.value && document.form_item_refs(controls_ref) == expected_controls,
+        "Form.Controls is stable and follows authoritative preorder rather than storage insertion order");
+    for (const auto& value : {PropertyValue{controls_ref}, PropertyValue{FormItemCollectionRef{ObjectId{999}, FormItemCollectionKind::controls}},
+            PropertyValue{UndefinedValue{}}})
+        expect(document.set_prop_val(form_owner, controls_id, value) == PropertyMutationStatus::read_only,
+            "Form.Controls rejects same, foreign and Undefined replacements");
+    expect(document.reset_prop_val(form_owner, controls_id) == PropertyMutationStatus::read_only, "Form.Controls cannot be reset");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        const FormItemCollectionRef pages_ref{owner.id, FormItemCollectionKind::pages};
+        std::vector<ChildItemRef> expected_pages;
+        for (std::uint64_t p = 0; p <= i % 3; ++p) expected_pages.push_back(PageRef{ObjectId{1000 + i * 3 + p}});
+        const auto pages = document.get_prop_val(owner, pages_id);
+        expect(pages.status == PropertyReadStatus::computed_value && pages.value == PropertyValue{pages_ref} &&
+            document.get_prop_val(owner, pages_id).value == pages.value && document.form_item_refs(pages_ref) == expected_pages,
+            "Panel.Pages is stable and enumerates only direct pages in ChildItems order");
+        for (const auto& value : {PropertyValue{pages_ref}, PropertyValue{FormItemCollectionRef{ObjectId{999}, FormItemCollectionKind::pages}},
+                PropertyValue{UndefinedValue{}}})
+            expect(document.set_prop_val(owner, pages_id, value) == PropertyMutationStatus::read_only,
+                "Panel.Pages rejects same, foreign and Undefined replacements");
+        expect(document.reset_prop_val(owner, pages_id) == PropertyMutationStatus::read_only, "Panel.Pages cannot be reset");
+        const auto first = std::get<PageRef>(expected_pages.front()), last = std::get<PageRef>(expected_pages.back());
+        expect(document.get_prop_val(owner, current_page_id).value == PropertyValue{first} &&
+            document.set_prop_val(owner, current_page_id, last) == PropertyMutationStatus::applied_runtime_only &&
+            document.get_prop_val(owner, current_page_id).value == PropertyValue{last}, "CurrentPage starts first and accepts the owned last page");
+        const PageRef foreign{ObjectId{i == 0 ? std::uint64_t{1003} : std::uint64_t{1000}}};
+        expect(document.set_prop_val(owner, current_page_id, foreign) == PropertyMutationStatus::applied_runtime_only &&
+            document.get_prop_val(owner, current_page_id).value == PropertyValue{last} &&
+            document.set_prop_val(owner, current_page_id, UndefinedValue{}) == PropertyMutationStatus::invalid_value,
+            "CurrentPage keeps existing foreign-page and Undefined behavior");
+        expect(document.form_item_refs(pages_ref) == expected_pages && document.get_prop_val(form_owner, controls_id).value == controls.value,
+            "runtime selection does not replace or reorder owned collections");
+    }
+    expect(!document.form_item_refs({ObjectId{999}, FormItemCollectionKind::controls}) &&
+        !document.form_item_refs({ObjectId{999}, FormItemCollectionKind::pages}) &&
+        !document.form_item_refs({ObjectId{200}, FormItemCollectionKind::pages}) &&
+        !document.form_item_refs({ObjectId{1}, static_cast<FormItemCollectionKind>(99)}), "invalid collection owner and kind must fail");
+    expect(document.get_prop_val({ObjectCategory::form, ObjectId{999}}, controls_id).status == PropertyReadStatus::unknown_owner &&
+        document.get_prop_val({ObjectCategory::control, ObjectId{999}}, pages_id).status == PropertyReadStatus::unknown_owner,
+        "collection getters reject unknown owners");
+
+    Form empty; empty.id = ObjectId{1}; empty.name = "Empty";
+    OrdinaryFormDocument empty_document(std::move(empty));
+    expect(empty_document.form_item_refs(controls_ref) == std::vector<ChildItemRef>{}, "empty Form.Controls is an empty sequence");
+    Form empty_panel_form; empty_panel_form.id = ObjectId{1}; empty_panel_form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument empty_panel(std::move(empty_panel_form));
+    empty_panel.add_control(ControlNode{ObjectId{2}, "EmptyPanel", PanelPayload{}});
+    const FormItemCollectionRef empty_pages{ObjectId{2}, FormItemCollectionKind::pages};
+    expect(empty_panel.get_prop_val({ObjectCategory::control, ObjectId{2}}, pages_id).value == PropertyValue{empty_pages} &&
+        !empty_panel.form_item_refs(empty_pages), "empty panel retains its collection handle without inventing native empty-page semantics");
+
+    for (const auto fault : {0, 1, 2, 3, 4, 5, 6}) {
+        Form invalid_form; invalid_form.id = ObjectId{1}; invalid_form.children = {ControlRef{ObjectId{2}}};
+        if (fault == 1) invalid_form.children.push_back(ControlRef{ObjectId{2}});
+        if (fault == 4) invalid_form.children.push_back(PageRef{ObjectId{999}});
+        OrdinaryFormDocument invalid(std::move(invalid_form));
+        ControlNode panel{ObjectId{2}, "Panel", PanelPayload{}};
+        panel.children = {PageRef{ObjectId{2}}};
+        Page page; page.id = ObjectId{2}; page.name = "Page";
+        if (fault == 0) page.children.push_back(ControlRef{ObjectId{999}});
+        if (fault == 2) page.children.push_back(ControlRef{ObjectId{2}});
+        if (fault == 5) page.children.push_back(PageRef{ObjectId{2}});
+        if (fault == 6) {
+            page.children.push_back(ControlRef{ObjectId{3}});
+            ControlNode leaf{ObjectId{3}, "Leaf", LabelDecorationPayload{}};
+            leaf.children.push_back(ControlRef{ObjectId{2}});
+            invalid.add_control(std::move(leaf));
+        }
+        invalid.add_control(std::move(panel)); invalid.add_page(std::move(page));
+        if (fault == 3) invalid.add_control(ControlNode{ObjectId{4}, "Orphan", LabelDecorationPayload{}});
+        expect(!invalid.form_item_refs(controls_ref) && !invalid.form_item_refs(empty_pages),
+            "dangling, repeated, cyclic, orphan and illegal child trees fail collection enumeration");
+    }
+    Form shared_ids; shared_ids.id = ObjectId{1}; shared_ids.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument category_scoped(std::move(shared_ids));
+    ControlNode scoped_panel{ObjectId{2}, "Panel", PanelPayload{}}; scoped_panel.children = {PageRef{ObjectId{2}}};
+    Page scoped_page; scoped_page.id = ObjectId{2}; scoped_page.name = "Page";
+    category_scoped.add_control(std::move(scoped_panel)); category_scoped.add_page(std::move(scoped_page));
+    expect(category_scoped.form_item_refs(controls_ref) == std::vector<ChildItemRef>{ControlRef{ObjectId{2}}} &&
+        category_scoped.form_item_refs(empty_pages) == std::vector<ChildItemRef>{PageRef{ObjectId{2}}},
+        "control and page numeric IDs remain distinct during traversal");
+    for (const auto property : {controls_id, pages_id}) {
+        auto invalid = category_scoped;
+        if (property == controls_id) {
+            auto invalid_form = invalid.form();
+            invalid_form.properties.set_explicit(property, controls_ref);
+            invalid.set_form(std::move(invalid_form));
+        } else {
+            Form invalid_form; invalid_form.id = ObjectId{1}; invalid_form.children = {ControlRef{ObjectId{2}}};
+            invalid = OrdinaryFormDocument(std::move(invalid_form));
+            ControlNode panel{ObjectId{2}, "Panel", PanelPayload{}}; panel.children = {PageRef{ObjectId{2}}};
+            panel.properties().set_explicit(property, empty_pages);
+            Page page; page.id = ObjectId{2}; page.name = "Page";
+            invalid.add_control(std::move(panel)); invalid.add_page(std::move(page));
+        }
+        expect(!invalid.validate().ok(), "owned form item collections cannot be duplicated in scalar property bags");
+    }
+}
+
 void test_panel_initial_current_page() {
     Form form;
     form.id = ObjectId{1};
@@ -4145,6 +4293,7 @@ int main() {
         test_input_incomplete_choice_mode_api();
         test_panel_scrolling_tab_read();
         test_panel_initial_current_page();
+        test_form_item_collections();
         test_current_page_is_runtime_only();
         test_unavailable_ordinary_geometry_properties();
         test_data_api_preserves_binding_until_supported();

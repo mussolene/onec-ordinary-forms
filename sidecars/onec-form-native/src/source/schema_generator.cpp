@@ -76,6 +76,12 @@ std::string_view xsd_type(ValueCodec codec) {
             return "CommandBarButtonsType";
         case ValueCodec::owned_panel:
             return "FormPanelType";
+        case ValueCodec::form_controls:
+            return "ControlChildItemsType";
+        case ValueCodec::panel_pages:
+            return "PanelChildItemsType";
+        case ValueCodec::page_reference:
+            return "ObjectIdType";
         case ValueCodec::dendrogram_items:
             return "DendrogramItemsType";
         case ValueCodec::dendrogram_links:
@@ -1097,6 +1103,8 @@ void append_property_element(
     const PropertyDescriptor& property,
     std::string_view indent
 ) {
+    if (property.value_codec == ValueCodec::form_controls ||
+        property.value_codec == ValueCodec::panel_pages) return;
     output.append(indent);
     output += "<xs:element";
     append_attribute(output, "name", property.xml_name);

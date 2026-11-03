@@ -1030,6 +1030,13 @@ model::PropertyValue parse_property_value(
 ) {
     const std::string property = node_name(node);
     switch (codec) {
+        case mm::ValueCodec::form_controls:
+        case mm::ValueCodec::panel_pages:
+            fail("OOF2003", node, std::string(object_id), property, "named ChildItems", "scalar collection",
+                "Form item collections are represented only by ChildItems");
+        case mm::ValueCodec::page_reference:
+            fail("OOF2003", node, std::string(object_id), property, "runtime-only page reference", "XML",
+                "Runtime page selection cannot be parsed from XML");
         case mm::ValueCodec::owned_panel:
             fail("OOF2003", node, std::string(object_id), property, "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
         case mm::ValueCodec::typed_scalar:
@@ -3543,6 +3550,13 @@ private:
                 return;
             case mm::ValueCodec::command_bar_buttons:
                 serialization_fail(std::string(object_id), std::string(name), "owned Buttons collection", "scalar", "Buttons is not a scalar property");
+            case mm::ValueCodec::form_controls:
+            case mm::ValueCodec::panel_pages:
+                serialization_fail(std::string(object_id), std::string(name), "named ChildItems", "scalar collection",
+                    "Form item collections cannot be serialized as scalar properties");
+            case mm::ValueCodec::page_reference:
+                serialization_fail(std::string(object_id), std::string(name), "runtime-only page reference", "XML",
+                    "Runtime page selection cannot be serialized");
             case mm::ValueCodec::chart_trendlines:
             case mm::ValueCodec::chart_equation_area:
             case mm::ValueCodec::chart_plot_area:

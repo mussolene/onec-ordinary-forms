@@ -175,6 +175,14 @@ using EventRef = Reference<Event>;
 using PictureAssetRef = Reference<PictureAsset>;
 using ChildItemRef = std::variant<ControlRef, PageRef>;
 
+enum class FormItemCollectionKind : std::uint8_t { controls, pages };
+
+struct FormItemCollectionRef {
+    ObjectId owner{};
+    FormItemCollectionKind kind = FormItemCollectionKind::controls;
+    friend bool operator==(const FormItemCollectionRef&, const FormItemCollectionRef&) = default;
+};
+
 enum class ChartScaleKind : std::uint8_t { none, points, values, additional_values, series };
 struct ChartScaleRef {
     ObjectId owner{};
@@ -551,6 +559,7 @@ using PropertyValue = std::variant<
     ChartTrendlineRef,
     ChartEquationAreaRef,
     ChartCollectionRef,
+    FormItemCollectionRef,
     CommandBarButtonRef>;
 
 struct PropertyEntry {
@@ -1228,6 +1237,7 @@ public:
     [[nodiscard]] const Event* find_event(ObjectId id) const noexcept;
     [[nodiscard]] const PictureAsset* find_asset(ObjectId id) const noexcept;
     [[nodiscard]] std::size_t indexed_id_count() const noexcept;
+    [[nodiscard]] std::optional<std::vector<ChildItemRef>> form_item_refs(FormItemCollectionRef reference) const;
 
     [[nodiscard]] std::optional<ChartTrendlineRef> add_chart_trendline(ObjectId chart, ObjectId series);
     [[nodiscard]] PropertyReadResult insert_chart_trendline(ObjectId chart, ObjectId series, const PropertyValue& argument);
