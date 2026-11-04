@@ -707,6 +707,18 @@ void test_form_runtime_variant_values() {
         document.set_prop_val(owner, current, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
         document.reset_prop_val(owner, current) == PropertyMutationStatus::unsupported_surface,
         "unfinished CurrentControl API must not manufacture an undefined scalar value");
+    const auto form_owner = PropertyId::from_name("FormOwner");
+    const auto* owner_descriptor = metamodel::find_form_property(form_owner);
+    expect(owner_descriptor && owner_descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+        owner_descriptor->storage_codec == metamodel::StorageCodec::none &&
+        owner_descriptor->default_value.kind == metamodel::DefaultKind::undefined &&
+        owner_descriptor->value_codec == metamodel::ValueCodec::unclassified,
+        "FormOwner persistence and initial undefined must not imply a completed live reference codec");
+    expect(document.get_prop_val(owner, form_owner).status == PropertyReadStatus::unsupported_surface &&
+        document.set_prop_val(owner, form_owner, FormRef{ObjectId{1}}) == PropertyMutationStatus::unsupported_surface &&
+        document.set_prop_val(owner, form_owner, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+        document.reset_prop_val(owner, form_owner) == PropertyMutationStatus::unsupported_surface,
+        "unfinished FormOwner API must reject scalar and local-only substitute implementations");
     const auto original_xml = oof::source::serialize_form_xml(document);
     const auto original_bin = oof::save_form_bin(document);
     expect(original_xml.ok() && original_bin.ok(), "form with runtime variants must serialize");

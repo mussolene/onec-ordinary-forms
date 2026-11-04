@@ -1544,6 +1544,11 @@ void apply_proven_storage_overrides(
                 ? DefaultValue{DefaultKind::string, ""} : DefaultValue{DefaultKind::none, {}};
         if (name == std::string_view{"CurrentControl"}) property->value_kind = ValueKind::object;
     }
+    auto form_owner = std::ranges::find(form_properties, "FormOwner", &PropertyDescriptor::api_name);
+    if (form_owner == form_properties.end()) throw std::logic_error("missing runtime FormOwner property");
+    form_owner->persistence = PersistenceClass::runtime_only;
+    form_owner->storage_codec = StorageCodec::none;
+    form_owner->default_value = {DefaultKind::undefined, "undefined"};
     if (auto property = std::ranges::find(form_properties, "CaptionPicture", &PropertyDescriptor::api_name);
         property != form_properties.end()) {
         property->persistence = PersistenceClass::persisted_editable;

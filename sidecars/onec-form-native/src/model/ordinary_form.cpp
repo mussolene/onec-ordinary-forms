@@ -1641,7 +1641,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
     const ControlNode* position_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
-        if (property == PropertyId::from_name("CurrentControl"))
+        if (property == PropertyId::from_name("CurrentControl") || property == PropertyId::from_name("FormOwner"))
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (property == PropertyId::from_name("Controls"))
             return {PropertyReadStatus::computed_value, PropertyValue{FormItemCollectionRef{form_.id, FormItemCollectionKind::controls}}};
@@ -2055,7 +2055,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
-        if (property == PropertyId::from_name("CurrentControl")) return PropertyMutationStatus::unsupported_surface;
+        if (property == PropertyId::from_name("CurrentControl") || property == PropertyId::from_name("FormOwner")) return PropertyMutationStatus::unsupported_surface;
         if (property == PropertyId::from_name("Controls")) return PropertyMutationStatus::read_only;
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
             if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
@@ -2617,7 +2617,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     ControlNode* property_control = nullptr;
     if (owner.category == ObjectCategory::form) {
         if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
-        if (property == PropertyId::from_name("CurrentControl")) return PropertyMutationStatus::unsupported_surface;
+        if (property == PropertyId::from_name("CurrentControl") || property == PropertyId::from_name("FormOwner")) return PropertyMutationStatus::unsupported_surface;
         if (property == PropertyId::from_name("Controls")) return PropertyMutationStatus::read_only;
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
             runtime_form_values_.unset(property);
