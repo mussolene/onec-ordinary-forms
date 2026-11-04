@@ -1,6 +1,9 @@
 # Ordinary Control Auto Map
 
-This note records the current platform-oracle mapping for ordinary form controls.
+This historical note records an earlier platform-oracle mapping for ordinary
+form controls. The two registry headers named below no longer exist in the
+current sidecar. This table is not a current property or serialization map;
+use the current model, descriptors, and fresh platform evidence for new work.
 It is based on the 26-control `ЗначениеВСтрокуВнутр(ЭтаФорма)` oracle batch,
 the native runtime graph summaries, `control_info_descriptor_registry.hpp`, and
 `platform_form_descriptor_join.hpp`.

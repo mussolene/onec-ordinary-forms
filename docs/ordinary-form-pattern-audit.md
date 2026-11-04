@@ -463,8 +463,10 @@ The platform library pattern supports the descriptor-driven fix:
   `cf_form_controls8`, and `cf_form_controls_info8`;
 - `FUN_00270da0` returns `cf_form_controls8` as the main existing payload and
   returns `position8`/`info8` as counted transfer records;
-- `FUN_00255f70` and `FUN_00256510` are the write/read persistence entries
-  around `core::ListOutStream` and `core::ListInStream`.
+- The earlier attribution of `FUN_00255f70` and `FUN_00256510` as form
+  persistence entries was disproved. They save and load the Designer setting
+  `FormDesigner/UseWizardForInsertControl`, not the form document. See the
+  current findings in `platform-mechanism-extraction.md`.
 
 Therefore the release path is not to restore a Python implementation and not
 to expose raw stream data in XML. The native writer must materialize a typed
