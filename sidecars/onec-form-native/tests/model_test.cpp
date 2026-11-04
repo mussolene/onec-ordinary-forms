@@ -2944,6 +2944,11 @@ void test_help_metamodel() {
         expect(property && property->persistence == PersistenceClass::runtime_only &&
                    property->storage_codec == StorageCodec::none,
             std::string(name) + " must be classified as runtime state without a storage codec");
+        if (std::string_view{name} == "CurrentRow" || std::string_view{name} == "CurrentData" ||
+            std::string_view{name} == "CurrentParent") {
+            expect(property->value_kind == ValueKind::variant && property->value_codec == ValueCodec::unclassified,
+                "table row and parent value types depend on the data extension, with live codecs still unfinished");
+        }
     }
     const auto* current_parent = find_event(ControlKind::table, "OnCurrentParentChange");
     expect(current_parent && current_parent->persistence == PersistenceClass::persisted_editable &&

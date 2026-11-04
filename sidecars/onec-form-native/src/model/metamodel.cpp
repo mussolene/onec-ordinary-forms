@@ -1348,7 +1348,9 @@ void apply_proven_storage_overrides(
             property->default_value = {DefaultKind::none, {}};
         }
     }
-    std::ranges::find(table, "CurrentParent", &PropertyDescriptor::api_name)->value_kind = ValueKind::variant;
+    for (const auto name : {"CurrentRow", "CurrentData", "CurrentParent"}) {
+        std::ranges::find(table, name, &PropertyDescriptor::api_name)->value_kind = ValueKind::variant;
+    }
     for (const auto& spec : detail::table_enum_specs) {
         classify_property(table, spec.property, StorageCodec::control_info, DefaultKind::enumeration, spec.default_qualified);
         std::ranges::find(table, spec.property, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
