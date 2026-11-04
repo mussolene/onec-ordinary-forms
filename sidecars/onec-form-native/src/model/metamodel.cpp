@@ -1284,6 +1284,20 @@ void apply_proven_storage_overrides(
     classify_property(list_box, "ShowPicture", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(list_box, "ShowCheckBox", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(list_box, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
+    auto current_row = std::ranges::find(list_box, "CurrentRow", &PropertyDescriptor::api_name);
+    if (current_row == list_box.end()) throw std::logic_error("missing ListBox CurrentRow");
+    current_row->persistence = PersistenceClass::runtime_only;
+    current_row->storage_codec = StorageCodec::none;
+    current_row->default_value = {DefaultKind::undefined, "undefined"};
+
+    auto& html_document = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
+    auto document = std::ranges::find(html_document, "Document", &PropertyDescriptor::api_name);
+    if (document == html_document.end()) throw std::logic_error("missing HTMLDocumentField Document");
+    document->persistence = PersistenceClass::runtime_only;
+    document->storage_codec = StorageCodec::none;
+    document->default_value = {DefaultKind::none, {}};
+    document->platform_type = u8"ВнешнийОбъект";
+
 
     auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
     for (const auto name : {"ChoiceMode", "CurrentRow", "CurrentData", "SelectedRows", "CurrentColumn"}) {

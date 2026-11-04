@@ -692,6 +692,41 @@ void test_chart_computed_counts() {
     }
 }
 
+void test_list_and_html_live_property_boundaries() {
+    Form form; form.id = ObjectId{1}; form.name = "LiveObjects";
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+        form.children.emplace_back(ControlRef{ObjectId{200 + i}});
+    }
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        for (const bool html : {false, true}) {
+            const ObjectId id{(html ? 200U : 100U) + i};
+            const auto kind = html ? ControlKind::html_document_field : ControlKind::list_box;
+            if (html) document.add_control(ControlNode{id, "Html" + std::to_string(i), HtmlDocumentFieldPayload{}});
+            else document.add_control(ControlNode{id, "List" + std::to_string(i), ListBoxPayload{}});
+            const auto property = PropertyId::from_name(html ? "Document" : "CurrentRow");
+            const auto* descriptor = metamodel::find_property(kind, property);
+            expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+                descriptor->storage_codec == metamodel::StorageCodec::none &&
+                descriptor->value_codec == metamodel::ValueCodec::unclassified &&
+                descriptor->default_value.kind == (html ? metamodel::DefaultKind::none : metamodel::DefaultKind::undefined),
+                "proven live-property storage must not imply an implemented reference codec");
+            const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+            expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface,
+                "live DOM and selected row must not become manufactured scalar defaults");
+            const auto expected = html ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
+            expect(document.set_prop_val(owner, property, UndefinedValue{}) == expected &&
+                document.reset_prop_val(owner, property) == expected,
+                "live-property API must retain readonly and unfinished-reference boundaries");
+            expect(document.find_control(id)->properties().find(property) == nullptr,
+                "rejected live-property operations must not mutate persisted properties");
+        }
+    }
+    const auto* html = metamodel::find_property(ControlKind::html_document_field, PropertyId::from_name("Document"));
+    expect(html->platform_type == u8"ВнешнийОбъект", "Linux HTML DOM must use the current platform type");
+}
+
 void test_form_runtime_variant_values() {
     Form form; form.id = ObjectId{1}; form.name = "RuntimeVariants";
     OrdinaryFormDocument document(std::move(form));
@@ -5138,6 +5173,7 @@ int main() {
         test_chart_owned_collections();
         test_chart_document_resource_budget();
         test_chart_scale_lines();
+        test_list_and_html_live_property_boundaries();
         test_form_runtime_variant_values();
         test_window_options_aliases();
         test_form_runtime_boolean_values();

@@ -2563,7 +2563,6 @@
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Document" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="HTMLDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
@@ -2589,7 +2588,6 @@
       <xs:element name="ShowCheckBox" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CurrentRow" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

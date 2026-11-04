@@ -1735,6 +1735,9 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
+            (control.kind() == ControlKind::html_document_field && descriptor->api_name == "Document"))
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (descriptor->api_name == "Name")
             return {PropertyReadStatus::computed_value, PropertyValue{control.name}};
         if (descriptor->value_codec == metamodel::ValueCodec::typed_value) {
@@ -2166,6 +2169,8 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow")
+            return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
             const auto* type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
@@ -2666,6 +2671,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow")
+            return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
             const auto* type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));

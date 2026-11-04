@@ -468,7 +468,7 @@
           <Control name="HTMLDocumentField" apiName="HTMLDocumentField" russianName="ПолеHTMLДокумента" children="none">
             <Properties>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
-              <Property name="Document" apiName="Document" russianName="Документ" russianType="COMОбъект" valueCodec="unclassified"/>
+              <Property name="Document" apiName="Document" russianName="Документ" russianType="ВнешнийОбъект" valueCodec="unclassified"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
             </Properties>

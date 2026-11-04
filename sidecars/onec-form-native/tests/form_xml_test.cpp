@@ -3395,6 +3395,11 @@ void test_chart_summary_series_color_xml() {
 }
 
 void test_runtime_properties_are_not_public_xml() {
+    for (const auto fragment : {"<ListBox id=\"2\" name=\"List\"><Position/><CurrentRow/></ListBox>",
+                                "<HTMLDocumentField id=\"2\" name=\"Html\"><Position/><Document/></HTMLDocumentField>"}) {
+        expect(!source::parse_form_xml(std::string{"<Form id=\"1\" name=\"Runtime\" ordinaryFormVersion=\"2.1\"><ChildItems>"} + fragment + "</ChildItems></Form>"),
+            "live selected rows and DOM must not enter public XML as empty placeholders");
+    }
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><FormOwner/></Form>)XML"),
         "runtime FormOwner must not enter public XML as an empty or raw reference placeholder");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><CurrentControl/></Form>)XML"),
