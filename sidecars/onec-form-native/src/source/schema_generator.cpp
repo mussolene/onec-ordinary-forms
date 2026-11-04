@@ -400,6 +400,12 @@ void append_value_types(std::string& output) {
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="AttributeIdType">
+    <xs:restriction base="xs:unsignedLong">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+
   <xs:simpleType name="UuidValueType">
     <xs:restriction base="xs:string">
       <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
@@ -769,7 +775,7 @@ void append_value_types(std::string& output) {
   </xs:complexType>
 
   <xs:simpleType name="AttributeReferenceValueType">
-    <xs:restriction base="ObjectIdType"/>
+    <xs:restriction base="AttributeIdType"/>
   </xs:simpleType>
 
   <xs:simpleType name="CommandReferenceValueType">
@@ -1068,7 +1074,7 @@ void append_document_types(std::string& output) {
     <xs:sequence>
       <xs:element name="Member" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
-    <xs:attribute name="attributeId" type="ObjectIdType" use="required"/>
+    <xs:attribute name="attributeId" type="AttributeIdType" use="required"/>
   </xs:complexType>
 
   <xs:simpleType name="BindingCoordinateType">
@@ -1128,7 +1134,7 @@ void append_document_types(std::string& output) {
       <xs:element name="Main" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="StoredData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
-    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+    <xs:attribute name="id" type="AttributeIdType" use="required"/>
     <xs:attribute name="name" type="xs:string" use="required"/>
   </xs:complexType>
 
@@ -1390,7 +1396,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     output += "  </xs:sequence></xs:complexType>\n";
     output += "  <xs:complexType name=\"FormType\">\n    <xs:sequence>\n";
     append_property_elements(output, metamodel.form_properties());
-    output += "      <xs:element name=\"MainAttribute\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"ObjectIdType\" use=\"required\"/></xs:complexType></xs:element>\n";
+    output += "      <xs:element name=\"MainAttribute\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"AttributeIdType\" use=\"required\"/></xs:complexType></xs:element>\n";
     output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n        <xs:element name=\"";
     append_xml_escaped(output, model::metamodel::data_processor_form_extension.xml_name);
     output += "\"><xs:complexType/></xs:element>\n        <xs:element name=\"";

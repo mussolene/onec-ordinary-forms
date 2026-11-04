@@ -109,6 +109,12 @@ void require_arity(
     }
 }
 
+const model::Attribute* resolve_attribute_reference(
+    const model::OrdinaryFormDocument& document,
+    model::AttributeRef reference) {
+    return reference.has_value() ? document.find_attribute(reference.id()) : nullptr;
+}
+
 const list_stream::ListValue& at(
     const list_stream::ListValue& value,
     std::size_t index,
@@ -6454,7 +6460,7 @@ void validate_radio_group(
             fail("OOF1122", std::string(path), "numeric head ValueType, DataPath, and SelectionValue",
                 head.name, "RadioButton group head is missing its numeric binding profile");
         }
-        const auto* attribute = document.find_attribute(head.data_path->attribute.id());
+        const auto* attribute = resolve_attribute_reference(document, head.data_path->attribute);
         if (attribute == nullptr || attribute->type != *head_type ||
             !decimal_fits_numeric_qualifiers(head_selection->canonical, head_type->entries.front().numeric)) {
             fail("OOF1122", std::string(path), "head numeric Attribute and matching SelectionValue",
@@ -10361,8 +10367,8 @@ DecodedControl decode_input_field(
                 "InputField TypeLink metadata member paths are not represented by the named model");
         require_arity(target, 3, target_path);
         const auto reference = composite_id(target.items[2], child_path(target_path, 2));
-        if (!reference.is_null || reference.uuid.canonical != null_uuid || reference.object_id <= 0)
-            fail("OOF1122", target_path, "positive local Attribute reference", {}, "Unsupported InputField TypeLink source");
+        if (!reference.is_null || reference.uuid.canonical != null_uuid || reference.object_id < 0)
+            fail("OOF1122", target_path, "nonnegative local Attribute reference", {}, "Unsupported InputField TypeLink source");
         type_link = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(reference.object_id)}};
     } else {
         fail("OOF1122", type_link_path, "zero or one direct TypeLink source", {}, "Unsupported InputField TypeLink source count");
@@ -11282,7 +11288,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         fail("OOF1122", "$/LabelDecoration/DataPath", "direct Attribute reference", control.name,
             "LabelDecoration DataPath members are unsupported");
     }
-    if (control.data_path && document.find_attribute(control.data_path->attribute.id()) == nullptr) {
+    if (control.data_path && resolve_attribute_reference(document, control.data_path->attribute) == nullptr) {
         fail("OOF1123", "$/LabelDecoration/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "LabelDecoration DataPath does not resolve");
     }
@@ -11374,7 +11380,7 @@ LV encode_progress_bar(
             control.name, "ProgressBar uses a storage concept outside the supported profile");
     }
     if (control.data_path) {
-        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
         if (attribute == nullptr) fail("OOF1123", "$/ProgressBar/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "ProgressBar DataPath does not resolve");
         if (!(attribute->type.entries.size() == 1 &&
@@ -11431,7 +11437,7 @@ LV encode_track_bar(
             control.name, "TrackBar uses a storage concept outside the supported profile");
     }
     if (control.data_path) {
-        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
         if (attribute == nullptr) fail("OOF1123", "$/TrackBar/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "TrackBar DataPath does not resolve");
         if (!is_single_track_bar_type_domain(attribute->type)) fail("OOF1122", "$/TrackBar/DataPath",
@@ -11512,7 +11518,7 @@ LV encode_list_box(
     }
     require_allowed_properties(control.properties(),
         {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly", "BorderColor", "FieldTextColor", "FieldBackColor", "Border"}, "$/ListBox");
-    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
     if (attribute == nullptr) {
         fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "ListBox DataPath does not resolve");
@@ -11562,7 +11568,7 @@ LV encode_check_box(
             "CheckBox uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {"Enabled", "ThreeState", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent", "TitleLocation", "HorizontalAlign", "VerticalAlign"}, "$/CheckBox");
-    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "CheckBox DataPath does not resolve");
@@ -11620,7 +11626,7 @@ LV encode_choice_field(
     }
     require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Border", "Transparent", "ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly", "ChoiceListHeight", "ChoiceListWidth", "Picture", "ChoiceButtonPicture"}, "$/ChoiceField");
     if (control.data_path) {
-        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
         if (attribute == nullptr) {
             fail("OOF1123", "$/ChoiceField/DataPath", "existing linked Attribute",
                 std::to_string(control.data_path->attribute.id().value()), "ChoiceField DataPath does not resolve");
@@ -11728,7 +11734,7 @@ LV encode_radio_button(
             "RadioButton DataPath requires a numeric ValueType");
     }
     if (control.data_path) {
-        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
         if (attribute == nullptr || attribute->type != value_type) {
             fail("OOF1122", "$/RadioButton/DataPath", "existing Attribute with matching numeric ValueType",
                 std::to_string(control.data_path->attribute.id().value()),
@@ -11886,7 +11892,7 @@ LV encode_calendar_field(
             "CalendarField uses a storage concept outside the supported profile");
     }
     if (control.data_path) {
-        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
         if (attribute == nullptr) fail("OOF1123", "$/CalendarField/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "CalendarField DataPath does not resolve");
         if (!is_single_date_time_type_domain(attribute->type)) fail("OOF1122", "$/CalendarField/DataPath",
@@ -12022,7 +12028,7 @@ LV encode_input_field(
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
         "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask", "TypeLinkItem"}, "$/InputField");
-    const auto* attribute = control.data_path ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
+    const auto* attribute = control.data_path ? resolve_attribute_reference(document, control.data_path->attribute) : nullptr;
     if (control.data_path && attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
     }
@@ -12142,7 +12148,7 @@ LV encode_table(
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "RowSelectionMode", "InitialListView", "InitialTreeView",
         "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree"}, "$/Table");
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
-    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
     if (attribute == nullptr) {
         fail("OOF1123", "$/Table/DataPath", "existing ValueTable Attribute",
             std::to_string(control.data_path->attribute.id().value()), "Table DataPath does not resolve");
@@ -12271,11 +12277,14 @@ std::size_t form_extension_ordinal(const model::PropertySet& properties, std::st
 }
 
 void validate_form_extension_context(const model::OrdinaryFormDocument& document, std::string_view path) {
-    if (document.form().main_attribute.id() && !document.form().extension)
+    if (document.form().main_attribute.has_value() && !document.form().extension)
         fail("OOF1122", std::string(path), "declared extension for the main object context",
             "absent extension", "MainAttribute context has no supported form extension");
     if (!document.form().extension) return;
     if (*document.form().extension == model::FormExtensionKind::data_processor) {
+        if (!document.form().main_attribute.has_value())
+            fail("OOF1122", std::string(path), "selected MainAttribute reference", "absent",
+                "DataProcessorFormExtension requires an explicit object context");
         const auto* main = document.find_attribute(document.form().main_attribute.id());
         if (!main || main->type.entries.size() != 1 ||
             main->type.entries.front().term != model::TypeDomainTerm::object ||
@@ -12290,6 +12299,9 @@ void validate_form_extension_context(const model::OrdinaryFormDocument& document
     if (*document.form().extension != model::FormExtensionKind::catalog_item)
         fail("OOF1122", std::string(path), "declared ordinary-form extension", "unknown extension kind",
             "Form extension kind is unsupported by the storage codec");
+    if (!document.form().main_attribute.has_value())
+        fail("OOF1122", std::string(path), "selected MainAttribute reference", "absent",
+            "CatalogItemFormExtension requires an explicit object context");
     const auto* main = document.find_attribute(document.form().main_attribute.id());
     if (!main || main->type.entries.size() != 1 ||
         main->type.entries.front().term != model::TypeDomainTerm::object ||
@@ -12584,8 +12596,8 @@ Result<AttributesRecord> decode_attributes(
         AttributesRecord result;
         const auto main_attribute = composite_id(at(record, 0, path), child_path(path, 0));
         if (!main_attribute.is_null || main_attribute.uuid.canonical != null_uuid ||
-            (main_attribute.object_id <= 0 && main_attribute.object_id != -1))
-            fail("OOF1107", child_path(path, 0), "absent or positive one-component main Attribute reference",
+            (main_attribute.object_id < 0 && main_attribute.object_id != -1))
+            fail("OOF1107", child_path(path, 0), "absent or nonnegative one-component main Attribute reference",
                 describe(at(record, 0, path)), "Main Attribute identity cannot be represented without loss");
         if (main_attribute.object_id != -1) result.main_attribute = main_attribute;
         result.slot_count = integer_atom<std::uint32_t>(
@@ -13128,12 +13140,12 @@ Result<model::OrdinaryFormDocument> decode_document(
 
         std::uint64_t actual_max_id = form.id.value();
         for (const auto& stored : attributes.attributes) {
-            if (stored.id.object_id <= 0 || !stored.id.is_null ||
+            if (stored.id.object_id < 0 || !stored.id.is_null ||
                 stored.id.uuid.canonical != null_uuid) {
                 fail(
                     "OOF1122",
                     "$/2/2",
-                    "one-component positive attribute ID",
+                    "one-component nonnegative attribute ID",
                     std::to_string(stored.id.object_id),
                     "Attribute identity cannot be represented by ObjectId without loss");
             }
@@ -14157,15 +14169,14 @@ Result<list_stream::ListValue> encode_document(
         }
 
         AttributesRecord attributes;
-        if (document.form().main_attribute.id())
+        if (document.form().main_attribute.has_value())
             attributes.main_attribute = model::CompositeIdValue{
                 static_cast<std::int64_t>(document.form().main_attribute.id().value()),
                 model::UuidValue{std::string(null_uuid)}, true};
         std::uint64_t max_attribute_id = 0;
         for (const auto& attribute : document.collections().attributes) {
-            if (attribute.id.value() == 0 ||
-                attribute.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-                fail("OOF1122", "$/Attributes", "positive int64 attribute ID", std::to_string(attribute.id.value()), "Attribute ID cannot be encoded");
+            if (attribute.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+                fail("OOF1122", "$/Attributes", "nonnegative int64 attribute ID", std::to_string(attribute.id.value()), "Attribute ID cannot be encoded");
             }
             attributes.attributes.push_back(AttributeRecord{
                 model::CompositeIdValue{

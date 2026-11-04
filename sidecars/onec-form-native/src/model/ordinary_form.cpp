@@ -621,7 +621,7 @@ bool property_value_references_resolve(
             } else if constexpr (std::is_same_v<Value, FormRef>) {
                 return typed_value.id() == document.form().id;
             } else if constexpr (std::is_same_v<Value, AttributeRef>) {
-                return document.find_attribute(typed_value.id()) != nullptr;
+                return typed_value.has_value() && document.find_attribute(typed_value.id()) != nullptr;
             } else if constexpr (std::is_same_v<Value, CommandRef>) {
                 return document.find_command(typed_value.id()) != nullptr;
             } else if constexpr (std::is_same_v<Value, PictureRef>) {
@@ -1323,6 +1323,7 @@ void OrdinaryFormDocument::set_module(FormModule module) {
 }
 
 std::optional<ValueListRef> OrdinaryFormDocument::attribute_value_list(AttributeRef attribute) const {
+    if (!attribute.has_value()) return std::nullopt;
     if (!value_list_attribute(find_attribute(attribute.id()))) return std::nullopt;
     const auto value = runtime_attribute_value_lists_.find(attribute.id());
     if (value == runtime_attribute_value_lists_.end()) return std::nullopt;
@@ -1330,6 +1331,7 @@ std::optional<ValueListRef> OrdinaryFormDocument::attribute_value_list(Attribute
 }
 
 PropertyMutationStatus OrdinaryFormDocument::bind_attribute_value_list(AttributeRef attribute, ValueListRef value) {
+    if (!attribute.has_value()) return PropertyMutationStatus::unknown_owner;
     const auto* source = find_attribute(attribute.id());
     if (!source) return PropertyMutationStatus::unknown_owner;
     if (!value_list_attribute(source) || !value.get()) return PropertyMutationStatus::invalid_value;
@@ -1675,7 +1677,8 @@ const TypeDomainPatternValue* effective_input_type(
     if (control.kind() != ControlKind::input_field) return nullptr;
     if (control.data_path) {
         if (!control.data_path->members.empty()) return nullptr;
-        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        const auto* attribute = control.data_path->attribute.has_value()
+            ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
         return attribute == nullptr ? nullptr : &attribute->type;
     }
     const auto* local = control.extension_properties.find(PropertyId::from_name("ValueType"));
@@ -1684,7 +1687,8 @@ const TypeDomainPatternValue* effective_input_type(
 
 bool table_tree_property_available(const OrdinaryFormDocument& document, const ControlNode& control) {
     if (!control.data_path || !control.data_path->members.empty()) return false;
-    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    const auto* attribute = control.data_path->attribute.has_value()
+        ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
     TypeDomainEntry expected;
     expected.term = TypeDomainTerm::value_tree;
     return attribute && attribute->type.entries.size() == 1 && attribute->type.entries.front() == expected;
@@ -2179,14 +2183,16 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             if (!control.data_path && control.kind() == ControlKind::radio_button)
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             if (!control.data_path) return {PropertyReadStatus::computed_value, PropertyValue{std::string{}}};
-            const auto* attribute = find_attribute(control.data_path->attribute.id());
+            const auto* attribute = control.data_path->attribute.has_value()
+                ? find_attribute(control.data_path->attribute.id()) : nullptr;
             if (!attribute || attribute->name.empty() || !control.data_path->members.empty())
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             return {PropertyReadStatus::computed_value, PropertyValue{attribute->name}};
         }
         if (descriptor->api_name == "ValueType") {
             if (control.data_path) {
-                const auto* attribute = find_attribute(control.data_path->attribute.id());
+                const auto* attribute = control.data_path->attribute.has_value()
+                    ? find_attribute(control.data_path->attribute.id()) : nullptr;
                 if (!attribute || !control.data_path->members.empty())
                     return {PropertyReadStatus::unsupported_surface, std::nullopt};
                 return {PropertyReadStatus::computed_value, PropertyValue{attribute->type}};
@@ -3333,13 +3339,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
     std::unordered_set<ObjectKey, ObjectKeyHash> seen;
 
     const auto record_id = [&](ObjectId id, ObjectCategory category) {
-        if (!id) {
+        if (!id && category != ObjectCategory::attribute) {
             add_violation(
                 report,
                 InvariantCode::invalid_id,
                 id,
                 id,
-                "ordinary-form object IDs must be nonzero");
+                "ordinary-form IDs must be nonzero except for Attributes");
         }
         if (!seen.insert(ObjectKey{category, id}).second) {
             add_violation(
@@ -3352,7 +3358,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
     };
 
     record_id(form_.id, ObjectCategory::form);
-    if (form_.main_attribute.id() && find_attribute(form_.main_attribute.id()) == nullptr) {
+    if (form_.main_attribute.has_value() && find_attribute(form_.main_attribute.id()) == nullptr) {
         add_violation(report, InvariantCode::dangling_reference, form_.id, form_.main_attribute.id(),
             "main form attribute must reference an existing Attribute");
     }
@@ -3404,7 +3410,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
     };
     const auto require_attribute = [&](ObjectId source, AttributeRef reference) {
-        if (find_attribute(reference.id()) == nullptr) {
+        if (!reference.has_value() || find_attribute(reference.id()) == nullptr) {
             add_violation(
                 report,
                 InvariantCode::dangling_reference,
@@ -3874,7 +3880,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
             const auto item_value = type_link_item != nullptr && std::holds_alternative<std::int64_t>(type_link_item->value)
                 ? std::get<std::int64_t>(type_link_item->value) : std::int64_t{1};
             if (input->type_link) {
-                const Attribute* attribute = find_attribute(input->type_link->id());
+                const Attribute* attribute = input->type_link->has_value()
+                    ? find_attribute(input->type_link->id()) : nullptr;
                 if (attribute == nullptr) {
                     add_violation(report, InvariantCode::dangling_reference, control.id,
                         input->type_link->id(), "InputField TypeLink must resolve to a local Attribute");
@@ -4011,7 +4018,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 };
                 if (!control.data_path->members.empty()) {
                     invalid_data_path("CalendarField and TrackBar DataPath must reference an Attribute directly");
-                } else if (const Attribute* attribute = find_attribute(control.data_path->attribute.id());
+                } else if (const Attribute* attribute = control.data_path->attribute.has_value()
+                               ? find_attribute(control.data_path->attribute.id()) : nullptr;
                            attribute != nullptr) {
                     TypeDomainEntry expected;
                     expected.term = calendar_field ? TypeDomainTerm::date : TypeDomainTerm::numeric;
@@ -4095,7 +4103,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
             if (!control.data_path || !control.data_path->members.empty()) {
                 invalid_table("Table requires a direct DataPath to a ValueTable or ValueTree Attribute");
             } else {
-                const Attribute* attribute = find_attribute(control.data_path->attribute.id());
+                const Attribute* attribute = control.data_path->attribute.has_value()
+                    ? find_attribute(control.data_path->attribute.id()) : nullptr;
                 const TypeDomainEntry value_table{.term = TypeDomainTerm::value_table};
                 const TypeDomainEntry value_tree{.term = TypeDomainTerm::value_tree};
                 if (attribute == nullptr || attribute->type.entries.size() != 1 ||

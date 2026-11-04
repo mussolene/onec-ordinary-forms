@@ -161,6 +161,31 @@ private:
     ObjectId id_{};
 };
 
+template <>
+class Reference<Attribute> {
+public:
+    constexpr Reference() noexcept = default;
+    explicit constexpr Reference(ObjectId id) noexcept : id_(id), present_(true) {}
+
+    [[nodiscard]] constexpr ObjectId id() const noexcept {
+        return id_;
+    }
+
+    [[nodiscard]] constexpr bool has_value() const noexcept {
+        return present_;
+    }
+
+    [[nodiscard]] constexpr explicit operator bool() const noexcept {
+        return present_;
+    }
+
+    friend constexpr auto operator<=>(Reference, Reference) noexcept = default;
+
+private:
+    ObjectId id_{};
+    bool present_ = false;
+};
+
 using FormRef = Reference<Form>;
 using ControlRef = Reference<ControlNode>;
 

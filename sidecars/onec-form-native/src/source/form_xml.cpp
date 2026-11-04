@@ -309,6 +309,15 @@ model::ObjectId parse_object_id(
     return model::ObjectId{value};
 }
 
+model::ObjectId parse_attribute_id(
+    std::string_view text,
+    xmlNodePtr node,
+    std::string_view property = "id",
+    std::string_view object_id = {}
+) {
+    return model::ObjectId{parse_integer<std::uint64_t>(text, node, property, object_id)};
+}
+
 std::string object_id_text(model::ObjectId id) {
     return std::to_string(id.value());
 }
@@ -1428,7 +1437,7 @@ model::PropertyValue parse_property_value(
         case mm::ValueCodec::form_reference:
             fail("OOF2003", node, std::string(object_id), property, "runtime-only form reference", "XML", "Runtime form reference cannot be parsed from XML");
         case mm::ValueCodec::attribute_reference:
-            return model::AttributeRef{parse_object_id(node_text(node), node, property, object_id)};
+            return model::AttributeRef{parse_attribute_id(node_text(node), node, property, object_id)};
         case mm::ValueCodec::command_reference:
             return model::CommandRef{parse_object_id(node_text(node), node, property, object_id)};
     }
@@ -1740,7 +1749,7 @@ public:
         for (xmlNodePtr child : element_children(root)) {
             const std::string name = node_name(child);
             if (name == "MainAttribute") {
-                form.main_attribute = model::AttributeRef{parse_object_id(required_attribute(child, "attributeId"), child)};
+                form.main_attribute = model::AttributeRef{parse_attribute_id(required_attribute(child, "attributeId"), child)};
             } else if (name == mm::data_processor_form_extension.xml_name) {
                 if (form_extension_seen)
                     fail("OOF2003", child, form_id, name, "one form extension", "duplicate extension",
@@ -1918,7 +1927,7 @@ private:
     void parse_attributes(xmlNodePtr node) {
         for (xmlNodePtr attribute_node : element_children(node)) {
             model::Attribute attribute;
-            attribute.id = parse_object_id(required_attribute(attribute_node, "id"), attribute_node);
+            attribute.id = parse_attribute_id(required_attribute(attribute_node, "id"), attribute_node);
             const std::string id = object_id_text(attribute.id);
             attribute.name = required_attribute(attribute_node, "name", id);
             for (xmlNodePtr child : element_children(attribute_node)) {
@@ -1986,7 +1995,7 @@ private:
 
     model::DataPath parse_data_path(xmlNodePtr node, std::string_view owner_id) {
         model::DataPath path;
-        path.attribute = model::AttributeRef{parse_object_id(
+        path.attribute = model::AttributeRef{parse_attribute_id(
             required_attribute(node, "attributeId", owner_id),
             node,
             "attributeId",
@@ -2546,7 +2555,7 @@ private:
                 }
                 if (!element_children(child).empty() || !trim_ascii(node_text(child)).empty())
                     fail("OOF2003", child, id_text, name, "empty TypeLink element", "content", "TypeLink cannot contain text or child elements");
-                input_field->type_link = model::AttributeRef{parse_object_id(
+                input_field->type_link = model::AttributeRef{parse_attribute_id(
                     required_attribute(child, "attributeId", id_text), child, "attributeId", id_text)};
             } else if (dendrogram != nullptr && name == "Items") {
                 if (dendrogram_items_seen) {
@@ -3388,7 +3397,7 @@ public:
         }
         writer_.open("Form", attributes);
         write_property_set(form.properties, metamodel_.form_properties(), form_id);
-        if (form.main_attribute.id())
+        if (form.main_attribute.has_value())
             writer_.empty("MainAttribute", {{"attributeId", object_id_text(form.main_attribute.id())}});
         if (form.extension == mm::data_processor_form_extension.kind) {
             writer_.empty(mm::data_processor_form_extension.xml_name);

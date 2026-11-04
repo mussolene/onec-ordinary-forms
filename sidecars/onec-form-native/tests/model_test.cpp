@@ -4688,6 +4688,16 @@ void test_duplicate_rejection() {
 }
 
 void test_category_scoped_object_ids() {
+    AttributeRef absent_attribute;
+    const AttributeRef zero_attribute{ObjectId{0}};
+    expect(!absent_attribute && !absent_attribute.has_value() &&
+        zero_attribute && zero_attribute.has_value() && zero_attribute.id() == ObjectId{0} &&
+        absent_attribute != zero_attribute,
+        "default AttributeRef must be absent while explicit Attribute ID 0 remains present");
+    expect(!ControlRef{} && !ControlRef{ObjectId{0}} && !PageRef{} && !PageRef{ObjectId{0}} &&
+        !EventRef{} && !EventRef{ObjectId{0}},
+        "ID 0 remains invalid for non-Attribute references and their defaults remain absent");
+
     Form form;
     form.id = ObjectId{1};
     form.name = "Main";
@@ -4695,22 +4705,60 @@ void test_category_scoped_object_ids() {
     form.events.push_back(EventRef{ObjectId{5}});
     OrdinaryFormDocument document(std::move(form));
 
+    document.add_attribute(Attribute{ObjectId{0}, "ZeroAttribute", TypeDomainPatternValue{}});
     document.add_attribute(Attribute{ObjectId{1}, "SyntheticValue", TypeDomainPatternValue{}});
     ControlNode input{ObjectId{4}, "InputSynthetic", InputFieldPayload{}};
-    input.data_path = DataPath{AttributeRef{ObjectId{1}}, {}};
+    input.data_path = DataPath{zero_attribute, {}};
     document.add_control(std::move(input));
     document.add_event(Event{ObjectId{5}, "OnOpen", "OnOpen", FormRef{ObjectId{1}}});
 
     expect(document.find_attribute(ObjectId{1}) != nullptr,
         "AttributeRef ID 1 must resolve when FormRef also has ID 1");
+    expect(document.find_attribute(ObjectId{0}) != nullptr &&
+        document.find_control(ObjectId{4})->data_path->attribute == zero_attribute,
+        "declared Attribute ID 0 must resolve as a present DataPath reference");
     expect(document.find_control(ObjectId{4}) != nullptr,
         "control ID 4 must resolve independently");
     expect(document.find(ObjectId{1}) == std::nullopt,
         "untyped lookup must report ambiguity for Form ID 1 and Attribute ID 1");
-    expect(document.indexed_id_count() == 4,
+    expect(document.indexed_id_count() == 5,
         "index count must include each category-scoped object identity");
     expect(document.validate().ok(),
         "Form 1, Attribute 1, and DataPath from Control 4 must validate");
+
+    auto duplicate_zero = document;
+    duplicate_zero.add_attribute(Attribute{ObjectId{0}, "DuplicateZero", TypeDomainPatternValue{}});
+    expect(duplicate_zero.validate().has(InvariantCode::duplicate_id),
+        "duplicate Attribute ID 0 must be rejected by category-scoped identity validation");
+
+    Form list_form;
+    list_form.id = ObjectId{1};
+    list_form.name = "ZeroList";
+    OrdinaryFormDocument list_document(std::move(list_form));
+    TypeDomainEntry list_entry;
+    list_entry.term = TypeDomainTerm::value_list;
+    list_document.add_attribute(Attribute{ObjectId{0}, "Values", TypeDomainPatternValue{{list_entry}}});
+    const auto values = ValueListRef::create(ValueListValue{});
+    expect(values && list_document.bind_attribute_value_list(zero_attribute, *values) ==
+               PropertyMutationStatus::applied_runtime_only &&
+               list_document.attribute_value_list(zero_attribute).has_value(),
+        "runtime ValueList binding must accept the explicit Attribute ID 0");
+    expect(!list_document.attribute_value_list(absent_attribute) &&
+               list_document.bind_attribute_value_list(absent_attribute, *values) ==
+                   PropertyMutationStatus::unknown_owner,
+        "an absent runtime AttributeRef must not alias a declared and bound Attribute ID 0");
+
+    Form invalid_form;
+    invalid_form.id = ObjectId{1};
+    OrdinaryFormDocument invalid_ids(std::move(invalid_form));
+    invalid_ids.add_control(ControlNode{ObjectId{0}, "InvalidControlZero", ButtonPayload{}});
+    Page page_zero;
+    page_zero.id = ObjectId{0};
+    page_zero.name = "InvalidPageZero";
+    invalid_ids.add_page(std::move(page_zero));
+    invalid_ids.add_event(Event{ObjectId{0}, "InvalidEventZero", "OnOpen", FormRef{ObjectId{1}}});
+    expect(invalid_ids.validate().has(InvariantCode::invalid_id),
+        "Control, Page, and Event object IDs must remain positive when Attribute ID 0 is valid");
 }
 
 void test_cycle_rejection() {

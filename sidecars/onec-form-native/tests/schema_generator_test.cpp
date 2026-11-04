@@ -785,7 +785,7 @@ void test_document_package_types(
         attribute_elements[0], "TypeDomain", "TypeDomainValueType", "1", "1");
     expect_element_shape(attribute_elements[1], "Main", "xs:boolean", "0", "1");
     expect_element_shape(attribute_elements[2], "StoredData", "xs:boolean", "0", "1");
-    expect_type_attribute(schema, "AttributeType", "id", "ObjectIdType", "required");
+    expect_type_attribute(schema, "AttributeType", "id", "AttributeIdType", "required");
     expect_type_attribute(schema, "AttributeType", "name", "xs:string", "required");
     const auto attributes =
         direct_children(sequence_for_type(schema, "AttributesType"), "element");
@@ -859,7 +859,7 @@ void test_data_path_position_and_bindings(
         schema,
         "DataPathType",
         "attributeId",
-        "ObjectIdType",
+        "AttributeIdType",
         "required");
 
     expect(
@@ -1791,6 +1791,24 @@ void test_input_field_type_link_schema(const GeneratedSchemas& schemas, xmlSchem
         "other control schemas must reject TypeLink");
 }
 
+void test_attribute_id_zero_schema(xmlSchemaPtr schema, xmlNodePtr schema_root) {
+    xmlNodePtr attribute_id = schema_component(schema_root, "simpleType", "AttributeIdType");
+    xmlNodePtr restriction = direct_child(attribute_id, "restriction");
+    expect(attribute(restriction, "base") == "xs:unsignedLong",
+        "AttributeIdType must remain a bounded nonnegative integer type");
+    expect(attribute(direct_child(restriction, "minInclusive"), "value") == "0",
+        "AttributeIdType must permit explicit ID 0");
+    expect(validate_document(schema,
+        R"XML(<Form id="1" name="AttributeZero" ordinaryFormVersion="2.1"><MainAttribute attributeId="0"/><Attributes><Attribute id="0" name="ObjectZero"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="Input"><DataPath attributeId="0"/><TypeLink attributeId="0"/><Position/></InputField></ChildItems></Form>)XML") == 0,
+        "named Attribute ID 0 and its references must validate in the generated schema");
+    expect(validate_document(schema,
+        R"XML(<Form id="1" name="ControlZero" ordinaryFormVersion="2.1"><ChildItems><Button id="0" name="Invalid"><Position/></Button></ChildItems></Form>)XML") != 0,
+        "ObjectIdType must continue to reject zero for controls");
+    expect(attribute(direct_child(schema_component(schema_root, "simpleType", "AttributeReferenceValueType"),
+               "restriction"), "base") == "AttributeIdType",
+        "AttributeRef XML values must use the zero-capable AttributeIdType");
+}
+
 void test_tracked_schema_drift(const GeneratedSchemas& schemas) {
     const std::filesystem::path root = find_repository_root();
     expect(
@@ -1876,6 +1894,7 @@ int main() {
             compiled_form.get());
         test_standard_menu_action_schema(compiled_form.get());
         test_input_field_type_link_schema(schemas, compiled_form.get());
+        test_attribute_id_zero_schema(compiled_form.get(), form_schema);
         test_tracked_schema_drift(schemas);
     } catch (const std::exception& error) {
         std::cerr << "schema generator tests: FAIL: " << error.what() << '\n';

@@ -6496,15 +6496,17 @@ void test_all_standard_button_pictures_round_trip_without_assets() {
 }
 
 void test_label_decoration_shared_attribute_links_round_trip() {
-    std::string xml = R"OOF(<Form id="1" name="Labels" ordinaryFormVersion="2.1"><Attributes><Attribute id="10" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="11" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute><Attribute id="12" name="List"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute><Attribute id="13" name="Table"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems>)OOF";
+    std::string xml = R"OOF(<Form id="1" name="Labels" ordinaryFormVersion="2.1"><Attributes><Attribute id="0" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="11" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute><Attribute id="12" name="List"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute><Attribute id="13" name="Table"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems>)OOF";
     for (int i = 0; i < 12; ++i) {
         xml += "<LabelDecoration id=\"" + std::to_string(100 + i) + "\" name=\"Label" +
-            std::to_string(i) + "\"><DataPath attributeId=\"" + std::to_string(10 + i % 4) +
+            std::to_string(i) + "\"><DataPath attributeId=\"" + std::to_string(i % 4 == 0 ? 0 : 10 + i % 4) +
             "\"/><Position/><Caption>Caption" + std::to_string(i) + "</Caption></LabelDecoration>";
     }
     xml += R"OOF(<LabelDecoration id="112" name="Unbound"><Position/><Caption>Independent</Caption></LabelDecoration></ChildItems></Form>)OOF";
     auto parsed = source::parse_form_xml(xml);
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    expect(!parsed.value().form().main_attribute.has_value(),
+        "a declared Attribute ID 0 must not infer a MainAttribute reference");
     auto* event_label = const_cast<model::ControlNode*>(parsed.value().find_control(model::ObjectId{100}));
     expect(event_label != nullptr, "bound event label must exist");
     event_label->events = {model::EventRef{model::ObjectId{200}}};
@@ -6518,7 +6520,7 @@ void test_label_decoration_shared_attribute_links_round_trip() {
     for (int i = 0; i < 12; ++i) {
         const auto& link = links.items[static_cast<std::size_t>(i + 1)];
         expect(list_stream::dump_compact(link) == "{" + std::to_string(100 + i) + ",{1,{" +
-                   std::to_string(10 + i % 4) + "}}}",
+                   std::to_string(i % 4 == 0 ? 0 : 10 + i % 4) + "}}}",
             "each label link must preserve its control and shared attribute ids");
     }
     const auto check = [&](const model::OrdinaryFormDocument& document) {
@@ -6544,7 +6546,7 @@ void test_label_decoration_shared_attribute_links_round_trip() {
                 expect(!control->data_path, "unbound label must remain unbound");
             } else {
                 expect(control->data_path && control->data_path->members.empty() &&
-                           control->data_path->attribute.id() == model::ObjectId{static_cast<std::uint64_t>(10 + i % 4)},
+                           control->data_path->attribute.id() == model::ObjectId{static_cast<std::uint64_t>(i % 4 == 0 ? 0 : 10 + i % 4)},
                     "label DataPath must preserve its shared attribute reference");
             }
         }
@@ -6579,16 +6581,53 @@ void test_label_decoration_shared_attribute_links_round_trip() {
         return !candidate || !form_stream::encode_document(candidate.value());
     };
     auto dangling = xml;
-    dangling.replace(dangling.find("attributeId=\"10\""), std::string("attributeId=\"10\"").size(), "attributeId=\"999\"");
+    dangling.replace(dangling.find("attributeId=\"0\""), std::string("attributeId=\"0\"").size(), "attributeId=\"999\"");
     expect(rejects(dangling), "label DataPath must reject dangling attribute references");
     auto nested = xml;
-    const auto path = nested.find("<DataPath attributeId=\"10\"/>");
-    nested.replace(path, std::string("<DataPath attributeId=\"10\"/>").size(),
-        "<DataPath attributeId=\"10\"><Member>Nested</Member></DataPath>");
+    const auto path = nested.find("<DataPath attributeId=\"0\"/>");
+    nested.replace(path, std::string("<DataPath attributeId=\"0\"/>").size(),
+        "<DataPath attributeId=\"0\"><Member>Nested</Member></DataPath>");
     const auto nested_parsed = source::parse_form_xml(nested);
     expect(nested_parsed.ok(), "label DataPath with a member must parse before encoding is checked");
     expect(!form_stream::encode_document(nested_parsed.value()),
         "label DataPath encoding must reject unsupported members");
+}
+
+void test_attribute_id_zero_form_bin_round_trip() {
+    constexpr std::string_view xml = R"OOF(<Form id="1" name="AttributeZeroBin" ordinaryFormVersion="2.1"><MainAttribute attributeId="0"/><DataProcessorFormExtension/><Attributes><Attribute id="0" name="ObjectZero"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute><Attribute id="3" name="Positive"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="InputZero"><DataPath attributeId="3"/><TypeLink attributeId="0"/><Position/></InputField><InputField id="4" name="InputPositive"><DataPath attributeId="3"/><Position/></InputField><InputField id="5" name="Unbound"><ValueType><Entry term="string" length="20"/></ValueType><Position/></InputField><LabelDecoration id="6" name="ObjectLabel"><DataPath attributeId="0"/><Position/></LabelDecoration></ChildItems></Form>)OOF";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    expect(parsed.value().form().main_attribute == model::AttributeRef{model::ObjectId{0}},
+        "explicit MainAttribute ID 0 must be represented as a present reference");
+    const auto* unbound = parsed.value().find_control(model::ObjectId{5});
+    expect(unbound && !unbound->data_path,
+        "an empty root DataPath must remain absent when Attribute ID 0 exists");
+    const auto binary = oof::save_form_bin(parsed.value());
+    expect(binary.ok(), binary ? "" : binary.diagnostics().front().message);
+    const auto loaded = oof::load_form_bin(binary.value(), "AttributeZeroBin");
+    expect(loaded.ok(), loaded ? "" : loaded.diagnostics().front().message);
+    expect(loaded.value().form().main_attribute == model::AttributeRef{model::ObjectId{0}} &&
+        loaded.value().find_attribute(model::ObjectId{0}) != nullptr &&
+        loaded.value().find_attribute(model::ObjectId{3}) != nullptr,
+        "Form.bin must preserve MainAttribute ID 0 and the zero and positive Attribute declarations");
+    const auto* input = loaded.value().find_control(model::ObjectId{2});
+    const auto* payload = input ? std::get_if<model::InputFieldPayload>(&input->payload) : nullptr;
+    const auto* object_label = loaded.value().find_control(model::ObjectId{6});
+    expect(input && input->data_path && input->data_path->attribute == model::AttributeRef{model::ObjectId{3}} &&
+        object_label && object_label->data_path &&
+        object_label->data_path->attribute == model::AttributeRef{model::ObjectId{0}} &&
+        payload && payload->type_link == model::AttributeRef{model::ObjectId{0}},
+        "Form.bin must preserve the typed DataPath and TypeLink AttributeRef values at ID 0");
+    const auto serialized = source::serialize_form_xml(loaded.value());
+    expect(serialized.ok() && serialized.value().find("<MainAttribute attributeId=\"0\"/>") != std::string::npos &&
+        serialized.value().find("<DataPath attributeId=\"0\"/>") != std::string::npos &&
+        serialized.value().find("<TypeLink attributeId=\"0\"/>") != std::string::npos &&
+        serialized.value().find("<InputField name=\"Unbound\" id=\"5\">") != std::string::npos,
+        "XML after Form.bin load must retain explicit zero references and the unbound control");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().form().main_attribute == model::AttributeRef{model::ObjectId{0}} &&
+        reparsed.value().find_control(model::ObjectId{5}) && !reparsed.value().find_control(model::ObjectId{5})->data_path,
+        "the complete model to XML to BIN to XML path must preserve zero identity and absent root binding");
 }
 
 void test_button_then_label_decoration_round_trip() {
@@ -23140,6 +23179,7 @@ int main() {
         test_button_external_picture_assets_round_trip();
         test_choice_and_input_field_picture_properties_round_trip();
         test_label_decoration_shared_attribute_links_round_trip();
+        test_attribute_id_zero_form_bin_round_trip();
         test_button_then_label_decoration_round_trip();
         test_label_decoration_click_event_round_trip_and_guards();
         test_label_border_color_round_trip();

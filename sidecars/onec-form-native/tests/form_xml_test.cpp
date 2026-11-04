@@ -1160,6 +1160,65 @@ void test_input_field_type_link_xml_contract() {
         "TypeLink is valid only on InputField");
 }
 
+void test_attribute_id_zero_xml_contract() {
+    constexpr std::string_view absent_main_xml = R"XML(<Form id="1" name="AttributeZero" ordinaryFormVersion="2.1"><Attributes><Attribute id="0" name="ObjectZero"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute><Attribute id="2" name="Positive"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="3" name="InputZero"><DataPath attributeId="0"/><TypeLink attributeId="0"/><Position/></InputField><InputField id="4" name="InputPositive"><DataPath attributeId="2"/><Position/></InputField><InputField id="5" name="Unbound"><Position/></InputField></ChildItems></Form>)XML";
+    const auto absent_main = source::parse_form_xml(absent_main_xml);
+    expect(absent_main.ok(), absent_main ? "" : absent_main.diagnostics().front().message);
+    expect(!absent_main.value().form().main_attribute.has_value() &&
+        absent_main.value().find_attribute(model::ObjectId{0}) != nullptr,
+        "declaring Attribute 0 must not infer a MainAttribute reference");
+    const auto* zero_input = absent_main.value().find_control(model::ObjectId{3});
+    const auto* zero_payload = zero_input ? std::get_if<model::InputFieldPayload>(&zero_input->payload) : nullptr;
+    expect(zero_payload && zero_input->data_path &&
+        zero_input->data_path->attribute == model::AttributeRef{model::ObjectId{0}} &&
+        zero_payload->type_link == model::AttributeRef{model::ObjectId{0}},
+        "DataPath and TypeLink must retain explicit Attribute ID 0");
+    expect(absent_main.value().find_control(model::ObjectId{5}) &&
+        !absent_main.value().find_control(model::ObjectId{5})->data_path,
+        "empty root DataPath must stay absent instead of binding to Attribute ID 0");
+    const auto serialized_absent = source::serialize_form_xml(absent_main.value());
+    expect(serialized_absent.ok() && serialized_absent.value().find("<MainAttribute") == std::string::npos &&
+        serialized_absent.value().find("<Attribute id=\"0\"") != std::string::npos &&
+        serialized_absent.value().find("<DataPath attributeId=\"0\"/>") != std::string::npos &&
+        serialized_absent.value().find("<TypeLink attributeId=\"0\"/>") != std::string::npos,
+        "XML writer must preserve ID 0 references and preserve absent MainAttribute");
+    const auto reparsed_absent = source::parse_form_xml(serialized_absent.value());
+    expect(reparsed_absent.ok() && !reparsed_absent.value().form().main_attribute.has_value(),
+        "absent MainAttribute must remain absent after named XML round trip");
+
+    auto explicit_main_xml = std::string(absent_main_xml);
+    explicit_main_xml.replace(explicit_main_xml.find("<Attributes>"), std::string("<Attributes>").size(),
+        "<MainAttribute attributeId=\"0\"/><Attributes>");
+    const auto explicit_main = source::parse_form_xml(explicit_main_xml);
+    expect(explicit_main.ok() && explicit_main.value().form().main_attribute ==
+        model::AttributeRef{model::ObjectId{0}},
+        "explicit MainAttribute ID 0 must remain present");
+    const auto explicit_main_serialized = source::serialize_form_xml(explicit_main.value());
+    expect(explicit_main_serialized.ok() && explicit_main_serialized.value().find(
+        "<MainAttribute attributeId=\"0\"/>") != std::string::npos,
+        "explicit MainAttribute ID 0 must serialize as a named reference");
+
+    const auto duplicate_zero = source::parse_form_xml(
+        "<Form id=\"1\" name=\"DuplicateZero\" ordinaryFormVersion=\"2.1\"><Attributes>"
+        "<Attribute id=\"0\" name=\"First\"><TypeDomain><Entry term=\"string\" length=\"1\"/></TypeDomain></Attribute>"
+        "<Attribute id=\"0\" name=\"Second\"><TypeDomain><Entry term=\"string\" length=\"1\"/></TypeDomain></Attribute>"
+        "</Attributes></Form>");
+    expect(!duplicate_zero.ok(), "duplicate Attribute ID 0 must be rejected");
+    expect(!source::parse_form_xml(
+        "<Form id=\"1\" name=\"DanglingZero\" ordinaryFormVersion=\"2.1\"><MainAttribute attributeId=\"0\"/></Form>").ok(),
+        "MainAttribute ID 0 without a declared Attribute 0 must be rejected");
+    expect(!source::parse_form_xml(
+        "<Form id=\"1\" name=\"DanglingDataPathZero\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<LabelDecoration id=\"2\" name=\"Label\"><DataPath attributeId=\"0\"/><Position/></LabelDecoration>"
+        "</ChildItems></Form>").ok(),
+        "DataPath Attribute ID 0 without a declared Attribute 0 must be rejected");
+    expect(!source::parse_form_xml(
+        "<Form id=\"1\" name=\"ControlZero\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"0\" name=\"Invalid\"><Position/></Button>"
+        "</ChildItems></Form>").ok(),
+        "control ID 0 must remain invalid in public XML");
+}
+
 void test_spreadsheet_document_cells_xml_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -4062,6 +4121,7 @@ int main() {
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
         test_input_field_type_link_xml_contract();
+        test_attribute_id_zero_xml_contract();
         test_spreadsheet_document_cells_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
         test_choice_field_static_xml_profile_and_runtime_list_rejection();
