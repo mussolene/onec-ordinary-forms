@@ -21060,6 +21060,41 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
         "SummarySeries named Color mirror mismatch must be rejected");
 }
 
+void test_form_style_named_reference_storage() {
+    const auto property = model::PropertyId::from_name("Style");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "Style" + std::to_string(i);
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        const auto suffix = std::string(i < 10 ? "0" : "") + std::to_string(i);
+        const model::StyleValue reference{model::UuidValue{"21436500-0000-4000-8000-0000000000" + suffix}};
+        if (i % 3 == 1) form.properties.set_explicit(property, model::StyleValue{});
+        if (i % 3 == 2) form.properties.set_explicit(property, reference);
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Label", model::LabelDecorationPayload{}});
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        const auto decoded = form_stream::decode_document(encoded.value(), document.form().name);
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), "twelve Forms with Auto and named Style references decode completely");
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::form, model::ObjectId{1}};
+        expect(decoded.value().get_prop_val(owner, property).value ==
+            model::PropertyValue{i % 3 == 2 ? reference : model::StyleValue{}},
+            "Style configuration UUID or Auto survives the primary codec");
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "Form Style storage reconstruction is canonical");
+        if (i == 0) for (const auto& bad_style : {
+                list_stream::ListValue::list({}),
+                list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")}),
+                list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::raw_atom("broken")}),
+                list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000")}),
+                list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::string_atom("21436500-0000-4000-8000-000000000001")}),
+                list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::raw_atom("21436500-0000-4000-8000-000000000001"), list_stream::ListValue::raw_atom("0")})}) {
+            auto bad = encoded.value(); bad.items[12] = bad_style;
+            expect(!form_stream::decode_document(bad, document.form().name), "Style storage rejects malformed records, sentinels and null references");
+        }
+    }
+}
+
 void test_chart_active_point_storage() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "ActivePoints";
     for (std::size_t i = 0; i < 12; ++i) form.children.emplace_back(model::ControlRef{model::ObjectId{100 + i}});
@@ -22568,6 +22603,7 @@ int main() {
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_automatic_collection_colors();
         test_chart_summary_series_color_roundtrip_and_guards();
+        test_form_style_named_reference_storage();
         test_chart_active_point_storage();
         test_chart_source_mode_storage();
         test_chart_gauge_bands_roundtrip_and_native_caches();

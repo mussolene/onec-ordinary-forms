@@ -24,6 +24,10 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:complexType name="StyleValueType">
+    <xs:attribute name="styleId" type="UuidValueType" use="optional"/>
+  </xs:complexType>
+
   <xs:simpleType name="UndefinedValueType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="undefined"/>
@@ -1997,7 +2001,7 @@
       <xs:element name="ConnectableWindow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowState" type="WindowStateVariantValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowAppearanceMode" type="WindowAppearanceModeVariantValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Style" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Style" type="StyleValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentControl" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>

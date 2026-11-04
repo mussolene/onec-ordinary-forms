@@ -1304,6 +1304,23 @@ model::PropertyValue parse_property_value(
         }
         case mm::ValueCodec::uuid:
             return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(node))))};
+        case mm::ValueCodec::style: {
+            for (xmlAttrPtr attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
+                if (attribute->name == nullptr || std::string_view(reinterpret_cast<const char*>(attribute->name)) != "styleId")
+                    fail("OOF2003", node, std::string(object_id), property, "styleId attribute only", "unexpected attribute",
+                        "Style accepts only the named configuration style reference");
+            }
+            if (!element_children(node).empty() || !trim_ascii(node_text(node)).empty())
+                fail("OOF2003", node, std::string(object_id), property, "empty Style element", "child or text content",
+                    "Style cannot contain child elements or text");
+            const auto style_id = optional_attribute(node, "styleId");
+            if (!style_id) return model::StyleValue{};
+            const std::string canonical = canonical_uuid(*style_id);
+            if (canonical == "00000000-0000-0000-0000-000000000000")
+                fail("OOF2003", node, std::string(object_id), property, "nonzero configuration style UUID", canonical,
+                    "Style reference UUID must be nonzero");
+            return model::StyleValue{model::UuidValue{canonical}};
+        }
         case mm::ValueCodec::composite_id:
             return parse_composite_id(node);
         case mm::ValueCodec::type_domain:
@@ -1491,6 +1508,9 @@ bool equals_descriptor_default(
         case mm::DefaultKind::shortcut:
             return canonical == "None" && std::holds_alternative<model::ShortcutValue>(value) &&
                 std::get<model::ShortcutValue>(value) == model::ShortcutValue{};
+        case mm::DefaultKind::style:
+            return canonical == "auto" && std::holds_alternative<model::StyleValue>(value) &&
+                std::get<model::StyleValue>(value) == model::StyleValue{};
     }
     return false;
 }
@@ -3851,6 +3871,17 @@ private:
             case mm::ValueCodec::uuid:
                 writer_.text(name, canonical_uuid(require_value<model::UuidValue>(value, object_id, name, "UUID").canonical));
                 return;
+            case mm::ValueCodec::style: {
+                const auto& style = require_value<model::StyleValue>(value, object_id, name, "Style value");
+                if (style.configuration_style) {
+                    const std::string uuid = canonical_uuid(style.configuration_style->canonical);
+                    if (uuid == "00000000-0000-0000-0000-000000000000")
+                        serialization_fail(std::string(object_id), std::string(name), "nonzero configuration style UUID", uuid,
+                            "Style reference UUID must be nonzero");
+                    writer_.empty(name, {{"styleId", uuid}});
+                } else writer_.empty(name);
+                return;
+            }
             case mm::ValueCodec::composite_id:
                 write_composite_id(name, require_value<model::CompositeIdValue>(value, object_id, name, "CompositeId"), object_id);
                 return;

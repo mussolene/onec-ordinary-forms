@@ -92,6 +92,7 @@ enum class ValueCodec : std::uint8_t {
     shortcut,
     date,
     uuid,
+    style,
     composite_id,
     type_domain,
     enumeration,
@@ -162,6 +163,7 @@ enum class DefaultKind : std::uint8_t {
     color,
     font,
     shortcut,
+    style,
 };
 
 struct DefaultValue {

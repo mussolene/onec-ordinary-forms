@@ -1615,6 +1615,12 @@ void apply_proven_storage_overrides(
     std::ranges::find(form_properties, "WindowDockLocation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     std::ranges::find(form_properties, "ThisForm", &PropertyDescriptor::api_name)->value_codec = ValueCodec::form_reference;
 
+    classify_property(form_properties, "Style", StorageCodec::root_record, DefaultKind::style, "auto");
+    auto form_style = std::ranges::find(form_properties, "Style", &PropertyDescriptor::api_name);
+    if (form_style == form_properties.end()) throw std::logic_error("missing Form.Style descriptor");
+    form_style->value_codec = ValueCodec::style;
+    form_style->value_kind = ValueKind::object;
+
     classify_property(
         form_properties,
         "Caption",
@@ -2854,6 +2860,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "date";
         case ValueCodec::uuid:
             return "uuid";
+        case ValueCodec::style:
+            return "style";
         case ValueCodec::composite_id:
             return "composite-id";
         case ValueCodec::type_domain:

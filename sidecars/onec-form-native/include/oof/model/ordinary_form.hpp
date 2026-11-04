@@ -257,6 +257,12 @@ struct UuidValue {
     friend bool operator==(const UuidValue&, const UuidValue&) = default;
 };
 
+struct StyleValue {
+    std::optional<UuidValue> configuration_style;
+
+    friend bool operator==(const StyleValue&, const StyleValue&) = default;
+};
+
 struct LocalizedStringItem {
     std::string language;
     std::string text;
@@ -593,6 +599,7 @@ using PropertyValueVariant = std::variant<
     FormattedStringValue,
     DateValue,
     UuidValue,
+    StyleValue,
     PlatformTypeValue,
     CompositeIdValue,
     TypeDomainPatternValue,

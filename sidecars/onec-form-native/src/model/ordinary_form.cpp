@@ -171,6 +171,20 @@ bool type_domain_numeric_precision_normalized(const TypeDomainPatternValue& type
     });
 }
 
+bool canonical_nonzero_uuid(std::string_view uuid) noexcept {
+    if (uuid.size() != 36) return false;
+    bool nonzero = false;
+    for (std::size_t index = 0; index < uuid.size(); ++index) {
+        const char character = uuid[index];
+        if (index == 8 || index == 13 || index == 18 || index == 23) {
+            if (character != '-') return false;
+        } else if ((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')) {
+            nonzero = nonzero || character != '0';
+        } else return false;
+    }
+    return nonzero;
+}
+
 bool property_value_matches(
     const metamodel::PropertyDescriptor& descriptor,
     const PropertyValue& value
@@ -226,6 +240,10 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::date;
             } else if constexpr (std::is_same_v<Value, UuidValue>) {
                 return expected == metamodel::ValueCodec::uuid;
+            } else if constexpr (std::is_same_v<Value, StyleValue>) {
+                return expected == metamodel::ValueCodec::style &&
+                    (!typed_value.configuration_style ||
+                     canonical_nonzero_uuid(typed_value.configuration_style->canonical));
             } else if constexpr (std::is_same_v<Value, CompositeIdValue>) {
                 return expected == metamodel::ValueCodec::composite_id;
             } else if constexpr (std::is_same_v<Value, TypeDomainPatternValue>) {
@@ -672,6 +690,10 @@ std::optional<PropertyValue> materialize_default(
             return std::nullopt;
         case DefaultKind::shortcut:
             if (value.canonical == "None") return PropertyValue{ShortcutValue{}};
+            return std::nullopt;
+        case DefaultKind::style:
+            if (value.canonical == "auto" && descriptor.value_codec == metamodel::ValueCodec::style)
+                return PropertyValue{StyleValue{}};
             return std::nullopt;
         case DefaultKind::unknown:
         case DefaultKind::none:

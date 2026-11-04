@@ -12672,7 +12672,17 @@ Result<model::OrdinaryFormDocument> decode_document(
         const bool center_window = bool_atom(payload.items[9], "$/9");
         const bool dont_change_size = bool_atom(payload.items[10], "$/10");
         require_list(payload.items[11], "$/11");
-        require_exact(payload.items[12], list({raw("0")}), "$/12", "Unsupported root table");
+        const auto& style_reference = payload.items[12];
+        require_list(style_reference, "$/12");
+        if (style_reference.items.size() != 1 && style_reference.items.size() != 2)
+            fail("OOF1114", "$/12", "automatic style or one configuration style reference", describe(style_reference), "Invalid Form Style reference record");
+        require_raw_constant(style_reference.items[0], "0", "$/12/0");
+        std::optional<model::UuidValue> configuration_style;
+        if (style_reference.items.size() == 2) {
+            configuration_style = uuid_atom(style_reference.items[1], "$/12/1");
+            if (configuration_style->canonical == null_uuid)
+                fail("OOF1114", "$/12/1", "non-null configuration style UUID", std::string(null_uuid), "Form Style reference cannot use the null UUID");
+        }
         const auto& root_style = payload.items[13];
         require_arity(root_style, 11, "$/13");
         const auto caption_picture = decode_button_picture(root_style.items[2], "$/13/2");
@@ -12776,6 +12786,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (configuration_style) form.properties.set_explicit(model::PropertyId::from_name("Style"), model::StyleValue{configuration_style});
         if (caption_picture && caption_picture->standard_name) form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"),
             model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*caption_picture->standard_name}});
         if (appearance_mode != 1) form.properties.set_explicit(model::PropertyId::from_name("WindowAppearanceMode"),
@@ -13520,7 +13531,7 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "CaptionPicture", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
+            {"Caption", "CaptionPicture", "Style", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
@@ -13995,6 +14006,18 @@ Result<list_stream::ListValue> encode_document(
         for (const auto& control : document.collections().controls)
             append_context_row(control.extension_properties, control.id.value());
         context_rows[0] = raw(std::to_string(context_count));
+        auto form_style_reference = list({raw("0")});
+        if (const auto* entry = document.form().properties.find(model::PropertyId::from_name("Style"))) {
+            const auto* style = std::get_if<model::StyleValue>(&entry->value);
+            if (!style)
+                fail("OOF1122", "$/Form/Style", "typed Style value", "invalid type", "Form Style has the wrong value type");
+            if (style->configuration_style) {
+                const auto uuid = uuid_atom(raw(style->configuration_style->canonical), "$/Form/Style");
+                if (uuid.canonical == null_uuid || uuid.canonical != style->configuration_style->canonical)
+                    fail("OOF1122", "$/Form/Style", "canonical non-null style UUID", style->configuration_style->canonical, "Invalid configuration Style reference");
+                form_style_reference.items.push_back(raw(uuid.canonical));
+            }
+        }
         auto root_style = canonical_style_record(10);
         if (const auto* entry = document.form().properties.find(model::PropertyId::from_name("CaptionPicture"))) {
             const auto* picture = std::get_if<model::PictureRef>(&entry->value);
@@ -14024,7 +14047,7 @@ Result<list_stream::ListValue> encode_document(
             raw(window_location == 1 ? "1" : "0"),
             raw(std::to_string(size_change)),
             list(std::move(context_rows)),
-            list({raw("0")}),
+            std::move(form_style_reference),
             std::move(root_style),
             raw(std::to_string(appearance_mode)),
             raw(std::to_string(window_appearance_change)),

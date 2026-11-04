@@ -116,6 +116,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "DateValueType";
         case ValueCodec::uuid:
             return "UuidValueType";
+        case ValueCodec::style:
+            return "StyleValueType";
         case ValueCodec::composite_id:
             return "CompositeIdValueType";
         case ValueCodec::type_domain:
@@ -391,6 +393,10 @@ void append_value_types(std::string& output) {
       <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
     </xs:restriction>
   </xs:simpleType>
+
+  <xs:complexType name="StyleValueType">
+    <xs:attribute name="styleId" type="UuidValueType" use="optional"/>
+  </xs:complexType>
 
   <xs:simpleType name="UndefinedValueType">
     <xs:restriction base="xs:string">

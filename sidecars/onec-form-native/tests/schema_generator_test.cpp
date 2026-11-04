@@ -1794,6 +1794,18 @@ int main() {
         Schema compiled_palette =
             compile_schema(schemas.ordinary_form_palette_xsd, "OrdinaryFormPalette.xsd");
         expect(compiled_palette != nullptr, "palette XSD must compile");
+        expect(schemas.ordinary_form_xsd.find("<xs:complexType name=\"StyleValueType\">") != std::string::npos &&
+               schemas.ordinary_form_xsd.find("<xs:attribute name=\"styleId\" type=\"UuidValueType\" use=\"optional\"/>") != std::string::npos,
+            "Form.Style schema is a named optional UUID reference");
+        expect(validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Styled" ordinaryFormVersion="2.1"><Style/><Style/></Form>)XML") != 0 &&
+               validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Styled" ordinaryFormVersion="2.1"><Style styleId="21436500-0000-4000-8000-000000000001"/></Form>)XML") == 0 &&
+               validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Styled" ordinaryFormVersion="2.1"><Style unexpected="x"/></Form>)XML") != 0 &&
+               validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Styled" ordinaryFormVersion="2.1"><Style><Unknown/></Style></Form>)XML") != 0,
+            "StyleValueType accepts empty Auto or UUID reference and rejects unknown content");
         expect(validate_document(compiled_form.get(), R"XML(<Form id="1" name="Collections" ordinaryFormVersion="2.1"><Controls/></Form>)XML") != 0 &&
                validate_document(compiled_form.get(), R"XML(<Form id="1" name="Collections" ordinaryFormVersion="2.1"><ChildItems><Panel id="2" name="Tabs"><Position/><Pages/></Panel></ChildItems></Form>)XML") != 0 &&
                validate_document(compiled_form.get(), R"XML(<Form id="1" name="Collections" ordinaryFormVersion="2.1"><ChildItems><Panel id="2" name="Tabs"><Position/><CurrentPage>3</CurrentPage></Panel></ChildItems></Form>)XML") != 0,

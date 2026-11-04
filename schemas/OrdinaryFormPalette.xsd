@@ -37,7 +37,7 @@
             <Property name="ConnectableWindow" apiName="ConnectableWindow" russianName="СоединяемоеОкно" russianType="Булево" valueCodec="boolean"/>
             <Property name="WindowState" apiName="WindowState" russianName="СостояниеОкна" russianType="ВариантСостоянияОкна" valueCodec="enumeration"/>
             <Property name="WindowAppearanceMode" apiName="WindowAppearanceMode" russianName="СпособОтображенияОкна" russianType="ВариантСпособаОтображенияОкна" valueCodec="enumeration"/>
-            <Property name="Style" apiName="Style" russianName="Стиль" russianType="Стиль" valueCodec="unclassified"/>
+            <Property name="Style" apiName="Style" russianName="Стиль" russianType="Стиль" valueCodec="style"/>
             <Property name="CurrentControl" apiName="CurrentControl" russianName="ТекущийЭлемент" russianType="" valueCodec="unclassified"/>
             <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
             <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>

@@ -1568,6 +1568,44 @@ void test_button_shortcut_xml() {
         "Shortcut must reject unknown named keys");
 }
 
+void test_form_style_xml_roundtrip_and_rejections() {
+    constexpr std::string_view automatic_xml =
+        "<Form id=\"1\" name=\"Styled\" ordinaryFormVersion=\"2.1\"><Style/></Form>";
+    auto automatic = source::parse_form_xml(automatic_xml);
+    expect(automatic.ok() && automatic.value().get_prop_val(
+        {model::ObjectCategory::form, model::ObjectId{1}}, model::PropertyId::from_name("Style")).value ==
+            model::PropertyValue{model::StyleValue{}},
+        "empty Form.Style means Auto");
+    auto automatic_output = source::serialize_form_xml(automatic.value());
+    expect(automatic_output.ok() && automatic_output.value().find("<Style") == std::string::npos,
+        "Auto Form.Style is omitted as the descriptor default");
+
+    constexpr std::string_view custom_xml =
+        "<Form id=\"1\" name=\"Styled\" ordinaryFormVersion=\"2.1\"><Style styleId=\"21436500-0000-4000-8000-000000000001\"/></Form>";
+    auto custom = source::parse_form_xml(custom_xml);
+    const auto* entry = custom.ok() ? custom.value().form().properties.find(model::PropertyId::from_name("Style")) : nullptr;
+    expect(entry && entry->value == model::PropertyValue{model::StyleValue{
+        model::UuidValue{"21436500-0000-4000-8000-000000000001"}}},
+        "Form.Style parses a named configuration style UUID");
+    auto serialized = source::serialize_form_xml(custom.value());
+    expect(serialized.ok() && serialized.value().find("<Style styleId=\"21436500-0000-4000-8000-000000000001\"/>") != std::string::npos,
+        "configured Form.Style serializes as a named reference");
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().form().properties.find(model::PropertyId::from_name("Style"))->value == entry->value,
+        "configured Form.Style roundtrips by UUID identity");
+
+    for (const auto invalid : {
+             "<Style styleId=\"00000000-0000-0000-0000-000000000000\"/>",
+             "<Style styleId=\"broken\"/>",
+             "<Style unexpected=\"value\"/>",
+             "<Style><Unknown/></Style>",
+             "<Style>text</Style>"}) {
+        const std::string xml = "<Form id=\"1\" name=\"Bad\" ordinaryFormVersion=\"2.1\">" +
+            std::string(invalid) + "</Form>";
+        expect(!source::parse_form_xml(xml).ok(), "Form.Style rejects invalid UUIDs and non-reference XML content");
+    }
+}
+
 void test_boolean_type_domain_xml_roundtrip() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Boolean" ordinaryFormVersion="2.1">
@@ -3894,6 +3932,7 @@ int main() {
         test_check_box_font_xml_round_trip();
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
+        test_form_style_xml_roundtrip_and_rejections();
         test_boolean_type_domain_xml_roundtrip();
         test_value_list_type_domain_xml_roundtrip();
         test_value_table_type_domain_xml_roundtrip();

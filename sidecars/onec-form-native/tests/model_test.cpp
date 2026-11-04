@@ -791,6 +791,39 @@ void test_chart_active_point_reference() {
     }
 }
 
+void test_form_style_property() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    const auto* descriptor = find_form_property("Style");
+    expect(descriptor && descriptor->value_kind == ValueKind::object &&
+        descriptor->value_codec == ValueCodec::style &&
+        descriptor->persistence == PersistenceClass::persisted_editable &&
+        descriptor->storage_codec == StorageCodec::root_record &&
+        descriptor->default_value.kind == DefaultKind::style && descriptor->default_value.canonical == "auto",
+        "Form.Style is a persisted root style value with Auto default");
+
+    Form form; form.id = ObjectId{1}; form.name = "Styled";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto property = PropertyId::from_name("Style");
+    expect(document.get_prop_val(owner, property).value == PropertyValue{StyleValue{}},
+        "Form.Style defaults to Auto");
+    const StyleValue custom{UuidValue{"21436500-0000-4000-8000-000000000001"}};
+    expect(document.set_prop_val(owner, property, custom) == PropertyMutationStatus::applied &&
+        document.get_prop_val(owner, property).value == PropertyValue{custom} && document.validate().ok(),
+        "Form.Style accepts and validates a named configuration style UUID");
+    expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, property).value == PropertyValue{StyleValue{}},
+        "Form.Style resets to Auto");
+    for (const PropertyValue& invalid : {PropertyValue{UuidValue{"21436500-0000-4000-8000-000000000001"}},
+             PropertyValue{StyleValue{UuidValue{"00000000-0000-0000-0000-000000000000"}}},
+             PropertyValue{StyleValue{UuidValue{"not-a-uuid"}}}}) {
+        expect(document.set_prop_val(owner, property, invalid) == PropertyMutationStatus::invalid_value &&
+            document.get_prop_val(owner, property).value == PropertyValue{StyleValue{}},
+            "Form.Style rejects wrong value types, zero UUIDs, and malformed UUIDs without mutation");
+    }
+}
+
 void test_chart_source_data_mode() {
     Form form; form.id = ObjectId{1}; form.name = "SourceCharts";
     for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
@@ -3279,7 +3312,7 @@ void test_recursive_typed_values() {
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     };
-    static_assert(std::variant_size_v<PropertyValue::Variant> == 41);
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 42);
     [&]<std::size_t... Index>(std::index_sequence<Index...>) {
         ([&] {
             using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
@@ -5358,6 +5391,7 @@ int main() {
         test_form_runtime_state_properties();
         test_chart_computed_counts();
         test_chart_active_point_reference();
+        test_form_style_property();
         test_chart_source_data_mode();
         test_chart_owned_collections();
         test_chart_document_resource_budget();
