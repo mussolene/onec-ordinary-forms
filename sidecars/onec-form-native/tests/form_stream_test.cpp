@@ -2285,6 +2285,66 @@ void test_usual_group_named_record_round_trip_and_rejections() {
         "UsualGroup IDs above int64 range must be rejected by the control encoder");
 }
 
+void test_input_type_link_item_storage() {
+    constexpr std::array<std::int64_t, 12> values{2, 3, 4, 5, 8, 13, 21, 34, 55, 89, 2147483646, 2147483647};
+    std::string xml = R"XML(<Form id="1" name="TypeLinks" ordinaryFormVersion="2.1"><Attributes><Attribute id="10" name="AccountSource"><TypeDomain><Entry term="object" typeUuid="013bfc4f-b337-46de-b58f-368c7765ea1e"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const auto type = i % 3 == 0 ? R"XML(<Entry term="string" length="10"/>)XML" :
+            i % 3 == 1 ? R"XML(<Entry term="numeric" length="12" precision="2"/>)XML" :
+            R"XML(<Entry term="date" date="true" time="false"/>)XML";
+        xml += "<InputField id=\"" + std::to_string(100 + i) + "\" name=\"Input" + std::to_string(i) +
+            "\"><TypeLink attributeId=\"10\"/><ValueType>" + type + "</ValueType><Position/><TypeLinkItem>" + std::to_string(values[i]) +
+            "</TypeLinkItem></InputField>";
+    }
+    xml += "</ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "twelve named TypeLinkItem values must parse");
+    const auto* descriptor = model::metamodel::find_property(model::ControlKind::input_field, "TypeLinkItem");
+    expect(descriptor && descriptor->persistence == model::metamodel::PersistenceClass::persisted_readonly &&
+        descriptor->storage_codec == model::metamodel::StorageCodec::control_info &&
+        descriptor->value_codec == model::metamodel::ValueCodec::integer32,
+        "TypeLinkItem is a stored readonly positive integer");
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "TypeLinkItem must encode from named XML without a baseline");
+    auto decoded = form_stream::decode_document(encoded.value(), "TypeLinks");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "TypeLinkItem must decode completely");
+    const auto property = model::PropertyId::from_name("TypeLinkItem");
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{100 + i}};
+        expect(decoded.value().get_prop_val(owner, property).value == model::PropertyValue{values[i]},
+            "TypeLinkItem getter must retain its one-based item number");
+        expect(decoded.value().set_prop_val(owner, property, std::int64_t{1}) == model::PropertyMutationStatus::read_only &&
+            decoded.value().reset_prop_val(owner, property) == model::PropertyMutationStatus::read_only,
+            "TypeLinkItem setter and reset remain readonly");
+    }
+    const auto serialized = source::serialize_form_xml(decoded.value());
+    expect(serialized.ok() && source::parse_form_xml(serialized.value()).ok(), "TypeLinkItem XML must round-trip");
+    for (const auto invalid : {"0", "-1", "2147483648", "2.5"}) {
+        auto malformed = xml;
+        const auto pos = malformed.find("<TypeLinkItem>2</TypeLinkItem>");
+        malformed.replace(pos, std::string("<TypeLinkItem>2</TypeLinkItem>").size(),
+            "<TypeLinkItem>" + std::string(invalid) + "</TypeLinkItem>");
+        expect(!source::parse_form_xml(malformed), "TypeLinkItem XML must reject non-positive, fractional and oversized values");
+    }
+    for (const auto invalid : {"-1", "2147483647"}) {
+        auto malformed = encoded.value();
+        auto* record = find_record_with_guid(malformed,
+            model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+        record->items[2].items[7].atom = invalid;
+        expect(!form_stream::decode_document(malformed), "TypeLinkItem storage must reject invalid zero-based indices");
+    }
+    auto inactive = encoded.value();
+    auto* inactive_record = find_record_with_guid(inactive,
+        model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+    inactive_record->items[2].items[8] = list_stream::ListValue::list({
+        list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("0")});
+    const auto without_source = form_stream::decode_document(inactive);
+    expect(without_source.ok() && without_source.value().reconstruction_complete() &&
+        without_source.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{100}}, property).value ==
+            model::PropertyValue{std::int64_t{1}},
+        "platform ignores an inactive item index when the TypeLink source is absent");
+}
+
 void test_geographical_schema_runtime_scale() {
     constexpr std::array<std::string_view, 3> modes{"AllData", "ScaleDefined", "SpecifiedArea"};
     for (std::size_t i = 0; i < 12; ++i) {
@@ -22426,6 +22486,7 @@ int main() {
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
         test_geographical_schema_runtime_scale();
+        test_input_type_link_item_storage();
         test_gantt_periodic_properties();
         test_chart_allocator_history();
         test_chart_data_mode();

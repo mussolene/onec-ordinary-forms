@@ -1436,7 +1436,9 @@ void apply_proven_storage_overrides(
     restriction->storage_codec = StorageCodec::none;
     restriction->default_value = {DefaultKind::none, {}};
     type_link_item->value_kind = ValueKind::number;
-    type_link_item->value_codec = ValueCodec::integer;
+    type_link_item->value_codec = ValueCodec::integer32;
+    type_link_item->persistence = PersistenceClass::persisted_readonly;
+    type_link_item->storage_codec = StorageCodec::control_info;
     type_link_item->default_value = {DefaultKind::integer, "1"};
     for (const auto name : {"MinValue", "MaxValue"}) {
         auto property = std::ranges::find(input_field, name, &PropertyDescriptor::api_name);

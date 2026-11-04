@@ -2042,6 +2042,8 @@ LV canonical_text_document_field_info(bool enabled, const model::ColorValue& bor
 
 enum class InputFieldFlagScope { payload, base_info, root_info };
 
+constexpr std::string_view input_type_link_data_source_guid = "c866d8e7-76ff-4334-9d02-144f1efe5e1d";
+
 struct InputFieldFlagMapping {
     std::string_view name;
     InputFieldFlagScope scope;
@@ -10212,6 +10214,38 @@ DecodedControl decode_input_field(
         payload.items[31], child_path(payload_path, 31));
     const auto choice_list_width = integer_atom<std::int32_t>(
         payload.items[32], child_path(payload_path, 32));
+    const auto type_link_index = integer_atom<std::int32_t>(info.items[7], child_path(info_path, 7));
+    if (type_link_index < 0 || type_link_index == std::numeric_limits<std::int32_t>::max())
+        fail("OOF1114", child_path(info_path, 7), "zero-based TypeLinkItem in 0..2147483646", {},
+            "InputField TypeLinkItem index is outside its supported range");
+    std::optional<model::AttributeRef> type_link;
+    const auto type_link_path = child_path(info_path, 8);
+    const auto& type_link_record = info.items[8];
+    require_raw_constant(at(type_link_record, 0, type_link_path), "1", child_path(type_link_path, 0));
+    const auto type_link_count = integer_atom<std::uint32_t>(at(type_link_record, 1, type_link_path), child_path(type_link_path, 1));
+    if (type_link_count == 0) {
+        require_arity(type_link_record, 2, type_link_path);
+    } else if (type_link_count == 1) {
+        require_arity(type_link_record, 3, type_link_path);
+        const auto source_path = child_path(type_link_path, 2);
+        const auto& source = type_link_record.items[2];
+        require_arity(source, 3, source_path);
+        require_raw_constant(source.items[0], "0", child_path(source_path, 0));
+        require_raw_constant(source.items[1], input_type_link_data_source_guid, child_path(source_path, 1));
+        const auto target_path = child_path(source_path, 2);
+        const auto& target = source.items[2];
+        require_raw_constant(at(target, 0, target_path), "2", child_path(target_path, 0));
+        if (integer_atom<std::uint32_t>(at(target, 1, target_path), child_path(target_path, 1)) != 1)
+            fail("OOF1122", target_path, "direct form Attribute TypeLink", {},
+                "InputField TypeLink metadata member paths are not represented by the named model");
+        require_arity(target, 3, target_path);
+        const auto reference = composite_id(target.items[2], child_path(target_path, 2));
+        if (!reference.is_null || reference.uuid.canonical != null_uuid || reference.object_id <= 0)
+            fail("OOF1122", target_path, "positive local Attribute reference", {}, "Unsupported InputField TypeLink source");
+        type_link = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(reference.object_id)}};
+    } else {
+        fail("OOF1122", type_link_path, "zero or one direct TypeLink source", {}, "Unsupported InputField TypeLink source count");
+    }
     const auto incomplete_choice_mode = integer_atom<std::int32_t>(
         payload.items[37], child_path(payload_path, 37));
     if (incomplete_choice_mode < 0 || incomplete_choice_mode > 1) {
@@ -10244,6 +10278,8 @@ DecodedControl decode_input_field(
         }
     }
     LV normalized_info = info;
+    normalized_info.items[7] = raw("0");
+    normalized_info.items[8] = list({raw("1"), raw("0")});
     normalized_info.items[4] = list({raw("0")});
     if (is_supported_input_numeric_type_domain(control_type) && !list_choice_mode) {
         auto& pair = normalized_info.items[3].items[1].items[1];
@@ -10277,10 +10313,14 @@ DecodedControl decode_input_field(
 
     std::vector<DecodedControl::PicturePropertyAsset> decoded_picture_assets;
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
+    std::get<model::InputFieldPayload>(control.payload).type_link = type_link;
     decode_control_metadata(metadata, metadata_path, control);
     if (linked_attribute == nullptr)
         control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), control_type);
     apply_common_control_base(control.properties(), common);
+    if (type_link && type_link_index != 0)
+        control.properties().set_explicit(model::PropertyId::from_name("TypeLinkItem"),
+            static_cast<std::int64_t>(type_link_index) + 1);
     for (std::size_t index = 0; index < input_bounds.size(); ++index) {
         if (input_bounds[index] && !std::holds_alternative<model::UndefinedValue>(*input_bounds[index]))
             control.properties().set_explicit(model::PropertyId::from_name(index == 0 ? "MinValue" : "MaxValue"), *input_bounds[index]);
@@ -11860,7 +11900,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask", "TypeLinkItem"}, "$/InputField");
     const auto* attribute = control.data_path ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
     if (control.data_path && attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -11916,6 +11956,19 @@ LV encode_input_field(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     auto input_info = canonical_input_field_info(*effective_type, enabled, read_only, input_field_flags,
         text_values, layout_values, &font, &border_color, shortcut);
+    const auto type_link_item = explicit_integer(control.properties(), "TypeLinkItem", 1, "$/InputField/TypeLinkItem");
+    if (type_link_item < 1 || type_link_item > std::numeric_limits<std::int32_t>::max())
+        fail("OOF1122", "$/InputField/TypeLinkItem", "positive int32 item number", {},
+            "InputField TypeLinkItem is outside its supported range");
+    input_info.items[7] = raw(std::to_string(type_link_item - 1));
+    const auto& type_link = std::get<model::InputFieldPayload>(control.payload).type_link;
+    if (type_link) {
+        input_info.items[8] = list({raw("1"), raw("1"), list({raw("0"), raw(std::string(input_type_link_data_source_guid)),
+            list({raw("2"), raw("1"), list({raw(std::to_string(type_link->id().value()))})})})});
+    } else if (type_link_item != 1) {
+        fail("OOF1122", "$/InputField/TypeLink", "named source for nondefault TypeLinkItem", {},
+            "InputField TypeLinkItem cannot be reconstructed without its source");
+    }
     for (std::size_t index = 0; index < 2; ++index) {
         const auto name = index == 0 ? "MinValue" : "MaxValue";
         const auto* bound = control.properties().find(model::PropertyId::from_name(name));

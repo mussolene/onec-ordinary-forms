@@ -2105,6 +2105,8 @@ private:
             make_payload(descriptor->kind),
         };
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
+        auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
+        bool type_link_seen = false;
         bool position_seen = false;
         bool chart_summary_series_seen = false;
         bool chart_values_seen = false;
@@ -2498,6 +2500,19 @@ private:
                 std::get<model::TablePayload>(control.payload).columns = parse_table_columns(child, id_text);
             } else if (name == "DataPath") {
                 control.data_path = parse_data_path(child, id_text);
+            } else if (name == "TypeLink" && input_field != nullptr) {
+                if (type_link_seen)
+                    fail("OOF2003", child, id_text, name, "one TypeLink", "duplicate", "Duplicate InputField TypeLink");
+                type_link_seen = true;
+                for (xmlAttrPtr attribute = child->properties; attribute != nullptr; attribute = attribute->next) {
+                    if (attribute->name == nullptr || std::string_view(reinterpret_cast<const char*>(attribute->name)) != "attributeId")
+                        fail("OOF2003", child, id_text, std::string(reinterpret_cast<const char*>(attribute->name)),
+                            "attributeId only", std::string(reinterpret_cast<const char*>(attribute->name)), "Unknown TypeLink attribute");
+                }
+                if (!element_children(child).empty() || !trim_ascii(node_text(child)).empty())
+                    fail("OOF2003", child, id_text, name, "empty TypeLink element", "content", "TypeLink cannot contain text or child elements");
+                input_field->type_link = model::AttributeRef{parse_object_id(
+                    required_attribute(child, "attributeId", id_text), child, "attributeId", id_text)};
             } else if (dendrogram != nullptr && name == "Items") {
                 if (dendrogram_items_seen) {
                     fail("OOF2003", child, id_text, name, "one owned Items collection", "duplicate", "Dendrogram Items is duplicated");
@@ -4486,6 +4501,9 @@ private:
         const std::string id = object_id_text(control.id);
         writer_.open(descriptor.public_name, {{"name", control.name}, {"id", id}});
         if (control.data_path.has_value()) write_data_path(*control.data_path);
+        if (const auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
+            input_field != nullptr && input_field->type_link.has_value())
+            writer_.empty("TypeLink", {{"attributeId", object_id_text(input_field->type_link->id())}});
         write_property_set(
             control.extension_properties,
             metamodel_.control_extension_properties(),

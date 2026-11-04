@@ -935,6 +935,8 @@ void test_control_surfaces_and_property_order(
         const auto elements = direct_children(sequence_for_type(schema, type_name), "element");
         std::size_t cursor = 0;
         expect_element_shape(elements[cursor++], "DataPath", "DataPathType", "0", "1");
+        if (control.kind == oof::model::ControlKind::input_field)
+            expect_element_shape(elements[cursor++], "TypeLink", "", "0", "1");
 
         for (const auto& descriptor : extension_properties) {
             if (descriptor.persistence == PersistenceClass::runtime_only) {
@@ -1762,6 +1764,17 @@ void test_standard_menu_action_schema(xmlSchemaPtr schema) {
         expect(validate_document(schema, make_xml(attributes)) != 0, "unsupported StandardAction enums and source ranges must fail XSD");
 }
 
+void test_input_field_type_link_schema(const GeneratedSchemas& schemas, xmlSchemaPtr schema) {
+    const auto type = schemas.ordinary_form_xsd.find("<xs:element name=\"TypeLink\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"AttributeReferenceValueType\" use=\"required\"/></xs:complexType></xs:element>");
+    expect(type != std::string::npos, "only generated InputField schema exposes the named TypeLink attribute reference");
+    expect(validate_document(schema,
+        R"XML(<Form id="1" name="Link" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Object"><TypeDomain><Entry term="object" typeUuid="12345678-1234-1234-1234-123456789abc"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="3" name="Input"><TypeLink attributeId="2"/><Position/></InputField></ChildItems></Form>)XML") == 0,
+        "InputField TypeLink must validate through AttributeReferenceValueType");
+    expect(validate_document(schema,
+        R"XML(<Form id="1" name="Link" ordinaryFormVersion="2.1"><ChildItems><CheckBox id="3" name="Check"><TypeLink attributeId="2"/><Position/></CheckBox></ChildItems></Form>)XML") != 0,
+        "other control schemas must reject TypeLink");
+}
+
 void test_tracked_schema_drift(const GeneratedSchemas& schemas) {
     const std::filesystem::path root = find_repository_root();
     expect(
@@ -1841,6 +1854,7 @@ int main() {
             metamodel,
             compiled_form.get());
         test_standard_menu_action_schema(compiled_form.get());
+        test_input_field_type_link_schema(schemas, compiled_form.get());
         test_tracked_schema_drift(schemas);
     } catch (const std::exception& error) {
         std::cerr << "schema generator tests: FAIL: " << error.what() << '\n';

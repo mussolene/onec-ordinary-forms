@@ -1624,6 +1624,59 @@ void test_binding_property_getters() {
         "missing RadioButton link must not guess whether the group inherits another owner's data");
 }
 
+void test_input_field_type_link_model() {
+    using namespace oof::model;
+    Form form; form.id = ObjectId{1}; form.name = "TypeLink";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{200 + i}});
+    OrdinaryFormDocument document(form);
+    TypeDomainEntry object_type;
+    object_type.term = TypeDomainTerm::object;
+    object_type.type_uuid = UuidValue{"12345678-1234-1234-1234-123456789abc"};
+    const TypeDomainPatternValue type{{object_type}};
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId attribute_id{100 + index};
+        const ObjectId control_id{200 + index};
+        document.add_attribute(Attribute{attribute_id, "Object" + std::to_string(index), type});
+        ControlNode input{control_id, "Input" + std::to_string(index), InputFieldPayload{}};
+        auto& payload = std::get<InputFieldPayload>(input.payload);
+        payload.type_link = AttributeRef{attribute_id};
+        input.properties().set_explicit(PropertyId::from_name("TypeLinkItem"), std::int64_t{2});
+        document.add_control(std::move(input));
+    }
+    expect(document.validate().ok(), "twelve InputField TypeLinks to one-object-type attributes validate");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const ObjectId control_id{200 + index};
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, control_id};
+        const auto* input = std::get_if<InputFieldPayload>(&document.find_control(control_id)->payload);
+        expect(input && input->type_link == AttributeRef{ObjectId{100 + index}} &&
+            document.get_prop_val(owner, PropertyId::from_name("TypeLinkItem")).value == PropertyValue{std::int64_t{2}} &&
+            document.set_prop_val(owner, PropertyId::from_name("TypeLinkItem"), std::int64_t{3}) == PropertyMutationStatus::read_only &&
+            document.reset_prop_val(owner, PropertyId::from_name("TypeLinkItem")) == PropertyMutationStatus::read_only,
+            "named TypeLink and stored TypeLinkItem remain distinct, with readonly property semantics");
+    }
+
+    auto dangling_document = document;
+    std::get<InputFieldPayload>(const_cast<ControlNode*>(dangling_document.find_control(ObjectId{200}))->payload).type_link = AttributeRef{ObjectId{999}};
+    expect(dangling_document.validate().has(InvariantCode::dangling_reference), "TypeLink cannot reference a missing local attribute");
+
+    TypeDomainEntry scalar_type; scalar_type.term = TypeDomainTerm::string;
+    auto scalar_document = document;
+    scalar_document.add_attribute(Attribute{ObjectId{500}, "Scalar", TypeDomainPatternValue{{scalar_type}}});
+    std::get<InputFieldPayload>(const_cast<ControlNode*>(scalar_document.find_control(ObjectId{200}))->payload).type_link = AttributeRef{ObjectId{500}};
+    expect(scalar_document.validate().has(InvariantCode::invalid_property), "TypeLink source must have exactly one object type with UUID");
+
+    auto unbound_document = document;
+    std::get<InputFieldPayload>(const_cast<ControlNode*>(unbound_document.find_control(ObjectId{200}))->payload).type_link.reset();
+    expect(unbound_document.validate().has(InvariantCode::invalid_property), "nondefault TypeLinkItem requires named TypeLink");
+    Form default_form; default_form.id = ObjectId{700}; default_form.name = "TypeLinkDefaults";
+    default_form.children.emplace_back(ControlRef{ObjectId{601}});
+    OrdinaryFormDocument defaults(std::move(default_form));
+    defaults.add_control(ControlNode{ObjectId{601}, "DefaultItem", InputFieldPayload{}});
+    expect(defaults.validate().ok() &&
+        defaults.get_prop_val({ObjectCategory::control, ObjectId{601}}, PropertyId::from_name("TypeLinkItem")).value ==
+            PropertyValue{std::int64_t{1}}, "default TypeLinkItem reads as 1 and needs no TypeLink");
+}
+
 void test_data_api_preserves_binding_until_supported() {
     const std::array<ControlPayload, 10> payloads{
         CalendarFieldPayload{}, ChoiceFieldPayload{}, CheckBoxPayload{}, RadioButtonPayload{},
@@ -2669,11 +2722,9 @@ void test_help_metamodel() {
     expect(coverage.form_event_count == 13, "Form help must retain 13 events");
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
-    expect(
-        coverage.unclassified_properties != 0 &&
-            coverage.unclassified_value_codecs != 0 &&
-            coverage.missing_storage_codecs != 0,
-        "coverage must expose unfinished property/storage classification");
+    expect(coverage.unclassified_properties == 0 && coverage.missing_storage_codecs == 0 &&
+            coverage.unclassified_value_codecs == 18,
+        "release coverage is blocked by 18 unclassified live value codecs");
 
     expect(
         property_descriptors(ControlKind::input_field).size() == 45,
@@ -5544,6 +5595,7 @@ int main() {
         test_typed_value_document_budget();
         test_document_property_api();
         test_control_position_property_api();
+        test_input_field_type_link_model();
         test_control_collapse_runtime_property();
         test_direct_collapse_validation();
         test_default_control_focus_groups();

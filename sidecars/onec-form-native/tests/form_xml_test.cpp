@@ -1120,6 +1120,46 @@ void test_input_field_tooltip_and_format_xml_round_trip() {
     }
 }
 
+void test_input_field_type_link_xml_contract() {
+    std::string xml = R"XML(<Form id="1" name="TypeLinks" ordinaryFormVersion="2.1"><Attributes>)XML";
+    for (int index = 0; index < 12; ++index) {
+        xml += "<Attribute id=\"" + std::to_string(100 + index) + "\" name=\"Object" + std::to_string(index) +
+            "\"><TypeDomain><Entry term=\"object\" typeUuid=\"12345678-1234-1234-1234-123456789abc\"/></TypeDomain></Attribute>";
+    }
+    xml += "</Attributes><ChildItems>";
+    for (int index = 0; index < 12; ++index) {
+        xml += "<InputField id=\"" + std::to_string(200 + index) + "\" name=\"Input" + std::to_string(index) +
+            "\"><DataPath attributeId=\"" + std::to_string(100 + index) + "\"/><TypeLink attributeId=\"" +
+            std::to_string(100 + index) + "\"/><Position/><TypeLinkItem>2</TypeLinkItem></InputField>";
+    }
+    xml += "</ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "twelve typed TypeLinks must parse" : parsed.diagnostics().front().message);
+    for (int index = 0; index < 12; ++index) {
+        const auto* input = std::get_if<model::InputFieldPayload>(&parsed.value().find_control(model::ObjectId{200 + static_cast<std::uint64_t>(index)})->payload);
+        expect(input && input->type_link == model::AttributeRef{model::ObjectId{100 + static_cast<std::uint64_t>(index)}},
+            "TypeLink must resolve as a named local Attribute reference");
+    }
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<TypeLink attributeId=\"100\"/>") != std::string::npos &&
+        serialized.value().find("<DataPath attributeId=\"100\"/>") < serialized.value().find("<TypeLink attributeId=\"100\"/>") &&
+        serialized.value().find("<TypeLinkItem>2</TypeLinkItem>") != std::string::npos,
+        "InputField TypeLink must serialize after DataPath while TypeLinkItem stays a named property");
+    expect(serialized && source::parse_form_xml(serialized.value()).ok(), "TypeLink and TypeLinkItem survive public XML roundtrip");
+
+    const auto invalid = [](std::string_view tail) {
+        return source::parse_form_xml("<Form id=\"1\" name=\"Invalid\" ordinaryFormVersion=\"2.1\"><Attributes>"
+            "<Attribute id=\"2\" name=\"Source\"><TypeDomain><Entry term=\"string\" length=\"10\" variable=\"false\"/></TypeDomain></Attribute>"
+            "</Attributes><ChildItems><InputField id=\"3\" name=\"Input\"><TypeLink attributeId=\"" + std::string(tail) +
+            "\"/><Position/></InputField></ChildItems></Form>");
+    };
+    expect(!invalid("999").ok() && !invalid("2").ok(), "missing and scalar TypeLink sources must be rejected");
+    expect(!source::parse_form_xml("<Form id=\"1\" name=\"Unbound\" ordinaryFormVersion=\"2.1\"><ChildItems><InputField id=\"2\" name=\"Input\"><TypeLinkItem>2</TypeLinkItem><Position/></InputField></ChildItems></Form>").ok(),
+        "nondefault TypeLinkItem without TypeLink must be rejected");
+    expect(!source::parse_form_xml("<Form id=\"1\" name=\"WrongControl\" ordinaryFormVersion=\"2.1\"><ChildItems><CheckBox id=\"2\" name=\"Check\"><TypeLink attributeId=\"3\"/><Position/></CheckBox></ChildItems></Form>").ok(),
+        "TypeLink is valid only on InputField");
+}
+
 void test_spreadsheet_document_cells_xml_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -3953,6 +3993,7 @@ int main() {
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
+        test_input_field_type_link_xml_contract();
         test_spreadsheet_document_cells_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
         test_choice_field_static_xml_profile_and_runtime_list_rejection();

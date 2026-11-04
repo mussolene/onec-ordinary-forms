@@ -87,6 +87,7 @@
           <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" surface="panelPlacement" valueCodec="integer32"/>
         </SharedProperties>
         <NamedConcept name="MainAttribute" russianName="Основной реквизит"/>
+        <NamedConcept name="TypeLink" russianName="СвязьПоТипу"/>
         <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
         <Controls>
           <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
@@ -309,7 +310,7 @@
               <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
               <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
-              <Property name="TypeLinkItem" apiName="TypeLinkItem" russianName="ЭлементСвязиПоТипу" russianType="" valueCodec="integer"/>
+              <Property name="TypeLinkItem" apiName="TypeLinkItem" russianName="ЭлементСвязиПоТипу" russianType="" valueCodec="integer32"/>
             </Properties>
             <Events>
               <Event name="AutoCompleteText" apiName="AutoCompleteText" russianName="АвтоПодборТекста"/>

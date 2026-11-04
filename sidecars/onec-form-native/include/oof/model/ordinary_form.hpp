@@ -894,7 +894,9 @@ struct PictureDecorationPayload final
 struct CheckBoxPayload final : TypedControlPayload<ControlKind::check_box> {};
 struct ChoiceFieldPayload final : TypedControlPayload<ControlKind::choice_field> {};
 struct RadioButtonPayload final : TypedControlPayload<ControlKind::radio_button> {};
-struct InputFieldPayload final : TypedControlPayload<ControlKind::input_field> {};
+struct InputFieldPayload final : TypedControlPayload<ControlKind::input_field> {
+    std::optional<AttributeRef> type_link;
+};
 struct UsualGroupPayload final : TypedControlPayload<ControlKind::usual_group> {};
 struct SplitterPayload final : TypedControlPayload<ControlKind::splitter> {};
 struct ChartTrendline {

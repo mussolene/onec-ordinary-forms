@@ -208,6 +208,9 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, bool>) {
                 return expected == metamodel::ValueCodec::boolean;
             } else if constexpr (std::is_same_v<Value, std::int64_t>) {
+                if (descriptor.control_kind == ControlKind::input_field && descriptor.api_name == "TypeLinkItem")
+                    return expected == metamodel::ValueCodec::integer32 && typed_value >= 1 &&
+                        typed_value <= std::numeric_limits<std::int32_t>::max();
                 if (is_positive_int32_property(descriptor))
                     return typed_value >= 1 && typed_value <= std::numeric_limits<std::int32_t>::max();
                 return expected == metamodel::ValueCodec::integer ||
@@ -3488,6 +3491,27 @@ ValidationReport OrdinaryFormDocument::validate() const {
             validate_buttons(validate_buttons, *owned_buttons, 0);
         }
         const auto& descriptor = metamodel::descriptor_for(control.kind());
+        if (const auto* input = std::get_if<InputFieldPayload>(&control.payload)) {
+            const auto* type_link_item = control.properties().find(PropertyId::from_name("TypeLinkItem"));
+            const auto item_value = type_link_item != nullptr && std::holds_alternative<std::int64_t>(type_link_item->value)
+                ? std::get<std::int64_t>(type_link_item->value) : std::int64_t{1};
+            if (input->type_link) {
+                const Attribute* attribute = find_attribute(input->type_link->id());
+                if (attribute == nullptr) {
+                    add_violation(report, InvariantCode::dangling_reference, control.id,
+                        input->type_link->id(), "InputField TypeLink must resolve to a local Attribute");
+                } else if (attribute->type.entries.size() != 1 ||
+                    attribute->type.entries.front().term != TypeDomainTerm::object ||
+                    !attribute->type.entries.front().type_uuid ||
+                    !canonical_nonzero_uuid(attribute->type.entries.front().type_uuid->canonical)) {
+                    add_violation(report, InvariantCode::invalid_property, control.id,
+                        attribute->id, "InputField TypeLink source must have one external object type UUID");
+                }
+            } else if (item_value != 1) {
+                add_violation(report, InvariantCode::invalid_property, control.id, {},
+                    "InputField TypeLinkItem requires a named TypeLink source");
+            }
+        }
         if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
             std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
             std::optional<std::pair<std::uint32_t, std::uint32_t>> previous;

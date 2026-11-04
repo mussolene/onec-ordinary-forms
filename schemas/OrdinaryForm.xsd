@@ -1617,6 +1617,7 @@
   <xs:simpleType name="StandardMenuActionSourceType"><xs:restriction base="xs:string"><xs:enumeration value="Form"/><xs:enumeration value="AllSources"/><xs:enumeration value="Control"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuActionContextType"><xs:restriction base="xs:string"><xs:enumeration value="Default"/><xs:enumeration value="CommandBar"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuSourceControlIdType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="TypeLinkItemValueType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
   <xs:complexType name="StandardMenuActionType"><xs:attribute name="command" type="StandardMenuCommandType" use="required"/><xs:attribute name="context" type="StandardMenuActionContextType" use="required"/><xs:attribute name="commandBarId" type="ObjectIdType"/><xs:attribute name="source" type="StandardMenuActionSourceType" use="required"/><xs:attribute name="sourceControlId" type="StandardMenuSourceControlIdType"/></xs:complexType>
   <xs:complexType name="CommandBarButtonType"><xs:sequence>
     <xs:element name="Text" type="xs:string" minOccurs="0"/><xs:element name="Explanation" type="xs:string" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0"/>
@@ -2303,6 +2304,7 @@
   <xs:complexType name="InputFieldType">
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TypeLink" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="AttributeReferenceValueType" use="required"/></xs:complexType></xs:element>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
@@ -2349,7 +2351,7 @@
       <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChoiceListWidth" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="TypeLinkItem" type="xs:long" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TypeLinkItem" type="TypeLinkItemValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="InputFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

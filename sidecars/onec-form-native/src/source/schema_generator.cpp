@@ -166,6 +166,8 @@ std::string_view xsd_type(ValueCodec codec) {
 }
 
 std::string_view xsd_type(const PropertyDescriptor& property) {
+    if (property.control_kind == model::ControlKind::input_field && property.api_name == "TypeLinkItem")
+        return "TypeLinkItemValueType";
     if (property.control_kind == model::ControlKind::chart && property.api_name == "SummarySeries") return "ChartSummarySeriesType";
     if (property.owner == model::metamodel::DescriptorOwner::form && property.api_name == "EnterKeyBehavior")
         return "EnterKeyBehaviorValueType";
@@ -1293,6 +1295,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
   <xs:simpleType name="StandardMenuActionSourceType"><xs:restriction base="xs:string"><xs:enumeration value="Form"/><xs:enumeration value="AllSources"/><xs:enumeration value="Control"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuActionContextType"><xs:restriction base="xs:string"><xs:enumeration value="Default"/><xs:enumeration value="CommandBar"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuSourceControlIdType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="TypeLinkItemValueType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
   <xs:complexType name="StandardMenuActionType"><xs:attribute name="command" type="StandardMenuCommandType" use="required"/><xs:attribute name="context" type="StandardMenuActionContextType" use="required"/><xs:attribute name="commandBarId" type="ObjectIdType"/><xs:attribute name="source" type="StandardMenuActionSourceType" use="required"/><xs:attribute name="sourceControlId" type="StandardMenuSourceControlIdType"/></xs:complexType>
   <xs:complexType name="CommandBarButtonType"><xs:sequence>
     <xs:element name="Text" type="xs:string" minOccurs="0"/><xs:element name="Explanation" type="xs:string" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0"/>
@@ -1442,6 +1445,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         output += ">\n    <xs:sequence>\n";
         output +=
             "      <xs:element name=\"DataPath\" type=\"DataPathType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+        if (control.kind == model::ControlKind::input_field)
+            output += "      <xs:element name=\"TypeLink\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"AttributeReferenceValueType\" use=\"required\"/></xs:complexType></xs:element>\n";
         append_control_extension_elements(
             output,
             metamodel.control_extension_properties(),
@@ -1599,7 +1604,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         output,
         metamodel.panel_placement_properties(),
         "          ");
-    output += "        </SharedProperties>\n        <NamedConcept name=\"MainAttribute\" russianName=\"Основной реквизит\"/>\n        <NamedConcept";
+    output += "        </SharedProperties>\n        <NamedConcept name=\"MainAttribute\" russianName=\"Основной реквизит\"/>\n        <NamedConcept name=\"TypeLink\" russianName=\"СвязьПоТипу\"/>\n        <NamedConcept";
     append_attribute(output, "name", model::metamodel::data_processor_form_extension.xml_name);
     append_attribute(output, "russianName", as_utf8(model::metamodel::data_processor_form_extension.russian_name));
     output += "/>\n        <Controls>\n";
