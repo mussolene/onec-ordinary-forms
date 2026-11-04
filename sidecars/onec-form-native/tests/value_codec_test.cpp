@@ -448,9 +448,51 @@ void test_font() {
     const auto legacy_automatic = codec::decode_font("{6,3,0,1}");
     expect(legacy_automatic == automatic && codec::encode_font(legacy_automatic) == "{8,3,0,1,100}",
         "observed legacy automatic Font6 must decode to the typed default and rebuild as Font8");
+    const auto legacy_style = codec::decode_font("{6,2,0,{-20},1}");
+    expect(legacy_style.kind == model::FontKind::style_reference &&
+               legacy_style.style == model::StyleReference{model::QualifiedName{"StyleFonts.TextFont"}} &&
+               codec::encode_font(legacy_style) == "{8,2,0,{-20},1,100}",
+        "observed legacy style Font6 must preserve its named font reference and append default scale");
+    for (const auto weight : {400, 700}) {
+        const auto legacy_bold = codec::decode_font("{6,3,4," + std::to_string(weight) + ",1}");
+        expect(legacy_bold.bold == std::optional<bool>{weight == 700} && legacy_bold.scale == 100 &&
+                   !legacy_bold.scale_override && codec::encode_font(legacy_bold) ==
+                       "{8,3,4," + std::to_string(weight) + ",1,100}",
+            "legacy Font6 bold override must remain explicit through the canonical Font8 writer");
+    }
     for (const auto legacy : {"{6,2,0,1}", "{6,3,4,1}", "{6,3,0,0}", "{6,3,0,1,100}"}) {
         expect_rejected([legacy] { static_cast<void>(codec::decode_font(legacy)); },
             "unobserved Font6 kinds, settings, and trailing fields must be rejected");
+    }
+    for (const auto& [legacy, modern] : {
+             std::pair{"{6,3,2,80,1}", "{8,3,2,80,1,100}"},
+             std::pair{"{6,3,8,1,1}", "{8,3,8,1,1,100}"},
+             std::pair{"{6,3,16,1,1}", "{8,3,16,1,1,100}"},
+             std::pair{"{6,3,32,1,1}", "{8,3,32,1,1,100}"},
+             std::pair{"{6,3,1,\"Arial\",1}", "{8,3,1,\"Arial\",1,100}"},
+             std::pair{"{6,3,6,80,700,1}", "{8,3,6,80,700,1,100}"},
+             std::pair{"{6,2,4,{-20},700,1}", "{8,2,4,{-20},700,1,100}"},
+             std::pair{"{6,0,63,200,0,0,0,700,0,0,0,0,0,0,0,0,\"Arial\",1,0}",
+                       "{8,0,63,200,0,0,0,700,0,0,0,0,0,0,0,0,\"Arial\",1,100,0}"}}) {
+        const auto value = codec::decode_font(legacy);
+        expect(value == codec::decode_font(modern) && codec::encode_font(value) == modern &&
+                   value.scale == 100 && !value.scale_override,
+            "native Font6 variants must preserve typed properties and append default Font8 scale");
+    }
+    for (const auto selector : {0, 1, 2, 3, 4}) {
+        for (const auto flags : {0, 4}) {
+            const auto prefix = std::to_string(flags) + ",{" + std::to_string(selector) + "}," +
+                (flags == 4 ? "700," : "") + "1";
+            const auto value = codec::decode_font("{6,1," + prefix + "}");
+            expect(value.kind == model::FontKind::windows_font && value.windows_font &&
+                       static_cast<unsigned>(*value.windows_font) == static_cast<unsigned>(selector) &&
+                       codec::encode_font(value) == "{8,1," + prefix + ",100}",
+                "native Windows Font6 selectors must preserve named kind and overrides through Font8");
+        }
+    }
+    for (const auto legacy : {"{6,3,512,1}", "{6,3,64,1}", "{6,1,0,{5},1}"}) {
+        expect_rejected([legacy] { static_cast<void>(codec::decode_font(legacy)); },
+            "unproven legacy Font6 settings must remain rejected");
     }
     model::FontValue automatic_bold_false = automatic;
     automatic_bold_false.bold = false;
