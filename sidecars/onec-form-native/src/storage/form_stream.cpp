@@ -2775,6 +2775,7 @@ struct DecodedOwnerPages {
 
 DecodedOwnerPages decode_owner_pages(
     const LV& envelope,
+    const StorageLayout& layout,
     std::uint64_t& next_page_id,
     std::optional<model::ControlRef> owner,
     bool panel,
@@ -2841,6 +2842,48 @@ DecodedOwnerPages decode_owner_pages(
         canonical_root_panel_payload(8, 8, pages, owner);
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
+    const bool proven_root_owner_layout =
+        (layout.outer_format == OuterFormat::v25 && layout.root_arity == 18) ||
+        (layout.outer_format == OuterFormat::v26 && layout.root_arity == 19);
+    const bool legacy_root_owner20 = !panel && proven_root_owner_layout &&
+        layout.kind == LayoutKind::form_section_16 && layout.page_style_section_version == 3 &&
+        normalized.items.size() == 18 &&
+        !normalized.items[1].is_list && normalized.items[1].atom_kind == LV::AtomKind::raw &&
+        normalized.items[1].atom == "20";
+    if (legacy_root_owner20) {
+        if (pages.size() != 1)
+            fail("OOF1114", child_path(path, 5), "one Page for the proven root-owner20 layout",
+                std::to_string(pages.size()), "Legacy root owner20 geometry is proven only for one Page");
+        const auto source_base_path = child_path(child_path(path, 1), 0);
+        const auto& source_base = normalized.items[0];
+        require_arity(source_base, 13, source_base_path);
+        require_raw_constant(source_base.items[0], "10", child_path(source_base_path, 0));
+        auto canonical_base = expected.items[1].items[0];
+        for (const auto slot : {1U, 5U, 11U, 12U})
+            require_exact(source_base.items[slot], canonical_base.items[slot],
+                child_path(source_base_path, slot), "Legacy root common-base field is unsupported");
+        for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
+            const auto color_path = child_path(source_base_path, slot);
+            canonical_base.items[slot] = encode_control_color(
+                decode_control_color(source_base.items[slot], color_path), color_path);
+        }
+        const auto font_path = child_path(source_base_path, 4);
+        canonical_base.items[4] = encode_control_font(decode_control_font(source_base.items[4], font_path), font_path);
+
+        const auto legacy_style = parse_constant("{3,1,{3,0,{0},\"\",-1,-1,1,0}}");
+        require_exact(normalized.items[2], legacy_style, child_path(child_path(path, 1), 2),
+            "Legacy root owner style contains unsupported settings");
+        normalized.items[0] = std::move(canonical_base);
+        normalized.items[1] = expected.items[1].items[1];
+        normalized.items[2] = expected.items[1].items[2];
+        // The native owner20 record omits only the seven confirmed modern defaults.
+        normalized.items.insert(normalized.items.end(), expected.items[1].items.begin() + 18,
+            expected.items[1].items.end());
+        normalized.items[19] = normalized.items[0].items[2];
+        for (const auto slot : {3U, 4U, 6U, 7U, 8U, 9U, 10U, 11U, 12U, 13U, 14U, 15U, 16U, 17U})
+            require_exact(normalized.items[slot], expected.items[1].items[slot],
+                child_path(child_path(path, 1), slot), "Legacy root owner field is unsupported");
+    }
     require_arity(normalized, expected.items[1].items.size(), child_path(path, 1));
     std::vector<std::uint32_t> default_controls;
     const auto focus_start = 11 + boundary_page_count * 4;
@@ -12874,7 +12917,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& root_panel_envelope = root_panel.items[1];
         require_arity(root_panel_envelope, 3, "$/1/2/1");
         std::uint64_t next_page_id = stored_max_id + 1;
-        auto root_owner = decode_owner_pages(root_panel_envelope, next_page_id, std::nullopt, false,
+        auto root_owner = decode_owner_pages(root_panel_envelope, layout.value(), next_page_id, std::nullopt, false,
             1, warnings, reconstruction_complete, "$/1/2/1");
         auto root_pages = std::move(root_owner.pages);
         const auto& root_incoming = root_owner.incoming;
@@ -13212,7 +13255,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         if (name.empty()) fail("OOF1115", child_path(child_path(record_path, 4), 1), "non-empty Panel Name", "empty", "Panel Name is required");
 
                         const model::ControlRef panel_ref{model::ObjectId{raw_id}};
-                        auto panel_owner = decode_owner_pages(at(record, 2, record_path), next_page_id, panel_ref, true,
+                        auto panel_owner = decode_owner_pages(at(record, 2, record_path), layout.value(), next_page_id, panel_ref, true,
                             raw_id, warnings, reconstruction_complete, child_path(record_path, 2));
                         auto named_events = decode_control_event_collection(record.items[2].items[2],
                             child_path(child_path(record_path, 2), 2), model::ControlKind::panel);
