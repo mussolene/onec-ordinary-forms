@@ -14,6 +14,8 @@
 #include <variant>
 #include <vector>
 
+namespace oof { class MetadataContext; }
+
 namespace oof::model {
 
 class ObjectId {
@@ -1362,7 +1364,14 @@ public:
     };
 
     OrdinaryFormDocument();
-    explicit OrdinaryFormDocument(Form form);
+    explicit OrdinaryFormDocument(
+        Form form, std::shared_ptr<const ::oof::MetadataContext> metadata_context = {});
+
+    [[nodiscard]] const std::shared_ptr<const ::oof::MetadataContext>& metadata_context() const noexcept {
+        return metadata_context_;
+    }
+
+    [[nodiscard]] std::optional<TypeDomainPatternValue> resolve_data_path_type(const DataPath& path) const;
 
     [[nodiscard]] const Form& form() const noexcept {
         return form_;
@@ -1447,6 +1456,7 @@ public:
     void validate_or_throw() const;
 
 private:
+    std::shared_ptr<const ::oof::MetadataContext> metadata_context_;
     bool reconstruction_complete_ = true;
     bool opening_started_ = false;
     PropertySet window_permissions_;

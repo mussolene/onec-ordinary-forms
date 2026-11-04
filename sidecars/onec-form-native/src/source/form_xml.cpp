@@ -1732,7 +1732,9 @@ struct ParsedObjects {
 
 class DocumentParser {
 public:
-    explicit DocumentParser(const mm::Metamodel& metamodel) : metamodel_(metamodel) {}
+    explicit DocumentParser(const mm::Metamodel& metamodel,
+        std::shared_ptr<const MetadataContext> metadata_context)
+        : metamodel_(metamodel), metadata_context_(std::move(metadata_context)) {}
 
     model::OrdinaryFormDocument parse(xmlNodePtr root) {
         model::Form form;
@@ -1816,7 +1818,7 @@ public:
             }
         }
 
-        model::OrdinaryFormDocument document(std::move(form));
+        model::OrdinaryFormDocument document(std::move(form), metadata_context_);
         document.set_reconstruction_complete(reconstruction_complete);
         for (auto& asset : objects_.assets) document.add_asset(std::move(asset));
         for (auto& attribute : objects_.attributes) document.add_attribute(std::move(attribute));
@@ -3168,6 +3170,7 @@ private:
     }
 
     const mm::Metamodel& metamodel_;
+    std::shared_ptr<const MetadataContext> metadata_context_;
     ParsedObjects objects_;
     std::size_t chart_budget_ = 0;
     model::TypedValueBudget typed_budget_;
@@ -5017,11 +5020,12 @@ Diagnostic internal_diagnostic(std::string message) {
 
 }  // namespace
 
-Result<model::OrdinaryFormDocument> parse_form_xml(std::string_view xml) {
+Result<model::OrdinaryFormDocument> parse_form_xml(
+    std::string_view xml, std::shared_ptr<const MetadataContext> metadata_context) {
     try {
         XmlDoc document = parse_and_validate_xml(xml);
         xmlNodePtr root = xmlDocGetRootElement(document.get());
-        DocumentParser parser(mm::Metamodel::instance());
+        DocumentParser parser(mm::Metamodel::instance(), std::move(metadata_context));
         model::OrdinaryFormDocument parsed = parser.parse(root);
         const model::ValidationReport report = parsed.validate();
         if (!report.ok()) {

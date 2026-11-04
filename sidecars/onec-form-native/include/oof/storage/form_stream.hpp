@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "oof/model/ordinary_form.hpp"
+#include "oof/metadata_context.hpp"
 #include "oof/result.hpp"
 #include "oof/storage/list_stream.hpp"
 
@@ -57,6 +58,7 @@ struct AttributeRecord {
 struct AttributeLink {
     std::int64_t control_id = 0;
     model::CompositeIdValue attribute_id;
+    std::vector<MetadataMemberKey> member_keys;
 
     friend bool operator==(const AttributeLink&, const AttributeLink&) = default;
 };
@@ -141,7 +143,8 @@ struct ControlGeometry {
 // on storage concepts not represented by OrdinaryFormDocument.
 [[nodiscard]] Result<model::OrdinaryFormDocument> decode_document(
     const list_stream::ListValue& payload,
-    std::string_view form_name = "Form");
+    std::string_view form_name = "Form",
+    std::shared_ptr<const MetadataContext> metadata_context = {});
 [[nodiscard]] Result<list_stream::ListValue> encode_document(
     const model::OrdinaryFormDocument& document);
 

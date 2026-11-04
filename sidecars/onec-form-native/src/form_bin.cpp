@@ -90,7 +90,8 @@ std::string canonical_module_newlines(std::string_view text, bool platform_crlf)
 
 Result<model::OrdinaryFormDocument> load_form_bin(
     std::span<const std::uint8_t> bytes,
-    std::string_view form_name) {
+    std::string_view form_name,
+    std::shared_ptr<const MetadataContext> metadata_context) {
     try {
         const storage::formbin::OneCContainer container =
             storage::formbin::parse_container({bytes.begin(), bytes.end()});
@@ -145,7 +146,7 @@ Result<model::OrdinaryFormDocument> load_form_bin(
                 {},
                 error.what())});
         }
-        auto decoded = storage::form_stream::decode_document(payload, form_name);
+        auto decoded = storage::form_stream::decode_document(payload, form_name, std::move(metadata_context));
         if (!decoded) {
             return Result<model::OrdinaryFormDocument>::failure(decoded.diagnostics());
         }
@@ -184,7 +185,7 @@ Result<std::vector<std::uint8_t>> save_form_bin(
         container.files.push_back({"module", 0, 0, bom_payload(module_text)});
         auto bytes = storage::formbin::serialize_container(container);
 
-        const auto verified = load_form_bin(bytes, document.form().name);
+        const auto verified = load_form_bin(bytes, document.form().name, document.metadata_context());
         if (!verified) {
             return Result<std::vector<std::uint8_t>>::failure(verified.diagnostics());
         }

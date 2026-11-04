@@ -13,9 +13,11 @@ add_library(
   liboof
   STATIC
     src/form_bin.cpp
+    src/metadata_context.cpp
     src/model/metamodel.cpp
     src/model/ordinary_form.cpp
     src/source/form_xml.cpp
+    src/source/metadata_xml.cpp
     src/source/schema_generator.cpp
     src/storage/form_stream.cpp
     src/storage/value_codec.cpp
@@ -76,6 +78,19 @@ if(BUILD_TESTING)
   oof_enable_project_warnings(oof-result-test)
   add_test(NAME product.result COMMAND oof-result-test)
   set_tests_properties(product.result PROPERTIES LABELS unit)
+
+  add_executable(oof-metadata-context-test tests/metadata_context_test.cpp)
+  set_target_properties(
+    oof-metadata-context-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-metadata-context-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-metadata-context-test)
+  add_test(NAME product.metadata-context COMMAND oof-metadata-context-test)
+  set_tests_properties(product.metadata-context PROPERTIES LABELS unit)
 
   add_executable(oof-container-test tests/container_test.cpp)
   set_target_properties(

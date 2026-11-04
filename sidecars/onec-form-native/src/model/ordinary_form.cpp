@@ -19,6 +19,7 @@
 #include <unordered_set>
 
 #include "oof/model/metamodel.hpp"
+#include "oof/metadata_context.hpp"
 #include "oof/storage/value_codec.hpp"
 
 namespace oof::model {
@@ -1303,8 +1304,19 @@ OrdinaryFormDocument::OrdinaryFormDocument() {
     rebuild_index();
 }
 
-OrdinaryFormDocument::OrdinaryFormDocument(Form form) : form_(std::move(form)) {
+OrdinaryFormDocument::OrdinaryFormDocument(
+    Form form, std::shared_ptr<const ::oof::MetadataContext> metadata_context)
+    : metadata_context_(std::move(metadata_context)), form_(std::move(form)) {
     rebuild_index();
+}
+
+std::optional<TypeDomainPatternValue> OrdinaryFormDocument::resolve_data_path_type(const DataPath& path) const {
+    const auto* attribute = path.attribute.has_value() ? find_attribute(path.attribute.id()) : nullptr;
+    if (!attribute) return std::nullopt;
+    if (path.members.empty()) return attribute->type;
+    if (!metadata_context_) return std::nullopt;
+    const auto resolved = metadata_context_->resolve_names(attribute->type, path.members);
+    return resolved ? resolved.value().leaf_type : std::nullopt;
 }
 
 void OrdinaryFormDocument::set_form(Form form) {
@@ -1672,26 +1684,20 @@ bool is_string_input_property(const metamodel::PropertyDescriptor& descriptor) n
          descriptor.api_name == "ExtendedEdit" || descriptor.api_name == "PasswordMode");
 }
 
-const TypeDomainPatternValue* effective_input_type(
-    const OrdinaryFormDocument& document, const ControlNode& control) noexcept {
-    if (control.kind() != ControlKind::input_field) return nullptr;
-    if (control.data_path) {
-        if (!control.data_path->members.empty()) return nullptr;
-        const auto* attribute = control.data_path->attribute.has_value()
-            ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
-        return attribute == nullptr ? nullptr : &attribute->type;
-    }
+std::optional<TypeDomainPatternValue> effective_input_type(
+    const OrdinaryFormDocument& document, const ControlNode& control) {
+    if (control.kind() != ControlKind::input_field) return std::nullopt;
+    if (control.data_path) return document.resolve_data_path_type(*control.data_path);
     const auto* local = control.extension_properties.find(PropertyId::from_name("ValueType"));
-    return local == nullptr ? nullptr : std::get_if<TypeDomainPatternValue>(&local->value);
+    const auto* type = local == nullptr ? nullptr : std::get_if<TypeDomainPatternValue>(&local->value);
+    return type ? std::optional{*type} : std::nullopt;
 }
 
 bool table_tree_property_available(const OrdinaryFormDocument& document, const ControlNode& control) {
-    if (!control.data_path || !control.data_path->members.empty()) return false;
-    const auto* attribute = control.data_path->attribute.has_value()
-        ? document.find_attribute(control.data_path->attribute.id()) : nullptr;
+    const auto type = control.data_path ? document.resolve_data_path_type(*control.data_path) : std::nullopt;
     TypeDomainEntry expected;
     expected.term = TypeDomainTerm::value_tree;
-    return attribute && attribute->type.entries.size() == 1 && attribute->type.entries.front() == expected;
+    return type && type->entries.size() == 1 && type->entries.front() == expected;
 }
 
 ChartArea default_chart_area(ChartAreaKind kind, bool show_legend) {
@@ -2127,16 +2133,16 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (descriptor->api_name == "Name")
             return {PropertyReadStatus::computed_value, PropertyValue{control.name}};
         if (descriptor->value_codec == metamodel::ValueCodec::typed_value) {
-            const auto* type = effective_input_type(*this, control);
+            const auto type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
-            if (type == nullptr || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
+            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
                 (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
         }
         if (is_string_input_property(*descriptor) ||
             (control.kind() == ControlKind::input_field && descriptor->api_name == "TypeRestriction")) {
-            const auto* type = effective_input_type(*this, control);
-            if (type == nullptr || type->entries.size() != 1)
+            const auto type = effective_input_type(*this, control);
+            if (!type || type->entries.size() != 1)
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             const auto term = type->entries.front().term;
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
@@ -2185,17 +2191,18 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             if (!control.data_path) return {PropertyReadStatus::computed_value, PropertyValue{std::string{}}};
             const auto* attribute = control.data_path->attribute.has_value()
                 ? find_attribute(control.data_path->attribute.id()) : nullptr;
-            if (!attribute || attribute->name.empty() || !control.data_path->members.empty())
+            if (!attribute || attribute->name.empty() ||
+                (!control.data_path->members.empty() && !resolve_data_path_type(*control.data_path)))
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
-            return {PropertyReadStatus::computed_value, PropertyValue{attribute->name}};
+            std::string name = attribute->name;
+            for (const auto& member : control.data_path->members) name += "." + member;
+            return {PropertyReadStatus::computed_value, PropertyValue{std::move(name)}};
         }
         if (descriptor->api_name == "ValueType") {
             if (control.data_path) {
-                const auto* attribute = control.data_path->attribute.has_value()
-                    ? find_attribute(control.data_path->attribute.id()) : nullptr;
-                if (!attribute || !control.data_path->members.empty())
-                    return {PropertyReadStatus::unsupported_surface, std::nullopt};
-                return {PropertyReadStatus::computed_value, PropertyValue{attribute->type}};
+                const auto type = resolve_data_path_type(*control.data_path);
+                if (!type) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                return {PropertyReadStatus::computed_value, PropertyValue{*type}};
             }
             if (control.kind() == ControlKind::choice_field)
                 return {PropertyReadStatus::computed_value, PropertyValue{TypeDomainPatternValue{}}};
@@ -2603,7 +2610,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
-            const auto* type = effective_input_type(*this, control);
+            const auto type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
             if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string ||
                 (list_mode && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
@@ -2782,9 +2789,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         return PropertyMutationStatus::unsupported_surface;
     }
     if (descriptor->value_codec == metamodel::ValueCodec::typed_value && property_control != nullptr) {
-        const auto* type = effective_input_type(*this, *property_control);
+        const auto type = effective_input_type(*this, *property_control);
         const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
-        if (type == nullptr || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
+        if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
             (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
             return PropertyMutationStatus::unsupported_surface;
     }
@@ -3143,7 +3150,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
-            const auto* type = effective_input_type(*this, control);
+            const auto type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
             if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string ||
                 (list_mode && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
@@ -3193,9 +3200,9 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     }
 
     if (descriptor->value_codec == metamodel::ValueCodec::typed_value && property_control != nullptr) {
-        const auto* type = effective_input_type(*this, *property_control);
+        const auto type = effective_input_type(*this, *property_control);
         const auto* list_mode = property_control->properties().find(PropertyId::from_name("ListChoiceMode"));
-        if (type == nullptr || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
+        if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::numeric ||
             (list_mode != nullptr && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
             return PropertyMutationStatus::unsupported_surface;
     }
@@ -4010,26 +4017,28 @@ ValidationReport OrdinaryFormDocument::validate() const {
         validate_position(control.id, control.position);
         if (control.data_path.has_value()) {
             require_attribute(control.id, control.data_path->attribute);
+            if (metadata_context_ && !control.data_path->members.empty() &&
+                !resolve_data_path_type(*control.data_path))
+                add_violation(report, InvariantCode::invalid_property, control.id, {},
+                    "DataPath members cannot be resolved in the supplied metadata context");
             const bool calendar_field = control.kind() == ControlKind::calendar_field;
             const bool track_bar = control.kind() == ControlKind::track_bar;
             if (calendar_field || track_bar) {
                 const auto invalid_data_path = [&](std::string reason) {
                     add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
                 };
-                if (!control.data_path->members.empty()) {
-                    invalid_data_path("CalendarField and TrackBar DataPath must reference an Attribute directly");
-                } else if (const Attribute* attribute = control.data_path->attribute.has_value()
-                               ? find_attribute(control.data_path->attribute.id()) : nullptr;
-                           attribute != nullptr) {
+                if (const auto type = resolve_data_path_type(*control.data_path); type) {
                     TypeDomainEntry expected;
                     expected.term = calendar_field ? TypeDomainTerm::date : TypeDomainTerm::numeric;
                     if (calendar_field) expected.date = DateQualifiers{true, true};
                     else expected.numeric = NumericQualifiers{10, 0, true};
-                    if (attribute->type.entries.size() != 1 || attribute->type.entries.front() != expected) {
+                    if (type->entries.size() != 1 || type->entries.front() != expected) {
                         invalid_data_path(calendar_field ?
                             "CalendarField DataPath must reference a single DateTime Attribute" :
                             "TrackBar DataPath must reference a single Numeric(10,0,nonnegative) Attribute");
                     }
+                } else {
+                    invalid_data_path("CalendarField or TrackBar DataPath type cannot be resolved");
                 }
             }
         }
@@ -4100,18 +4109,17 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
             bool tree_source = false;
-            if (!control.data_path || !control.data_path->members.empty()) {
-                invalid_table("Table requires a direct DataPath to a ValueTable or ValueTree Attribute");
+            if (!control.data_path) {
+                invalid_table("Table requires a DataPath to a ValueTable or ValueTree value");
             } else {
-                const Attribute* attribute = control.data_path->attribute.has_value()
-                    ? find_attribute(control.data_path->attribute.id()) : nullptr;
+                const auto type = resolve_data_path_type(*control.data_path);
                 const TypeDomainEntry value_table{.term = TypeDomainTerm::value_table};
                 const TypeDomainEntry value_tree{.term = TypeDomainTerm::value_tree};
-                if (attribute == nullptr || attribute->type.entries.size() != 1 ||
-                    (attribute->type.entries.front() != value_table && attribute->type.entries.front() != value_tree)) {
+                if (!type || type->entries.size() != 1 ||
+                    (type->entries.front() != value_table && type->entries.front() != value_tree)) {
                     invalid_table("Table DataPath must reference the named ValueTable or ValueTree type");
                 } else {
-                    tree_source = attribute->type.entries.front() == value_tree;
+                    tree_source = type->entries.front() == value_tree;
                 }
             }
             if (!tree_source && control.properties().find(PropertyId::from_name("Tree")) != nullptr) {

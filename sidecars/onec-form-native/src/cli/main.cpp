@@ -29,6 +29,7 @@
 #include "oof/form_bin.hpp"
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
+#include "oof/source/metadata_xml.hpp"
 
 namespace {
 
@@ -37,8 +38,8 @@ constexpr std::uintmax_t max_input_bytes = 64U * 1024U * 1024U;
 
 void print_usage(std::ostream& output) {
     output
-        << "Usage: oof dump <Form.bin> <Form.xml> [--json]\n"
-        << "       oof build <Form.xml> <Form.bin> [--json] (requires <XML-stem>/Module.bsl)\n"
+        << "Usage: oof dump <Form.bin> <Form.xml> [--json] [--metadata <configuration-root>]\n"
+        << "       oof build <Form.xml> <Form.bin> [--json] [--metadata <configuration-root>] (requires <XML-stem>/Module.bsl)\n"
         << "       oof --coverage [--json]\n"
         << "       oof --version\n";
 }
@@ -53,7 +54,10 @@ std::vector<std::string_view> positional_arguments(int argc, char** argv) {
     std::vector<std::string_view> result;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument = argv[index];
-        if (argument != "--json") {
+        if (argument == "--metadata") {
+            if (++index >= argc || std::string_view(argv[index]).starts_with("--"))
+                throw std::invalid_argument("--metadata requires a configuration root directory");
+        } else if (argument != "--json") {
             result.push_back(argument);
         }
     }
@@ -547,11 +551,61 @@ std::vector<PendingWrite> picture_asset_writes(
     return writes;
 }
 
+std::shared_ptr<const oof::MetadataContext> load_metadata_context(int argc, char** argv, const std::filesystem::path& output) {
+    std::optional<std::filesystem::path> root;
+    for (int index = 1; index < argc; ++index) {
+        if (std::string_view(argv[index]) != "--metadata") continue;
+        if (root || index + 1 >= argc) throw std::invalid_argument("Specify --metadata once with a directory");
+        root = argv[++index];
+    }
+    if (!root) return {};
+    if (std::filesystem::is_symlink(std::filesystem::symlink_status(*root)) ||
+        !std::filesystem::is_directory(*root))
+        throw std::invalid_argument("Metadata root must be a directory, without a symbolic link");
+    const auto canonical_root = std::filesystem::canonical(*root);
+    std::vector<std::filesystem::path> files;
+    const auto collect = [&](const std::filesystem::path& path) {
+        const auto status = std::filesystem::symlink_status(path);
+        if (std::filesystem::is_symlink(status))
+            throw std::invalid_argument("Symbolic links are forbidden in metadata input");
+        if (std::filesystem::is_regular_file(status) && path.extension() == ".xml") {
+            if (files.size() >= oof::source::metadata_xml_max_documents) throw std::invalid_argument("Metadata document count exceeds limit");
+            files.push_back(path);
+        }
+    };
+    collect(canonical_root / "Configuration.xml");
+    for (const auto& entry : std::filesystem::directory_iterator(canonical_root)) {
+        const auto status = entry.symlink_status();
+        if (std::filesystem::is_symlink(status))
+            throw std::invalid_argument("Symbolic links are forbidden in metadata input");
+        if (!std::filesystem::is_directory(status)) continue;
+        const auto name = entry.path().filename();
+        if (name == "Ext" || name == "Forms" || name == "Templates") continue;
+        for (const auto& child : std::filesystem::directory_iterator(entry.path())) collect(child.path());
+    }
+    std::sort(files.begin(), files.end());
+    std::vector<std::string> documents;
+    std::uintmax_t remaining = oof::source::metadata_xml_max_total_bytes;
+    for (const auto& file : files) {
+        reject_input_output_overlap(file, output);
+        const auto bytes = read_bytes(file, std::min<std::uintmax_t>(remaining, oof::source::metadata_xml_max_document_bytes));
+        remaining -= bytes.size();
+        documents.emplace_back(bytes.begin(), bytes.end());
+    }
+    auto parsed = oof::source::parse_metadata_context(documents);
+    if (!parsed) {
+        // The caller prints structured diagnostics without retaining source XML.
+        throw std::invalid_argument(parsed.diagnostics().empty() ? "Invalid metadata context" :
+            parsed.diagnostics().front().message);
+    }
+    return std::make_shared<const oof::MetadataContext>(parsed.take_value());
+}
+
 int dump_form(
     const std::filesystem::path& input,
     const std::filesystem::path& output,
-    bool json) {
-    const auto loaded = oof::load_form_bin(read_bytes(input));
+    bool json, std::shared_ptr<const oof::MetadataContext> metadata_context) {
+    const auto loaded = oof::load_form_bin(read_bytes(input), "Form", std::move(metadata_context));
     if (!loaded) {
         print_diagnostics(loaded.diagnostics(), json);
         return 1;
@@ -586,9 +640,9 @@ int dump_form(
 int build_form(
     const std::filesystem::path& input,
     const std::filesystem::path& output,
-    bool json) {
+    bool json, std::shared_ptr<const oof::MetadataContext> metadata_context) {
     reject_input_output_overlap(input, output);
-    auto parsed = oof::source::parse_form_xml(read_text(input));
+    auto parsed = oof::source::parse_form_xml(read_text(input), std::move(metadata_context));
     if (!parsed) {
         print_diagnostics(parsed.diagnostics(), json);
         return 1;
@@ -639,13 +693,13 @@ int main(int argc, char** argv) {
     }
 
     const bool json = requests_json(argc, argv);
-    const auto arguments = positional_arguments(argc, argv);
-    if (arguments.empty()) {
-        print_usage(std::cerr);
-        return 64;
-    }
-    const std::string_view command = arguments[0];
     try {
+        const auto arguments = positional_arguments(argc, argv);
+        if (arguments.empty()) {
+            print_usage(std::cerr);
+            return 64;
+        }
+        const std::string_view command = arguments[0];
         if ((command == "dump" || command == "build") && arguments.size() != 3) {
             print_diagnostics(
                 cli_failure(
@@ -668,10 +722,10 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (command == "dump") {
-            return dump_form(arguments[1], arguments[2], json);
+            return dump_form(arguments[1], arguments[2], json, load_metadata_context(argc, argv, arguments[2]));
         }
         if (command == "build") {
-            return build_form(arguments[1], arguments[2], json);
+            return build_form(arguments[1], arguments[2], json, load_metadata_context(argc, argv, arguments[2]));
         }
         print_diagnostics(
             cli_failure(

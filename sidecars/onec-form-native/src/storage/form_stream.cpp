@@ -109,10 +109,34 @@ void require_arity(
     }
 }
 
-const model::Attribute* resolve_attribute_reference(
+constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
+
+// A resolved binding keeps the real local root identity and the semantic leaf
+// type. Metadata members never become synthetic document Attributes.
+struct ResolvedBinding {
+    std::string name;
+    model::TypeDomainPatternValue type;
+    model::DataPath data_path;
+};
+
+std::optional<ResolvedBinding> resolve_attribute_reference(
     const model::OrdinaryFormDocument& document,
-    model::AttributeRef reference) {
-    return reference.has_value() ? document.find_attribute(reference.id()) : nullptr;
+    const model::DataPath& path) {
+    const auto* root = path.attribute.has_value() ? document.find_attribute(path.attribute.id()) : nullptr;
+    if (!root) return std::nullopt;
+    ResolvedBinding binding{root->name, root->type, path};
+    if (path.members.empty()) return binding;
+    if (!document.metadata_context())
+        fail("OOF1123", "$/DataPath", "metadata context for a member path", "absent",
+            "DataPath members require the configuration metadata context");
+    const auto resolved = document.metadata_context()->resolve_names(root->type, path.members);
+    if (!resolved) throw DecodeFailure(resolved.diagnostics().front());
+    if (!resolved.value().leaf_type)
+        fail("OOF1123", "$/DataPath", "resolved member type", "unresolved named type",
+            "DataPath leaf type is not available in the metadata context");
+    binding.type = *resolved.value().leaf_type;
+    for (const auto& member : resolved.value().members) binding.name += "." + member;
+    return binding;
 }
 
 const list_stream::ListValue& at(
@@ -300,7 +324,6 @@ list_stream::ListValue encoded_type_domain(
 using LV = list_stream::ListValue;
 namespace ls = list_stream;
 
-constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 constexpr std::string_view root_panel_guid = "09ccdc77-ea1a-4a6d-ab1c-3435eada2433";
 constexpr std::int32_t default_form_width = 400;
 constexpr std::int32_t default_form_height = 300;
@@ -6274,7 +6297,7 @@ DecodedControl decode_splitter(
 DecodedControl decode_radio_button(
     const LV& record,
     std::string_view path,
-    const AttributeRecord* linked_attribute,
+    const ResolvedBinding* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -6386,8 +6409,7 @@ DecodedControl decode_radio_button(
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (selection_value) control.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), *selection_value);
     if (!value_type.entries.empty()) control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), value_type);
-    if (linked_attribute != nullptr) control.data_path = model::DataPath{model::AttributeRef{
-        model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+    if (linked_attribute != nullptr) control.data_path = linked_attribute->data_path;
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
         std::move(named_events)};
@@ -6460,8 +6482,8 @@ void validate_radio_group(
             fail("OOF1122", std::string(path), "numeric head ValueType, DataPath, and SelectionValue",
                 head.name, "RadioButton group head is missing its numeric binding profile");
         }
-        const auto* attribute = resolve_attribute_reference(document, head.data_path->attribute);
-        if (attribute == nullptr || attribute->type != *head_type ||
+        const auto attribute = resolve_attribute_reference(document, *head.data_path);
+        if (!attribute || attribute->type != *head_type ||
             !decimal_fits_numeric_qualifiers(head_selection->canonical, head_type->entries.front().numeric)) {
             fail("OOF1122", std::string(path), "head numeric Attribute and matching SelectionValue",
                 head.name, "RadioButton group head numeric values do not agree");
@@ -8739,7 +8761,7 @@ DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
     const GeometryContext& context,
-    const AttributeRecord* linked_attribute,
+    const ResolvedBinding* linked_attribute,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
@@ -8837,8 +8859,7 @@ DecodedControl decode_progress_bar(
         control.properties().set_explicit(model::PropertyId::from_name("Orientation"),
             model::EnumerationValue{"Orientation", std::string(members[static_cast<std::size_t>(orientation)])});
     }
-    if (linked_attribute) control.data_path = model::DataPath{
-        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+    if (linked_attribute) control.data_path = linked_attribute->data_path;
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -8846,7 +8867,7 @@ DecodedControl decode_progress_bar(
 DecodedControl decode_track_bar(
     const LV& record,
     std::string_view path,
-    const AttributeRecord* linked_attribute,
+    const ResolvedBinding* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -8952,8 +8973,7 @@ DecodedControl decode_track_bar(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::TrackBarPayload{}};
     decode_control_metadata(metadata, metadata_path, control);
-    if (linked_attribute != nullptr) control.data_path = model::DataPath{
-        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+    if (linked_attribute != nullptr) control.data_path = linked_attribute->data_path;
     apply_common_control_base(control.properties(), common);
     if (max_value != 100) control.properties().set_explicit(
         model::PropertyId::from_name("MaxValue"), static_cast<std::int64_t>(max_value));
@@ -8984,7 +9004,7 @@ DecodedControl decode_track_bar(
 DecodedControl decode_list_box(
     const LV& record,
     std::string_view path,
-    const AttributeRecord& linked_attribute,
+    const ResolvedBinding& linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -9065,7 +9085,7 @@ DecodedControl decode_list_box(
 DecodedControl decode_check_box(
     const LV& record,
     std::string_view path,
-    const AttributeRecord& linked_attribute,
+    const ResolvedBinding& linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -9173,7 +9193,7 @@ DecodedControl decode_check_box(
 DecodedControl decode_choice_field(
     const LV& record,
     std::string_view path,
-    const AttributeRecord* linked_attribute,
+    const ResolvedBinding* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings,
     bool& reconstruction_complete) {
@@ -9328,7 +9348,7 @@ DecodedControl decode_text_document_field(
 DecodedControl decode_calendar_field(
     const LV& record,
     std::string_view path,
-    const AttributeRecord* linked_attribute,
+    const ResolvedBinding* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -9423,8 +9443,7 @@ DecodedControl decode_calendar_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
     decode_control_metadata(metadata, metadata_path, control);
-    if (linked_attribute != nullptr) control.data_path = model::DataPath{
-        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+    if (linked_attribute != nullptr) control.data_path = linked_attribute->data_path;
     apply_common_control_base(control.properties(), common);
     if (selection_mode != 0) {
         constexpr std::array<std::string_view, 3> members{"Single", "Multiple", "Interval"};
@@ -10251,7 +10270,7 @@ LV encode_spreadsheet_document_field(
 DecodedControl decode_input_field(
     const LV& record,
     std::string_view path,
-    const AttributeRecord* linked_attribute,
+    const ResolvedBinding* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -10708,7 +10727,7 @@ model::TableColumn decode_table_column(
 DecodedControl decode_table(
     const LV& record,
     std::string_view path,
-    const AttributeRecord& linked_attribute,
+    const ResolvedBinding& linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings,
     bool& reconstruction_complete) {
@@ -10777,8 +10796,7 @@ DecodedControl decode_table(
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty Table Name", "empty", "Table Name is required");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::TablePayload{}};
-    control.data_path = model::DataPath{model::AttributeRef{
-        model::ObjectId{static_cast<std::uint64_t>(linked_attribute.id.object_id)}}, {}};
+    control.data_path = linked_attribute.data_path;
     control.position = geometry.position;
     decode_control_metadata(record.items[4], metadata_path, control);
     if (tree_source && !tree_mode) control.properties().set_explicit(model::PropertyId::from_name("Tree"), false);
@@ -11284,11 +11302,7 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$/Form/ChildItems", "LabelDecoration with positive int64 ID", control.name, "LabelDecoration is outside the supported profile");
     }
-    if (control.data_path && !control.data_path->members.empty()) {
-        fail("OOF1122", "$/LabelDecoration/DataPath", "direct Attribute reference", control.name,
-            "LabelDecoration DataPath members are unsupported");
-    }
-    if (control.data_path && resolve_attribute_reference(document, control.data_path->attribute) == nullptr) {
+    if (control.data_path && !resolve_attribute_reference(document, *control.data_path)) {
         fail("OOF1123", "$/LabelDecoration/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "LabelDecoration DataPath does not resolve");
     }
@@ -11372,16 +11386,16 @@ LV encode_progress_bar(
         fail("OOF1122", "$/Form/ChildItems", "ProgressBar with positive int64 ID", control.name,
             "ProgressBar is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
+    if (control.name.empty() ||
         !control.children.empty() || !control.events.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/ProgressBar", "named ProgressBar with optional direct DataPath, no ValueType, Events, or storage children",
+        fail("OOF1122", "$/ProgressBar", "named ProgressBar with optional resolved DataPath, no ValueType, Events, or storage children",
             control.name, "ProgressBar uses a storage concept outside the supported profile");
     }
     if (control.data_path) {
-        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-        if (attribute == nullptr) fail("OOF1123", "$/ProgressBar/DataPath", "existing linked Attribute",
+        const auto attribute = resolve_attribute_reference(document, *control.data_path);
+        if (!attribute) fail("OOF1123", "$/ProgressBar/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "ProgressBar DataPath does not resolve");
         if (!(attribute->type.entries.size() == 1 &&
             attribute->type.entries.front().term == model::TypeDomainTerm::numeric &&
@@ -11429,16 +11443,16 @@ LV encode_track_bar(
         fail("OOF1122", "$/Form/ChildItems", "TrackBar with positive int64 ID", control.name,
             "TrackBar is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
+    if (control.name.empty() ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/TrackBar", "named TrackBar with optional direct DataPath, no Events or storage children",
+        fail("OOF1122", "$/TrackBar", "named TrackBar with optional resolved DataPath, no Events or storage children",
             control.name, "TrackBar uses a storage concept outside the supported profile");
     }
     if (control.data_path) {
-        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-        if (attribute == nullptr) fail("OOF1123", "$/TrackBar/DataPath", "existing linked Attribute",
+        const auto attribute = resolve_attribute_reference(document, *control.data_path);
+        if (!attribute) fail("OOF1123", "$/TrackBar/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "TrackBar DataPath does not resolve");
         if (!is_single_track_bar_type_domain(attribute->type)) fail("OOF1122", "$/TrackBar/DataPath",
             "single Numeric(10,0,nonnegative) Attribute", attribute->name,
@@ -11509,17 +11523,17 @@ LV encode_list_box(
         fail("OOF1122", "$/Form/ChildItems", "ListBox with positive int64 ID", control.name,
             "ListBox is outside the supported profile");
     }
-    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+    if (control.name.empty() || !control.data_path ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/ListBox", "named ListBox with direct DataPath and ordinary Position",
+        fail("OOF1122", "$/ListBox", "named ListBox with resolved DataPath and ordinary Position",
             control.name, "ListBox uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(),
         {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly", "BorderColor", "FieldTextColor", "FieldBackColor", "Border"}, "$/ListBox");
-    const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-    if (attribute == nullptr) {
+    const auto attribute = resolve_attribute_reference(document, *control.data_path);
+    if (!attribute) {
         fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "ListBox DataPath does not resolve");
     }
@@ -11560,16 +11574,16 @@ LV encode_check_box(
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "CheckBox with positive int64 ID", control.name, "CheckBox is outside the supported profile");
     }
-    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+    if (control.name.empty() || !control.data_path ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
+        fail("OOF1122", "$/CheckBox", "named CheckBox with resolved DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {"Enabled", "ThreeState", "Caption", "ToolTip", "Font", "BorderColor", "TextColor", "FieldTextColor", "BackColor", "FieldBackColor", "Border", "Transparent", "TitleLocation", "HorizontalAlign", "VerticalAlign"}, "$/CheckBox");
-    const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-    if (attribute == nullptr) {
+    const auto attribute = resolve_attribute_reference(document, *control.data_path);
+    if (!attribute) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "CheckBox DataPath does not resolve");
     }
@@ -11617,17 +11631,17 @@ LV encode_choice_field(
         fail("OOF1122", "$/Form/ChildItems", "ChoiceField with positive int64 ID", control.name,
             "ChoiceField is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
+    if (control.name.empty() ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
+        fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional resolved DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip", "Font", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Border", "Transparent", "ChoiceButton", "ClearButton", "SpinButton", "OpenButton", "ReadOnly", "ChoiceListHeight", "ChoiceListWidth", "Picture", "ChoiceButtonPicture"}, "$/ChoiceField");
     if (control.data_path) {
-        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-        if (attribute == nullptr) {
+        const auto attribute = resolve_attribute_reference(document, *control.data_path);
+        if (!attribute) {
             fail("OOF1123", "$/ChoiceField/DataPath", "existing linked Attribute",
                 std::to_string(control.data_path->attribute.id().value()), "ChoiceField DataPath does not resolve");
         }
@@ -11681,7 +11695,7 @@ LV encode_radio_button(
         fail("OOF1122", "$/Form/ChildItems", "RadioButton with positive int64 ID", control.name,
             "RadioButton is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
+    if (control.name.empty() ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -11734,8 +11748,8 @@ LV encode_radio_button(
             "RadioButton DataPath requires a numeric ValueType");
     }
     if (control.data_path) {
-        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-        if (attribute == nullptr || attribute->type != value_type) {
+        const auto attribute = resolve_attribute_reference(document, *control.data_path);
+        if (!attribute || attribute->type != value_type) {
             fail("OOF1122", "$/RadioButton/DataPath", "existing Attribute with matching numeric ValueType",
                 std::to_string(control.data_path->attribute.id().value()),
                 "RadioButton DataPath does not resolve to an Attribute with the same numeric type");
@@ -11884,16 +11898,16 @@ LV encode_calendar_field(
         fail("OOF1122", "$/Form/ChildItems", "CalendarField with positive int64 ID", control.name,
             "CalendarField is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
+    if (control.name.empty() ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/CalendarField", "named CalendarField with optional direct DataPath and plain Position", control.name,
+        fail("OOF1122", "$/CalendarField", "named CalendarField with optional resolved DataPath and plain Position", control.name,
             "CalendarField uses a storage concept outside the supported profile");
     }
     if (control.data_path) {
-        const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-        if (attribute == nullptr) fail("OOF1123", "$/CalendarField/DataPath", "existing linked Attribute",
+        const auto attribute = resolve_attribute_reference(document, *control.data_path);
+        if (!attribute) fail("OOF1123", "$/CalendarField/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "CalendarField DataPath does not resolve");
         if (!is_single_date_time_type_domain(attribute->type)) fail("OOF1122", "$/CalendarField/DataPath",
             "single DateTime Attribute", attribute->name,
@@ -12017,19 +12031,19 @@ LV encode_input_field(
         control.id.value() == 0) {
         fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at its ChildItems index", control.name, "InputField is outside the supported profile");
     }
-    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
+    if (control.name.empty() ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/InputField", "named InputField with optional direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
+        fail("OOF1122", "$/InputField", "named InputField with optional resolved DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
         "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask", "TypeLinkItem"}, "$/InputField");
-    const auto* attribute = control.data_path ? resolve_attribute_reference(document, control.data_path->attribute) : nullptr;
-    if (control.data_path && attribute == nullptr) {
+    const auto attribute = control.data_path ? resolve_attribute_reference(document, *control.data_path) : std::nullopt;
+    if (control.data_path && !attribute) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
     }
     const auto* local_type_entry = control.extension_properties.find(model::PropertyId::from_name("ValueType"));
@@ -12038,16 +12052,16 @@ LV encode_input_field(
     if (local_type_entry != nullptr && local_type == nullptr)
         fail("OOF1122", "$/InputField/ValueType", "TypeDomainPattern", "different value kind",
             "InputField ValueType must be a TypeDomainPattern");
-    if (attribute != nullptr && local_type != nullptr && *local_type != attribute->type)
+    if (attribute.has_value() && local_type != nullptr && *local_type != attribute->type)
         fail("OOF1122", "$/InputField/ValueType", "ValueType matching linked Attribute", {},
             "InputField ValueType differs from its linked Attribute type");
-    const auto* effective_type = attribute != nullptr ? &attribute->type : local_type;
+    const auto* effective_type = attribute.has_value() ? &attribute->type : local_type;
     if (effective_type == nullptr)
         fail("OOF1122", "$/InputField/ValueType", "explicit local ValueType for an unbound InputField", "absent",
             "Unbound InputField requires an explicit ValueType");
     if (!is_single_string_type_domain(*effective_type) && !is_supported_input_numeric_type_domain(*effective_type) &&
         !is_single_date_only_type_domain(*effective_type)) {
-        fail("OOF1122", attribute != nullptr ? "$/InputField/DataPath" : "$/InputField/ValueType",
+        fail("OOF1122", attribute.has_value() ? "$/InputField/DataPath" : "$/InputField/ValueType",
             "single-string, single-numeric, or Date-only TypeDomainPattern", {},
             "InputField type is outside the supported profile");
     }
@@ -12133,11 +12147,11 @@ LV encode_table(
         fail("OOF1122", "$/Table", "Table with positive ID", control.name,
             "Table is outside the supported storage profile");
     }
-    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+    if (control.name.empty() || !control.data_path ||
         !control.children.empty() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/Table", "named Table with direct DataPath and basic Position", control.name,
+        fail("OOF1122", "$/Table", "named Table with resolved DataPath and basic Position", control.name,
             "Table uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {"ReadOnly", "Enabled", "ToolTip", "Font", "BorderColor", "FieldBackColor",
@@ -12148,8 +12162,8 @@ LV encode_table(
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "RowSelectionMode", "InitialListView", "InitialTreeView",
         "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree"}, "$/Table");
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
-    const auto* attribute = resolve_attribute_reference(document, control.data_path->attribute);
-    if (attribute == nullptr) {
+    const auto attribute = resolve_attribute_reference(document, *control.data_path);
+    if (!attribute) {
         fail("OOF1123", "$/Table/DataPath", "existing ValueTable Attribute",
             std::to_string(control.data_path->attribute.id().value()), "Table DataPath does not resolve");
     }
@@ -12313,9 +12327,9 @@ void validate_form_extension_context(const model::OrdinaryFormDocument& document
         fail("OOF1122", std::string(path), "default flags for the main object Attribute",
             "nondefault flags", "Form extension main Attribute flags must remain false");
     for (const auto& control : document.collections().controls)
-        if (control.data_path && !control.data_path->members.empty())
-            fail("OOF1122", std::string(path), "root Attribute DataPath without member segments",
-                "member path", "CatalogItemFormExtension does not establish member-path storage");
+        if (control.data_path && !resolve_attribute_reference(document, *control.data_path))
+            fail("OOF1123", std::string(path), "resolved DataPath", control.name,
+                "Form extension DataPath does not resolve in its metadata context");
 }
 
 }  // namespace
@@ -12689,14 +12703,29 @@ Result<AttributesRecord> decode_attributes(
                     "Attribute link uses an invalid control ID");
             }
             const auto& target = item.items[1];
-            require_arity(target, 2, child_path(link_path, 1));
-            require_raw_constant(
-                target.items[0],
-                "1",
-                child_path(child_path(link_path, 1), 0));
-            link.attribute_id = composite_id(
-                target.items[1],
-                child_path(child_path(link_path, 1), 1));
+            const auto target_path = child_path(link_path, 1);
+            require_list(target, target_path);
+            const auto components = integer_atom<std::uint32_t>(at(target, 0, target_path), child_path(target_path, 0));
+            if (components == 0 || components > MetadataContext::max_path_depth + 1 ||
+                target.items.size() != static_cast<std::size_t>(components) + 1)
+                fail("OOF1102", target_path, "root and bounded member count matching link arity",
+                    describe(target), "Attribute member link has an invalid component count");
+            link.attribute_id = composite_id(target.items[1], child_path(target_path, 1));
+            link.member_keys.reserve(components - 1);
+            for (std::size_t member_index = 2; member_index < target.items.size(); ++member_index) {
+                const auto& member = target.items[member_index];
+                const auto member_path = child_path(target_path, member_index);
+                if (!member.is_list) {
+                    link.member_keys.emplace_back(integer_atom<std::int64_t>(member, member_path));
+                } else {
+                    require_arity(member, 2, member_path);
+                    const auto key = composite_id(member, member_path);
+                    if (key.object_id != 0 || key.is_null || key.uuid.canonical == null_uuid)
+                        fail("OOF1107", member_path, "metadata member UUID identity", describe(member),
+                            "Attribute member link UUID must identify a concrete metadata member");
+                    link.member_keys.emplace_back(key.uuid);
+                }
+            }
             result.links.push_back(std::move(link));
         }
         return result;
@@ -12837,13 +12866,23 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
                     std::to_string(link.control_id),
                     "Attribute link uses an invalid control ID");
             }
-            links.push_back(list_stream::ListValue::list({
-                list_stream::ListValue::raw_atom(std::to_string(link.control_id)),
-                list_stream::ListValue::list({
-                    list_stream::ListValue::raw_atom("1"),
-                    encoded_composite_id(link.attribute_id, link_path + "/1/1"),
-                }),
-            }));
+            if (link.member_keys.size() > MetadataContext::max_path_depth)
+                fail("OOF1112", link_path, "bounded metadata member path", "depth overflow",
+                    "Attribute member link exceeds the supported path depth");
+            std::vector<LV> target;
+            target.reserve(link.member_keys.size() + 2);
+            target.push_back(raw(std::to_string(link.member_keys.size() + 1)));
+            target.push_back(encoded_composite_id(link.attribute_id, link_path + "/1/1"));
+            for (std::size_t member_index = 0; member_index < link.member_keys.size(); ++member_index) {
+                const auto& key = link.member_keys[member_index];
+                const auto member_path = link_path + "/1/" + std::to_string(member_index + 2);
+                if (const auto* uuid = std::get_if<model::UuidValue>(&key)) {
+                    target.push_back(encoded_composite_id(model::CompositeIdValue{0, *uuid, false}, member_path));
+                } else {
+                    target.push_back(raw(std::to_string(std::get<std::int64_t>(key))));
+                }
+            }
+            links.push_back(list({raw(std::to_string(link.control_id)), list(std::move(target))}));
         }
 
         auto encoded = list_stream::ListValue::list({
@@ -12862,11 +12901,12 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
 
 Result<model::OrdinaryFormDocument> decode_document(
     const list_stream::ListValue& payload,
-    std::string_view form_name) {
+    std::string_view form_name,
+    std::shared_ptr<const MetadataContext> metadata_context) {
     Diagnostics warnings;
     bool reconstruction_complete = true;
     auto decoded = capture_decode_failure<model::OrdinaryFormDocument>(
-        [&payload, form_name, &warnings, &reconstruction_complete] {
+        [&payload, form_name, &warnings, &reconstruction_complete, &metadata_context] {
         std::size_t decoded_chart_collection_items = 0;
         const auto layout = probe_layout(payload);
         if (!layout) {
@@ -13136,7 +13176,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 model::PropertyId::from_name("Height"),
                 static_cast<std::int64_t>(height));
         }
-        model::OrdinaryFormDocument document(form);
+        model::OrdinaryFormDocument document(form, metadata_context);
 
         std::uint64_t actual_max_id = form.id.value();
         for (const auto& stored : attributes.attributes) {
@@ -13330,7 +13370,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
                             "DataPath link for each required linked control", std::to_string(candidate_id),
                             "Linked control has no attribute link");
-                        const AttributeRecord* linked_attribute = nullptr;
+                        std::optional<ResolvedBinding> binding;
+                        const ResolvedBinding* linked_attribute = nullptr;
                         if (link_it != links_by_control.end()) {
                             if (!consumed_link_ids.insert(candidate_key).second) fail("OOF1122", "$/2/3",
                                 "one DataPath link per linked control", std::to_string(candidate_id),
@@ -13344,45 +13385,47 @@ Result<model::OrdinaryFormDocument> decode_document(
                             if (attribute_it == attributes_by_id.end()) fail("OOF1122", "$/2/3",
                                 "link to an existing Attribute", std::to_string(link.attribute_id.object_id),
                                 "DataPath target is unresolved");
-                            linked_attribute = attribute_it->second;
+                            const auto& root = *attribute_it->second;
+                            binding.emplace(ResolvedBinding{root.name, root.type,
+                                model::DataPath{model::AttributeRef{model::ObjectId{
+                                    static_cast<std::uint64_t>(root.id.object_id)}}, {}}});
+                            if (!link.member_keys.empty()) {
+                                if (!metadata_context)
+                                    fail("OOF1123", "$/2/3", "metadata context for member links", "absent",
+                                        "Attribute member links require the configuration metadata context");
+                                const auto resolved = metadata_context->resolve_keys(root.type, link.member_keys);
+                                if (!resolved) throw DecodeFailure(resolved.diagnostics().front());
+                                if (!resolved.value().leaf_type)
+                                    fail("OOF1123", "$/2/3", "resolved member type", "unresolved named type",
+                                        "Attribute member link type is unavailable in the metadata context");
+                                binding->type = *resolved.value().leaf_type;
+                                binding->data_path.members = resolved.value().members;
+                                for (const auto& member : binding->data_path.members) binding->name += "." + member;
+                            }
+                            linked_attribute = &*binding;
                         }
                         if (guid == label_descriptor.guid) {
                             child = decode_label(record, record_path, context, warnings, reconstruction_complete);
-                            if (linked_attribute != nullptr) {
-                                child.control.data_path = model::DataPath{model::AttributeRef{
-                                    model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
-                            }
                         } else if (calendar_field_guid) {
                             child = decode_calendar_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                         } else if (track_bar_guid) {
                             child = decode_track_bar(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                         } else if (choice_field_guid) {
                             child = decode_choice_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
-                            if (linked_attribute != nullptr) {
-                                child.control.data_path = model::DataPath{model::AttributeRef{
-                                    model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
-                            }
                         } else if (radio_button_guid) {
                             child = decode_radio_button(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                         } else if (guid == input_descriptor.guid) {
                             child = decode_input_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
-                            if (linked_attribute != nullptr) {
-                                child.control.data_path = model::DataPath{model::AttributeRef{
-                                    model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
-                            }
                         } else if (guid == checkbox_descriptor.guid) {
                             child = decode_check_box(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
-                            child.control.data_path = model::DataPath{model::AttributeRef{
-                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == list_box_descriptor.guid) {
                             child = decode_list_box(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
-                            child.control.data_path = model::DataPath{model::AttributeRef{
-                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
                             child = decode_table(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                         } else {
                             child = decode_progress_bar(record, record_path, context, linked_attribute, warnings, reconstruction_complete);
                         }
+                        if (binding) child.control.data_path = binding->data_path;
                     } else if (guid == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) {
                         child = decode_gantt_chart(record, record_path, context, warnings, reconstruction_complete);
                     } else if (guid == panel_descriptor.guid) {
@@ -14072,10 +14115,23 @@ Result<list_stream::ListValue> encode_document(
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {
-                    ordered_control_links.push_back(form_stream::AttributeLink{
+                    form_stream::AttributeLink link{
                         static_cast<std::int64_t>(control->id.value()),
                         model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()),
-                            model::UuidValue{std::string(null_uuid)}, true}});
+                            model::UuidValue{std::string(null_uuid)}, true}, {}};
+                    if (!control->data_path->members.empty()) {
+                        if (!document.metadata_context())
+                            fail("OOF1123", std::string(path), "metadata context for member links", "absent",
+                                "DataPath members require the configuration metadata context");
+                        const auto* root = document.find_attribute(control->data_path->attribute.id());
+                        if (!root)
+                            fail("OOF1123", std::string(path), "declared DataPath root", control->name,
+                                "DataPath member root does not resolve");
+                        const auto resolved = document.metadata_context()->resolve_names(root->type, control->data_path->members);
+                        if (!resolved) throw DecodeFailure(resolved.diagnostics().front());
+                        link.member_keys = resolved.value().keys;
+                    }
+                    ordered_control_links.push_back(std::move(link));
                 }
                 max_id = std::max(max_id, control->id.value());
                 children.push_back(EncodedChild{control, page_index, ordinal, std::move(record)});
@@ -14380,7 +14436,7 @@ Result<list_stream::ListValue> encode_document(
             raw("1"),
         });
 
-        const auto decoded = decode_document(encoded, document.form().name);
+        const auto decoded = decode_document(encoded, document.form().name, document.metadata_context());
         if (!decoded) {
             throw DecodeFailure(decoded.diagnostics().front());
         }
