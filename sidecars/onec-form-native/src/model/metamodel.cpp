@@ -789,6 +789,13 @@ void apply_proven_storage_overrides(
         property->storage_codec = StorageCodec::collection_record;
         property->default_value = {DefaultKind::integer, "0"};
     }
+    {
+        auto source = std::ranges::find(chart_properties, "DataSource", &PropertyDescriptor::api_name);
+        if (source == chart_properties.end()) throw std::logic_error("missing Chart DataSource descriptor");
+        source->persistence = PersistenceClass::runtime_only;
+        source->storage_codec = StorageCodec::none;
+        source->default_value = {DefaultKind::none, {}};
+    }
     if (const auto refresh = std::ranges::find(chart_properties, "RefreshEnabled", &PropertyDescriptor::api_name);
         refresh != chart_properties.end()) {
         refresh->persistence = PersistenceClass::runtime_only;

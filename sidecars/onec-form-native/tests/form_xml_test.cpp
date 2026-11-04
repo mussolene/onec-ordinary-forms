@@ -3495,6 +3495,7 @@ void test_chart_source_mode_xml() {
         }
     }
     for (const auto bad_xml : {
+        R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values dataMode="Source"/><DataSource><Undefined/></DataSource></Chart></ChildItems></Form>)XML",
         R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values dataMode="Source" sourceDescription="source"><ChartValue seriesRef="1" pointRef="1"><Number>1</Number></ChartValue></Values></Chart></ChildItems></Form>)XML",
         R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values dataMode="Source" unexpected="x"/></Chart></ChildItems></Form>)XML",
         R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values sourceDescription="outside"/></Chart></ChildItems></Form>)XML",

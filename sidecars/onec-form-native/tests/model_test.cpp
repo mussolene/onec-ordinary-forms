@@ -730,6 +730,26 @@ void test_chart_source_data_mode() {
         document.add_control(ControlNode{ObjectId{100 + i}, "Source" + std::to_string(i), std::move(chart)});
     }
     expect(document.validate().ok(), "Source mode permits varied dimensions without dense Values cells");
+    const auto source_id = PropertyId::from_name("DataSource");
+    const auto* source = metamodel::find_property(ControlKind::chart, source_id);
+    expect(source && source->api_access == metamodel::ApiAccess::write_only &&
+        source->persistence == metamodel::PersistenceClass::runtime_only &&
+        source->storage_codec == metamodel::StorageCodec::none &&
+        source->default_value.kind == metamodel::DefaultKind::none &&
+        source->value_codec == metamodel::ValueCodec::unclassified,
+        "live Chart DataSource does not persist, while named Source mode does; reference codec remains unfinished");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        expect(document.get_prop_val(owner, source_id).status == PropertyReadStatus::write_only,
+            "Chart source cannot expose a manufactured scalar getter");
+        expect(document.set_prop_val(owner, source_id, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+            document.reset_prop_val(owner, source_id) == PropertyMutationStatus::unsupported_surface,
+            "unfinished live source operations must not silently detach or materialize a source");
+        expect(!document.find_control(owner.id)->properties().contains(source_id) &&
+            std::get<ChartPayload>(document.find_control(owner.id)->payload).data_mode == ChartDataMode::source,
+            "rejected live source operations preserve the named persisted mode");
+    }
+
     for (std::uint64_t i = 0; i < 12; ++i) {
         const ObjectId owner{100 + i};
         const auto* chart = std::get_if<ChartPayload>(&document.find_control(owner)->payload);
