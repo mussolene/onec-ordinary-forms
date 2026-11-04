@@ -16819,6 +16819,78 @@ void test_owned_panel_common_properties_and_page_event() {
     }
 }
 
+void test_owner_page_default_controls() {
+    using namespace model;
+    Form form; form.id = ObjectId{1}; form.name = "OwnerDefaults";
+    form.children = {PageRef{ObjectId{6000}}, PageRef{ObjectId{6001}}};
+    OrdinaryFormDocument document(std::move(form));
+    const auto add_page = [&](std::uint64_t id, std::string name, std::optional<ControlRef> owner,
+                              std::vector<ChildItemRef> children) {
+        Page page; page.id = ObjectId{id}; page.name = std::move(name); page.children = std::move(children);
+        Position position; position.left.set(8); position.top.set(8); position.width.set(200); position.height.set(100);
+        for (const auto edge : {BindingCoordinate::right, BindingCoordinate::bottom}) {
+            AnchorBinding binding; binding.coordinate = edge; binding.target_coordinate = edge;
+            binding.target = owner; binding.offset.set(-8); position.bindings.anchors.push_back(std::move(binding));
+        }
+        page.position.set(std::move(position)); document.add_page(std::move(page));
+    };
+    add_page(6000, "RootA", {}, {ControlRef{ObjectId{100}}, ControlRef{ObjectId{101}}, ControlRef{ObjectId{102}}});
+    add_page(6001, "RootB", {}, {ControlRef{ObjectId{103}}, ControlRef{ObjectId{104}}, ControlRef{ObjectId{105}},
+        ControlRef{ObjectId{5000}}, ControlRef{ObjectId{5001}}});
+    add_page(6002, "NormalA", ControlRef{ObjectId{5000}}, {ControlRef{ObjectId{106}}, ControlRef{ObjectId{107}}});
+    add_page(6003, "NormalB", ControlRef{ObjectId{5000}}, {ControlRef{ObjectId{108}}});
+    add_page(6004, "SharedA", ControlRef{ObjectId{5001}}, {ControlRef{ObjectId{109}}, ControlRef{ObjectId{110}}});
+    add_page(6005, "SharedB", ControlRef{ObjectId{5001}}, {ControlRef{ObjectId{111}}});
+    for (std::uint64_t i = 0; i < 2; ++i) {
+        ControlNode panel{ObjectId{5000 + i}, "Panel" + std::to_string(i), PanelPayload{}};
+        panel.children = {PageRef{ObjectId{6002 + i * 2}}, PageRef{ObjectId{6003 + i * 2}}};
+        if (i == 1) panel.properties().set_explicit(PropertyId::from_name("SeparateByPage"), false);
+        panel.position.width.set(216); panel.position.height.set(116); document.add_control(std::move(panel));
+    }
+    const auto selected = PropertyId::from_name("DefaultControl");
+    for (std::uint64_t i = 0; i < 12; ++i)
+        document.add_control(ControlNode{ObjectId{100 + i}, "Button" + std::to_string(i), ButtonPayload{}});
+    for (std::uint64_t i = 0; i < 12; ++i)
+        expect(document.set_prop_val({ObjectCategory::control, ObjectId{100 + i}}, selected, true) == PropertyMutationStatus::applied,
+            "DefaultControl must use its actual writable native API");
+    expect(document.get_prop_val({ObjectCategory::control, ObjectId{111}}, PropertyId::from_name("TabOrder")).value == PropertyValue{std::int64_t{3}},
+        "the model and encoder must use the same global TabOrder for a shared physical page");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "owner DefaultControl profiles must encode" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "OwnerDefaults");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "root, separate and shared focus groups decode completely");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const bool expected = i == 2 || i == 5 || i == 7 || i == 8 || i == 11;
+        expect(decoded.value().get_prop_val({ObjectCategory::control, ObjectId{100 + i}}, selected).value == PropertyValue{expected},
+            "five independent owner groups preserve their selected controls");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<DefaultControl>true</DefaultControl>") != std::string::npos,
+        "owner focus references must become named Position.DefaultControl booleans");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named owner focus XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "DefaultControl and shared global TabOrder must rebuild without a baseline");
+    for (const auto id : {0U, 103U, 999U}) {
+        auto broken = encoded.value();
+        broken.items[1].items[2].items[1].items[1].items[25] = list_stream::ListValue::raw_atom(std::to_string(id));
+        expect(!form_stream::decode_document(broken, "OwnerDefaults").ok(),
+            "zero, foreign-page and missing DefaultControl references must be rejected");
+    }
+    Form implicit_form; implicit_form.id = ObjectId{1}; implicit_form.name = "ImplicitDefaults";
+    for (std::uint64_t i = 0; i < 12; ++i) implicit_form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument implicit(std::move(implicit_form));
+    for (std::uint64_t i = 0; i < 12; ++i) implicit.add_control(ControlNode{ObjectId{100 + i}, "Button" + std::to_string(i), ButtonPayload{}});
+    expect(implicit.set_prop_val({ObjectCategory::control, ObjectId{111}}, selected, true) == PropertyMutationStatus::applied,
+        "an implicit root page must accept DefaultControl");
+    const auto implicit_stream = form_stream::encode_document(implicit);
+    expect(implicit_stream.ok(), "an implicit root focus selection must encode");
+    const auto implicit_decoded = form_stream::decode_document(implicit_stream.value(), "ImplicitDefaults");
+    expect(implicit_decoded.ok() && implicit_decoded.value().get_prop_val({ObjectCategory::control, ObjectId{111}}, selected).value == PropertyValue{true},
+        "implicit root focus must not disappear when the source has no explicit Pages");
+}
+
 void test_panel_shared_page_position_round_trip() {
     for (const std::size_t count : {2U, 3U}) for (const bool separate : {true, false}) {
         model::Form form;
@@ -22249,6 +22321,7 @@ int main() {
         test_owned_panel_colors_and_repeated_background();
         test_owned_panel_auto_tab_order_round_trip();
         test_owned_panel_common_properties_and_page_event();
+        test_owner_page_default_controls();
         test_panel_shared_page_position_round_trip();
         test_panel_scroll_page_mode_round_trip();
         test_recursive_panel_pages_keep_owner_geometry_separate();

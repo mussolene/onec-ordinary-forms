@@ -1519,6 +1519,16 @@ void apply_proven_storage_overrides(
         DefaultKind::boolean,
         "true");
 
+    classify_property(panel_placement_properties, "DefaultControl", StorageCodec::position_record,
+        DefaultKind::boolean, "false");
+    std::ranges::find(panel_placement_properties, "DefaultControl", &PropertyDescriptor::api_name)->api_access = ApiAccess::read_write;
+
+    auto collapse = std::ranges::find(panel_placement_properties, "Collapse", &PropertyDescriptor::api_name);
+    if (collapse == panel_placement_properties.end()) throw std::logic_error("missing runtime Collapse property");
+    collapse->persistence = PersistenceClass::runtime_only;
+    collapse->storage_codec = StorageCodec::none;
+    collapse->default_value = {DefaultKind::enumeration, "ControlCollapseMode.None"};
+
     for (const auto name : {"ModalMode", "Modified", "CloseOnChoice", "CloseOnOwnerClose", "ChoiceMode", "ThisForm",
                             "AllowNormalState", "AllowDockedState", "AllowAutohideState", "AllowFloatState", "AllowJoinWindow",
                             "ReadOnly", "MultipleChoice", "WindowOptionsName", "WindowOptionsKey", "UniqueKey", "ChoiceInitialValue", "CurrentControl"}) {

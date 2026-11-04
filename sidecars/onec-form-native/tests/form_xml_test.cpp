@@ -3420,6 +3420,99 @@ void test_runtime_properties_are_not_public_xml() {
         "XML writer must reject explicit runtime state instead of silently losing it");
 }
 
+void test_default_control_focus_groups_xml() {
+    constexpr std::array<std::size_t, 12> page_indexes{0, 0, 0, 1, 1, 1, 2, 2, 3, 4, 4, 5};
+    constexpr std::array<bool, 12> selected{false, false, true, false, false, true,
+        false, true, true, false, false, true};
+    std::array<std::string, 6> pages;
+    for (std::size_t index = 0; index < page_indexes.size(); ++index)
+        pages[page_indexes[index]] += "<InputField id=\"" + std::to_string(100 + index) + "\" name=\"Input" +
+            std::to_string(index) + "\"><Position><DefaultControl>" + (selected[index] ? "true" : "false") +
+            "</DefaultControl></Position></InputField>";
+    for (std::size_t index = 0; index < pages.size(); ++index)
+        pages[index] = "<Page name=\"Page" + std::to_string(index) + "\"><ChildItems>" + pages[index] + "</ChildItems></Page>";
+    const std::string xml = R"XML(<Form id="1" name="FocusGroups" ordinaryFormVersion="2.1"><ChildItems>)XML" +
+        pages[0] + pages[1] + R"XML(<Panel id="30" name="Normal"><Position/><ChildItems>)XML" + pages[2] + pages[3] +
+        R"XML(</ChildItems></Panel><Panel id="31" name="Shared"><Position/><SeparateByPage>false</SeparateByPage><ChildItems>)XML" +
+        pages[4] + pages[5] + "</ChildItems></Panel></ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "independent root, normal panel, and shared panel focus groups must parse");
+    if (!parsed) return;
+    const auto property = model::PropertyId::from_name("DefaultControl");
+    for (std::size_t index = 0; index < selected.size(); ++index)
+        expect(parsed.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{100 + index}}, property).value ==
+                   model::PropertyValue{selected[index]},
+            "public XML DefaultControl must populate the same named Position state as the model API");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<DefaultControl>false</DefaultControl>") == std::string::npos &&
+               serialized.value().find("<DefaultControl>true</DefaultControl>") != std::string::npos,
+        "XML writer must omit known false defaults and preserve true focus selections");
+    if (!serialized) return;
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && source::serialize_form_xml(reparsed.value()).value() == serialized.value(),
+        "focus groups must reach a deterministic public XML round trip");
+    for (const auto duplicate : {0u, 6u, 9u}) {
+        auto invalid = xml;
+        const std::string needle = "name=\"Input" + std::to_string(duplicate) + "\"><Position><DefaultControl>false";
+        const auto offset = invalid.find(needle);
+        expect(offset != std::string::npos, "duplicate DefaultControl fixture must identify an unselected control");
+        invalid.replace(offset, needle.size(), "name=\"Input" + std::to_string(duplicate) + "\"><Position><DefaultControl>true");
+        expect(!source::parse_form_xml(invalid).ok(),
+            "public XML must reject duplicate defaults within root pages, normal pages, and shared panels");
+    }
+    const model::OrdinaryFormDocument::ObjectKey shared_owner{model::ObjectCategory::control, model::ObjectId{109}};
+    expect(parsed.value().set_prop_val(shared_owner, property, true) == model::PropertyMutationStatus::applied &&
+               parsed.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{111}}, property).value == model::PropertyValue{false},
+        "model mutation must clear a shared panel default on another page");
+    const auto updated = source::serialize_form_xml(parsed.value());
+    expect(updated.ok(), "updated focus groups must serialize");
+    if (!updated) return;
+    const auto updated_model = source::parse_form_xml(updated.value());
+    expect(updated_model.ok() && updated_model.value().get_prop_val(shared_owner, property).value == model::PropertyValue{true} &&
+               updated_model.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{111}}, property).value == model::PropertyValue{false},
+        "updated shared panel focus selections must survive source serialization");
+    expect(parsed.value().reset_prop_val(shared_owner, property) == model::PropertyMutationStatus::reset &&
+               source::serialize_form_xml(parsed.value()).ok(),
+        "clearing a shared focus selection must remain serializable without reassignment");
+}
+
+void test_collapse_runtime_source_boundary() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Collapse" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Input"><Position><Top>17</Top><Visible>false</Visible><Height>45</Height><Left>13</Left><Width>120</Width></Position></InputField></ChildItems></Form>)XML";
+    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+    const auto property = model::PropertyId::from_name("Collapse");
+    for (const auto member : {"None", "Left", "Right", "Top", "Bottom"}) {
+        const std::string with_collapse = std::string(R"XML(<Form id="1" name="Collapse" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Input"><Position><Collapse type="ControlCollapseMode" member=")XML") + member +
+            R"XML("/></Position></InputField></ChildItems></Form>)XML";
+        expect(!source::parse_form_xml(with_collapse).ok(),
+            "public XML must reject Collapse, including the explicit None runtime state");
+        auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "Collapse runtime source boundary fixture must parse");
+        if (!parsed) continue;
+        const auto baseline = source::serialize_form_xml(parsed.value());
+        expect(baseline.ok(), "Collapse fixture must serialize before runtime assignment");
+        expect(parsed.value().set_prop_val(owner, property, model::EnumerationValue{"ControlCollapseMode", member}) ==
+                   model::PropertyMutationStatus::applied_runtime_only,
+            "Collapse must remain writable through the in-memory model");
+        expect(!source::serialize_form_xml(parsed.value()).ok(),
+            "XML writer must reject explicit runtime Collapse instead of silently omitting it");
+        expect(parsed.value().reset_prop_val(owner, property) == model::PropertyMutationStatus::reset_runtime_only,
+            "Collapse reset must remove runtime state");
+        const auto reset = source::serialize_form_xml(parsed.value());
+        expect(reset.ok() && baseline.ok() && reset.value() == baseline.value(),
+            "reset Collapse must restore source serialization without changing other Position fields");
+    }
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "ExplicitRuntime";
+    form.children.push_back(model::ControlRef{model::ObjectId{2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+    input.position.collapse.set(std::nullopt);
+    document.add_control(std::move(input));
+    expect(!source::serialize_form_xml(document).ok(),
+        "even an explicit empty runtime Collapse must be rejected rather than lost");
+}
+
 void test_unavailable_ordinary_geometry_properties_are_not_public_xml() {
     struct Case { std::string_view element; std::string_view property; };
     const std::array cases{
@@ -3637,6 +3730,8 @@ int main() {
         test_border_and_calendar_selection_xml_contract();
         test_typed_defaults_for_existing_codecs();
         test_runtime_properties_are_not_public_xml();
+        test_collapse_runtime_source_boundary();
+        test_default_control_focus_groups_xml();
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();

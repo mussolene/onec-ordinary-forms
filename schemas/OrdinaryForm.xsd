@@ -1587,7 +1587,6 @@
       <xs:element name="Left" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TabOrder" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ZOrder" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Collapse" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Width" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Bindings" type="BindingsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>

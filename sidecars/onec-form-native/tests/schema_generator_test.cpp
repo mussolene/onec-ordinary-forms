@@ -910,7 +910,7 @@ void test_data_path_position_and_bindings(
         direct_children(sequence_for_type(schema, "PositionType"), "element");
     std::size_t cursor = expect_property_sequence(
         metamodel.panel_placement_properties(),
-        position);
+        position, 0, true);
     expect_element_shape(position[cursor++], "Bindings", "BindingsType", "0", "1");
     expect(cursor == position.size(), "PositionType descriptor sequence drift");
 }

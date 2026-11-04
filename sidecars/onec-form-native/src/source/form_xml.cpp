@@ -2017,8 +2017,6 @@ private:
                 position.tab_order.set(parse_integer<std::int32_t>(node_text(child), child, name, owner_id));
             } else if (name == "ZOrder") {
                 position.z_order.set(parse_integer<std::int32_t>(node_text(child), child, name, owner_id));
-            } else if (name == "Collapse") {
-                position.collapse.set(parse_enumeration(child));
             } else if (name == "Width") {
                 const auto value = parse_integer<std::int32_t>(node_text(child), child, name, owner_id);
                 if (value != 0) position.width.set(value);
@@ -4169,33 +4167,35 @@ private:
         writer_.close("Bindings");
     }
 
-    void write_position(const model::Position& position) {
+    void write_position(const model::Position& position, std::string_view object_id) {
+        if (position.collapse.is_explicit()) {
+            serialization_fail(std::string(object_id), "Collapse", "persisted property", "runtime-only value",
+                "Runtime-only properties cannot be serialized into public Form.xml");
+        }
         const bool default_control =
-            position.default_control.is_explicit() && position.default_control.value().has_value();
+            position.default_control.is_explicit() && position.default_control.value().value_or(false);
         const bool top = position.top.is_explicit() && position.top.value() != 0;
         const bool visible = position.visible.is_explicit() && !position.visible.value();
         const bool height = position.height.is_explicit() && position.height.value() != 0;
         const bool left = position.left.is_explicit() && position.left.value() != 0;
         const bool tab_order = position.tab_order.is_explicit() && position.tab_order.value().has_value();
         const bool z_order = position.z_order.is_explicit() && position.z_order.value().has_value();
-        const bool collapse = position.collapse.is_explicit() && position.collapse.value().has_value();
         const bool width = position.width.is_explicit() && position.width.value() != 0;
         const bool bindings = !position.bindings.anchors.empty() || !position.bindings.dimensions.empty() ||
             position.bindings.manual_horizontal.value() || position.bindings.manual_vertical.value();
         if (!(default_control || top || visible || height || left || tab_order || z_order ||
-              collapse || width || bindings)) {
+              width || bindings)) {
             writer_.empty("Position");
             return;
         }
         writer_.open("Position");
-        if (default_control) writer_.text("DefaultControl", *position.default_control.value() ? "true" : "false");
+        if (default_control) writer_.text("DefaultControl", "true");
         if (top) writer_.text("Top", std::to_string(position.top.value()));
         if (visible) writer_.text("Visible", "false");
         if (height) writer_.text("Height", std::to_string(position.height.value()));
         if (left) writer_.text("Left", std::to_string(position.left.value()));
         if (tab_order) writer_.text("TabOrder", std::to_string(*position.tab_order.value()));
         if (z_order) writer_.text("ZOrder", std::to_string(*position.z_order.value()));
-        if (collapse) write_enumeration("Collapse", *position.collapse.value());
         if (width) writer_.text("Width", std::to_string(position.width.value()));
         if (bindings) write_bindings(position.bindings);
         writer_.close("Position");
@@ -4209,7 +4209,7 @@ private:
         }
         if (!page.visible.value()) writer_.text("Visible", "false");
         if (!page.enabled.value()) writer_.text("Enabled", "false");
-        if (page.position.is_explicit()) write_position(page.position.value());
+        if (page.position.is_explicit()) write_position(page.position.value(), id);
         write_child_items(page.children);
         writer_.close("Page");
     }
@@ -4384,7 +4384,7 @@ private:
             id,
             true,
             control.kind());
-        write_position(control.position);
+        write_position(control.position, id);
         if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
             spreadsheet != nullptr && !spreadsheet->cells.empty()) {
             writer_.open("Document");

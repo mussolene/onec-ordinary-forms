@@ -3778,6 +3778,192 @@ void test_control_position_property_api() {
     }
 }
 
+void test_default_control_focus_groups() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    const auto property = PropertyId::from_name("DefaultControl");
+    Form form;
+    form.id = ObjectId{1};
+    form.children = {PageRef{ObjectId{20}}, PageRef{ObjectId{21}}, ControlRef{ObjectId{30}},
+        ControlRef{ObjectId{31}}, ControlRef{ObjectId{112}}, ControlRef{ObjectId{113}}};
+    OrdinaryFormDocument document(std::move(form));
+    ControlNode normal{ObjectId{30}, "Normal", PanelPayload{}};
+    normal.children = {PageRef{ObjectId{22}}, PageRef{ObjectId{23}}};
+    document.add_control(std::move(normal));
+    ControlNode shared{ObjectId{31}, "Shared", PanelPayload{}};
+    shared.properties().set_explicit(PropertyId::from_name("SeparateByPage"), false);
+    shared.children = {PageRef{ObjectId{24}}, PageRef{ObjectId{25}}};
+    document.add_control(std::move(shared));
+    constexpr std::array<std::size_t, 12> pages{0, 0, 0, 1, 1, 1, 2, 2, 3, 4, 4, 5};
+    constexpr std::array<std::size_t, 12> groups{0, 0, 0, 1, 1, 1, 2, 2, 3, 4, 4, 4};
+    for (std::size_t page_index = 0; page_index < 6; ++page_index) {
+        Page page;
+        page.id = ObjectId{20 + page_index};
+        page.name = "Page" + std::to_string(page_index);
+        for (std::size_t index = 0; index < pages.size(); ++index)
+            if (pages[index] == page_index) page.children.emplace_back(ControlRef{ObjectId{100 + index}});
+        document.add_page(std::move(page));
+    }
+    for (std::uint64_t id = 100; id < 114; ++id)
+        document.add_control(ControlNode{ObjectId{id}, "Input" + std::to_string(id), InputFieldPayload{}});
+    const auto owner = [](std::size_t index) {
+        return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{100 + index}};
+    };
+    std::array<bool, 12> selected{};
+    for (std::size_t index = 0; index < groups.size(); ++index) {
+        const auto* descriptor = find_property(ControlKind::input_field, property);
+        expect(descriptor && descriptor->surface == PropertySurface::panel_placement &&
+                   descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::position_record && descriptor->api_access == ApiAccess::read_write &&
+                   descriptor->default_value.kind == DefaultKind::boolean && descriptor->default_value.canonical == "false",
+            "DefaultControl must expose the persisted Boolean position-record contract");
+        expect(document.get_prop_val(owner(index), property).value == PropertyValue{false},
+            "each focus group control must initially expose false");
+        expect(document.set_prop_val(owner(index), property, true) == PropertyMutationStatus::applied,
+            "DefaultControl true must select the target in its immediate focus group");
+        for (std::size_t other = 0; other < selected.size(); ++other) {
+            if (groups[other] == groups[index]) selected[other] = other == index;
+            expect(document.get_prop_val(owner(other), property).value == PropertyValue{selected[other]},
+                "DefaultControl must clear only peers in the same root page, normal page, or shared panel");
+        }
+        expect(document.validate().ok(), "independent focus groups may each have one DefaultControl");
+        expect(document.set_prop_val(owner(index), property, std::string{"true"}) == PropertyMutationStatus::invalid_value &&
+                   document.get_prop_val(owner(index), property).value == PropertyValue{true},
+            "invalid DefaultControl values must not mutate any selection");
+    }
+    expect(document.set_prop_val(owner(12), property, true) == PropertyMutationStatus::applied &&
+               document.set_prop_val(owner(13), property, true) == PropertyMutationStatus::applied &&
+               document.get_prop_val(owner(12), property).value == PropertyValue{false} &&
+               document.get_prop_val(owner(13), property).value == PropertyValue{true},
+        "direct root controls must share a focus group separate from root page children");
+    for (std::size_t index = 0; index < selected.size(); ++index)
+        expect(document.get_prop_val(owner(index), property).value == PropertyValue{selected[index]},
+            "selecting a direct root control must preserve all nested focus groups");
+    for (std::size_t index = 0; index < selected.size(); ++index) {
+        expect(document.reset_prop_val(owner(index), property) == PropertyMutationStatus::reset,
+            "DefaultControl reset must clear only its own selection");
+        selected[index] = false;
+        const auto reset = document.get_prop_val(owner(index), property);
+        expect(reset.status == PropertyReadStatus::proven_default && reset.value == PropertyValue{false} &&
+                   !document.find_control(ObjectId{100 + index})->position.default_control.is_explicit(),
+            "DefaultControl reset must unset the named Position property and restore false");
+        for (std::size_t other = 0; other < selected.size(); ++other)
+            expect(document.get_prop_val(owner(other), property).value == PropertyValue{selected[other]},
+                "DefaultControl reset must not reassign or clear any other group");
+    }
+    expect(document.set_prop_val(owner(13), property, false) == PropertyMutationStatus::applied &&
+               document.get_prop_val(owner(13), property).status == PropertyReadStatus::proven_default,
+        "DefaultControl false must clear the target without selecting another control");
+    for (const auto pair : {std::pair{0u, 1u}, std::pair{6u, 7u}, std::pair{9u, 11u}}) {
+        auto* first = const_cast<ControlNode*>(document.find_control(ObjectId{100 + pair.first}));
+        auto* second = const_cast<ControlNode*>(document.find_control(ObjectId{100 + pair.second}));
+        first->position.default_control.set(true);
+        second->position.default_control.set(true);
+        expect(document.validate().has(InvariantCode::invalid_property),
+            "direct model construction must reject multiple DefaultControl values within each focus group");
+        first->position.default_control.reset();
+        second->position.default_control.reset();
+    }
+    auto* root_page = const_cast<Page*>(document.find_page(ObjectId{20}));
+    root_page->children.emplace_back(ControlRef{ObjectId{999}});
+    expect(document.set_prop_val(owner(0), property, true) == PropertyMutationStatus::unsupported_surface &&
+               document.reset_prop_val(owner(0), property) == PropertyMutationStatus::unsupported_surface &&
+               document.get_prop_val(owner(0), property).value == PropertyValue{false},
+        "unresolved focus group references must prevent DefaultControl mutation");
+    root_page->children.pop_back();
+    auto& root = const_cast<Form&>(document.form());
+    root.children.emplace_back(ControlRef{ObjectId{100}});
+    expect(document.set_prop_val(owner(0), property, true) == PropertyMutationStatus::unsupported_surface &&
+               document.reset_prop_val(owner(0), property) == PropertyMutationStatus::unsupported_surface &&
+               !document.find_control(ObjectId{100})->position.default_control.is_explicit(),
+        "ambiguous immediate ownership must prevent DefaultControl mutation");
+    root.children.pop_back();
+    expect(document.set_prop_val({ObjectCategory::control, ObjectId{999}}, property, true) == PropertyMutationStatus::unknown_owner &&
+               document.validate().ok(),
+        "unknown DefaultControl owners must not mutate a valid focus graph");
+    expect(document.get_prop_val(owner(11), PropertyId::from_name("TabOrder")).value == PropertyValue{std::int64_t{3}} &&
+        document.set_prop_val(owner(11), PropertyId::from_name("ZOrder"), std::int64_t{1}) == PropertyMutationStatus::applied &&
+        document.get_prop_val(owner(11), PropertyId::from_name("ZOrder")).value == PropertyValue{std::int64_t{1}} &&
+        document.get_prop_val(owner(11), PropertyId::from_name("TabOrder")).value == PropertyValue{std::int64_t{3}} && document.validate().ok(),
+        "shared-page reordering must preserve the independent global TabOrder while canonicalizing one physical child sequence");
+}
+
+void test_control_collapse_runtime_property() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+
+    Form form;
+    form.id = ObjectId{1};
+    OrdinaryFormDocument document(std::move(form));
+    const std::array<ControlPayload, 12> payloads{{
+        InputFieldPayload{}, PanelPayload{}, SpreadsheetDocumentFieldPayload{}, TablePayload{},
+        ButtonPayload{}, CheckBoxPayload{}, ChoiceFieldPayload{}, RadioButtonPayload{},
+        UsualGroupPayload{}, SplitterPayload{}, LabelDecorationPayload{}, CalendarFieldPayload{},
+    }};
+    const auto property = PropertyId::from_name("Collapse");
+    const PropertyValue default_value{EnumerationValue{"ControlCollapseMode", "None"}};
+    for (std::size_t index = 0; index < payloads.size(); ++index) {
+        const ObjectId id{static_cast<unsigned>(100 + index)};
+        document.add_control(ControlNode{id, "CollapseControl" + std::to_string(index), payloads[index]});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        const auto* descriptor = find_property(document.find_control(id)->kind(), property);
+        expect(descriptor && descriptor->surface == PropertySurface::panel_placement &&
+                   descriptor->persistence == PersistenceClass::runtime_only &&
+                   descriptor->storage_codec == StorageCodec::none &&
+                   descriptor->default_value.kind == DefaultKind::enumeration &&
+                   descriptor->default_value.canonical == "ControlCollapseMode.None",
+            "Collapse must be a shared runtime-only Position property with a proven None default");
+        const auto initial = document.get_prop_val(owner, property);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value && *initial.value == default_value,
+            "Collapse API must expose None before assignment");
+        for (const auto member : {"None", "Left", "Right", "Top", "Bottom"}) {
+            const EnumerationValue value{"ControlCollapseMode", member};
+            expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::applied_runtime_only,
+                "Collapse assignments must accept every valid member on each common control kind");
+            const auto read = document.get_prop_val(owner, property);
+            expect(read.value && *read.value == PropertyValue{value} && read.status == PropertyReadStatus::explicit_value,
+                "Collapse GET must expose each assigned runtime state");
+            const auto* control = document.find_control(id);
+            expect(control && !control->properties().contains(property) && !control->extension_properties.contains(property) &&
+                       control->position.collapse.is_explicit() &&
+                       control->position.collapse.value() == std::optional<EnumerationValue>{value},
+                "Collapse runtime state must have one owner in Position");
+            for (const PropertyValue& invalid : {PropertyValue{EnumerationValue{"ControlCollapseMode", "Unknown"}},
+                     PropertyValue{EnumerationValue{"OtherType", member}}, PropertyValue{false}, PropertyValue{std::string{member}}}) {
+                expect(document.set_prop_val(owner, property, invalid) == PropertyMutationStatus::invalid_value,
+                    "Collapse must reject invalid enumeration types, members, and value types before mutation");
+                const auto unchanged = document.get_prop_val(owner, property);
+                expect(unchanged.status == read.status && unchanged.value == read.value,
+                    "rejected Collapse assignments must preserve the previous runtime state");
+            }
+            expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset_runtime_only,
+                "Collapse reset must report runtime-only state");
+            const auto reset = document.get_prop_val(owner, property);
+            expect(reset.status == PropertyReadStatus::proven_default && reset.value && *reset.value == default_value &&
+                       !document.find_control(id)->position.collapse.is_explicit(),
+                "Collapse reset must clear explicit Position state and restore None");
+        }
+    }
+}
+
+void test_direct_collapse_validation() {
+    Form form; form.id = ObjectId{1}; form.name = "DirectCollapse";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) document.add_control(ControlNode{ObjectId{100 + i}, "Button" + std::to_string(i), ButtonPayload{}});
+    expect(document.validate().ok(), "direct Collapse fixture must be valid before mutation");
+    for (std::uint64_t i = 0; i < 12; ++i) for (const auto& value : {
+            EnumerationValue{"OtherType", "None"}, EnumerationValue{"ControlCollapseMode", "Unknown"}}) {
+        auto invalid = document;
+        const_cast<ControlNode*>(invalid.find_control(ObjectId{100 + i}))->position.collapse.set(value);
+        expect(invalid.validate().has(InvariantCode::invalid_property), "direct invalid Collapse values must fail model validation");
+    }
+    auto dangling = document;
+    auto bad_form = dangling.form(); bad_form.children.emplace_back(ControlRef{ObjectId{999}}); dangling.set_form(std::move(bad_form));
+    for (std::uint64_t i = 0; i < 12; ++i) const_cast<ControlNode*>(dangling.find_control(ObjectId{100 + i}))->position.default_control.set(true);
+    expect(dangling.validate().has(InvariantCode::dangling_reference), "derived focus validation must preserve malformed ownership diagnostics");
+}
+
 void test_id_lookup() {
     Form form;
     form.id = ObjectId{1};
@@ -4977,6 +5163,9 @@ int main() {
         test_typed_value_document_budget();
         test_document_property_api();
         test_control_position_property_api();
+        test_control_collapse_runtime_property();
+        test_direct_collapse_validation();
+        test_default_control_focus_groups();
         test_id_lookup();
         test_duplicate_rejection();
         test_category_scoped_object_ids();

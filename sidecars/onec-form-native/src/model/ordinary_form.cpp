@@ -198,6 +198,10 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::type_domain && type_domain_numeric_precision_normalized(typed_value);
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 if (expected != metamodel::ValueCodec::enumeration) return false;
+                if (descriptor.surface == metamodel::PropertySurface::panel_placement && descriptor.api_name == "Collapse")
+                    return typed_value.type_name == "ControlCollapseMode" &&
+                        (typed_value.member == "None" || typed_value.member == "Left" || typed_value.member == "Right" ||
+                         typed_value.member == "Top" || typed_value.member == "Bottom");
                 if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "EnterKeyBehavior")
                     return typed_value.type_name == "EnterKeyBehaviorType" &&
                         (typed_value.member == "ControlNavigation" || typed_value.member == "DefaultButton");
@@ -375,6 +379,8 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
+    if (descriptor.surface == metamodel::PropertySurface::panel_placement && descriptor.api_name == "Collapse")
+        return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "EnterKeyBehavior")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "SizeChange")
@@ -684,6 +690,81 @@ bool canonical_chart_decimal(std::string_view value) {
     return !(value == "-0");
 }
 
+std::optional<std::vector<ObjectId>> placement_control_group(const OrdinaryFormDocument& document, ObjectId target) {
+    struct Owner {
+        const std::vector<ChildItemRef>* children = nullptr;
+        const ControlNode* control = nullptr;
+        const Page* page = nullptr;
+    };
+    struct Ownership { Owner owner; std::size_t count = 0; };
+    std::unordered_map<std::uint64_t, Ownership> control_owners;
+    std::unordered_map<std::uint64_t, Ownership> page_owners;
+    const auto index_owner = [&](Owner owner) {
+        for (const auto& item : *owner.children) {
+            const auto* control = std::get_if<ControlRef>(&item);
+            const auto id = control ? control->id() : std::get<PageRef>(item).id();
+            auto& entry = (control ? control_owners : page_owners)[id.value()];
+            entry.owner = owner;
+            ++entry.count;
+        }
+    };
+    index_owner(Owner{&document.form().children});
+    for (const auto& control : document.collections().controls) index_owner(Owner{&control.children, &control});
+    for (const auto& page : document.collections().pages) index_owner(Owner{&page.children, nullptr, &page});
+    const auto find_owner = [&](const ChildItemRef& reference) -> std::optional<Owner> {
+        const auto* control = std::get_if<ControlRef>(&reference);
+        const auto id = control ? control->id() : std::get<PageRef>(reference).id();
+        const auto& owners = control ? control_owners : page_owners;
+        const auto found = owners.find(id.value());
+        if (found == owners.end() || found->second.count != 1) return std::nullopt;
+        return found->second.owner;
+    };
+    const auto owner = find_owner(ControlRef{target});
+    if (!owner) return std::nullopt;
+    const ControlNode* panel = owner->control;
+    if (owner->page) {
+        const auto page_owner = find_owner(PageRef{owner->page->id});
+        if (!page_owner || page_owner->page ||
+            (page_owner->control && page_owner->control->kind() != ControlKind::panel)) return std::nullopt;
+        panel = page_owner->control;
+    }
+    bool shared_pages = false;
+    if (panel && panel->kind() == ControlKind::panel) {
+        const auto* separate = panel->properties().find(PropertyId::from_name("SeparateByPage"));
+        if (separate) {
+            const auto* boolean = std::get_if<bool>(&separate->value);
+            if (!boolean) return std::nullopt;
+            shared_pages = !*boolean;
+        }
+    } else if (panel && metamodel::descriptor_for(panel->kind()).child_policy == metamodel::ChildPolicy::forbidden) {
+        return std::nullopt;
+    }
+    std::vector<ObjectId> result;
+    const auto collect = [&](const Owner& group_owner) {
+        for (const auto& child : *group_owner.children) {
+            const auto* reference = std::get_if<ControlRef>(&child);
+            if (!reference) continue;
+            const auto resolved_owner = find_owner(child);
+            if (!document.find_control(reference->id()) || !resolved_owner ||
+                resolved_owner->children != group_owner.children) return false;
+            result.push_back(reference->id());
+        }
+        return true;
+    };
+    if (shared_pages) {
+        if (!collect(Owner{&panel->children, panel})) return std::nullopt;
+        for (const auto& child : panel->children) {
+            const auto* reference = std::get_if<PageRef>(&child);
+            if (!reference) continue;
+            const auto* page = document.find_page(reference->id());
+            const auto page_owner = find_owner(child);
+            if (!page || !page_owner || page_owner->control != panel ||
+                !collect(Owner{&page->children, nullptr, page})) return std::nullopt;
+        }
+    } else if (!collect(*owner)) return std::nullopt;
+    return result;
+}
+
 struct TabOrderGroup {
     std::vector<ObjectId> ids;
     std::vector<std::int32_t> orders;
@@ -691,34 +772,23 @@ struct TabOrderGroup {
 };
 
 std::optional<TabOrderGroup> tab_order_group(const OrdinaryFormDocument& document, ObjectId target) {
-    std::optional<TabOrderGroup> result;
-    bool ambiguous = false;
-    const auto consider = [&](const std::vector<ChildItemRef>& children) {
-        std::vector<ObjectId> ids;
-        for (const auto& child : children)
-            if (const auto* control = std::get_if<ControlRef>(&child)) ids.push_back(control->id());
-        const auto found = std::ranges::find(ids, target);
-        if (found == ids.end()) return;
-        if (result || std::count(ids.begin(), ids.end(), target) != 1) { ambiguous = true; return; }
-        TabOrderGroup group;
-        group.target_index = static_cast<std::size_t>(found - ids.begin());
-        group.ids = std::move(ids);
-        if (group.ids.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) { ambiguous = true; return; }
-        std::set<std::int32_t> seen;
-        for (std::size_t index = 0; index < group.ids.size(); ++index) {
-            const auto* control = document.find_control(group.ids[index]);
-            if (control == nullptr) { ambiguous = true; return; }
-            const auto& property = control->position.tab_order;
-            const auto value = property.is_explicit() ? property.value() : std::optional<std::int32_t>{static_cast<std::int32_t>(index + 1)};
-            if (!value || *value <= 0 || static_cast<std::size_t>(*value) > group.ids.size() || !seen.insert(*value).second) { ambiguous = true; return; }
-            group.orders.push_back(*value);
-        }
-        result = std::move(group);
-    };
-    consider(document.form().children);
-    for (const auto& page : document.collections().pages) consider(page.children);
-    for (const auto& control : document.collections().controls) consider(control.children);
-    return ambiguous ? std::nullopt : result;
+    auto ids = placement_control_group(document, target);
+    if (!ids || ids->size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) return std::nullopt;
+    const auto found = std::ranges::find(*ids, target);
+    if (found == ids->end()) return std::nullopt;
+    TabOrderGroup group;
+    group.target_index = static_cast<std::size_t>(found - ids->begin());
+    group.ids = std::move(*ids);
+    std::set<std::int32_t> seen;
+    for (std::size_t index = 0; index < group.ids.size(); ++index) {
+        const auto* control = document.find_control(group.ids[index]);
+        if (!control) return std::nullopt;
+        const auto& property = control->position.tab_order;
+        const auto value = property.is_explicit() ? property.value() : std::optional<std::int32_t>{static_cast<std::int32_t>(index + 1)};
+        if (!value || *value <= 0 || static_cast<std::size_t>(*value) > group.ids.size() || !seen.insert(*value).second) return std::nullopt;
+        group.orders.push_back(*value);
+    }
+    return group;
 }
 
 using PositionPropertyRef = std::variant<Property<std::int32_t>*, Property<bool>*>;
@@ -1779,6 +1849,17 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         return {PropertyReadStatus::unsupported_surface, std::nullopt};
     }
     if (position_control != nullptr) {
+        if (descriptor->api_name == "DefaultControl") {
+            const auto& selected = position_control->position.default_control;
+            return {selected.is_explicit() ? PropertyReadStatus::explicit_value : PropertyReadStatus::proven_default,
+                PropertyValue{selected.value().value_or(false)}};
+        }
+        if (descriptor->api_name == "Collapse") {
+            const auto& collapse = position_control->position.collapse;
+            if (collapse.is_explicit() && collapse.value())
+                return {PropertyReadStatus::explicit_value, PropertyValue{*collapse.value()}};
+            return {PropertyReadStatus::proven_default, PropertyValue{EnumerationValue{"ControlCollapseMode", "None"}}};
+        }
         const auto position_property = find_position_property(position_control->position, descriptor->api_name);
         if (!position_property) return {PropertyReadStatus::unsupported_surface, std::nullopt};
         return std::visit([](const auto* property_value) -> PropertyReadResult {
@@ -2140,7 +2221,34 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             consider(form_.children);
             for (auto& page : collections_.pages) consider(page.children);
             for (auto& candidate : collections_.controls) consider(candidate.children);
-            if (!siblings || siblings->size() != group->ids.size()) return PropertyMutationStatus::unsupported_surface;
+            if (siblings && siblings->size() != group->ids.size()) siblings = nullptr;
+            if (!siblings) {
+                for (auto& panel : collections_.controls) {
+                    if (panel.kind() != ControlKind::panel) continue;
+                    const auto* separate = panel.properties().find(PropertyId::from_name("SeparateByPage"));
+                    if (!separate || !std::get_if<bool>(&separate->value) || std::get<bool>(separate->value)) continue;
+                    std::vector<Page*> pages;
+                    std::vector<ChildItemRef> merged;
+                    for (const auto& item : panel.children) {
+                        const auto* page = std::get_if<PageRef>(&item);
+                        const auto location = page ? find_location(ObjectCategory::page, page->id()) : std::nullopt;
+                        if (!location) { pages.clear(); break; }
+                        auto& owned = collections_.pages[location->index];
+                        pages.push_back(&owned);
+                        merged.insert(merged.end(), owned.children.begin(), owned.children.end());
+                    }
+                    if (pages.empty() || merged.size() != group->ids.size() ||
+                        !std::equal(merged.begin(), merged.end(), group->ids.begin(), [](const auto& item, ObjectId id) {
+                            const auto* reference = std::get_if<ControlRef>(&item);
+                            return reference && reference->id() == id;
+                        })) continue;
+                    pages.front()->children = std::move(merged);
+                    for (std::size_t index = 1; index < pages.size(); ++index) pages[index]->children.clear();
+                    siblings = &pages.front()->children;
+                    break;
+                }
+            }
+            if (!siblings) return PropertyMutationStatus::unsupported_surface;
             if (target < group->target_index)
                 std::rotate(siblings->begin() + static_cast<std::ptrdiff_t>(target),
                     siblings->begin() + static_cast<std::ptrdiff_t>(group->target_index),
@@ -2286,6 +2394,23 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
     }
     if (position_control != nullptr) {
+        if (descriptor->api_name == "DefaultControl") {
+            const auto group = placement_control_group(*this, position_control->id);
+            if (!group) return PropertyMutationStatus::unsupported_surface;
+            if (std::get<bool>(value)) {
+                for (const auto id : *group) {
+                    const auto location = find_location(ObjectCategory::control, id);
+                    collections_.controls[location->index].position.default_control.reset();
+                }
+                position_control->position.default_control.set(true);
+            } else position_control->position.default_control.reset();
+            return PropertyMutationStatus::applied;
+        }
+        if (descriptor->api_name == "Collapse") {
+            const auto& collapse = std::get<EnumerationValue>(value);
+            position_control->position.collapse.set(collapse);
+            return PropertyMutationStatus::applied_runtime_only;
+        }
         const auto position_property = find_position_property(position_control->position, descriptor->api_name);
         if (!position_property) return PropertyMutationStatus::unsupported_surface;
         const bool nonnegative_dimension = descriptor->api_name == "Width" || descriptor->api_name == "Height";
@@ -2600,6 +2725,15 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     }
 
     if (position_control != nullptr) {
+        if (descriptor->api_name == "DefaultControl") {
+            if (!placement_control_group(*this, position_control->id)) return PropertyMutationStatus::unsupported_surface;
+            position_control->position.default_control.reset();
+            return PropertyMutationStatus::reset;
+        }
+        if (descriptor->api_name == "Collapse") {
+            position_control->position.collapse.reset();
+            return PropertyMutationStatus::reset_runtime_only;
+        }
         const auto position_property = find_position_property(position_control->position, descriptor->api_name);
         if (!position_property) return PropertyMutationStatus::unsupported_surface;
         std::visit([](auto* property_value) { property_value->reset(); }, *position_property);
@@ -2977,6 +3111,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
     };
 
     const auto validate_position = [&](ObjectId source, const Position& position) {
+        if (position.collapse.value() && !property_value_matches(
+                *metamodel::find_property(ControlKind::panel, PropertyId::from_name("Collapse")),
+                PropertyValue{*position.collapse.value()}))
+            add_violation(report, InvariantCode::invalid_property, source, {}, "Position Collapse must use a known ControlCollapseMode member");
         if (position.width.value() < 0 || position.height.value() < 0) {
             add_violation(
                 report,
@@ -3728,6 +3866,22 @@ ValidationReport OrdinaryFormDocument::validate() const {
             }
             register_parent(page.id, child);
         }
+    }
+
+    const bool valid_focus_ownership = std::ranges::none_of(report.violations,
+        [](const auto& violation) { return violation.code != InvariantCode::invalid_property; });
+    std::unordered_set<std::uint64_t> checked_focus_controls;
+    for (const auto& control : collections_.controls) {
+        if (!valid_focus_ownership) break;
+        if (!control.position.default_control.value().value_or(false) || checked_focus_controls.contains(control.id.value())) continue;
+        const auto group = placement_control_group(*this, control.id);
+        if (!group) continue;
+        for (const auto id : *group) checked_focus_controls.insert(id.value());
+        if (std::ranges::count_if(*group, [&](ObjectId id) {
+                return find_control(id)->position.default_control.value().value_or(false);
+            }) > 1)
+            add_violation(report, InvariantCode::invalid_property, control.id, {},
+                "DefaultControl must select at most one control in its focus group");
     }
 
     for (const auto& event : collections_.events) {

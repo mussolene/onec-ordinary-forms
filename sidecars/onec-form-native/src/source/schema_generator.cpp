@@ -1199,7 +1199,7 @@ void append_position_type(
     std::span<const PropertyDescriptor> properties
 ) {
     output += "  <xs:complexType name=\"PositionType\">\n    <xs:sequence>\n";
-    append_property_elements(output, properties);
+    append_property_elements(output, properties, "      ", false);
     output +=
         "      <xs:element name=\"Bindings\" type=\"BindingsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "    </xs:sequence>\n"

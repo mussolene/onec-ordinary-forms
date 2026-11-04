@@ -2532,8 +2532,7 @@ LV encode_geometry(
     const GeometryContext& context,
     const IncomingAnchorLists& incoming) {
     validate_geometry_context(context, "$/Position");
-    if (position.default_control.is_explicit() ||
-        position.z_order.is_explicit() || position.collapse.is_explicit() ||
+    if (position.z_order.is_explicit() || position.collapse.is_explicit() ||
         !position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Position", "geometry Position without unsupported control or dimension properties",
             "unsupported Position property", "Control geometry codec cannot represent this Position property");
@@ -2716,6 +2715,7 @@ struct DecodedOwnerPages {
     IncomingAnchorLists incoming;
     model::PanelPayload panel;
     std::optional<LV> picture;
+    std::vector<std::uint32_t> default_controls;
 };
 
 DecodedOwnerPages decode_owner_pages(
@@ -2787,6 +2787,15 @@ DecodedOwnerPages decode_owner_pages(
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
     require_arity(normalized, expected.items[1].items.size(), child_path(path, 1));
+    std::vector<std::uint32_t> default_controls;
+    const auto focus_start = 11 + boundary_page_count * 4;
+    for (std::size_t index = 0; index < boundary_page_count; ++index) {
+        const auto id = integer_atom<std::uint32_t>(normalized.items.at(focus_start + index),
+            child_path(child_path(path, 1), focus_start + index + incoming_end - 2));
+        if (id == 0) fail("OOF1114", std::string(path), "positive DefaultControl ID or uint32 sentinel", "0", "DefaultControl ID is invalid");
+        default_controls.push_back(id);
+        expected.items[1].items.at(focus_start + index) = raw(std::to_string(id));
+    }
     require_arity(normalized.items[0], expected.items[1].items[0].items.size(), child_path(child_path(path, 1), 0));
     require_raw_constant(normalized.items[0].items[0], "19", child_path(child_path(child_path(path, 1), 0), 0));
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
@@ -2866,7 +2875,7 @@ DecodedOwnerPages decode_owner_pages(
             "Page ID allocation overflows uint64");
     }
     next_page_id += pages.size();
-    return DecodedOwnerPages{std::move(pages), std::move(incoming), std::move(decoded_panel), std::move(panel_picture)};
+    return DecodedOwnerPages{std::move(pages), std::move(incoming), std::move(decoded_panel), std::move(panel_picture), std::move(default_controls)};
 }
 
 std::int32_t explicit_enum_storage_value(
@@ -2875,6 +2884,7 @@ std::int32_t explicit_enum_storage_value(
     std::initializer_list<std::pair<std::string_view, std::int32_t>> members);
 
 LV encode_owner_pages(
+    const model::OrdinaryFormDocument& document,
     const std::vector<model::Page>& pages,
     const IncomingAnchorLists& incoming,
     bool panel,
@@ -2931,6 +2941,27 @@ LV encode_owner_pages(
         const auto encoded_color = encode_control_color(color, std::string("$/Panel/") + std::string(name));
         envelope.items[1].items[0].items[slot] = encoded_color;
         if (name == "BackColor") envelope.items[1].items[envelope.items[1].items.size() - 6] = encoded_color;
+    }
+    const bool focus_per_page = !panel || separate;
+    const auto focus_count = focus_per_page ? std::max(pages.size(), std::size_t{1}) : std::size_t{1};
+    const auto focus_start = 17 + focus_count * 4;
+    for (std::size_t group = 0; group < focus_count; ++group) {
+        auto selected = std::numeric_limits<std::uint32_t>::max();
+        for (std::size_t page_index = 0; page_index < std::max(pages.size(), std::size_t{1}); ++page_index) {
+            if (focus_per_page && page_index != group) continue;
+            const auto& items = pages.empty() ? document.form().children : pages[page_index].children;
+            for (const auto& item : items) {
+                const auto* reference = std::get_if<model::ControlRef>(&item);
+                const auto* control = reference ? document.find_control(reference->id()) : nullptr;
+                if (!control) fail("OOF1123", "$/Position/DefaultControl", "existing immediate Control", {}, "DefaultControl owner contains a missing control");
+                if (!control->position.default_control.value().value_or(false)) continue;
+                if (selected != std::numeric_limits<std::uint32_t>::max() || control->id.value() == 0 ||
+                    control->id.value() >= std::numeric_limits<std::uint32_t>::max())
+                    fail("OOF1123", "$/Position/DefaultControl", "one selected Control per owner page", control->name, "DefaultControl selection is invalid or duplicated");
+                selected = static_cast<std::uint32_t>(control->id.value());
+            }
+        }
+        envelope.items[1].items.at(focus_start + group) = raw(std::to_string(selected));
     }
     insert_incoming_anchor_lists(envelope.items[1], incoming, 2);
     return envelope;
@@ -7628,7 +7659,6 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
     }
     if (control.name.empty() || control.data_path  ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Chart", "Chart named collections and plain Position", control.name, "Chart uses a storage concept outside the supported profile");
@@ -10671,8 +10701,7 @@ LV encode_button(
         fail("OOF1122", "$", "Button with positive int64 ID", std::to_string(control.id.value()), "Unsupported control record");
     }
     if (control.name.empty() || control.data_path  ||
-        !control.children.empty() || control.position.default_control.is_explicit() ||
-        control.position.z_order.is_explicit() ||
+        !control.children.empty() || control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$", "plain Button", control.name, "Button uses a storage concept outside the executable slice");
     }
@@ -10823,7 +10852,6 @@ LV encode_picture_decoration(
     }
     if (control.name.empty() || control.data_path  ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/PictureDecoration", "plain PictureDecoration", control.name,
@@ -10910,7 +10938,6 @@ LV encode_splitter(const model::ControlNode& control, const GeometryContext& con
     }
     if (control.name.empty() || control.data_path  ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Splitter", "named Splitter without events, DataPath, extensions, or children and plain Position",
@@ -10951,7 +10978,6 @@ LV encode_label(const model::OrdinaryFormDocument& document, const model::Contro
     }
     if (control.name.empty() ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
@@ -11032,7 +11058,6 @@ LV encode_progress_bar(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/ProgressBar", "named ProgressBar with optional direct DataPath, no ValueType, Events, or storage children",
@@ -11090,7 +11115,6 @@ LV encode_track_bar(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/TrackBar", "named TrackBar with optional direct DataPath, no Events or storage children",
@@ -11171,7 +11195,6 @@ LV encode_list_box(
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/ListBox", "named ListBox with direct DataPath and ordinary Position",
@@ -11223,7 +11246,6 @@ LV encode_check_box(
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
@@ -11281,7 +11303,6 @@ LV encode_choice_field(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
@@ -11346,7 +11367,6 @@ LV encode_radio_button(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/RadioButton", "named RadioButton with plain Position", control.name,
@@ -11451,7 +11471,6 @@ LV encode_html_document_field(const model::OrdinaryFormDocument& document, const
     }
     if (control.name.empty() || control.data_path  ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/HTMLDocumentField", "named HTMLDocumentField with plain Position and no DataPath, Events, extensions, or children",
@@ -11483,7 +11502,7 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", "$/Form/ChildItems", "TextDocumentField with positive int64 ID", control.name, "TextDocumentField is outside the supported profile");
     if (control.name.empty() || control.data_path  || !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.z_order.is_explicit() ||
+        control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty())
         fail("OOF1122", "$/TextDocumentField", "named unbound TextDocumentField with plain Position", control.name, "TextDocumentField uses an unsupported storage concept");
     require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Font", "Border"}, "$/TextDocumentField");
@@ -11551,7 +11570,6 @@ LV encode_calendar_field(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty())  ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/CalendarField", "named CalendarField with optional direct DataPath and plain Position", control.name,
@@ -11632,7 +11650,6 @@ LV encode_dendrogram(const model::OrdinaryFormDocument& document, const model::C
     }
     if (control.name.empty() || control.data_path ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Dendrogram", "named Dendrogram with plain Position", control.name,
@@ -11686,7 +11703,6 @@ LV encode_input_field(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/InputField", "named InputField with optional direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
@@ -11790,7 +11806,6 @@ LV encode_table(
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.children.empty() ||
-        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Table", "named Table with direct DataPath and basic Position", control.name,
@@ -12380,6 +12395,9 @@ Result<list_stream::ListValue> encode_control_geometry(
     const GeometryContext& context) {
     return capture_decode_failure<list_stream::ListValue>([&geometry, &context] {
         validate_geometry_context(context, "$/Position");
+        if (geometry.position.default_control.is_explicit())
+            fail("OOF1122", "$/Position", "DefaultControl encoded by an owner page", {},
+                "Standalone geometry cannot encode an owner DefaultControl selection");
         return encode_geometry(geometry.position, context, geometry.incoming);
     });
 }
@@ -12707,11 +12725,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
         std::unordered_map<std::uint64_t, std::vector<model::ObjectId>> command_bar_contexts;
         using DecodeChildTable = std::function<void(
-            const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
+            const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&,
+            const std::vector<std::uint32_t>&, std::string_view)>;
         DecodeChildTable decode_child_table;
         decode_child_table = [&](const LV& child_table, std::vector<model::Page>& pages,
                                  GeometryOwner owner, const IncomingAnchorLists& owner_incoming,
-                                 std::string_view path) {
+                                 const std::vector<std::uint32_t>& default_controls, std::string_view path) {
             require_list(child_table, path);
             if (child_table.items.empty()) fail("OOF1103", child_path(path, 0), "control count", "missing", "Control table has no count");
             const auto count = integer_atom<std::uint32_t>(child_table.items[0], child_path(path, 0));
@@ -12774,6 +12793,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 }
             }
             std::vector<std::vector<DecodedControl>> decoded(ordered.size());
+            std::vector<bool> found_default(default_controls.size(), false);
             std::unordered_set<std::uint64_t> owner_child_ids;
             std::unordered_map<std::uint64_t, std::string> child_record_paths;
             for (std::size_t page_index = 0; page_index < ordered.size(); ++page_index) {
@@ -12917,7 +12937,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         panel.payload = std::move(panel_owner.panel);
                         for (const auto& page : panel_owner.pages) panel.children.push_back(model::PageRef{page.id});
                         decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
-                            panel_owner.incoming, child_path(record_path, 5));
+                            panel_owner.incoming, panel_owner.default_controls, child_path(record_path, 5));
                         for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
                         const auto picture = decode_button_picture(*panel_owner.picture, child_path(record_path, 2) + "/Picture");
                         if (picture && picture->standard_name)
@@ -12938,11 +12958,19 @@ Result<model::OrdinaryFormDocument> decode_document(
                             child_path(child_path(child_path(record_path, 2), 1), 9));
                         command_bar_contexts[collection_id].push_back(model::ObjectId{child_id});
                     }
+                    const auto focus_group = default_controls.size() == 1 ? std::size_t{0} : page_index;
+                    if (child_id == default_controls.at(focus_group)) {
+                        child.control.position.default_control.set(true);
+                        found_default[focus_group] = true;
+                    }
                     actual_max_id = std::max(actual_max_id, child_id);
                     pages[page_index].children.push_back(model::ControlRef{child.control.id});
                     decoded[page_index].push_back(std::move(child));
                 }
             }
+            for (std::size_t index = 0; index < default_controls.size(); ++index)
+                if (default_controls[index] != std::numeric_limits<std::uint32_t>::max() && !found_default[index])
+                    fail("OOF1114", std::string(path), "DefaultControl in its immediate owner page", std::to_string(default_controls[index]), "DefaultControl reference is missing or belongs to another page");
             IncomingAnchorLists expected_owner_incoming;
             std::unordered_map<std::uint64_t, IncomingAnchorLists> expected_sibling_incoming;
             for (const auto& page_controls : decoded) for (const auto& child : page_controls) {
@@ -13002,7 +13030,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 pending_controls.push_back(child);
             }
         };
-        decode_child_table(root_panel.items[2], root_pages, GeometryOwner{FormGeometryOwner{}}, root_incoming, "$/1/2/2");
+        decode_child_table(root_panel.items[2], root_pages, GeometryOwner{FormGeometryOwner{}}, root_incoming, root_owner.default_controls, "$/1/2/2");
         if (consumed_link_ids.size() != links_by_control.size()) {
             fail("OOF1122", "$/2/3", "one matching link per decoded DataPath control", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }
@@ -13429,6 +13457,11 @@ Result<list_stream::ListValue> encode_document(
                 fail("OOF1122", std::string(path), "explicit Page references inside Panel", "direct controls",
                     "Panel storage requires named Pages");
             }
+            bool shared_page = false;
+            if (const auto* panel_ref = std::get_if<model::ControlRef>(&owner)) {
+                const auto* panel = document.find_control(panel_ref->id());
+                shared_page = panel && !explicit_bool(panel->properties(), "SeparateByPage", true);
+            }
             std::vector<EncodedChild> children;
             const auto append_control = [&](const model::ControlRef& reference, std::uint32_t page_index,
                                             std::size_t ordinal) {
@@ -13448,7 +13481,6 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::gantt_chart) {
                     if (control->id.value() == 0 || control->id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
                         control->name.empty() || control->data_path || !control->children.empty() ||
-                        control->position.default_control.is_explicit() ||
                         control->position.z_order.is_explicit() ||
                         control->position.collapse.is_explicit() || !control->position.bindings.dimensions.empty())
                         fail("OOF1122", child_path(path, ordinal), "childless GanttChart with basic Position", control->name,
@@ -13480,7 +13512,6 @@ Result<list_stream::ListValue> encode_document(
                     }
                     if (control->name.empty() || control->data_path  ||
                         !control->children.empty() || !control->events.empty() ||
-                        control->position.default_control.is_explicit() ||
                         control->position.z_order.is_explicit() || control->position.collapse.is_explicit() ||
                         !control->position.bindings.dimensions.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "plain childless UsualGroup with basic Position",
@@ -13555,7 +13586,7 @@ Result<list_stream::ListValue> encode_document(
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");
-                    auto panel_properties = encode_owner_pages(panel_owner.pages, panel_owner.incoming, true, panel_ref, 8, 8,
+                    auto panel_properties = encode_owner_pages(document, panel_owner.pages, panel_owner.incoming, true, panel_ref, 8, 8,
                         control->properties());
                     std::size_t picture_cursor = 2;
                     static_cast<void>(decode_incoming_anchor_lists(panel_properties.items[1], picture_cursor, child_path(path, ordinal)));
@@ -13587,7 +13618,8 @@ Result<list_stream::ListValue> encode_document(
                         const auto* control_ref = std::get_if<model::ControlRef>(&pages[page_index].children[ordinal]);
                         if (!control_ref) fail("OOF1122", std::string(path), "Control references inside Page", "nested Page reference",
                             "A Page cannot directly contain another Page");
-                        append_control(*control_ref, static_cast<std::uint32_t>(page_index), ordinal);
+                        append_control(*control_ref, shared_page ? 0 : static_cast<std::uint32_t>(page_index),
+                            shared_page ? children.size() : ordinal);
                     }
                 }
             } else {
@@ -13717,7 +13749,7 @@ Result<list_stream::ListValue> encode_document(
             throw DecodeFailure(encoded_attributes_result.diagnostics().front());
         }
 
-        auto root_panel_payload = encode_owner_pages(root_pages, form_incoming, false, std::nullopt, width, height,
+        auto root_panel_payload = encode_owner_pages(document, root_pages, form_incoming, false, std::nullopt, width, height,
             document.form().panel.properties);
         const auto root_control_count = child_records.items.size() - 1;
         const auto root_panel = list({
