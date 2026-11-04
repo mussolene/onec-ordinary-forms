@@ -106,6 +106,12 @@ bool valid_chart_gauge_quality_band_range(const DecimalValue& begin, const Decim
 
 namespace {
 
+bool value_list_attribute(const Attribute* attribute) {
+    return attribute && attribute->type.entries.size() == 1 &&
+        attribute->type.entries.front().term == TypeDomainTerm::value_list &&
+        !attribute->type.entries.front().type_uuid;
+}
+
 std::optional<std::chrono::sys_days> calendar_day(const DateValue& date) {
     try {
         const auto digits = storage::value_codec::date_to_platform(date.canonical);
@@ -246,6 +252,7 @@ bool property_value_matches(
             using Value = std::remove_cvref_t<decltype(typed_value)>;
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
                 return expected == metamodel::ValueCodec::date ||
+                       expected == metamodel::ValueCodec::value_list_item_reference ||
                        expected == metamodel::ValueCodec::action_source_reference ||
                        expected == metamodel::ValueCodec::context_menu_reference ||
                        (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ActivePoint" &&
@@ -461,6 +468,8 @@ bool property_value_matches(
                     (expected == metamodel::ValueCodec::panel_pages && typed_value.kind == FormItemCollectionKind::pages);
             } else if constexpr (std::is_same_v<Value, ValueListRef>) {
                 return expected == metamodel::ValueCodec::value_list_reference && typed_value.get();
+            } else if constexpr (std::is_same_v<Value, ValueListItemRef>) {
+                return expected == metamodel::ValueCodec::value_list_item_reference && typed_value.get();
             } else if constexpr (std::is_same_v<Value, TableColumnsRef>) {
                 return expected == metamodel::ValueCodec::table_columns;
             } else if constexpr (std::is_same_v<Value, CalendarSelectedDatesRef>) {
@@ -1109,6 +1118,15 @@ bool validate_typed_value(const PropertyValue& value, TypedValueBudget& budget) 
     }
 }
 
+struct ValueListRef::ItemIdentity {
+    std::uint64_t id = 0;
+    std::shared_ptr<const ValueListItem> payload;
+};
+
+struct ValueListRef::IdentityState {
+    std::unordered_map<std::uint64_t, std::shared_ptr<ItemIdentity>> items;
+};
+
 std::optional<ValueListRef> ValueListRef::create(const ValueListValue& value) {
     try {
         TypedValueBudget budget{1};
@@ -1116,18 +1134,69 @@ std::optional<ValueListRef> ValueListRef::create(const ValueListValue& value) {
     } catch (const std::exception&) { return std::nullopt; }
     ValueListRef result;
     result.value_ = std::make_shared<ValueListValue>(value);
+    result.identity_state_ = std::make_shared<IdentityState>();
     return result;
 }
 
 bool ValueListRef::replace(const ValueListValue& value) const {
-    if (!value_) return false;
+    if (!value_ || !identity_state_) return false;
     try {
         TypedValueBudget budget{1};
         if (!validate_value_list_contents(value, budget, 0)) return false;
     } catch (const std::exception&) { return false; }
-    ValueListValue replacement = value;
-    *value_ = std::move(replacement);
+    try {
+        ValueListValue replacement = value;
+        std::unordered_map<std::uint64_t, std::shared_ptr<ItemIdentity>> replacement_identities;
+        replacement_identities.reserve(identity_state_->items.size());
+        std::vector<std::pair<std::shared_ptr<ItemIdentity>, std::shared_ptr<const ValueListItem>>> payload_updates;
+        payload_updates.reserve(identity_state_->items.size());
+        for (const auto& item : value.items) {
+            const auto existing = identity_state_->items.find(item.id);
+            if (existing != identity_state_->items.end()) {
+                auto payload = std::make_shared<ValueListItem>(item);
+                replacement_identities.emplace(item.id, existing->second);
+                payload_updates.emplace_back(existing->second, std::move(payload));
+            }
+        }
+        *value_ = std::move(replacement);
+        for (auto& [identity, payload] : payload_updates) identity->payload = std::move(payload);
+        identity_state_->items.swap(replacement_identities);
+    } catch (const std::exception&) { return false; }
     return true;
+}
+
+std::optional<ValueListItemRef> ValueListItemRef::create(ValueListRef value_list, std::uint64_t id) {
+    if (!value_list.value_ || !value_list.identity_state_) return std::nullopt;
+    const auto item = std::ranges::find(value_list.value_->items, id, &ValueListItem::id);
+    if (item == value_list.value_->items.end()) return std::nullopt;
+    auto identity = value_list.identity_state_->items.find(id);
+    if (identity == value_list.identity_state_->items.end()) {
+        auto payload = std::make_shared<ValueListItem>(*item);
+        identity = value_list.identity_state_->items.emplace(id,
+            std::make_shared<ValueListRef::ItemIdentity>(ValueListRef::ItemIdentity{id, std::move(payload)})).first;
+    }
+    ValueListItemRef result;
+    result.value_list_ = std::move(value_list);
+    result.identity_ = identity->second;
+    return result;
+}
+
+std::optional<std::uint64_t> ValueListItemRef::id() const noexcept {
+    return identity_ ? std::optional<std::uint64_t>{identity_->id} : std::nullopt;
+}
+
+bool ValueListItemRef::is_attached() const noexcept {
+    if (!identity_ || !value_list_.value_ || !value_list_.identity_state_) return false;
+    const auto identity = value_list_.identity_state_->items.find(identity_->id);
+    return identity != value_list_.identity_state_->items.end() && identity->second == identity_;
+}
+
+const ValueListItem* ValueListItemRef::get() const noexcept {
+    return identity_ ? identity_->payload.get() : nullptr;
+}
+
+bool operator==(const ValueListItemRef& left, const ValueListItemRef& right) noexcept {
+    return left.identity_ == right.identity_;
 }
 
 const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
@@ -1234,6 +1303,8 @@ void OrdinaryFormDocument::set_form(Form form) {
     form_ = std::move(form);
     window_permissions_.clear();
     runtime_form_values_.clear();
+    runtime_attribute_value_lists_.clear();
+    runtime_list_current_rows_.clear();
     runtime_calendars_.clear();
     runtime_choice_lists_.clear();
     rebuild_index();
@@ -1241,6 +1312,29 @@ void OrdinaryFormDocument::set_form(Form form) {
 
 void OrdinaryFormDocument::set_module(FormModule module) {
     module_ = std::move(module);
+}
+
+std::optional<ValueListRef> OrdinaryFormDocument::attribute_value_list(AttributeRef attribute) const {
+    if (!value_list_attribute(find_attribute(attribute.id()))) return std::nullopt;
+    const auto value = runtime_attribute_value_lists_.find(attribute.id());
+    if (value == runtime_attribute_value_lists_.end()) return std::nullopt;
+    return value->second;
+}
+
+PropertyMutationStatus OrdinaryFormDocument::bind_attribute_value_list(AttributeRef attribute, ValueListRef value) {
+    const auto* source = find_attribute(attribute.id());
+    if (!source) return PropertyMutationStatus::unknown_owner;
+    if (!value_list_attribute(source) || !value.get()) return PropertyMutationStatus::invalid_value;
+    std::optional<ValueListItemRef> first;
+    if (!value.get()->items.empty()) first = ValueListItemRef::create(value, value.get()->items.front().id);
+    runtime_attribute_value_lists_.insert_or_assign(attribute.id(), std::move(value));
+    for (const auto& control : collections_.controls) {
+        if (control.kind() != ControlKind::list_box || !control.data_path || !control.data_path->members.empty() ||
+            control.data_path->attribute != attribute) continue;
+        if (first) runtime_list_current_rows_.insert_or_assign(control.id, first->identity_);
+        else runtime_list_current_rows_.erase(control.id);
+    }
+    return PropertyMutationStatus::applied_runtime_only;
 }
 
 PropertyMutationStatus OrdinaryFormDocument::initialize_calendar_runtime(ObjectId calendar, DateValue local_date) {
@@ -1923,6 +2017,20 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
         const auto& control = collections_.controls[location->index];
+        if (control.kind() == ControlKind::list_box && property == PropertyId::from_name("CurrentRow")) {
+            const auto selected = runtime_list_current_rows_.find(control.id);
+            if (selected != runtime_list_current_rows_.end() && control.data_path && control.data_path->members.empty()) {
+                const auto source = attribute_value_list(control.data_path->attribute);
+                if (source) {
+                    ValueListItemRef row;
+                    row.value_list_ = *source;
+                    row.identity_ = selected->second.lock();
+                    if (row.is_attached()) return {PropertyReadStatus::computed_value, PropertyValue{std::move(row)}};
+                }
+                runtime_list_current_rows_.erase(selected);
+            }
+            return {PropertyReadStatus::proven_default, PropertyValue{UndefinedValue{}}};
+        }
         if (control.kind() == ControlKind::calendar_field) {
             if (property == PropertyId::from_name("SelectedDates"))
                 return {PropertyReadStatus::computed_value, PropertyValue{CalendarSelectedDatesRef{control.id}}};
@@ -1987,8 +2095,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (control.kind() == ControlKind::pivot_chart &&
             (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
-        if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
-            (control.kind() == ControlKind::html_document_field && descriptor->api_name == "Document") ||
+        if ((control.kind() == ControlKind::html_document_field && descriptor->api_name == "Document") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
             (control.kind() == ControlKind::geographical_schema_field && descriptor->api_name == "ShowedArea") ||
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
@@ -2403,6 +2510,17 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         property_control = &control;
         if (control.kind() == ControlKind::table && property == PropertyId::from_name("Columns"))
             return PropertyMutationStatus::read_only;
+        if (control.kind() == ControlKind::list_box && property == PropertyId::from_name("CurrentRow")) {
+            const auto* row = std::get_if<ValueListItemRef>(&value);
+            if (!row || !row->get()) return PropertyMutationStatus::invalid_value;
+            if (!row->is_attached()) return PropertyMutationStatus::applied_runtime_only;
+            if (!control.data_path || !control.data_path->members.empty()) return PropertyMutationStatus::unsupported_surface;
+            const auto source = attribute_value_list(control.data_path->attribute);
+            if (!source) return PropertyMutationStatus::unsupported_surface;
+            const auto own = ValueListItemRef::create(*source, *row->id());
+            if (own) runtime_list_current_rows_.insert_or_assign(control.id, own->identity_);
+            return PropertyMutationStatus::applied_runtime_only;
+        }
         if ((control.kind() == ControlKind::input_field || control.kind() == ControlKind::choice_field) &&
             property == PropertyId::from_name("ChoiceList")) {
             const auto* reference = std::get_if<ValueListRef>(&value);
@@ -2441,8 +2559,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             runtime_calendars_.insert_or_assign(control.id, CalendarRuntimeState{std::move(current), {{*date, *date}}});
             return PropertyMutationStatus::applied_runtime_only;
         }
-        if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
-            (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
+        if ((control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
             (control.kind() == ControlKind::geographical_schema_field && descriptor->api_name == "ShowedArea") ||
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
@@ -2942,6 +3059,10 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         property_control = &control;
         if (control.kind() == ControlKind::table && property == PropertyId::from_name("Columns"))
             return PropertyMutationStatus::read_only;
+        if (control.kind() == ControlKind::list_box && property == PropertyId::from_name("CurrentRow")) {
+            runtime_list_current_rows_.erase(control.id);
+            return PropertyMutationStatus::reset_runtime_only;
+        }
         if ((control.kind() == ControlKind::input_field || control.kind() == ControlKind::choice_field) &&
             property == PropertyId::from_name("ChoiceList"))
             return PropertyMutationStatus::unsupported_surface;
@@ -2966,8 +3087,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
                 state->second.current_date.reset();
             return PropertyMutationStatus::reset_runtime_only;
         }
-        if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
-            (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
+        if ((control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
             (control.kind() == ControlKind::geographical_schema_field && descriptor->api_name == "ShowedArea") ||
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
@@ -3385,6 +3505,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
             } else if (descriptor->value_codec == metamodel::ValueCodec::form_controls ||
                 descriptor->value_codec == metamodel::ValueCodec::panel_pages ||
                 descriptor->value_codec == metamodel::ValueCodec::value_list_reference ||
+                descriptor->value_codec == metamodel::ValueCodec::value_list_item_reference ||
                 descriptor->value_codec == metamodel::ValueCodec::calendar_selected_dates ||
                 descriptor->value_codec == metamodel::ValueCodec::table_columns) {
                 add_violation(report, InvariantCode::invalid_property, source, {},

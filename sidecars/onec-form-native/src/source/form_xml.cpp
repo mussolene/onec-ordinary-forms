@@ -1250,6 +1250,7 @@ model::PropertyValue parse_property_value(
             fail("OOF2003", node, std::string(object_id), property, "named Table Columns", "scalar collection",
                 "Table columns must use their owned named object model");
         case mm::ValueCodec::value_list_reference:
+        case mm::ValueCodec::value_list_item_reference:
             fail("OOF2003", node, std::string(object_id), property, "runtime-only list reference", "XML",
                 "Runtime value list references cannot be parsed from XML");
         case mm::ValueCodec::form_controls:
@@ -3820,6 +3821,7 @@ private:
                 serialization_fail(std::string(object_id), std::string(name), "named Table Columns", "scalar collection",
                     "Table columns must use their owned named object model");
             case mm::ValueCodec::value_list_reference:
+            case mm::ValueCodec::value_list_item_reference:
                 serialization_fail(std::string(object_id), std::string(name), "runtime-only list reference", "XML",
                     "Runtime value list references cannot be serialized");
             case mm::ValueCodec::owned_panel:

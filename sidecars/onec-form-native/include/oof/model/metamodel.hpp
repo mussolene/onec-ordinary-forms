@@ -78,6 +78,7 @@ enum class ValueCodec : std::uint8_t {
     form_controls,
     panel_pages,
     value_list_reference,
+    value_list_item_reference,
     table_columns,
     calendar_selected_dates,
     dendrogram_items,

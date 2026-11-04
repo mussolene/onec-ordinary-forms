@@ -590,7 +590,28 @@ public:
     friend bool operator==(const ValueListRef&, const ValueListRef&) = default;
 
 private:
+    struct ItemIdentity;
+    struct IdentityState;
+    friend class ValueListItemRef;
+    friend class OrdinaryFormDocument;
+
     std::shared_ptr<ValueListValue> value_;
+    std::shared_ptr<IdentityState> identity_state_;
+};
+
+class ValueListItemRef {
+public:
+    ValueListItemRef() = default;
+    [[nodiscard]] static std::optional<ValueListItemRef> create(ValueListRef value_list, std::uint64_t id);
+    [[nodiscard]] std::optional<std::uint64_t> id() const noexcept;
+    [[nodiscard]] bool is_attached() const noexcept;
+    [[nodiscard]] const ValueListItem* get() const noexcept;
+    friend bool operator==(const ValueListItemRef& left, const ValueListItemRef& right) noexcept;
+
+private:
+    friend class OrdinaryFormDocument;
+    ValueListRef value_list_;
+    std::shared_ptr<ValueListRef::ItemIdentity> identity_;
 };
 
 using PropertyValueVariant = std::variant<
@@ -636,7 +657,8 @@ using PropertyValueVariant = std::variant<
     ValueListValue,
     ValueListRef,
     TableColumnsRef,
-    CalendarSelectedDatesRef>;
+    CalendarSelectedDatesRef,
+    ValueListItemRef>;
 
 struct PropertyValue : PropertyValueVariant {
     using Variant = PropertyValueVariant;
@@ -1368,6 +1390,8 @@ public:
     [[nodiscard]] std::size_t indexed_id_count() const noexcept;
     [[nodiscard]] std::optional<std::vector<ChildItemRef>> form_item_refs(FormItemCollectionRef reference) const;
     [[nodiscard]] const std::vector<TableColumn>* table_columns(TableColumnsRef reference) const noexcept;
+    [[nodiscard]] std::optional<ValueListRef> attribute_value_list(AttributeRef attribute) const;
+    [[nodiscard]] PropertyMutationStatus bind_attribute_value_list(AttributeRef attribute, ValueListRef value);
 
     // Supplies the local date of the runtime which owns this source document.
     [[nodiscard]] PropertyMutationStatus initialize_calendar_runtime(ObjectId calendar, DateValue local_date);
@@ -1400,6 +1424,8 @@ private:
     bool opening_started_ = false;
     PropertySet window_permissions_;
     PropertySet runtime_form_values_;
+    std::unordered_map<ObjectId, ValueListRef, ObjectIdHash> runtime_attribute_value_lists_;
+    mutable std::unordered_map<ObjectId, std::weak_ptr<ValueListRef::ItemIdentity>, ObjectIdHash> runtime_list_current_rows_;
     struct CalendarRuntimeState {
         std::optional<DateValue> current_date;
         // Inclusive spans retain selection order and the time shared by their dates.

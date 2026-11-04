@@ -898,24 +898,228 @@ void test_list_and_html_live_property_boundaries() {
             else document.add_control(ControlNode{id, "List" + std::to_string(i), ListBoxPayload{}});
             const auto property = PropertyId::from_name(html ? "Document" : "CurrentRow");
             const auto* descriptor = metamodel::find_property(kind, property);
-            expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
-                descriptor->storage_codec == metamodel::StorageCodec::none &&
-                descriptor->value_codec == metamodel::ValueCodec::unclassified &&
-                descriptor->default_value.kind == (html ? metamodel::DefaultKind::none : metamodel::DefaultKind::undefined),
-                "proven live-property storage must not imply an implemented reference codec");
             const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
-            expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface,
-                "live DOM and selected row must not become manufactured scalar defaults");
-            const auto expected = html ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
-            expect(document.set_prop_val(owner, property, UndefinedValue{}) == expected &&
-                document.reset_prop_val(owner, property) == expected,
-                "live-property API must retain readonly and unfinished-reference boundaries");
+            if (html) {
+                expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+                    descriptor->storage_codec == metamodel::StorageCodec::none &&
+                    descriptor->value_codec == metamodel::ValueCodec::unclassified &&
+                    descriptor->default_value.kind == metamodel::DefaultKind::none,
+                    "HTML DOM remains an unclassified runtime-only property");
+                expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface &&
+                    document.set_prop_val(owner, property, UndefinedValue{}) == PropertyMutationStatus::read_only &&
+                    document.reset_prop_val(owner, property) == PropertyMutationStatus::read_only,
+                    "HTML DOM getter remains unsupported and mutation remains read-only");
+            } else {
+                expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+                    descriptor->storage_codec == metamodel::StorageCodec::none &&
+                    descriptor->value_codec == metamodel::ValueCodec::value_list_item_reference &&
+                    descriptor->value_kind == metamodel::ValueKind::variant &&
+                    descriptor->default_value.kind == metamodel::DefaultKind::undefined,
+                    "ListBox CurrentRow uses its named runtime reference codec and Undefined default");
+                const auto result = document.get_prop_val(owner, property);
+                expect(result.status == PropertyReadStatus::proven_default && result.value == PropertyValue{UndefinedValue{}},
+                    "a known unbound ListBox starts with proven Undefined CurrentRow");
+                expect(document.set_prop_val(owner, property, UndefinedValue{}) == PropertyMutationStatus::invalid_value &&
+                    document.reset_prop_val(owner, property) == PropertyMutationStatus::reset_runtime_only,
+                    "CurrentRow rejects Undefined assignment and runtime reset restores its default");
+            }
             expect(document.find_control(id)->properties().find(property) == nullptr,
-                "rejected live-property operations must not mutate persisted properties");
+                "live-property operations must not mutate persisted properties");
         }
     }
     const auto* html = metamodel::find_property(ControlKind::html_document_field, PropertyId::from_name("Document"));
     expect(html->platform_type == u8"ВнешнийОбъект", "Linux HTML DOM must use the current platform type");
+}
+
+void test_list_box_current_row_runtime_model() {
+    Form form; form.id = ObjectId{1}; form.name = "ListRows";
+    for (std::uint64_t id = 100; id < 112; ++id) form.children.emplace_back(ControlRef{ObjectId{id}});
+    form.children.emplace_back(ControlRef{ObjectId{122}});
+    TypeDomainEntry list_type; list_type.term = TypeDomainTerm::value_list;
+    const TypeDomainPatternValue value_list_type{{list_type}};
+    Attribute source_attribute{ObjectId{900}, "Source", value_list_type};
+    Attribute other_attribute{ObjectId{901}, "Other", value_list_type};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_attribute(source_attribute);
+    document.add_attribute(other_attribute);
+
+    const auto current_row = PropertyId::from_name("CurrentRow");
+    const auto owner = [](std::uint64_t id) {
+        return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{id}};
+    };
+    const auto add_list = [&](std::uint64_t id, std::uint64_t attribute_id) {
+        ControlNode list{ObjectId{id}, "List" + std::to_string(id), ListBoxPayload{}};
+        list.data_path = DataPath{AttributeRef{ObjectId{attribute_id}}, {}};
+        document.add_control(std::move(list));
+    };
+    for (std::uint64_t id = 100; id < 112; ++id) add_list(id, 900);
+    add_list(122, 901);
+    Form unsupported_form; unsupported_form.id = ObjectId{1}; unsupported_form.name = "UnsupportedPaths";
+    unsupported_form.children = {ControlRef{ObjectId{120}}, ControlRef{ObjectId{121}}};
+    OrdinaryFormDocument unsupported(std::move(unsupported_form));
+    unsupported.add_attribute(source_attribute);
+    ControlNode unbound{ObjectId{120}, "Unbound", ListBoxPayload{}};
+    unsupported.add_control(std::move(unbound));
+    ControlNode nested{ObjectId{121}, "Nested", ListBoxPayload{}};
+    nested.data_path = DataPath{AttributeRef{ObjectId{900}}, {"Member"}};
+    unsupported.add_control(std::move(nested));
+
+    ValueListValue initial;
+    initial.items.push_back({7, std::string{"seven"}, std::string{"Seven"}, false, {}});
+    initial.items.push_back({11, std::int64_t{11}, std::string{"Eleven"}, true, {}});
+    initial.last_assigned_id = 11;
+    auto source = ValueListRef::create(initial);
+    expect(source && document.bind_attribute_value_list(AttributeRef{ObjectId{900}}, *source) == PropertyMutationStatus::applied_runtime_only,
+        "a one-ValueList attribute accepts a live source binding");
+    TypeDomainEntry text_type_entry; text_type_entry.term = TypeDomainTerm::string;
+    document.add_attribute(Attribute{ObjectId{902}, "Scalar", TypeDomainPatternValue{{text_type_entry}}});
+    expect(!document.attribute_value_list(AttributeRef{ObjectId{901}}) &&
+        !document.attribute_value_list(AttributeRef{ObjectId{999}}) &&
+        document.bind_attribute_value_list(AttributeRef{ObjectId{999}}, *source) == PropertyMutationStatus::unknown_owner &&
+        document.bind_attribute_value_list(AttributeRef{ObjectId{902}}, *source) == PropertyMutationStatus::invalid_value,
+        "unknown, unbound and non-ValueList attributes do not acquire a source list");
+
+    const auto read_row = [&](std::uint64_t id) {
+        const auto result = document.get_prop_val(owner(id), current_row);
+        expect((result.status == PropertyReadStatus::computed_value || result.status == PropertyReadStatus::proven_default) && result.value,
+            "known ListBox CurrentRow has a selected value or its proven Undefined default");
+        return *result.value;
+    };
+    const auto row7 = ValueListItemRef::create(*source, 7);
+    const auto row11 = ValueListItemRef::create(*source, 11);
+    expect(row7 && row11 && row7->id() == 7 && row7->is_attached() && row7->get() &&
+        std::get<std::string>(row7->get()->value) == "seven" &&
+        !ValueListItemRef::create(*source, 8),
+        "item references resolve existing rows and expose the attached payload");
+    auto reordered = *source->get();
+    std::swap(reordered.items.front(), reordered.items.back());
+    expect(source->replace(reordered) && row7->is_attached() && row11->is_attached() &&
+        ValueListItemRef::create(*source, 7) == row7 && ValueListItemRef::create(*source, 11) == row11,
+        "sorting by replacement order preserves identities for surviving numeric IDs");
+    std::swap(reordered.items.front(), reordered.items.back());
+    expect(source->replace(reordered), "restoring original order leaves the same live source list");
+    for (std::uint64_t id = 100; id < 112; ++id)
+        expect(read_row(id) == PropertyValue{*row7}, "new nonempty source bindings select their first row");
+
+    expect(document.set_prop_val(owner(100), current_row, *row11) == PropertyMutationStatus::applied_runtime_only &&
+        read_row(100) == PropertyValue{*row11} && read_row(101) == PropertyValue{*row7},
+        "selection is local to its ListBox and preserves the source row identity");
+    expect(document.set_prop_val(owner(100), current_row, *row11) == PropertyMutationStatus::applied_runtime_only &&
+        read_row(100) == PropertyValue{*row11},
+        "assigning the selected row again remains a valid runtime mutation");
+    expect(document.set_prop_val(owner(101), current_row, *row11) == PropertyMutationStatus::applied_runtime_only &&
+        document.set_prop_val(owner(102), current_row, *row11) == PropertyMutationStatus::applied_runtime_only,
+        "different ListBoxes can independently select the same source row");
+    expect(document.reset_prop_val(owner(100), current_row) == PropertyMutationStatus::reset_runtime_only &&
+        read_row(100) == PropertyValue{UndefinedValue{}} && read_row(101) == PropertyValue{*row11} &&
+        document.attribute_value_list(AttributeRef{ObjectId{900}}) == source &&
+        document.set_prop_val(owner(100), current_row, *row11) == PropertyMutationStatus::applied_runtime_only,
+        "reset clears only the selected row and leaves its source binding intact");
+
+    ValueListValue foreign_values = initial;
+    foreign_values.items[0].id = 11;
+    foreign_values.items[1].id = 7;
+    auto foreign = ValueListRef::create(foreign_values);
+    const auto foreign11 = ValueListItemRef::create(*foreign, 11);
+    expect(foreign11 && document.set_prop_val(owner(103), current_row, *foreign11) == PropertyMutationStatus::applied_runtime_only &&
+        read_row(103) == PropertyValue{*row11},
+        "an attached foreign candidate maps by numeric ID onto the ListBox source");
+    auto foreign_missing_values = foreign_values;
+    foreign_missing_values.items[0].id = 99;
+    foreign_missing_values.items[1].id = 98;
+    foreign_missing_values.last_assigned_id = 99;
+    auto foreign_missing = ValueListRef::create(foreign_missing_values);
+    const auto foreign99 = ValueListItemRef::create(*foreign_missing, 99);
+    expect(foreign99 && document.set_prop_val(owner(103), current_row, *foreign99) == PropertyMutationStatus::applied_runtime_only &&
+        read_row(103) == PropertyValue{*row11},
+        "foreign rows with no matching source ID leave the previous selection intact");
+
+    for (const auto& invalid : {PropertyValue{UndefinedValue{}}, PropertyValue{NullValue{}}, PropertyValue{std::int64_t{7}},
+            PropertyValue{std::string{"7"}}, PropertyValue{ValueListItemRef{}}})
+        expect(document.set_prop_val(owner(103), current_row, invalid) == PropertyMutationStatus::invalid_value &&
+            read_row(103) == PropertyValue{*row11},
+            "invalid CurrentRow values are rejected without replacing the prior selection");
+    expect(unsupported.set_prop_val(owner(120), current_row, *row7) == PropertyMutationStatus::unsupported_surface &&
+        unsupported.get_prop_val(owner(120), current_row).value == PropertyValue{UndefinedValue{}} &&
+        unsupported.set_prop_val(owner(121), current_row, *row7) == PropertyMutationStatus::unsupported_surface &&
+        unsupported.get_prop_val(owner(121), current_row).value == PropertyValue{UndefinedValue{}},
+        "unbound or nested ListBoxes expose Undefined and reject unsupported selection context");
+    expect(document.set_prop_val(owner(122), current_row, *row7) == PropertyMutationStatus::unsupported_surface &&
+        read_row(122) == PropertyValue{UndefinedValue{}},
+        "a valid direct binding still needs a supplied runtime attribute value");
+    expect(document.get_prop_val(owner(999), current_row).status == PropertyReadStatus::unknown_owner,
+        "unknown controls do not manufacture a CurrentRow context");
+
+    expect(document.set_prop_val(owner(106), PropertyId::from_name("Enabled"), false) == PropertyMutationStatus::applied,
+        "persisted ListBox state can coexist with runtime selection");
+    const auto xml_before_runtime = oof::source::serialize_form_xml(document);
+    const auto bin_before_runtime = oof::save_form_bin(document);
+    expect(xml_before_runtime.ok() && bin_before_runtime.ok(), "row selection fixture serializes before runtime changes");
+    expect(document.set_prop_val(owner(104), current_row, *row7) == PropertyMutationStatus::applied_runtime_only &&
+        document.set_prop_val(owner(105), current_row, *row11) == PropertyMutationStatus::applied_runtime_only,
+        "independent selections are established for persistence checks");
+    const auto xml_after_runtime = oof::source::serialize_form_xml(document);
+    const auto bin_after_runtime = oof::save_form_bin(document);
+    expect(xml_after_runtime.ok() && xml_after_runtime.value() == xml_before_runtime.value() &&
+        bin_after_runtime.ok() && bin_after_runtime.value() == bin_before_runtime.value(),
+        "runtime row selection does not change XML or BIN output");
+    const auto cold = oof::source::parse_form_xml(xml_after_runtime.value());
+    expect(cold.ok() && cold.value().get_prop_val(owner(104), current_row).value == PropertyValue{UndefinedValue{}},
+        "cold source parsing starts with Undefined CurrentRow");
+
+    auto edited = *source->get();
+    edited.items.erase(edited.items.begin());
+    expect(source->replace(edited) && !row7->is_attached() && row7->id() == 7 && row7->get() &&
+        std::get<std::string>(row7->get()->value) == "seven" && read_row(104) == PropertyValue{UndefinedValue{}},
+        "removal detaches selected rows while an external reference retains its final payload snapshot");
+    const auto row11_again = ValueListItemRef::create(*source, 11);
+    edited.items.insert(edited.items.begin(), initial.items.front());
+    expect(source->replace(edited) && row11_again && *row11_again == *row11 &&
+        read_row(104) == PropertyValue{UndefinedValue{}} && read_row(105) == PropertyValue{*row11_again},
+        "reordering preserves surviving row identity while removed rows cannot remain selected");
+    const auto recreated7 = ValueListItemRef::create(*source, 7);
+    expect(recreated7 && *recreated7 != *row7 && recreated7->is_attached(),
+        "reintroducing a removed numeric ID creates a new row identity");
+
+    expect(document.bind_attribute_value_list(AttributeRef{ObjectId{900}}, *source) == PropertyMutationStatus::applied_runtime_only,
+        "rebinding even the same source identity is accepted");
+    for (std::uint64_t id = 100; id < 112; ++id)
+        expect(read_row(id) == PropertyValue{*recreated7},
+            "rebinding the shared source resets every directly bound ListBox to its first item");
+    expect(document.set_prop_val(owner(100), current_row, *row7) == PropertyMutationStatus::applied_runtime_only &&
+        read_row(100) == PropertyValue{*recreated7},
+        "a detached candidate cannot replace a selection even when its numeric ID exists again");
+    auto empty = ValueListRef::create(ValueListValue{});
+    expect(empty && document.bind_attribute_value_list(AttributeRef{ObjectId{900}}, *empty) == PropertyMutationStatus::applied_runtime_only,
+        "an empty source can be bound to the ValueList attribute");
+    for (std::uint64_t id = 100; id < 112; ++id)
+        expect(read_row(id) == PropertyValue{UndefinedValue{}}, "empty source binding clears every ListBox selection");
+    expect(document.bind_attribute_value_list(AttributeRef{ObjectId{900}}, *source) == PropertyMutationStatus::applied_runtime_only,
+        "a populated source can be rebound to the ValueList attribute");
+    for (std::uint64_t id = 100; id < 112; ++id)
+        expect(read_row(id) == PropertyValue{*recreated7}, "populated source binding selects its first row in every ListBox");
+
+    OrdinaryFormDocument copied = document;
+    const auto copied_ref = copied.get_prop_val(owner(100), current_row);
+    expect(copied.attribute_value_list(AttributeRef{ObjectId{900}}) == source &&
+        copied_ref.value == PropertyValue{*recreated7} &&
+        copied.set_prop_val(owner(100), current_row, *row11_again) == PropertyMutationStatus::applied_runtime_only &&
+        document.get_prop_val(owner(100), current_row).value == PropertyValue{*recreated7},
+        "document copies share source list identity and keep independent row selections");
+    document.set_form(document.form());
+    expect(!document.attribute_value_list(AttributeRef{ObjectId{900}}) &&
+        document.get_prop_val(owner(100), current_row).value == PropertyValue{UndefinedValue{}} &&
+        document.get_prop_val(owner(106), PropertyId::from_name("Enabled")).value == PropertyValue{false},
+        "form replacement clears runtime bindings and selections while retaining persisted collections");
+
+    ControlNode shadow{ObjectId{130}, "Shadow", ListBoxPayload{}};
+    shadow.properties().set_explicit(current_row, *row7);
+    Form shadow_form; shadow_form.id = ObjectId{129}; shadow_form.name = "ShadowCurrentRow";
+    shadow_form.children.emplace_back(ControlRef{ObjectId{130}});
+    OrdinaryFormDocument shadow_document(std::move(shadow_form));
+    shadow_document.add_control(std::move(shadow));
+    expect(shadow_document.validate().has(InvariantCode::invalid_property),
+        "manually stored CurrentRow shadow is rejected by model validation");
 }
 
 void test_control_extension_value_runtime_boundary() {
@@ -2723,8 +2927,8 @@ void test_help_metamodel() {
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
     expect(coverage.unclassified_properties == 0 && coverage.missing_storage_codecs == 0 &&
-            coverage.unclassified_value_codecs == 17,
-        "release coverage is blocked by 17 unclassified live value codecs");
+            coverage.unclassified_value_codecs == 16,
+        "release coverage is blocked by 16 unclassified live value codecs");
 
     expect(
         property_descriptors(ControlKind::input_field).size() == 45,
@@ -3468,7 +3672,7 @@ void test_recursive_typed_values() {
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     };
-    static_assert(std::variant_size_v<PropertyValue::Variant> == 43);
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 44);
     [&]<std::size_t... Index>(std::index_sequence<Index...>) {
         ([&] {
             using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
@@ -5891,6 +6095,7 @@ int main() {
         test_chart_document_resource_budget();
         test_chart_scale_lines();
         test_list_and_html_live_property_boundaries();
+        test_list_box_current_row_runtime_model();
         test_control_extension_value_runtime_boundary();
         test_table_current_parent_runtime_boundary();
         test_geographical_showed_area_runtime_boundary();

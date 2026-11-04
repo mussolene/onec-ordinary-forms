@@ -73,7 +73,8 @@ std::string as_utf8(std::u8string_view value) {
 std::string_view xsd_type(ValueCodec codec) {
     switch (codec) {
         case ValueCodec::calendar_selected_dates:
-            throw std::logic_error("runtime calendar selection has no public XML type");
+        case ValueCodec::value_list_item_reference:
+            throw std::logic_error("runtime object references have no public XML type");
         case ValueCodec::command_bar_buttons:
             return "CommandBarButtonsType";
         case ValueCodec::owned_panel:

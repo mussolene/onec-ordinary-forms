@@ -1330,6 +1330,8 @@ void apply_proven_storage_overrides(
     current_row->persistence = PersistenceClass::runtime_only;
     current_row->storage_codec = StorageCodec::none;
     current_row->default_value = {DefaultKind::undefined, "undefined"};
+    current_row->value_kind = ValueKind::variant;
+    current_row->value_codec = ValueCodec::value_list_item_reference;
 
     auto& html_document = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
     auto document = std::ranges::find(html_document, "Document", &PropertyDescriptor::api_name);
@@ -2853,6 +2855,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "panel-pages";
         case ValueCodec::value_list_reference:
             return "value-list-reference";
+        case ValueCodec::value_list_item_reference:
+            return "value-list-item-reference";
         case ValueCodec::table_columns:
             return "table-columns";
         case ValueCodec::dendrogram_items:
