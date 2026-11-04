@@ -339,6 +339,154 @@ struct TypeParser {
 
 }  // namespace
 
+std::optional<std::string_view> ConfigurationTypeSchema::name_for(const model::UuidValue& type_id) const {
+    try {
+        const auto found = identities_.find(canonical_uuid(type_id.canonical, "$/TypeIdentity/@uuid"));
+        if (found != identities_.end()) return found->second;
+    } catch (const ParseFailure&) {
+        // Invalid and unknown identities have no declaration name.
+    }
+    return std::nullopt;
+}
+
+bool ConfigurationTypeSchema::declares(std::string_view name) const {
+    return declarations_.contains(name);
+}
+
+Result<ConfigurationTypeSchema> parse_configuration_type_schema(std::string_view xsd) {
+    constexpr std::string_view identity_uri = "urn:oof:configuration-types:1";
+    try {
+        if (xsd.empty() || xsd.size() > metadata_xml_max_document_bytes)
+            fail("$", "nonempty XSD within byte limit", std::to_string(xsd.size()),
+                "Configuration type schema input exceeds configured limits");
+        xmlInitParser();
+        // No schema compilation, external loading, DTD loading, or entity substitution.
+        XmlDoc doc(xmlReadMemory(xsd.data(), static_cast<int>(xsd.size()), "configuration-types.xsd", nullptr,
+            XML_PARSE_NONET | XML_PARSE_NOBLANKS | XML_PARSE_NOCDATA | XML_PARSE_COMPACT | XML_PARSE_NOERROR | XML_PARSE_NOWARNING));
+        if (!doc) fail("$", "well-formed XSD", "malformed", "Configuration type schema cannot be parsed");
+        if (doc->intSubset || doc->extSubset)
+            fail("$", "XML without DTD declarations", "DTD", "Configuration type schema DTDs are forbidden");
+        xmlNodePtr root = xmlDocGetRootElement(doc.get());
+        if (!element(root, "schema", xs_uri) || !xmlHasNsProp(root, BAD_CAST "targetNamespace", nullptr) ||
+            attribute(root, "targetNamespace") != cfg_uri)
+            fail("$", "XSD schema in the current-config target namespace", local_name(root),
+                "Configuration type schema root or target namespace is unsupported");
+        std::size_t nodes = 0;
+        check_tree_limits(root, 0, nodes);
+        std::set<std::string, std::less<>> declarations;
+        std::map<std::string, std::string, std::less<>> identities;
+        std::set<xmlNodePtr> annotated_declarations;
+        std::vector<xmlNodePtr> pending{root};
+        while (!pending.empty()) {
+            xmlNodePtr node = pending.back();
+            pending.pop_back();
+            const std::string local = local_name(node);
+            const bool type = local == "simpleType" || local == "complexType";
+            if (type) {
+                if (namespace_uri(node) != xs_uri)
+                    fail("$/schema", "XSD type declaration namespace", local,
+                        "Configuration type declaration uses an unexpected namespace");
+                const auto name = attribute(node, "name");
+                if (node->parent == root) {
+                    if (!name || name->empty() || xmlValidateNCName(BAD_CAST name->c_str(), 0) != 0)
+                        fail("$/schema/type/@name", "nonempty NCName", name.value_or("missing"),
+                            "Configuration type declaration name is invalid");
+                    if (declarations.size() >= ConfigurationTypeSchema::max_declarations)
+                        fail("$/schema", "bounded type declaration count", std::to_string(declarations.size() + 1),
+                            "Configuration type schema exceeds declaration limit");
+                    if (!declarations.insert(*name).second)
+                        fail("$/schema/type/@name", "unique type name", *name,
+                            "Configuration type declaration name is duplicated");
+                } else if (name || namespace_uri(node->parent) != xs_uri ||
+                    (local_name(node->parent) != "element" &&
+                     (local != "simpleType" || (local_name(node->parent) != "restriction" &&
+                      local_name(node->parent) != "list" && local_name(node->parent) != "union")))) {
+                    fail("$/schema/type", "anonymous nested type in XSD content", name.value_or("invalid location"),
+                        "Configuration nested type declaration is malformed");
+                }
+                for (xmlAttrPtr property = node->properties; property; property = property->next) {
+                    if (std::string_view(reinterpret_cast<const char*>(property->name)) == "name" && property->ns)
+                        fail("$/schema/type/@name", "unqualified name attribute", "qualified name",
+                            "Configuration type declaration name attribute is malformed");
+                }
+                for (xmlNodePtr child = node->children; child; child = child->next) {
+                    if (child->type == XML_TEXT_NODE && !content(child).empty())
+                        fail("$/schema/type", "XSD element content without free text", "text",
+                            "Configuration type declaration contains unexpected text");
+                }
+                std::size_t annotations = 0;
+                std::size_t bodies = 0;
+                bool saw_body = false;
+                std::size_t complex_bodies = 0;
+                bool content_body = false;
+                for (xmlNodePtr child : children(node)) {
+                    const std::string child_name = local_name(child);
+                    if (element(child, "annotation", xs_uri)) {
+                        if (++annotations > 1 || saw_body)
+                            fail("$/schema/type", "one leading annotation", child_name,
+                                "Configuration type declaration annotation is malformed");
+                        continue;
+                    }
+                    saw_body = true;
+                    if (namespace_uri(child) != xs_uri ||
+                        (local == "simpleType" && child_name != "restriction" && child_name != "list" && child_name != "union") ||
+                        (local == "complexType" && child_name != "simpleContent" && child_name != "complexContent" &&
+                         child_name != "group" && child_name != "all" && child_name != "choice" && child_name != "sequence" &&
+                         child_name != "attribute" && child_name != "attributeGroup" && child_name != "anyAttribute"))
+                        fail("$/schema/type", "XSD type content", child_name,
+                            "Configuration type declaration content is malformed");
+                    if (local == "complexType") {
+                        const bool is_content = child_name == "simpleContent" || child_name == "complexContent";
+                        const bool is_particle = is_content || child_name == "group" || child_name == "all" ||
+                            child_name == "choice" || child_name == "sequence";
+                        if ((is_particle && ++complex_bodies > 1) || content_body)
+                            fail("$/schema/type", "one complex type body", child_name,
+                                "Configuration complex type has conflicting bodies");
+                        content_body = is_content;
+                    }
+                    if (local == "simpleType" && ++bodies > 1)
+                        fail("$/schema/type", "one simple type body", child_name,
+                            "Configuration simple type has multiple bodies");
+                }
+                if (local == "simpleType" && bodies != 1)
+                    fail("$/schema/type", "one simple type body", "missing",
+                        "Configuration simple type body is absent");
+            }
+            if (local == "TypeIdentity" || namespace_uri(node) == identity_uri) {
+                xmlNodePtr appinfo = node->parent;
+                xmlNodePtr annotation = appinfo ? appinfo->parent : nullptr;
+                xmlNodePtr declaration = annotation ? annotation->parent : nullptr;
+                if (!element(node, "TypeIdentity", identity_uri) || !element(appinfo, "appinfo", xs_uri) ||
+                    !element(annotation, "annotation", xs_uri) || !declaration || declaration->parent != root ||
+                    (!element(declaration, "simpleType", xs_uri) && !element(declaration, "complexType", xs_uri)))
+                    fail("$/schema/TypeIdentity", "TypeIdentity inside a declared type annotation/appinfo", local,
+                        "Configuration type identity namespace or location is invalid");
+                if (!annotated_declarations.insert(declaration).second)
+                    fail("$/schema/TypeIdentity", "one identity per declaration", "duplicate",
+                        "Configuration type declaration has multiple identities");
+                if (!node->properties || node->properties->next || node->properties->ns ||
+                    std::string_view(reinterpret_cast<const char*>(node->properties->name)) != "uuid" ||
+                    !children(node).empty() || !content(node).empty())
+                    fail("$/schema/TypeIdentity", "only an unqualified uuid attribute and no content", "invalid identity",
+                        "Configuration type identity attributes or content are invalid");
+                const std::string uuid = canonical_uuid(required_attribute(node, "uuid", "$/schema/TypeIdentity"),
+                    "$/schema/TypeIdentity/@uuid");
+                const std::string name = required_attribute(declaration, "name", "$/schema/type");
+                if (!identities.emplace(uuid, name).second)
+                    fail("$/schema/TypeIdentity/@uuid", "unique type UUID", uuid,
+                        "Configuration type identity is duplicated or conflicting");
+            }
+            for (xmlNodePtr child : children(node)) pending.push_back(child);
+        }
+        return Result<ConfigurationTypeSchema>::success(ConfigurationTypeSchema{std::move(declarations), std::move(identities)});
+    } catch (const ParseFailure& failure) {
+        return Result<ConfigurationTypeSchema>::failure({failure.diagnostic});
+    } catch (const std::exception& exception) {
+        return Result<ConfigurationTypeSchema>::failure({{"OOF3002", DiagnosticSeverity::error, {}, "$", {},
+            "valid bounded configuration type XSD", "parser error", exception.what()}});
+    }
+}
+
 Result<MetadataContext> parse_metadata_context(std::span<const std::string> xml_documents) {
     if (xml_documents.empty() || xml_documents.size() > metadata_xml_max_documents)
         return Result<MetadataContext>::failure({{"OOF3002", DiagnosticSeverity::error, {}, "$", {},

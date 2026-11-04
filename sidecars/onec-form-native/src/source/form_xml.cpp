@@ -31,6 +31,7 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/schema_generator.hpp"
+#include "oof/source/metadata_xml.hpp"
 #include "oof/storage/value_codec.hpp"
 
 namespace oof::source {
@@ -288,6 +289,21 @@ std::string canonical_uuid(std::string value) {
     return value;
 }
 
+bool nonzero_uuid(std::string_view value) {
+    if (value.size() != 36) return false;
+    bool nonzero = false;
+    for (std::size_t index = 0; index < value.size(); ++index) {
+        const auto character = static_cast<unsigned char>(value[index]);
+        if (index == 8 || index == 13 || index == 18 || index == 23) {
+            if (character != '-') return false;
+        } else {
+            if (!std::isxdigit(character)) return false;
+            nonzero = nonzero || character != '0';
+        }
+    }
+    return nonzero;
+}
+
 model::ObjectId parse_object_id(
     std::string_view text,
     xmlNodePtr node,
@@ -425,7 +441,7 @@ const CompiledOrdinaryFormSchema& compiled_schema() {
     return schema;
 }
 
-XmlDoc parse_and_validate_xml(std::string_view xml) {
+XmlDoc parse_and_validate_xml(std::string_view xml, bool mutable_tree = false) {
     if (xml.size() > static_cast<std::size_t>(INT_MAX)) {
         throw AdapterError({
             "OOF2001",
@@ -445,7 +461,7 @@ XmlDoc parse_and_validate_xml(std::string_view xml) {
         "Form.xml",
         nullptr,
         XML_PARSE_NONET | XML_PARSE_NOBLANKS | XML_PARSE_NOCDATA |
-            XML_PARSE_COMPACT | XML_PARSE_NOERROR | XML_PARSE_NOWARNING));
+            (mutable_tree ? 0 : XML_PARSE_COMPACT) | XML_PARSE_NOERROR | XML_PARSE_NOWARNING));
     if (!document) {
         throw AdapterError({
             "OOF2001",
@@ -474,6 +490,46 @@ XmlDoc parse_and_validate_xml(std::string_view xml) {
         throw AdapterError(std::move(*diagnostic));
     }
     return document;
+}
+
+bool apply_configuration_type_names(xmlDocPtr document, const ConfigurationTypeSchema& types,
+    Diagnostics& diagnostics) {
+    bool changed = false;
+    bool missing_identity_warning = false;
+    std::set<std::pair<std::string, std::string>> warned_names;
+    std::vector<xmlNodePtr> pending{xmlDocGetRootElement(document)};
+    while (!pending.empty()) {
+        xmlNodePtr node = pending.back();
+        pending.pop_back();
+        for (xmlNodePtr child : element_children(node)) pending.push_back(child);
+        if (node == nullptr || node->ns != nullptr || node_name(node) != "Entry") continue;
+        const auto term = optional_attribute(node, "term");
+        if (!term || (*term != "object" && *term != "reference" && *term != "list" && *term != "type"))
+            continue;
+        const auto uuid = optional_attribute(node, "typeUuid");
+        if (!uuid || !nonzero_uuid(*uuid)) continue;
+        const std::string canonical = canonical_uuid(*uuid);
+        const auto explicit_name = optional_attribute(node, "typeName");
+        const auto schema_name = types.name_for(model::UuidValue{canonical});
+        if (schema_name) {
+            if (!explicit_name) {
+                const std::string name(*schema_name);
+                if (xmlSetProp(node, BAD_CAST "typeName", BAD_CAST name.c_str()) == nullptr)
+                    throw std::runtime_error("Cannot set configuration type name in ordinary-form XML");
+                changed = true;
+            } else if (*explicit_name != *schema_name && warned_names.emplace(canonical, *explicit_name).second) {
+                diagnostics.push_back({"OOF1142", DiagnosticSeverity::warning, {}, xml_node_path(node),
+                    "typeName", std::string(*schema_name), *explicit_name,
+                    "The explicit typeName differs from the supplied type schema; the name and UUID are preserved."});
+            }
+        } else if (!explicit_name && types.identity_count() == 0 && types.declaration_count() != 0 &&
+            !missing_identity_warning) {
+            diagnostics.push_back({"OOF1143", DiagnosticSeverity::warning, {}, {}, "typeName", {}, {},
+                "The supplied type schema has declarations but no UUID identities; missing type names cannot be mapped from GUIDs."});
+            missing_identity_warning = true;
+        }
+    }
+    return changed;
 }
 
 model::LocalizedStringValue parse_localized_string(xmlNodePtr node) {
@@ -582,10 +638,32 @@ model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr 
 
 model::TypeDomainPatternValue parse_type_domain(xmlNodePtr node) {
     model::TypeDomainPatternValue value;
+    if (node->properties != nullptr)
+        fail("OOF2003", node, {}, node_name(node), "no attributes", "present",
+            "Type-domain container does not accept attributes");
+    for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
+        if ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) &&
+            child->content && !trim_ascii(reinterpret_cast<const char*>(child->content)).empty())
+            fail("OOF2003", node, {}, node_name(node), "Entry elements", "text",
+                "Type-domain container cannot contain direct text");
+    }
     for (xmlNodePtr entry_node : element_children(node)) {
+        if (node_name(entry_node) != "Entry" || !element_children(entry_node).empty() ||
+            !trim_ascii(node_text(entry_node)).empty())
+            fail("OOF2003", entry_node, {}, node_name(node), "empty Entry element", "unsupported content",
+                "Type-domain entry must contain only named qualifiers");
+        static constexpr std::array<std::string_view, 9> allowed{
+            "term", "typeUuid", "typeName", "length", "precision", "nonNegative", "variable", "date", "time"};
+        for (xmlAttrPtr attribute = entry_node->properties; attribute != nullptr; attribute = attribute->next) {
+            if (attribute->ns != nullptr || std::ranges::find(allowed,
+                std::string_view(reinterpret_cast<const char*>(attribute->name))) == allowed.end())
+                fail("OOF2003", entry_node, {}, node_name(entry_node), "named type qualifier", "unsupported attribute",
+                    "Type-domain entry contains an unsupported qualifier");
+        }
         model::TypeDomainEntry entry;
         entry.term = parse_type_domain_term(required_attribute(entry_node, "term"), entry_node);
         const auto type_uuid = optional_attribute(entry_node, "typeUuid");
+        const auto type_name = optional_attribute(entry_node, "typeName");
         const auto length = optional_attribute(entry_node, "length");
         const auto precision = optional_attribute(entry_node, "precision");
         const auto non_negative = optional_attribute(entry_node, "nonNegative");
@@ -605,6 +683,8 @@ model::TypeDomainPatternValue parse_type_domain(xmlNodePtr node) {
         const bool invalid_attributes =
             (entry.term == model::TypeDomainTerm::object && !type_uuid.has_value()) ||
             (!reference_like && type_uuid.has_value()) ||
+            (type_name && (!reference_like || !type_uuid || !nonzero_uuid(*type_uuid) ||
+                trim_ascii(*type_name).empty())) ||
             (!numeric && (precision.has_value() || non_negative.has_value())) ||
             (!(numeric || string || binary) && length.has_value()) ||
             (!(string || binary) && variable.has_value()) ||
@@ -628,6 +708,7 @@ model::TypeDomainPatternValue parse_type_domain(xmlNodePtr node) {
                     "ValueTree requires its named type-domain term");
             }
         }
+        if (type_name) entry.type_name = model::QualifiedName{*type_name};
         if (numeric) {
             if (length.has_value()) {
                 entry.numeric.length = parse_integer<std::uint32_t>(*length, entry_node, "length");
@@ -2002,8 +2083,49 @@ private:
             node,
             "attributeId",
             owner_id)};
+        require_typed_container(node, owner_id, "attributeId");
         for (xmlNodePtr member : element_children(node)) {
-            path.members.push_back(node_text(member));
+            if (node_name(member) != "Member" || path.members.size() >= 128)
+                fail("OOF2003", member, std::string(owner_id), "DataPath", "at most 128 Member elements",
+                    node_name(member), "Data path contains unsupported content or exceeds its depth limit");
+            model::DataPathMember descriptor;
+            for (xmlAttrPtr attribute = member->properties; attribute != nullptr; attribute = attribute->next) {
+                const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+                if (attribute->ns != nullptr || (name != "name" && name != "uuid"))
+                    fail("OOF2003", member, std::string(owner_id), "Member", "name or uuid", std::string(name),
+                        "Data path member contains an unsupported attribute");
+            }
+            const auto name = optional_attribute(member, "name");
+            const auto uuid = optional_attribute(member, "uuid");
+            std::string text;
+            for (xmlNodePtr child = member->children; child != nullptr; child = child->next) {
+                if (child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE)
+                    text += node_text(child);
+                else if (child->type == XML_ELEMENT_NODE) {
+                    if (node_name(child) != "TypeDomain" || descriptor.type)
+                        fail("OOF2003", child, std::string(owner_id), "Member", "one TypeDomain", node_name(child),
+                            "Data path member contains an unsupported or duplicate type descriptor");
+                    descriptor.type = parse_type_domain(child);
+                }
+            }
+            const std::string_view text_name = trim_ascii(text);
+            if (name && !text_name.empty() && *name != text_name)
+                fail("OOF2003", member, std::string(owner_id), "Member", "matching text and attribute names", text,
+                    "Data path member names conflict");
+            descriptor.name = name ? *name : std::string(text_name);
+            if (name && trim_ascii(*name).empty())
+                fail("OOF2003", member, std::string(owner_id), "name", "nonempty member name", *name,
+                    "Data path member name is empty");
+            if (uuid) {
+                if (!nonzero_uuid(*uuid))
+                    fail("OOF2003", member, std::string(owner_id), "uuid", "nonzero UUID", *uuid,
+                        "Data path member UUID is malformed or zero");
+                descriptor.uuid = model::UuidValue{canonical_uuid(*uuid)};
+            }
+            if (descriptor.name.empty() && !descriptor.uuid)
+                fail("OOF2003", member, std::string(owner_id), "Member", "member name or UUID", "missing",
+                    "Data path member descriptor has no identity");
+            path.members.push_back(std::move(descriptor));
         }
         return path;
     }
@@ -2440,8 +2562,8 @@ private:
                             for (xmlNodePtr entry_node : element_children(value_node)) {
                                 if (node_name(entry_node) != "Entry")
                                     fail("OOF2003", entry_node, id_text, node_name(entry_node), "Entry", node_name(entry_node), "Unknown Spreadsheet Cell ValueType item");
-                                static constexpr std::array<std::string_view, 8> allowed{
-                                    "term", "typeUuid", "length", "precision", "nonNegative", "variable", "date", "time"};
+                                static constexpr std::array<std::string_view, 9> allowed{
+                                    "term", "typeUuid", "typeName", "length", "precision", "nonNegative", "variable", "date", "time"};
                                 for (xmlAttrPtr attribute = entry_node->properties; attribute != nullptr; attribute = attribute->next) {
                                     if (std::ranges::find(allowed, std::string_view(reinterpret_cast<const char*>(attribute->name))) == allowed.end())
                                         fail("OOF2003", entry_node, id_text, std::string(reinterpret_cast<const char*>(attribute->name)), "named type qualifier", "unsupported", "Spreadsheet Cell ValueType contains an unsupported qualifier");
@@ -3615,6 +3737,16 @@ private:
                     if (!entry.date.time) attributes.emplace_back("time", "false");
                     break;
             }
+            if (entry.type_name) {
+                const bool reference_like = entry.term == model::TypeDomainTerm::object ||
+                    entry.term == model::TypeDomainTerm::reference || entry.term == model::TypeDomainTerm::list ||
+                    entry.term == model::TypeDomainTerm::type;
+                if (!reference_like || !entry.type_uuid || !nonzero_uuid(entry.type_uuid->canonical) ||
+                    trim_ascii(entry.type_name->value).empty())
+                    serialization_fail(std::string(object_id), std::string(name), "named concrete type UUID",
+                        "invalid type name", "Type name requires a concrete object, reference, list, or type UUID");
+                attributes.emplace_back("typeName", entry.type_name->value);
+            }
             writer_.empty("Entry", attributes);
         }
         writer_.close(name);
@@ -4299,7 +4431,28 @@ private:
             return;
         }
         writer_.open("DataPath", attributes);
-        for (const std::string& member : path.members) writer_.text("Member", member);
+        if (path.members.size() > 128)
+            serialization_fail({}, "DataPath", "at most 128 members", "excessive depth",
+                "Data path exceeds its depth limit");
+        for (const auto& member : path.members) {
+            if ((trim_ascii(member.name).empty() && !member.uuid) ||
+                (!member.name.empty() && trim_ascii(member.name).empty()) ||
+                (member.uuid && !nonzero_uuid(member.uuid->canonical)))
+                serialization_fail({}, "Member", "member name or nonzero UUID", "invalid descriptor",
+                    "Data path member identity is missing or malformed");
+            if (!member.uuid && !member.type) {
+                writer_.text("Member", member.name);
+                continue;
+            }
+            XmlAttributes member_attributes;
+            if (member.uuid) member_attributes.emplace_back("uuid", canonical_uuid(member.uuid->canonical));
+            if (!member.name.empty()) member_attributes.emplace_back("name", member.name);
+            if (member.type) {
+                writer_.open("Member", member_attributes);
+                write_type_domain("TypeDomain", *member.type, {});
+                writer_.close("Member");
+            } else writer_.empty("Member", member_attributes);
+        }
         writer_.close("DataPath");
     }
 
@@ -5021,9 +5174,12 @@ Diagnostic internal_diagnostic(std::string message) {
 }  // namespace
 
 Result<model::OrdinaryFormDocument> parse_form_xml(
-    std::string_view xml, std::shared_ptr<const MetadataContext> metadata_context) {
+    std::string_view xml, std::shared_ptr<const MetadataContext> metadata_context,
+    const ConfigurationTypeSchema* types) {
     try {
-        XmlDoc document = parse_and_validate_xml(xml);
+        XmlDoc document = parse_and_validate_xml(xml, types != nullptr);
+        Diagnostics diagnostics;
+        if (types != nullptr) apply_configuration_type_names(document.get(), *types, diagnostics);
         xmlNodePtr root = xmlDocGetRootElement(document.get());
         DocumentParser parser(mm::Metamodel::instance(), std::move(metadata_context));
         model::OrdinaryFormDocument parsed = parser.parse(root);
@@ -5032,7 +5188,6 @@ Result<model::OrdinaryFormDocument> parse_form_xml(
             return Result<model::OrdinaryFormDocument>::failure(
                 invariant_diagnostics(report));
         }
-        Diagnostics diagnostics;
         if (!parsed.reconstruction_complete()) {
             diagnostics.push_back({"OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
                 "The source Form.xml is marked incomplete; unsupported source properties are not available."});
@@ -5048,7 +5203,8 @@ Result<model::OrdinaryFormDocument> parse_form_xml(
     }
 }
 
-Result<std::string> serialize_form_xml(const model::OrdinaryFormDocument& document) {
+Result<std::string> serialize_form_xml(const model::OrdinaryFormDocument& document,
+    const ConfigurationTypeSchema* types) {
     const model::ValidationReport report = document.validate();
     if (!report.ok()) {
         return Result<std::string>::failure(invariant_diagnostics(report));
@@ -5056,8 +5212,18 @@ Result<std::string> serialize_form_xml(const model::OrdinaryFormDocument& docume
     try {
         DocumentSerializer serializer(document, mm::Metamodel::instance());
         std::string xml = serializer.serialize();
+        Diagnostics diagnostics;
         try {
-            static_cast<void>(parse_and_validate_xml(xml));
+            XmlDoc validated = parse_and_validate_xml(xml, types != nullptr);
+            if (types != nullptr && apply_configuration_type_names(validated.get(), *types, diagnostics)) {
+                xmlChar* raw = nullptr;
+                int size = 0;
+                xmlDocDumpFormatMemoryEnc(validated.get(), &raw, &size, "UTF-8", 1);
+                std::unique_ptr<xmlChar, decltype(xmlFree)> buffer(raw, xmlFree);
+                if (raw == nullptr || size <= 0)
+                    throw std::runtime_error("Cannot serialize configuration type names in ordinary-form XML");
+                xml.assign(reinterpret_cast<const char*>(raw), static_cast<std::size_t>(size));
+            }
         } catch (AdapterError& validation_error) {
             Diagnostic diagnostic = validation_error.take_diagnostic();
             diagnostic.code = "OOF2005";
@@ -5065,7 +5231,6 @@ Result<std::string> serialize_form_xml(const model::OrdinaryFormDocument& docume
                 "Canonical XML produced by the adapter is invalid: " + diagnostic.message;
             throw AdapterError(std::move(diagnostic));
         }
-        Diagnostics diagnostics;
         if (!document.reconstruction_complete()) {
             diagnostics.push_back({"OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
                 "The serialized Form.xml remains incomplete; unsupported source properties are not available."});

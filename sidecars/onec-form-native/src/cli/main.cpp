@@ -38,8 +38,8 @@ constexpr std::uintmax_t max_input_bytes = 64U * 1024U * 1024U;
 
 void print_usage(std::ostream& output) {
     output
-        << "Usage: oof dump <Form.bin> <Form.xml> [--json] [--metadata <configuration-root>]\n"
-        << "       oof build <Form.xml> <Form.bin> [--json] [--metadata <configuration-root>] (requires <XML-stem>/Module.bsl)\n"
+        << "Usage: oof dump <Form.bin> <Form.xml> [--json] [--type-schema <types.xsd>] [--metadata <configuration-root>]\n"
+        << "       oof build <Form.xml> <Form.bin> [--json] [--type-schema <types.xsd>] [--metadata <configuration-root>] (requires <XML-stem>/Module.bsl)\n"
         << "       oof --coverage [--json]\n"
         << "       oof --version\n";
 }
@@ -54,9 +54,9 @@ std::vector<std::string_view> positional_arguments(int argc, char** argv) {
     std::vector<std::string_view> result;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument = argv[index];
-        if (argument == "--metadata") {
+        if (argument == "--metadata" || argument == "--type-schema") {
             if (++index >= argc || std::string_view(argv[index]).starts_with("--"))
-                throw std::invalid_argument("--metadata requires a configuration root directory");
+                throw std::invalid_argument(std::string(argument) + " requires an input path");
         } else if (argument != "--json") {
             result.push_back(argument);
         }
@@ -601,16 +601,40 @@ std::shared_ptr<const oof::MetadataContext> load_metadata_context(int argc, char
     return std::make_shared<const oof::MetadataContext>(parsed.take_value());
 }
 
+struct TypeSchemaInput {
+    oof::source::ConfigurationTypeSchema schema;
+    std::filesystem::path source;
+};
+
+std::optional<TypeSchemaInput> load_type_schema(
+    int argc, char** argv, const std::filesystem::path& output) {
+    std::optional<std::filesystem::path> path;
+    for (int index = 1; index < argc; ++index) {
+        if (std::string_view(argv[index]) != "--type-schema") continue;
+        if (path || index + 1 >= argc) throw std::invalid_argument("Specify --type-schema once with a file");
+        path = argv[++index];
+    }
+    if (!path) return std::nullopt;
+    reject_input_output_overlap(*path, output);
+    const auto bytes = read_bytes(*path, oof::source::metadata_xml_max_document_bytes);
+    const std::string_view xml(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    auto parsed = oof::source::parse_configuration_type_schema(xml);
+    if (!parsed) throw std::invalid_argument(parsed.diagnostics().empty()
+        ? "Invalid configuration type schema" : parsed.diagnostics().front().message);
+    return TypeSchemaInput{parsed.take_value(), std::move(*path)};
+}
+
 int dump_form(
     const std::filesystem::path& input,
     const std::filesystem::path& output,
-    bool json, std::shared_ptr<const oof::MetadataContext> metadata_context) {
+    bool json, std::shared_ptr<const oof::MetadataContext> metadata_context,
+    const TypeSchemaInput* types) {
     const auto loaded = oof::load_form_bin(read_bytes(input), "Form", std::move(metadata_context));
     if (!loaded) {
         print_diagnostics(loaded.diagnostics(), json);
         return 1;
     }
-    const auto xml = oof::source::serialize_form_xml(loaded.value());
+    const auto xml = oof::source::serialize_form_xml(loaded.value(), types ? &types->schema : nullptr);
     if (!xml) {
         print_diagnostics(xml.diagnostics(), json);
         return 1;
@@ -618,8 +642,10 @@ int dump_form(
     reject_input_output_overlap(input, output);
     const auto root = package_root_for(output);
     reject_input_output_overlap(input, root / "Module.bsl");
+    if (types) reject_input_output_overlap(types->source, root / "Module.bsl");
     for (const auto& asset : loaded.value().assets()) {
         reject_input_output_overlap(input, root / asset.relative_path);
+        if (types) reject_input_output_overlap(types->source, root / asset.relative_path);
     }
     check_output_file(output);
     std::filesystem::create_directories(root);
@@ -640,9 +666,11 @@ int dump_form(
 int build_form(
     const std::filesystem::path& input,
     const std::filesystem::path& output,
-    bool json, std::shared_ptr<const oof::MetadataContext> metadata_context) {
+    bool json, std::shared_ptr<const oof::MetadataContext> metadata_context,
+    const TypeSchemaInput* types) {
     reject_input_output_overlap(input, output);
-    auto parsed = oof::source::parse_form_xml(read_text(input), std::move(metadata_context));
+    auto parsed = oof::source::parse_form_xml(read_text(input), std::move(metadata_context),
+        types ? &types->schema : nullptr);
     if (!parsed) {
         print_diagnostics(parsed.diagnostics(), json);
         return 1;
@@ -721,11 +749,12 @@ int main(int argc, char** argv) {
             print_coverage(json);
             return 0;
         }
-        if (command == "dump") {
-            return dump_form(arguments[1], arguments[2], json, load_metadata_context(argc, argv, arguments[2]));
-        }
-        if (command == "build") {
-            return build_form(arguments[1], arguments[2], json, load_metadata_context(argc, argv, arguments[2]));
+        if (command == "dump" || command == "build") {
+            const auto types = load_type_schema(argc, argv, arguments[2]);
+            const auto* schema = types ? &*types : nullptr;
+            auto metadata = load_metadata_context(argc, argv, arguments[2]);
+            return command == "dump" ? dump_form(arguments[1], arguments[2], json, std::move(metadata), schema)
+                : build_form(arguments[1], arguments[2], json, std::move(metadata), schema);
         }
         print_diagnostics(
             cli_failure(

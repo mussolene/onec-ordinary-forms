@@ -1,5 +1,6 @@
 #include "../src/model/chart_type.hpp"
 #include "../src/model/table_properties.hpp"
+#include <algorithm>
 #include <array>
 #include <exception>
 #include <iostream>
@@ -13,6 +14,7 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
+#include "oof/source/metadata_xml.hpp"
 #include "oof/storage/form_stream.hpp"
 #include "oof/storage/list_stream.hpp"
 
@@ -4078,10 +4080,178 @@ void test_chart_xml_document_resource_budget() {
         "XML dimensions and Trendlines must share one budget before dense matrix allocation");
 }
 
+
+void test_self_contained_field_descriptors_xml() {
+    const std::string xml = R"XML(<Form id="1" name="NamedFields" ordinaryFormVersion="2.1"><MainAttribute attributeId="0"/><CatalogItemFormExtension/><Attributes><Attribute id="0" name="Object"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111" typeName="CatalogObject.Root"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="Text"><DataPath attributeId="0"><Member name="CustomText" uuid="22222222-2222-2222-2222-222222222222"><TypeDomain><Entry term="string" length="64"/></TypeDomain></Member></DataPath><Position/></InputField><LabelDecoration id="3" name="Untyped"><DataPath attributeId="0"><Member uuid="33333333-3333-3333-3333-333333333333"/></DataPath><Position/></LabelDecoration></ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto& member = parsed.value().find_control(model::ObjectId{2})->data_path->members.front();
+    expect(member.name == "CustomText" && member.uuid == model::UuidValue{"22222222-2222-2222-2222-222222222222"} &&
+        member.type && member.type->entries.size() == 1 && member.type->entries.front().term == model::TypeDomainTerm::string &&
+        member.type->entries.front().string.length == 64,
+        "a named field must retain its semantic identity and exact type qualifiers");
+    const auto& untyped = parsed.value().find_control(model::ObjectId{3})->data_path->members.front();
+    expect(untyped.name.empty() && untyped.uuid == model::UuidValue{"33333333-3333-3333-3333-333333333333"} && !untyped.type,
+        "a field reference can retain only its UUID when its source has no name or type");
+    expect(parsed.value().find_attribute(model::ObjectId{0})->type.entries.front().type_name ==
+        model::QualifiedName{"CatalogObject.Root"}, "configured type names must be explicit XML annotations");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), serialized ? "" : serialized.diagnostics().front().message);
+    const auto again = source::parse_form_xml(serialized.value());
+    expect(again.ok() && again.value().find_control(model::ObjectId{2})->data_path ==
+        parsed.value().find_control(model::ObjectId{2})->data_path &&
+        again.value().find_control(model::ObjectId{3})->data_path == parsed.value().find_control(model::ObjectId{3})->data_path,
+        "field UUIDs, supplied labels, and type descriptors must survive public XML round-trip");
+    const std::array<std::pair<std::string_view, std::string_view>, 8> invalid{{
+        {"uuid=\"22222222-2222-2222-2222-222222222222\"", "uuid=\"bad\""},
+        {"uuid=\"22222222-2222-2222-2222-222222222222\"", "uuid=\"00000000-0000-0000-0000-000000000000\""},
+        {"name=\"CustomText\"", "name=\"\""},
+        {"<Member uuid=\"33333333-3333-3333-3333-333333333333\"/>", "<Member/>"},
+        {"term=\"string\" length=\"64\"", "term=\"string\" length=\"64\" typeName=\"CatalogRef.Root\""},
+        {" typeUuid=\"11111111-1111-1111-1111-111111111111\"", ""},
+        {"<TypeDomain><Entry term=\"string\" length=\"64\"/></TypeDomain>", "<TypeDomain><Entry term=\"string\"/></TypeDomain><TypeDomain><Entry term=\"string\"/></TypeDomain>"},
+        {"<Member uuid=\"33333333-3333-3333-3333-333333333333\"/>", "<Member name=\"One\">Other</Member>"},
+    }};
+    for (const auto& [from, to] : invalid) {
+        auto bad = xml;
+        const auto offset = bad.find(from);
+        expect(offset != std::string::npos, "negative fixture must change its intended descriptor");
+        bad.replace(offset, from.size(), to);
+        expect(!source::parse_form_xml(bad), "malformed field identities or configured type annotations must be rejected");
+    }
+    auto legacy = xml;
+    const auto offset = legacy.find("<Member uuid=\"33333333-3333-3333-3333-333333333333\"/>");
+    legacy.replace(offset, std::string("<Member uuid=\"33333333-3333-3333-3333-333333333333\"/>").size(),
+        "<Member>LegacyField</Member>");
+    const auto legacy_parsed = source::parse_form_xml(legacy);
+    expect(legacy_parsed.ok() && legacy_parsed.value().find_control(model::ObjectId{3})->data_path->members.front().name ==
+        "LegacyField", "legacy named member text must remain available for source inspection");
+}
+
+
+void test_configuration_type_schema_xml_enrichment() {
+    constexpr std::string_view annotated_xsd = R"XSD(<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://v8.1c.ru/8.1/data/enterprise/current-config">
+      <xs:complexType name="CatalogObject.Root"><xs:annotation><xs:appinfo><TypeIdentity xmlns="urn:oof:configuration-types:1" uuid="11111111-1111-1111-1111-111111111111"/></xs:appinfo></xs:annotation></xs:complexType>
+      <xs:simpleType name="CatalogRef.Item"><xs:annotation><xs:appinfo><TypeIdentity xmlns="urn:oof:configuration-types:1" uuid="22222222-2222-2222-2222-222222222222"/></xs:appinfo></xs:annotation><xs:restriction base="xs:string"/></xs:simpleType>
+      <xs:complexType name="CatalogList.Root"><xs:annotation><xs:appinfo><TypeIdentity xmlns="urn:oof:configuration-types:1" uuid="33333333-3333-3333-3333-333333333333"/></xs:appinfo></xs:annotation></xs:complexType>
+      <xs:complexType name="Type.Custom"><xs:annotation><xs:appinfo><TypeIdentity xmlns="urn:oof:configuration-types:1" uuid="44444444-4444-4444-4444-444444444444"/></xs:appinfo></xs:annotation></xs:complexType>
+    </xs:schema>)XSD";
+    const auto types = source::parse_configuration_type_schema(annotated_xsd);
+    expect(types.ok(), types ? "" : types.diagnostics().front().message);
+    std::string xml = R"XML(<Form id="1" name="SchemaNames" ordinaryFormVersion="2.1"><Attributes>
+      <Attribute id="0" name="Root"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute>
+      <Attribute id="2" name="Reference"><TypeDomain><Entry term="reference" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute>
+      <Attribute id="3" name="List"><TypeDomain><Entry term="list" typeUuid="33333333-3333-3333-3333-333333333333"/></TypeDomain></Attribute>
+      <Attribute id="4" name="Type"><TypeDomain><Entry term="type" typeUuid="44444444-4444-4444-4444-444444444444"/></TypeDomain></Attribute>
+      <Attribute id="5" name="Primitive"><TypeDomain><Entry term="string" length="40"/></TypeDomain></Attribute>
+      <Attribute id="6" name="Unknown"><TypeDomain><Entry term="object" typeUuid="55555555-5555-5555-5555-555555555555"/></TypeDomain></Attribute>
+      </Attributes><ChildItems>)XML";
+    for (std::size_t index = 0; index < 12; ++index) {
+        xml += "<LabelDecoration id=\"" + std::to_string(20 + index) + "\" name=\"Label" + std::to_string(index) +
+            "\"><DataPath attributeId=\"0\"><Member uuid=\"22222222-2222-2222-2222-222222222222\"";
+        if (index % 2 == 0)
+            xml += "><TypeDomain><Entry term=\"object\" typeUuid=\"11111111-1111-1111-1111-111111111111\"/></TypeDomain></Member>";
+        else xml += "/>";
+        xml += "</DataPath><Position/></LabelDecoration>";
+    }
+    xml += "</ChildItems></Form>";
+    const auto plain = source::parse_form_xml(xml);
+    expect(plain.ok(), plain ? "" : plain.diagnostics().front().message);
+    expect(plain.value().collections().controls.size() == 12 && !plain.value().metadata_context(),
+        "the annotation test must cover twelve controls without MetadataContext");
+    const auto unchanged = source::serialize_form_xml(plain.value());
+    expect(unchanged.ok(), unchanged ? "" : unchanged.diagnostics().front().message);
+    const auto enriched = source::serialize_form_xml(plain.value(), &types.value());
+    expect(enriched.ok(), enriched ? "" : enriched.diagnostics().front().message);
+    expect(enriched.diagnostics().empty(), "unambiguous schema type identities must not produce warnings");
+    const auto enriched_model = source::parse_form_xml(enriched.value());
+    expect(enriched_model.ok(), enriched_model ? "" : enriched_model.diagnostics().front().message);
+    const auto from_input = source::parse_form_xml(xml, {}, &types.value());
+    expect(from_input.ok(), from_input ? "" : from_input.diagnostics().front().message);
+    const std::array<std::pair<std::uint64_t, std::string_view>, 4> configured{{
+        {0, "CatalogObject.Root"}, {2, "CatalogRef.Item"}, {3, "CatalogList.Root"}, {4, "Type.Custom"},
+    }};
+    for (const auto& [id, name] : configured) {
+        expect(enriched_model.value().find_attribute(model::ObjectId{id})->type.entries.front().type_name ==
+            model::QualifiedName{std::string(name)} &&
+            from_input.value().find_attribute(model::ObjectId{id})->type.entries.front().type_name ==
+            model::QualifiedName{std::string(name)},
+            "parse and serialize must enrich only the configured type matching its GUID");
+    }
+    expect(!from_input.value().find_attribute(model::ObjectId{5})->type.entries.front().type_name &&
+        !from_input.value().find_attribute(model::ObjectId{6})->type.entries.front().type_name,
+        "primitive types and unknown configured GUIDs must not acquire invented names");
+    for (std::size_t index = 0; index < 12; ++index) {
+        const auto& member = from_input.value().find_control(model::ObjectId{20 + index})->data_path->members.front();
+        expect(member.name.empty() && member.uuid == model::UuidValue{"22222222-2222-2222-2222-222222222222"},
+            "a known type GUID used as Member.uuid must not become a field name");
+        if (index % 2 == 0)
+            expect(member.type && member.type->entries.front().type_name == model::QualifiedName{"CatalogObject.Root"},
+                "an explicitly present member value type may receive its own configured type name");
+        else expect(!member.type, "a UUID-only member must not acquire an invented value type");
+    }
+    const auto default_again = source::serialize_form_xml(plain.value());
+    expect(default_again.ok() && default_again.value() == unchanged.value() && default_again.diagnostics().empty(),
+        "optional schema enrichment must not mutate the input model or default serialization");
+    const std::string conflict_name = "CatalogObject.UserSupplied";
+    auto conflicting_xml = xml;
+    const std::string root_identity = "typeUuid=\"11111111-1111-1111-1111-111111111111\"";
+    std::size_t cursor = 0;
+    while ((cursor = conflicting_xml.find(root_identity, cursor)) != std::string::npos) {
+        cursor += root_identity.size();
+        const std::string annotation = " typeName=\"" + conflict_name + "\"";
+        conflicting_xml.insert(cursor, annotation);
+        cursor += annotation.size();
+    }
+    const auto conflict = source::parse_form_xml(conflicting_xml, {}, &types.value());
+    expect(conflict.ok(), conflict ? "" : conflict.diagnostics().front().message);
+    expect(std::count_if(conflict.diagnostics().begin(), conflict.diagnostics().end(), [](const auto& diagnostic) {
+        return diagnostic.code == "OOF1142";
+    }) == 1, "repeated conflicting annotations for the same type and explicit name must warn once");
+    expect(conflict.value().find_attribute(model::ObjectId{0})->type.entries.front().type_name ==
+        model::QualifiedName{conflict_name}, "an explicit configured type name must remain authoritative source text");
+    const auto conflict_output = source::serialize_form_xml(conflict.value(), &types.value());
+    expect(conflict_output.ok() && std::count_if(conflict_output.diagnostics().begin(), conflict_output.diagnostics().end(),
+        [](const auto& diagnostic) { return diagnostic.code == "OOF1142"; }) == 1,
+        "serialize must also deduplicate its explicit-name conflict warning");
+    auto escaped_xml = conflicting_xml;
+    const auto explicit_position = escaped_xml.find(conflict_name);
+    escaped_xml.replace(explicit_position, conflict_name.size(), "Safe&amp;&quot;&lt;Injected/&gt;");
+    const auto escaped = source::parse_form_xml(escaped_xml, {}, &types.value());
+    expect(escaped.ok(), escaped ? "" : escaped.diagnostics().front().message);
+    const auto escaped_output = source::serialize_form_xml(escaped.value(), &types.value());
+    expect(escaped_output.ok() && escaped_output.value().find("<Injected/>") == std::string::npos,
+        "explicit type names must be escaped as attribute data rather than executable XML");
+    const auto escaped_again = source::parse_form_xml(escaped_output.value());
+    expect(escaped_again.ok() && escaped_again.value().find_attribute(model::ObjectId{0})->type.entries.front().type_name ==
+        model::QualifiedName{"Safe&\"<Injected/>"}, "escaping must preserve the supplied type name value");
+    constexpr std::string_view declarations_xsd = R"XSD(<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://v8.1c.ru/8.1/data/enterprise/current-config"><xs:complexType name="CatalogObject.Root"/><xs:simpleType name="CatalogRef.Item"><xs:restriction base="xs:string"/></xs:simpleType></xs:schema>)XSD";
+    const auto declarations = source::parse_configuration_type_schema(declarations_xsd);
+    expect(declarations.ok(), declarations ? "" : declarations.diagnostics().front().message);
+    const auto unnamed = source::parse_form_xml(xml, {}, &declarations.value());
+    expect(unnamed.ok(), unnamed ? "" : unnamed.diagnostics().front().message);
+    expect(std::count_if(unnamed.diagnostics().begin(), unnamed.diagnostics().end(), [](const auto& diagnostic) {
+        return diagnostic.code == "OOF1143";
+    }) == 1 && !unnamed.value().find_attribute(model::ObjectId{0})->type.entries.front().type_name,
+        "a declarations-only schema must warn once without guessing UUID associations");
+    const auto unnamed_output = source::serialize_form_xml(plain.value(), &declarations.value());
+    expect(unnamed_output.ok() && unnamed_output.value() == unchanged.value() &&
+        std::count_if(unnamed_output.diagnostics().begin(), unnamed_output.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1143";
+        }) == 1, "a declarations-only schema must leave serialized XML unchanged and warn once");
+    auto invalid_name_xsd = std::string(declarations_xsd);
+    const auto declaration_name = invalid_name_xsd.find("CatalogObject.Root");
+    invalid_name_xsd.replace(declaration_name, std::string("CatalogObject.Root").size(), "Name&quot;&lt;Injected/&gt;");
+    expect(!source::parse_configuration_type_schema(invalid_name_xsd),
+        "type declaration names must be valid NCNames and cannot inject source markup");
+}
+
 }  // namespace
 
 int main() {
     try {
+        test_configuration_type_schema_xml_enrichment();
+        test_self_contained_field_descriptors_xml();
         test_value_list_xml_contract();
         test_map_canonical_xml_order();
         test_recursive_typed_value_xml_contract();

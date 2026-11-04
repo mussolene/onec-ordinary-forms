@@ -14466,7 +14466,7 @@ void test_input_field_typed_bounds() {
         model::TypeDomainEntry type; type.term = context == 2 ? model::TypeDomainTerm::string : model::TypeDomainTerm::numeric;
         document.add_attribute(model::Attribute{model::ObjectId{3}, "Number", model::TypeDomainPatternValue{{type}}});
         model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
-        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, context == 1 ? std::vector<std::string>{"Member"} : std::vector<std::string>{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, context == 1 ? std::vector<model::DataPathMember>{"Member"} : std::vector<model::DataPathMember>{}};
         if (context == 3) input.data_path.reset();
         if (context == 0) input.properties().set_explicit(model::PropertyId::from_name("ListChoiceMode"), true);
         document.add_control(std::move(input));
@@ -16036,8 +16036,8 @@ void test_canonical_unbound_input_fields_round_trip() {
     expect(!form_stream::encode_document(dangling), "a dangling binding must not fall back to a local ValueType");
     auto nested = document;
     const_cast<model::ControlNode*>(nested.find_control(model::ObjectId{20}))->data_path->members = {"Member"};
-    expect_failure(form_stream::encode_document(nested), "OOF1123", "$/DataPath",
-        "InputField member paths require an explicit metadata context");
+    expect_failure(form_stream::encode_document(nested), "OOF1123", "$/DataPath/Member",
+        "InputField custom members require their declared UUID");
     auto conflicting = document;
     const_cast<model::ControlNode*>(conflicting.find_control(model::ObjectId{20}))->extension_properties.set_explicit(value_type, make_type(1));
     expect_failure(form_stream::encode_document(conflicting), "OOF1122", "$/InputField/ValueType",
@@ -16422,7 +16422,7 @@ void test_two_input_fields_round_trip() {
         "CheckBox linked to a non-Boolean Attribute must be rejected");
 
     const auto rejects_checkbox_model = [](model::TypeDomainPatternValue type,
-                                           std::vector<std::string> members = {},
+                                           std::vector<model::DataPathMember> members = {},
                                            bool add_unsupported_property = false) {
         model::Form invalid_form;
         invalid_form.id = model::ObjectId{1};
@@ -22721,7 +22721,7 @@ void test_catalog_item_form_extension_named_round_trip_and_guards() {
     form.children.emplace_back(model::ControlRef{model::ObjectId{3}});
     member_path.set_form(std::move(form));
     expect(!form_stream::encode_document(member_path),
-        "CatalogItemFormExtension member paths require a matching metadata context");
+        "an InputField member binding requires its explicit leaf type descriptor");
 }
 
 void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
@@ -23095,37 +23095,22 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
 
 void test_metadata_member_binding_shared_round_trip() {
     const model::UuidValue root_type{"11111111-1111-1111-1111-111111111111"};
-    const model::UuidValue root_owner{"22222222-2222-2222-2222-222222222222"};
     const model::UuidValue child_type{"33333333-3333-3333-3333-333333333333"};
-    const model::UuidValue child_owner{"44444444-4444-4444-4444-444444444444"};
-    const model::UuidValue foreign_type{"55555555-5555-5555-5555-555555555555"};
-    const model::UuidValue foreign_owner{"66666666-6666-6666-6666-666666666666"};
     const model::UuidValue text_key{"77777777-7777-7777-7777-777777777777"};
     const model::UuidValue child_key{"88888888-8888-8888-8888-888888888888"};
-    const model::UuidValue child_text_key{"99999999-9999-9999-9999-999999999999"};
+    const model::UuidValue flag_key{"99999999-9999-9999-9999-999999999999"};
+    const model::UuidValue other_text_key{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"};
     model::TypeDomainPatternValue object_type;
-    object_type.entries.push_back(model::TypeDomainEntry{.term = model::TypeDomainTerm::object, .type_uuid = root_type});
+    object_type.entries.push_back(model::TypeDomainEntry{.term = model::TypeDomainTerm::object,
+        .type_uuid = root_type, .type_name = model::QualifiedName{"CatalogObject.Root"}});
     model::TypeDomainPatternValue nested_type;
-    nested_type.entries.push_back(model::TypeDomainEntry{.term = model::TypeDomainTerm::object, .type_uuid = child_type});
+    nested_type.entries.push_back(model::TypeDomainEntry{.term = model::TypeDomainTerm::reference,
+        .type_uuid = child_type, .type_name = model::QualifiedName{"CatalogRef.Child"}});
     model::TypeDomainPatternValue string_type;
     string_type.entries.push_back(model::TypeDomainEntry{
         .term = model::TypeDomainTerm::string, .string = model::LengthQualifiers{64, true}});
     model::TypeDomainPatternValue boolean_type;
     boolean_type.entries.push_back(model::TypeDomainEntry{.term = model::TypeDomainTerm::boolean});
-    const auto make_context = [&](bool wrong_owner, bool wrong_leaf) {
-        auto result = oof::MetadataContext::create(
-            {{root_type, root_owner, "CatalogObject.Root"}, {child_type, child_owner, "CatalogObject.Child"},
-             {foreign_type, foreign_owner, "CatalogObject.Foreign"}},
-            {{wrong_owner ? foreign_owner : root_owner, "Text", text_key, wrong_leaf ? boolean_type : string_type, {}},
-             // This numeric mapping belongs only to the synthetic test descriptor.
-             {root_owner, "Flag", std::int64_t{-42}, boolean_type, {}},
-             {root_owner, "Child", child_key, nested_type, {}},
-             {root_owner, "OtherText", model::UuidValue{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}, string_type, {}},
-             {child_owner, "Text", child_text_key, string_type, {}}});
-        expect(result.ok(), result ? "" : result.diagnostics().front().message);
-        return std::make_shared<const oof::MetadataContext>(result.take_value());
-    };
-    const auto context = make_context(false, false);
     model::Form form;
     form.id = model::ObjectId{1};
     form.name = "MetadataBindings";
@@ -23133,23 +23118,23 @@ void test_metadata_member_binding_shared_round_trip() {
     form.main_attribute = model::AttributeRef{model::ObjectId{0}};
     for (std::uint64_t index = 0; index < 12; ++index)
         form.children.emplace_back(model::ControlRef{model::ObjectId{20 + index}});
-    model::OrdinaryFormDocument document(std::move(form), context);
+    model::OrdinaryFormDocument document(std::move(form));
     document.add_attribute(model::Attribute{model::ObjectId{0}, "Object", object_type});
     document.add_attribute(model::Attribute{model::ObjectId{7}, "LocalText", string_type});
     document.add_attribute(model::Attribute{model::ObjectId{8}, "LocalFlag", boolean_type});
     const std::array<model::DataPath, 12> paths{{
-        {model::AttributeRef{model::ObjectId{0}}, {"Text"}},
-        {model::AttributeRef{model::ObjectId{0}}, {"Child", "Text"}},
+        {model::AttributeRef{model::ObjectId{0}}, {{"Text", text_key, string_type}}},
+        {model::AttributeRef{model::ObjectId{0}}, {{"Child", child_key, nested_type}, {"Text", text_key, string_type}}},
         {model::AttributeRef{model::ObjectId{7}}, {}},
-        {model::AttributeRef{model::ObjectId{0}}, {"Text"}},
-        {model::AttributeRef{model::ObjectId{0}}, {"Flag"}},
+        {model::AttributeRef{model::ObjectId{0}}, {{"Code", {}, string_type}}},
+        {model::AttributeRef{model::ObjectId{0}}, {{"Flag", flag_key, boolean_type}}},
         {model::AttributeRef{model::ObjectId{8}}, {}},
-        {model::AttributeRef{model::ObjectId{0}}, {"Flag"}},
+        {model::AttributeRef{model::ObjectId{0}}, {{"Flag", flag_key, boolean_type}}},
         {model::AttributeRef{model::ObjectId{8}}, {}},
-        {model::AttributeRef{model::ObjectId{0}}, {"Text"}},
-        {model::AttributeRef{model::ObjectId{0}}, {"Child", "Text"}},
+        {model::AttributeRef{model::ObjectId{0}}, {{"Text", text_key}}},
+        {model::AttributeRef{model::ObjectId{0}}, {"Description"}},
         {model::AttributeRef{model::ObjectId{7}}, {}},
-        {model::AttributeRef{model::ObjectId{0}}, {"Text"}},
+        {model::AttributeRef{model::ObjectId{0}}, {"Parent", "Description"}},
     }};
     for (std::size_t index = 0; index < paths.size(); ++index) {
         model::ControlNode control{model::ObjectId{20 + index}, "Control" + std::to_string(index),
@@ -23163,88 +23148,175 @@ void test_metadata_member_binding_shared_round_trip() {
         control.position.height.set(20);
         document.add_control(std::move(control));
     }
-    expect(document.validate().ok(), "mixed metadata and local bindings must satisfy model invariants");
+    expect(document.validate().ok(), "self-contained metadata and local bindings must satisfy model invariants");
+    expect(!document.metadata_context(), "source model must not require a configuration metadata index");
+    const auto description_data = document.get_prop_val({model::ObjectCategory::control, model::ObjectId{29}},
+        model::PropertyId::from_name("Data"));
+    expect(description_data.value == model::PropertyValue{std::string{"Object.Description"}},
+        "Data must expose a provided standard field name without requiring an invented leaf type");
     const auto nested_value = document.get_prop_val({model::ObjectCategory::control, model::ObjectId{21}},
         model::PropertyId::from_name("ValueType"));
     expect(nested_value.value == model::PropertyValue{string_type},
-        "ValueType must resolve the nested leaf instead of returning the root object type");
+        "ValueType must use the explicit leaf descriptor instead of the root object type");
     const auto nested_data = document.get_prop_val({model::ObjectCategory::control, model::ObjectId{21}},
         model::PropertyId::from_name("Data"));
     expect(nested_data.value == model::PropertyValue{std::string{"Object.Child.Text"}},
-        "Data must expose the named path from local root through metadata members");
+        "Data must expose the supplied named field path");
     expect(document.set_prop_val({model::ObjectCategory::control, model::ObjectId{20}},
         model::PropertyId::from_name("MultiLine"), true) == model::PropertyMutationStatus::applied,
-        "string-only properties must use the metadata leaf type");
+        "string-only properties must use the field leaf descriptor");
     const auto xml = source::serialize_form_xml(document);
     expect(xml.ok(), xml ? "" : xml.diagnostics().front().message);
-    const auto parsed = source::parse_form_xml(xml.value(), context);
+    const auto parsed = source::parse_form_xml(xml.value());
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    expect(!parsed.value().metadata_context(), "public XML must build independently of MetadataContext");
+    expect(parsed.value().find_attribute(model::ObjectId{0})->type.entries.front().type_name ==
+        model::QualifiedName{"CatalogObject.Root"}, "XML must preserve the descriptive configured type name");
+    for (std::size_t index = 0; index < paths.size(); ++index)
+        expect(parsed.value().find_control(model::ObjectId{20 + index})->data_path == paths[index],
+            "XML must preserve field names, UUIDs, types, and standard member names");
+    const auto* nested = parsed.value().find_control(model::ObjectId{21});
+    expect(nested->data_path->members.front().type->entries.front().type_name ==
+        model::QualifiedName{"CatalogRef.Child"}, "XML must preserve names on intermediate configured field types");
     const auto bytes = oof::save_form_bin(parsed.value());
     expect(bytes.ok(), bytes ? "" : bytes.diagnostics().front().message);
-    const auto loaded = oof::load_form_bin(bytes.value(), "MetadataBindings", context);
+    const auto loaded = oof::load_form_bin(bytes.value(), "MetadataBindings");
     expect(loaded.ok(), loaded ? "" : loaded.diagnostics().front().message);
-    expect(loaded.value().reconstruction_complete(), "supported metadata paths must yield a complete document");
+    expect(loaded.value().reconstruction_complete(), "supported typed UUID bindings must yield a complete document");
     expect(loaded.value().form().main_attribute.has_value() &&
         loaded.value().form().main_attribute.id() == model::ObjectId{0} &&
         loaded.value().find_attribute(model::ObjectId{0}) != nullptr,
-        "MainAttribute zero must remain an explicit declared local root");
+        "MainAttribute zero must remain the explicit declared local root");
     expect(loaded.value().collections().attributes.size() == 3,
-        "member resolution must not introduce surrogate local attributes");
+        "member bindings must not introduce surrogate local attributes");
     for (std::size_t index = 0; index < paths.size(); ++index) {
         const auto* control = loaded.value().find_control(model::ObjectId{20 + index});
-        expect(control && control->data_path == paths[index],
-            "all twelve controls must preserve their actual root and named member path");
+        expect(control && control->data_path && control->data_path->attribute == paths[index].attribute &&
+            control->data_path->members.size() == paths[index].members.size(),
+            "all twelve controls must preserve actual local roots and member counts");
+        for (std::size_t part = 0; part < paths[index].members.size(); ++part) {
+            const auto& expected = paths[index].members[part];
+            const auto& actual = control->data_path->members[part];
+            expect(actual.uuid == expected.uuid, "binary bindings must preserve custom field identity");
+            if (expected.uuid) expect(actual.name.empty(), "BIN must not invent names absent from its UUID tokens");
+            else expect(actual.name == expected.name, "known standard names must be decoded by their own codec");
+        }
+        if (index < 8 && !paths[index].members.empty())
+            expect(control->data_path->members.back().type == paths[index].members.back().type,
+                "typed controls must recover their actual stored or invariant leaf type");
     }
     const auto stream = form_stream::encode_document(loaded.value());
     expect(stream.ok(), stream ? "" : stream.diagnostics().front().message);
     const auto attributes = form_stream::decode_attributes(stream.value().items[2]);
     expect(attributes.ok() && attributes.value().links.size() == 12,
-        "one shared attribute-link table must represent all twelve bindings");
-    bool found_uuid = false;
-    bool found_numeric = false;
-    bool found_nested = false;
+        "one shared link table must represent the entire mixed batch");
+    bool found_uuid = false, found_code = false, found_description = false, found_parent = false, found_nested = false;
     for (const auto& link : attributes.value().links) {
         found_uuid |= link.member_keys == std::vector<oof::MetadataMemberKey>{text_key};
-        found_numeric |= link.member_keys == std::vector<oof::MetadataMemberKey>{std::int64_t{-42}};
-        found_nested |= link.member_keys == std::vector<oof::MetadataMemberKey>{child_key, child_text_key};
+        found_code |= link.member_keys == std::vector<oof::MetadataMemberKey>{std::int64_t{-2}};
+        found_description |= link.member_keys == std::vector<oof::MetadataMemberKey>{std::int64_t{-3}};
+        found_parent |= link.member_keys == std::vector<oof::MetadataMemberKey>{std::int64_t{-4}, std::int64_t{-3}};
+        found_nested |= link.member_keys == std::vector<oof::MetadataMemberKey>{child_key, text_key};
     }
-    expect(found_uuid && found_numeric && found_nested,
-        "UUID, explicitly registered numeric, and nested segments must share the same path mechanism");
+    expect(found_uuid && found_code && found_description && found_parent && found_nested,
+        "custom UUIDs and known CatalogItem standard members must use explicit primary codecs");
+    bool native_code_shape = false;
+    for (const auto& row : stream.value().items[2].items[3].items)
+        if (row.is_list && row.items.size() == 2 && row.items[0].atom == "23")
+            native_code_shape = list_stream::dump_compact(row.items[1]) == "{2,{0},{-2}}";
+    expect(native_code_shape, "standard member must retain the native one-component composite ID list");
+    auto scalar_standard = stream.value();
+    for (auto& row : scalar_standard.items[2].items[3].items)
+        if (row.is_list && row.items.size() == 2 && row.items[0].atom == "23")
+            row.items[1].items[2] = list_stream::ListValue::raw_atom("-2");
+    expect(!form_stream::decode_document(scalar_standard, "MetadataBindings"),
+        "a scalar standard ID must not replace the native composite-ID list");
     const auto rebuilt_xml = source::serialize_form_xml(loaded.value());
     expect(rebuilt_xml.ok(), rebuilt_xml ? "" : rebuilt_xml.diagnostics().front().message);
-    const auto rebuilt = source::parse_form_xml(rebuilt_xml.value(), context);
+    const auto rebuilt = source::parse_form_xml(rebuilt_xml.value());
     expect(rebuilt.ok(), rebuilt ? "" : rebuilt.diagnostics().front().message);
     const auto rebuilt_stream = form_stream::encode_document(rebuilt.value());
     expect(rebuilt_stream.ok() && list_stream::dump_compact(rebuilt_stream.value()) ==
-        list_stream::dump_compact(stream.value()),
-        "public named XML must rebuild metadata links without a baseline form stream");
+        list_stream::dump_compact(stream.value()), "decoded self-contained XML must rebuild without context or a baseline");
     auto edited_xml = xml.value();
-    const auto member_position = edited_xml.find("<Member>Text</Member>");
-    expect(member_position != std::string::npos, "editable XML must contain named member text");
-    edited_xml.replace(member_position, std::string("<Member>Text</Member>").size(), "<Member>OtherText</Member>");
-    const auto edited = source::parse_form_xml(edited_xml, context);
+    const auto uuid_position = edited_xml.find(text_key.canonical);
+    expect(uuid_position != std::string::npos, "source XML must expose the declared member UUID");
+    edited_xml.replace(uuid_position, text_key.canonical.size(), other_text_key.canonical);
+    const auto edited = source::parse_form_xml(edited_xml);
     expect(edited.ok(), edited ? "" : edited.diagnostics().front().message);
     const auto edited_bytes = oof::save_form_bin(edited.value());
     expect(edited_bytes.ok(), edited_bytes ? "" : edited_bytes.diagnostics().front().message);
-    const auto edited_loaded = oof::load_form_bin(edited_bytes.value(), "MetadataBindings", context);
-    expect(edited_loaded.ok() && edited_loaded.value().find_control(model::ObjectId{20})->data_path ==
-        model::DataPath{model::AttributeRef{model::ObjectId{0}}, {"OtherText"}},
-        "editing a named member in XML must change the rebuilt binary binding");
-    auto unknown_xml = xml.value();
-    unknown_xml.replace(member_position, std::string("<Member>Text</Member>").size(), "<Member>Missing</Member>");
-    expect(!source::parse_form_xml(unknown_xml, context),
-        "unknown named members must not silently bind to another field");
-    expect(!oof::load_form_bin(bytes.value(), "MetadataBindings"),
-        "decoding member tokens without metadata context must fail explicitly");
-    expect(!oof::load_form_bin(bytes.value(), "MetadataBindings", make_context(true, false)),
-        "a member key declared only by a foreign owner must not resolve");
-    expect(!oof::load_form_bin(bytes.value(), "MetadataBindings", make_context(false, true)),
-        "a mismatching metadata leaf type must not replace the stored control type");
-    auto no_context = source::parse_form_xml(xml.value());
-    if (no_context) expect(!oof::save_form_bin(no_context.value()),
-        "building member paths without metadata context must fail explicitly");
-    expect(!source::parse_form_xml(xml.value(), make_context(true, false)),
-        "named XML member paths must reject an incorrect metadata owner");
+    const auto edited_loaded = oof::load_form_bin(edited_bytes.value(), "MetadataBindings");
+    expect(edited_loaded.ok() && edited_loaded.value().find_control(model::ObjectId{20})->data_path->members.front().uuid ==
+        other_text_key, "editing a field UUID must change the rebuilt binary binding without a resolver");
+    auto unsupported_numeric = stream.value();
+    unsupported_numeric.items[2].items[3].items[1].items[1].items[2] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("-42")});
+    expect(!form_stream::decode_document(unsupported_numeric, "MetadataBindings"),
+        "an unknown numeric member must not use an alternate metadata resolver");
+    auto name_only_xml = xml.value();
+    const std::string member_uuid_attribute = " uuid=\"" + text_key.canonical + "\"";
+    const auto member_uuid_position = name_only_xml.find(member_uuid_attribute);
+    expect(member_uuid_position != std::string::npos, "typed custom member must declare its UUID");
+    name_only_xml.erase(member_uuid_position, member_uuid_attribute.size());
+    const auto name_only = source::parse_form_xml(name_only_xml);
+    expect(name_only.ok() && !oof::save_form_bin(name_only.value()),
+        "a custom field name and type without its UUID cannot be serialized");
+    const model::UuidValue diagnostic_owner{"22222222-2222-2222-2222-222222222222"};
+    auto diagnostic_context = oof::MetadataContext::create(
+        {{root_type, diagnostic_owner, "CatalogObject.Root"}},
+        {{diagnostic_owner, "Text", text_key, string_type, {}}});
+    expect(diagnostic_context.ok(), "diagnostic descriptor fixture must be valid");
+    auto legacy_context = std::make_shared<const oof::MetadataContext>(diagnostic_context.take_value());
+    model::Form standard_form;
+    standard_form.id = model::ObjectId{1};
+    standard_form.name = "StandardWithOptionalContext";
+    standard_form.extension = model::FormExtensionKind::catalog_item;
+    standard_form.main_attribute = model::AttributeRef{model::ObjectId{0}};
+    standard_form.children.emplace_back(model::ControlRef{model::ObjectId{2}});
+    standard_form.children.emplace_back(model::ControlRef{model::ObjectId{3}});
+    model::OrdinaryFormDocument standard_document(std::move(standard_form));
+    standard_document.add_attribute(model::Attribute{model::ObjectId{0}, "Root", object_type});
+    model::ControlNode code{model::ObjectId{2}, "Code", model::InputFieldPayload{}};
+    code.data_path = model::DataPath{model::AttributeRef{model::ObjectId{0}}, {{"Code", {}, string_type}}};
+    standard_document.add_control(std::move(code));
+    model::ControlNode description{model::ObjectId{3}, "Description", model::LabelDecorationPayload{}};
+    description.data_path = model::DataPath{model::AttributeRef{model::ObjectId{0}}, {"Description"}};
+    standard_document.add_control(std::move(description));
+    const auto standard_stream = form_stream::encode_document(standard_document);
+    expect(standard_stream.ok(), standard_stream ? "" : standard_stream.diagnostics().front().message);
+    const auto standard_with_context = form_stream::decode_document(standard_stream.value(),
+        "StandardWithOptionalContext", legacy_context);
+    expect(standard_with_context.ok(), standard_with_context ? "" : standard_with_context.diagnostics().front().message);
+    expect(standard_with_context.value().validate().ok() &&
+        standard_with_context.value().find_control(model::ObjectId{2})->data_path->members.front().name == "Code" &&
+        standard_with_context.value().find_control(model::ObjectId{3})->data_path->members.front().name == "Description",
+        "optional configured descriptors must not intercept standard Code or untyped Description bindings");
+    model::Form context_form;
+    context_form.id = model::ObjectId{1};
+    context_form.name = "NoResolverFallback";
+    context_form.children.emplace_back(model::ControlRef{model::ObjectId{2}});
+    model::OrdinaryFormDocument context_document(std::move(context_form), std::move(legacy_context));
+    context_document.add_attribute(model::Attribute{model::ObjectId{0}, "Root", object_type});
+    model::ControlNode context_field{model::ObjectId{2}, "Text", model::InputFieldPayload{}};
+    context_field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{0}}, {{"Text", {}, string_type}}};
+    context_document.add_control(std::move(context_field));
+    expect(context_document.validate().ok() && !oof::save_form_bin(context_document),
+        "the writer must not fill a missing field UUID through a diagnostic metadata context");
+    auto wrong_family = parsed.value();
+    auto wrong_form = wrong_family.form();
+    wrong_form.extension = model::FormExtensionKind::data_processor;
+    wrong_family.set_form(std::move(wrong_form));
+    expect(!oof::save_form_bin(wrong_family), "standard CatalogItem fields require the matching form family");
+    auto wrong_root_xml = xml.value();
+    const auto code_position = wrong_root_xml.find("name=\"Code\"");
+    expect(code_position != std::string::npos, "standard typed Code member must be present");
+    const auto root_position = wrong_root_xml.rfind("attributeId=\"0\"", code_position);
+    expect(root_position != std::string::npos, "Code must have the declared MainAttribute root");
+    wrong_root_xml.replace(root_position, std::string("attributeId=\"0\"").size(), "attributeId=\"7\"");
+    const auto wrong_root = source::parse_form_xml(wrong_root_xml);
+    expect(wrong_root.ok() && !oof::save_form_bin(wrong_root.value()),
+        "standard fields cannot borrow another Attribute as their MainAttribute root");
+
 }
 
 }  // namespace

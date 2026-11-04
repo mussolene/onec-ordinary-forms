@@ -239,6 +239,13 @@ bool canonical_nonzero_uuid(std::string_view uuid) noexcept {
     return nonzero;
 }
 
+bool has_concrete_member_root(const TypeDomainPatternValue& type) noexcept {
+    if (type.entries.size() != 1) return false;
+    const auto& entry = type.entries.front();
+    return (entry.term == TypeDomainTerm::object || entry.term == TypeDomainTerm::reference) &&
+        entry.type_uuid && canonical_nonzero_uuid(entry.type_uuid->canonical);
+}
+
 bool property_value_matches(
     const metamodel::PropertyDescriptor& descriptor,
     const PropertyValue& value
@@ -1314,8 +1321,14 @@ std::optional<TypeDomainPatternValue> OrdinaryFormDocument::resolve_data_path_ty
     const auto* attribute = path.attribute.has_value() ? find_attribute(path.attribute.id()) : nullptr;
     if (!attribute) return std::nullopt;
     if (path.members.empty()) return attribute->type;
+    if (std::ranges::any_of(path.members, [](const auto& member) { return member.uuid.has_value(); }) &&
+        !has_concrete_member_root(attribute->type)) return std::nullopt;
+    if (path.members.back().type) return path.members.back().type;
     if (!metadata_context_) return std::nullopt;
-    const auto resolved = metadata_context_->resolve_names(attribute->type, path.members);
+    std::vector<std::string> names;
+    names.reserve(path.members.size());
+    for (const auto& member : path.members) names.push_back(member.name);
+    const auto resolved = metadata_context_->resolve_names(attribute->type, names);
     return resolved ? resolved.value().leaf_type : std::nullopt;
 }
 
@@ -2192,10 +2205,14 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             const auto* attribute = control.data_path->attribute.has_value()
                 ? find_attribute(control.data_path->attribute.id()) : nullptr;
             if (!attribute || attribute->name.empty() ||
-                (!control.data_path->members.empty() && !resolve_data_path_type(*control.data_path)))
+                (!control.data_path->members.empty() && !has_concrete_member_root(attribute->type) &&
+                    !resolve_data_path_type(*control.data_path)))
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             std::string name = attribute->name;
-            for (const auto& member : control.data_path->members) name += "." + member;
+            for (const auto& member : control.data_path->members) {
+                if (member.name.empty()) return {PropertyReadStatus::unsupported_surface, std::nullopt};
+                name += "." + member.name;
+            }
             return {PropertyReadStatus::computed_value, PropertyValue{std::move(name)}};
         }
         if (descriptor->api_name == "ValueType") {
@@ -4017,10 +4034,30 @@ ValidationReport OrdinaryFormDocument::validate() const {
         validate_position(control.id, control.position);
         if (control.data_path.has_value()) {
             require_attribute(control.id, control.data_path->attribute);
-            if (metadata_context_ && !control.data_path->members.empty() &&
-                !resolve_data_path_type(*control.data_path))
-                add_violation(report, InvariantCode::invalid_property, control.id, {},
-                    "DataPath members cannot be resolved in the supplied metadata context");
+            if (control.data_path->members.size() > MetadataContext::max_path_depth)
+                add_violation(report, InvariantCode::invalid_property, control.id, {}, "DataPath exceeds the supported depth");
+            if (std::ranges::any_of(control.data_path->members,
+                [](const auto& member) { return member.uuid.has_value(); })) {
+                const auto* root = control.data_path->attribute.has_value()
+                    ? find_attribute(control.data_path->attribute.id()) : nullptr;
+                if (root && !has_concrete_member_root(root->type))
+                    add_violation(report, InvariantCode::invalid_property, control.id, {},
+                        "Metadata member UUID requires a concrete object or reference root type");
+            }
+            for (const auto& member : control.data_path->members) {
+                if ((member.name.empty() && !member.uuid) ||
+                    (member.uuid && !canonical_nonzero_uuid(member.uuid->canonical)))
+                    add_violation(report, InvariantCode::invalid_property, control.id, {}, "DataPath member requires a name or a nonzero UUID");
+                if (member.type) {
+                    try {
+                        TypedValueBudget budget;
+                        if (!validate_typed_description(*member.type, budget))
+                            add_violation(report, InvariantCode::invalid_property, control.id, {}, "DataPath member has an invalid field type");
+                    } catch (const std::exception&) {
+                        add_violation(report, InvariantCode::invalid_property, control.id, {}, "DataPath member has an invalid field type");
+                    }
+                }
+            }
             const bool calendar_field = control.kind() == ControlKind::calendar_field;
             const bool track_bar = control.kind() == ControlKind::track_bar;
             if (calendar_field || track_bar) {

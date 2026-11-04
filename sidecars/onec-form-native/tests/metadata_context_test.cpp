@@ -225,10 +225,106 @@ bool test_factory_validation_and_unresolved_type() {
         "path continued through unresolved named type");
 }
 
+std::string configuration_schema(std::string_view declarations) {
+    return "<s:schema xmlns:s=\"http://www.w3.org/2001/XMLSchema\" "
+        "xmlns:i=\"urn:oof:configuration-types:1\" "
+        "targetNamespace=\"http://v8.1c.ru/8.1/data/enterprise/current-config\">" +
+        std::string(declarations) + "</s:schema>";
+}
+
+std::string configuration_type(std::string_view name, std::string_view uuid) {
+    return "<s:complexType name=\"" + std::string(name) + "\"><s:annotation><s:appinfo>"
+        "<i:TypeIdentity uuid=\"" + std::string(uuid) +
+        "\"/></s:appinfo></s:annotation></s:complexType>";
+}
+
+bool test_configuration_type_schema() {
+    const UuidValue first{"11111111-1111-4111-8111-111111111111"};
+    const UuidValue second{"22222222-2222-4222-8222-222222222222"};
+    const auto xml = configuration_schema(configuration_type("CatalogRef.Test", first.canonical) +
+        configuration_type("DocumentObject.Test", second.canonical) +
+        "<s:import namespace=\"urn:unavailable\" schemaLocation=\"https://invalid.example/never-read.xsd\"/>"
+        "<s:simpleType name=\"DefinedType.Name\"><s:restriction base=\"s:string\"/></s:simpleType>");
+    auto parsed = oof::source::parse_configuration_type_schema(xml);
+    if (!expect(parsed.ok(), "configuration type XSD with namespace aliases failed")) return false;
+    auto copy = parsed.value();
+    auto moved = std::move(copy);
+    if (!expect(moved.declaration_count() == 3 && moved.identity_count() == 2 &&
+        moved.declares("CatalogRef.Test") && moved.declares("DefinedType.Name") &&
+        !moved.declares("Missing") && moved.name_for(first) == "CatalogRef.Test" &&
+        moved.name_for(second) == "DocumentObject.Test" &&
+        !moved.name_for(UuidValue{"11111111-1111-4111-8111-111111111112"}),
+        "configuration type declaration lookup or copy/move lost ownership")) return false;
+    const auto plain = oof::source::parse_configuration_type_schema(configuration_schema(
+        "<s:complexType name=\"CatalogRef.Test\"/>"));
+    if (!expect(plain && plain.value().declaration_count() == 1 && plain.value().identity_count() == 0 &&
+        !plain.value().name_for(first), "declarations-only XSD inferred a UUID")) return false;
+    const auto uppercase = oof::source::parse_configuration_type_schema(configuration_schema(
+        configuration_type("CatalogRef.Upper", "11111111-1111-4111-8111-1111111111AA")));
+    return expect(uppercase && uppercase.value().name_for(UuidValue{"11111111-1111-4111-8111-1111111111aa"}) ==
+        "CatalogRef.Upper", "configuration type UUID was not canonicalized");
+}
+
+bool test_configuration_type_schema_rejections() {
+    const std::string first = configuration_type("CatalogRef.Test", "11111111-1111-4111-8111-111111111111");
+    const std::vector<std::string> invalid{
+        configuration_schema(first + first),
+        configuration_schema(first + configuration_type("CatalogRef.Other", "11111111-1111-4111-8111-111111111111")),
+        configuration_schema(configuration_type("CatalogRef.Zero", "00000000-0000-0000-0000-000000000000")),
+        configuration_schema(configuration_type("CatalogRef.Bad", "not-a-uuid")),
+        "<!DOCTYPE schema [<!ENTITY x 'value'>]>" + configuration_schema(first),
+        "<!DOCTYPE schema SYSTEM 'https://invalid.example/never-read.dtd'>" + configuration_schema(first),
+        "<s:schema xmlns:s=\"http://www.w3.org/2001/XMLSchema\" targetNamespace=\"urn:foreign\"/>",
+        "<s:schema xmlns:s=\"urn:foreign\" targetNamespace=\"http://v8.1c.ru/8.1/data/enterprise/current-config\"/>",
+        configuration_schema("<s:complexType/>"),
+        configuration_schema("<s:complexType name=\"C\">&undefined;</s:complexType>"),
+        configuration_schema("<s:complexType name=\"bad name\"/>"),
+        configuration_schema("<s:simpleType name=\"MissingBody\"/>"),
+        configuration_schema("<s:simpleType name=\"TwoBodies\"><s:list itemType=\"s:string\"/><s:union/></s:simpleType>"),
+        configuration_schema("<s:complexType name=\"C\"><s:sequence/><s:choice/></s:complexType>"),
+        configuration_schema("<s:complexType xmlns:s=\"urn:foreign\" name=\"WrongNamespace\"/>"),
+        configuration_schema("<i:TypeIdentity uuid=\"11111111-1111-4111-8111-111111111111\"/>"),
+        configuration_schema("<s:complexType name=\"C\"><s:annotation><s:appinfo>"
+            "<TypeIdentity xmlns=\"urn:foreign\" uuid=\"11111111-1111-4111-8111-111111111111\"/>"
+            "</s:appinfo></s:annotation></s:complexType>"),
+        configuration_schema("<s:complexType name=\"C\"><s:annotation><s:appinfo>"
+            "<i:TypeIdentity uuid=\"11111111-1111-4111-8111-111111111111\" extra=\"bad\"/>"
+            "</s:appinfo></s:annotation></s:complexType>"),
+        configuration_schema("<s:complexType name=\"C\"><s:annotation><s:appinfo>"
+            "<i:TypeIdentity i:uuid=\"11111111-1111-4111-8111-111111111111\"/>"
+            "</s:appinfo></s:annotation></s:complexType>"),
+        configuration_schema("<s:complexType name=\"C\"><s:annotation><s:appinfo>"
+            "<i:TypeIdentity uuid=\"11111111-1111-4111-8111-111111111111\"/>"
+            "<i:TypeIdentity uuid=\"22222222-2222-4222-8222-222222222222\"/>"
+            "</s:appinfo></s:annotation></s:complexType>")};
+    for (std::size_t index = 0; index < invalid.size(); ++index)
+        if (!expect(!oof::source::parse_configuration_type_schema(invalid[index]),
+            "configuration type XSD rejection case " + std::to_string(index) + " was accepted")) return false;
+    if (!expect(!oof::source::parse_configuration_type_schema(std::string(
+        oof::source::metadata_xml_max_document_bytes + 1, ' ')), "configuration XSD byte limit was not enforced")) return false;
+    std::string declarations;
+    for (std::size_t index = 0; index <= oof::source::ConfigurationTypeSchema::max_declarations; ++index)
+        declarations += "<s:complexType name=\"C" + std::to_string(index) + "\"/>";
+    if (!expect(!oof::source::parse_configuration_type_schema(configuration_schema(declarations)),
+        "configuration XSD declaration limit was not enforced")) return false;
+    std::string deep;
+    for (std::size_t index = 0; index < 130; ++index) deep += "<s:annotation>";
+    for (std::size_t index = 0; index < 130; ++index) deep += "</s:annotation>";
+    if (!expect(!oof::source::parse_configuration_type_schema(configuration_schema(deep)),
+        "configuration XSD depth limit was not enforced")) return false;
+    // Compact comments keep this below the byte cap while exercising the shared node cap.
+    std::string many_nodes;
+    many_nodes.reserve(8000010);
+    for (std::size_t index = 0; index < 1000001; ++index) many_nodes += "<!--x-->";
+    return expect(!oof::source::parse_configuration_type_schema(configuration_schema(many_nodes)),
+        "configuration XSD node limit was not enforced");
+}
+
 }  // namespace
 
 int main() {
-    return test_context_lookup_and_path() && test_xml_cross_document_and_shared_owner() &&
+    return test_configuration_type_schema() && test_configuration_type_schema_rejections() &&
+        test_context_lookup_and_path() && test_xml_cross_document_and_shared_owner() &&
         test_characteristic_type_set_alias() &&
         test_rejections() && test_factory_validation_and_unresolved_type() ? 0 : 1;
 }

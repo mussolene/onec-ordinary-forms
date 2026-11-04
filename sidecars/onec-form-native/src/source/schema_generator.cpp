@@ -511,6 +511,7 @@ void append_value_types(std::string& output) {
   <xs:complexType name="TypeDomainEntryType">
     <xs:attribute name="term" type="TypeDomainTermType" use="required"/>
     <xs:attribute name="typeUuid" type="UuidValueType" use="optional"/>
+    <xs:attribute name="typeName" type="NonEmptyTokenType" use="optional"/>
     <xs:attribute name="length" type="xs:nonNegativeInteger" use="optional"/>
     <xs:attribute name="precision" type="xs:nonNegativeInteger" use="optional"/>
     <xs:attribute name="nonNegative" type="xs:boolean" use="optional"/>
@@ -1070,9 +1071,17 @@ void append_value_types(std::string& output) {
 
 void append_document_types(std::string& output) {
     output += R"XSD(
+  <xs:complexType name="DataPathMemberType" mixed="true">
+    <xs:sequence>
+      <xs:element name="TypeDomain" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="uuid" type="UuidValueType" use="optional"/>
+    <xs:attribute name="name" type="NonEmptyTokenType" use="optional"/>
+  </xs:complexType>
+
   <xs:complexType name="DataPathType">
     <xs:sequence>
-      <xs:element name="Member" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Member" type="DataPathMemberType" minOccurs="0" maxOccurs="128"/>
     </xs:sequence>
     <xs:attribute name="attributeId" type="AttributeIdType" use="required"/>
   </xs:complexType>

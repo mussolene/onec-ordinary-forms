@@ -396,6 +396,12 @@ struct DateQualifiers {
     friend bool operator==(const DateQualifiers&, const DateQualifiers&) = default;
 };
 
+struct QualifiedName {
+    std::string value;
+
+    friend bool operator==(const QualifiedName&, const QualifiedName&) = default;
+};
+
 struct TypeDomainEntry {
     TypeDomainTerm term = TypeDomainTerm::unknown;
     std::optional<UuidValue> type_uuid;
@@ -404,7 +410,13 @@ struct TypeDomainEntry {
     LengthQualifiers binary;
     DateQualifiers date;
 
-    friend bool operator==(const TypeDomainEntry&, const TypeDomainEntry&) = default;
+    std::optional<QualifiedName> type_name;
+
+    // Имя описывает прикладной тип; его идентичность и бинарное значение задает GUID.
+    friend bool operator==(const TypeDomainEntry& a, const TypeDomainEntry& b) {
+        return a.term == b.term && a.type_uuid == b.type_uuid && a.numeric == b.numeric &&
+            a.string == b.string && a.binary == b.binary && a.date == b.date;
+    }
 };
 
 struct TypeDomainPatternValue {
@@ -413,11 +425,7 @@ struct TypeDomainPatternValue {
     friend bool operator==(const TypeDomainPatternValue&, const TypeDomainPatternValue&) = default;
 };
 
-struct QualifiedName {
-    std::string value;
 
-    friend bool operator==(const QualifiedName&, const QualifiedName&) = default;
-};
 
 using StyleReference = std::variant<std::monostate, CompositeIdValue, QualifiedName>;
 
@@ -491,9 +499,24 @@ struct FontValue {
     friend bool operator==(const FontValue&, const FontValue&) = default;
 };
 
+struct DataPathMember {
+    std::string name;
+    std::optional<UuidValue> uuid;
+    std::optional<TypeDomainPatternValue> type;
+
+    DataPathMember() = default;
+    DataPathMember(std::string name_value) : name(std::move(name_value)) {}
+    DataPathMember(const char* name_value) : name(name_value) {}
+    DataPathMember(std::string name_value, std::optional<UuidValue> uuid_value,
+        std::optional<TypeDomainPatternValue> type_value = {})
+        : name(std::move(name_value)), uuid(std::move(uuid_value)), type(std::move(type_value)) {}
+
+    friend bool operator==(const DataPathMember&, const DataPathMember&) = default;
+};
+
 struct DataPath {
     AttributeRef attribute;
-    std::vector<std::string> members;
+    std::vector<DataPathMember> members;
 
     friend bool operator==(const DataPath&, const DataPath&) = default;
 };

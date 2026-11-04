@@ -111,13 +111,54 @@ void require_arity(
 
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 
-// A resolved binding keeps the real local root identity and the semantic leaf
-// type. Metadata members never become synthetic document Attributes.
+// Bindings keep the real local root identity. A metadata leaf domain is optional
+// when its control stores only member identity rather than a value type.
 struct ResolvedBinding {
     std::string name;
-    model::TypeDomainPatternValue type;
+    std::optional<model::TypeDomainPatternValue> type;
     model::DataPath data_path;
+
+    const model::TypeDomainPatternValue& required_type() const {
+        if (!type)
+            fail("OOF1123", "$/DataPath/Member/TypeDomain", "explicit member leaf type", "absent",
+                "This control requires a self-contained DataPath member type");
+        return *type;
+    }
 };
+
+// These standard members are verified for CatalogItem object context only.
+constexpr std::array<std::pair<std::string_view, std::int64_t>, 3> catalog_standard_members{{
+    {"Code", -2}, {"Description", -3}, {"Parent", -4},
+}};
+
+bool catalog_member_root(const model::Form& form, const model::DataPath& path) {
+    return form.extension == model::FormExtensionKind::catalog_item &&
+        form.main_attribute.has_value() && path.attribute == form.main_attribute;
+}
+
+std::vector<MetadataMemberKey> encode_binding_members(
+    const model::Form& form, const model::DataPath& path) {
+    std::vector<MetadataMemberKey> keys;
+    bool catalog_family = catalog_member_root(form, path);
+    for (std::size_t index = 0; index < path.members.size(); ++index) {
+        const auto& member = path.members[index];
+        if (member.uuid) {
+            keys.emplace_back(*member.uuid);
+            catalog_family = false;
+            continue;
+        }
+        const auto standard = std::ranges::find(catalog_standard_members, member.name,
+            &decltype(catalog_standard_members)::value_type::first);
+        if (!catalog_family || standard == catalog_standard_members.end())
+            fail("OOF1123", "$/DataPath/Member", "metadata member UUID or known CatalogItem standard member",
+                member.name, "Named metadata member has no supported serialized identity");
+        keys.emplace_back(standard->second);
+        if (member.name != "Parent" && index + 1 != path.members.size())
+            fail("OOF1123", "$/DataPath/Member", "terminal Code or Description member", member.name,
+                "Only Parent preserves the CatalogItem member family for further segments");
+    }
+    return keys;
+}
 
 std::optional<ResolvedBinding> resolve_attribute_reference(
     const model::OrdinaryFormDocument& document,
@@ -126,16 +167,11 @@ std::optional<ResolvedBinding> resolve_attribute_reference(
     if (!root) return std::nullopt;
     ResolvedBinding binding{root->name, root->type, path};
     if (path.members.empty()) return binding;
-    if (!document.metadata_context())
-        fail("OOF1123", "$/DataPath", "metadata context for a member path", "absent",
-            "DataPath members require the configuration metadata context");
-    const auto resolved = document.metadata_context()->resolve_names(root->type, path.members);
-    if (!resolved) throw DecodeFailure(resolved.diagnostics().front());
-    if (!resolved.value().leaf_type)
-        fail("OOF1123", "$/DataPath", "resolved member type", "unresolved named type",
-            "DataPath leaf type is not available in the metadata context");
-    binding.type = *resolved.value().leaf_type;
-    for (const auto& member : resolved.value().members) binding.name += "." + member;
+    (void)encode_binding_members(document.form(), path);
+    for (const auto& member : path.members) {
+        if (!member.name.empty()) binding.name += "." + member.name;
+    }
+    binding.type = path.members.back().type;
     return binding;
 }
 
@@ -6318,7 +6354,7 @@ DecodedControl decode_radio_button(
         fail("OOF1122", child_path(info_path, 1), "empty or single Numeric ValueType", describe(info.items[1]),
             "RadioButton ValueType is outside the supported numeric profile");
     }
-    if (linked_attribute != nullptr && value_type != linked_attribute->type) {
+    if (linked_attribute != nullptr && value_type != linked_attribute->required_type()) {
         fail("OOF1122", child_path(info_path, 1), "ValueType matching linked Attribute", describe(info.items[1]),
             "RadioButton ValueType differs from its linked Attribute type");
     }
@@ -6483,7 +6519,7 @@ void validate_radio_group(
                 head.name, "RadioButton group head is missing its numeric binding profile");
         }
         const auto attribute = resolve_attribute_reference(document, *head.data_path);
-        if (!attribute || attribute->type != *head_type ||
+        if (!attribute || attribute->required_type() != *head_type ||
             !decimal_fits_numeric_qualifiers(head_selection->canonical, head_type->entries.front().numeric)) {
             fail("OOF1122", std::string(path), "head numeric Attribute and matching SelectionValue",
                 head.name, "RadioButton group head numeric values do not agree");
@@ -8771,9 +8807,9 @@ DecodedControl decode_progress_bar(
         fail("OOF1122", child_path(path, 1), "positive int64 ProgressBar ID", std::to_string(raw_id),
             "ProgressBar ID is invalid");
     }
-    if (linked_attribute && !(linked_attribute->type.entries.size() == 1 &&
-        linked_attribute->type.entries.front().term == model::TypeDomainTerm::numeric &&
-        !linked_attribute->type.entries.front().type_uuid)) {
+    if (linked_attribute && linked_attribute->type && !(linked_attribute->required_type().entries.size() == 1 &&
+        linked_attribute->required_type().entries.front().term == model::TypeDomainTerm::numeric &&
+        !linked_attribute->required_type().entries.front().type_uuid)) {
         fail("OOF1122", "$/2/3", "link to a single numeric Attribute", linked_attribute->name,
             "ProgressBar DataPath must target a single numeric attribute");
     }
@@ -8932,7 +8968,7 @@ DecodedControl decode_track_bar(
         fail("OOF1122", child_path(payload_path, 8), "non-negative TrackBar MarkingStep", std::to_string(marking_step),
             "TrackBar MarkingStep below zero was not accepted by the platform runtime");
     }
-    if (linked_attribute != nullptr && !is_single_track_bar_type_domain(linked_attribute->type)) {
+    if (linked_attribute != nullptr && !is_single_track_bar_type_domain(linked_attribute->required_type())) {
         fail("OOF1122", "$/2/3", "single Numeric(10,0,nonnegative) Attribute for TrackBar",
             linked_attribute->name, "TrackBar DataPath TypeDomain is unsupported");
     }
@@ -9015,9 +9051,9 @@ DecodedControl decode_list_box(
         fail("OOF1122", child_path(path, 1), "positive int64 ListBox ID", std::to_string(raw_id),
             "ListBox ID is invalid");
     }
-    if (linked_attribute.type.entries.size() != 1 ||
-        linked_attribute.type.entries.front().term != model::TypeDomainTerm::value_list ||
-        linked_attribute.type.entries.front().type_uuid.has_value()) {
+    if (linked_attribute.required_type().entries.size() != 1 ||
+        linked_attribute.required_type().entries.front().term != model::TypeDomainTerm::value_list ||
+        linked_attribute.required_type().entries.front().type_uuid.has_value()) {
         fail("OOF1122", "$/2/3", "link to one ValueList Attribute", linked_attribute.name,
             "ListBox DataPath must target a single ValueList Attribute");
     }
@@ -9096,7 +9132,7 @@ DecodedControl decode_check_box(
         fail("OOF1122", child_path(path, 1), "positive int64 CheckBox ID", std::to_string(raw_id), "CheckBox ID is invalid");
     }
 
-    if (!is_single_boolean_type_domain(linked_attribute.type)) {
+    if (!is_single_boolean_type_domain(linked_attribute.required_type())) {
         fail("OOF1122", "$/2/3", "link to a single Boolean Attribute", linked_attribute.name,
             "CheckBox DataPath must target a Boolean attribute");
     }
@@ -9205,8 +9241,8 @@ DecodedControl decode_choice_field(
         fail("OOF1122", child_path(path, 1), "positive int64 ChoiceField ID", std::to_string(raw_id),
             "ChoiceField ID is invalid");
     }
-    if (linked_attribute != nullptr && !linked_attribute->type.entries.empty() &&
-        !is_single_string_type_domain(linked_attribute->type)) {
+    if (linked_attribute != nullptr && linked_attribute->type && !linked_attribute->required_type().entries.empty() &&
+        !is_single_string_type_domain(linked_attribute->required_type())) {
         fail("OOF1122", "$/2/3", "link to an empty TypeDomain or single String Attribute", linked_attribute->name,
             "ChoiceField DataPath must target an empty TypeDomain or single String attribute");
     }
@@ -9418,7 +9454,7 @@ DecodedControl decode_calendar_field(
     const bool calendar_navigation = bool_atom(properties.items[8], child_path(properties_path, 8));
     const bool enable_start_drag = bool_atom(properties.items[10], child_path(properties_path, 10));
     const bool enable_drag = bool_atom(properties.items[11], child_path(properties_path, 11));
-    if (linked_attribute != nullptr && !is_single_date_time_type_domain(linked_attribute->type)) {
+    if (linked_attribute != nullptr && !is_single_date_time_type_domain(linked_attribute->required_type())) {
         fail("OOF1122", "$/2/3", "single DateTime Attribute for CalendarField",
             linked_attribute->name, "CalendarField DataPath TypeDomain is unsupported");
     }
@@ -10288,7 +10324,7 @@ DecodedControl decode_input_field(
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
     const bool supported_type = is_single_string_type_domain(control_type) || is_supported_input_numeric_type_domain(control_type) ||
         is_single_date_only_type_domain(control_type);
-    if (!supported_type || (linked_attribute != nullptr && control_type != linked_attribute->type)) {
+    if (!supported_type || (linked_attribute != nullptr && control_type != linked_attribute->required_type())) {
         fail(
             "OOF1122",
             child_path(info_path, 1),
@@ -10738,8 +10774,8 @@ DecodedControl decode_table(
     if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", child_path(path, 1), "positive int64 Table ID", std::to_string(raw_id), "Table ID is invalid");
     }
-    const bool tree_source = is_single_value_tree_type_domain(linked_attribute.type);
-    if (!tree_source && !is_single_value_table_type_domain(linked_attribute.type)) {
+    const bool tree_source = is_single_value_tree_type_domain(linked_attribute.required_type());
+    if (!tree_source && !is_single_value_table_type_domain(linked_attribute.required_type())) {
         fail("OOF1122", child_path(path, 1), "DataPath to an unqualified ValueTable or ValueTree Attribute",
             linked_attribute.name, "Table DataPath target must have a supported named collection type");
     }
@@ -10776,7 +10812,7 @@ DecodedControl decode_table(
         fail("OOF1122", child_path(info_path, 4), "ValueTree source for OnCurrentParentChange", "ValueTable",
             "OnCurrentParentChange is unavailable for a ValueTable source");
     const auto stored_type = type_domain(info.items[1], child_path(info_path, 1));
-    if (stored_type != linked_attribute.type) {
+    if (stored_type != linked_attribute.required_type()) {
         fail("OOF1122", child_path(info_path, 1), "Table ValueType matching linked ValueTable Attribute",
             describe(info.items[1]), "Table DataPath and ValueType disagree");
     }
@@ -10867,7 +10903,7 @@ DecodedControl decode_table(
         if (value != 1) control.properties().set_explicit(model::PropertyId::from_name(name), static_cast<std::int64_t>(value));
         normalized_table_properties.items.at(slot) = raw("1");
     }
-    const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path, tree_mode);
+    const LV canonical_info = canonical_table_control_info(linked_attribute.required_type(), table.columns, read_only, info_path, tree_mode);
     for (const auto& spec : table_appearance_properties) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
         const auto& stored = info.items[2].items[1].items.at(spec.slot);
@@ -11397,9 +11433,9 @@ LV encode_progress_bar(
         const auto attribute = resolve_attribute_reference(document, *control.data_path);
         if (!attribute) fail("OOF1123", "$/ProgressBar/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "ProgressBar DataPath does not resolve");
-        if (!(attribute->type.entries.size() == 1 &&
-            attribute->type.entries.front().term == model::TypeDomainTerm::numeric &&
-            !attribute->type.entries.front().type_uuid)) fail("OOF1122", "$/ProgressBar/DataPath",
+        if (attribute->type && !(attribute->required_type().entries.size() == 1 &&
+            attribute->required_type().entries.front().term == model::TypeDomainTerm::numeric &&
+            !attribute->required_type().entries.front().type_uuid)) fail("OOF1122", "$/ProgressBar/DataPath",
             "single numeric Attribute", attribute->name, "ProgressBar DataPath must target a single numeric attribute");
     }
     require_allowed_properties(control.properties(),
@@ -11454,7 +11490,7 @@ LV encode_track_bar(
         const auto attribute = resolve_attribute_reference(document, *control.data_path);
         if (!attribute) fail("OOF1123", "$/TrackBar/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "TrackBar DataPath does not resolve");
-        if (!is_single_track_bar_type_domain(attribute->type)) fail("OOF1122", "$/TrackBar/DataPath",
+        if (!is_single_track_bar_type_domain(attribute->required_type())) fail("OOF1122", "$/TrackBar/DataPath",
             "single Numeric(10,0,nonnegative) Attribute", attribute->name,
             "TrackBar DataPath must target the supported numeric domain");
     }
@@ -11537,9 +11573,9 @@ LV encode_list_box(
         fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "ListBox DataPath does not resolve");
     }
-    if (attribute->type.entries.size() != 1 ||
-        attribute->type.entries.front().term != model::TypeDomainTerm::value_list ||
-        attribute->type.entries.front().type_uuid.has_value()) {
+    if (attribute->required_type().entries.size() != 1 ||
+        attribute->required_type().entries.front().term != model::TypeDomainTerm::value_list ||
+        attribute->required_type().entries.front().type_uuid.has_value()) {
         fail("OOF1122", "$/ListBox/DataPath", "single ValueList Attribute", attribute->name,
             "ListBox DataPath must target a single ValueList Attribute");
     }
@@ -11587,7 +11623,7 @@ LV encode_check_box(
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "CheckBox DataPath does not resolve");
     }
-    if (!is_single_boolean_type_domain(attribute->type)) {
+    if (!is_single_boolean_type_domain(attribute->required_type())) {
         fail("OOF1122", "$/CheckBox/DataPath", "linked Boolean Attribute", attribute->name,
             "CheckBox DataPath must target a Boolean attribute");
     }
@@ -11645,7 +11681,7 @@ LV encode_choice_field(
             fail("OOF1123", "$/ChoiceField/DataPath", "existing linked Attribute",
                 std::to_string(control.data_path->attribute.id().value()), "ChoiceField DataPath does not resolve");
         }
-        if (!attribute->type.entries.empty() && !is_single_string_type_domain(attribute->type)) {
+        if (attribute->type && !attribute->required_type().entries.empty() && !is_single_string_type_domain(attribute->required_type())) {
             fail("OOF1122", "$/ChoiceField/DataPath", "linked empty TypeDomain or single String Attribute",
                 attribute->name, "ChoiceField DataPath must target an empty TypeDomain or single String attribute");
         }
@@ -11749,7 +11785,7 @@ LV encode_radio_button(
     }
     if (control.data_path) {
         const auto attribute = resolve_attribute_reference(document, *control.data_path);
-        if (!attribute || attribute->type != value_type) {
+        if (!attribute || attribute->required_type() != value_type) {
             fail("OOF1122", "$/RadioButton/DataPath", "existing Attribute with matching numeric ValueType",
                 std::to_string(control.data_path->attribute.id().value()),
                 "RadioButton DataPath does not resolve to an Attribute with the same numeric type");
@@ -11909,7 +11945,7 @@ LV encode_calendar_field(
         const auto attribute = resolve_attribute_reference(document, *control.data_path);
         if (!attribute) fail("OOF1123", "$/CalendarField/DataPath", "existing linked Attribute",
             std::to_string(control.data_path->attribute.id().value()), "CalendarField DataPath does not resolve");
-        if (!is_single_date_time_type_domain(attribute->type)) fail("OOF1122", "$/CalendarField/DataPath",
+        if (!is_single_date_time_type_domain(attribute->required_type())) fail("OOF1122", "$/CalendarField/DataPath",
             "single DateTime Attribute", attribute->name,
             "CalendarField DataPath must target a DateTime attribute");
     }
@@ -12052,10 +12088,10 @@ LV encode_input_field(
     if (local_type_entry != nullptr && local_type == nullptr)
         fail("OOF1122", "$/InputField/ValueType", "TypeDomainPattern", "different value kind",
             "InputField ValueType must be a TypeDomainPattern");
-    if (attribute.has_value() && local_type != nullptr && *local_type != attribute->type)
+    if (attribute.has_value() && local_type != nullptr && *local_type != attribute->required_type())
         fail("OOF1122", "$/InputField/ValueType", "ValueType matching linked Attribute", {},
             "InputField ValueType differs from its linked Attribute type");
-    const auto* effective_type = attribute.has_value() ? &attribute->type : local_type;
+    const auto* effective_type = attribute.has_value() ? &attribute->required_type() : local_type;
     if (effective_type == nullptr)
         fail("OOF1122", "$/InputField/ValueType", "explicit local ValueType for an unbound InputField", "absent",
             "Unbound InputField requires an explicit ValueType");
@@ -12167,8 +12203,8 @@ LV encode_table(
         fail("OOF1123", "$/Table/DataPath", "existing ValueTable Attribute",
             std::to_string(control.data_path->attribute.id().value()), "Table DataPath does not resolve");
     }
-    const bool tree_source = is_single_value_tree_type_domain(attribute->type);
-    if (!tree_source && !is_single_value_table_type_domain(attribute->type)) {
+    const bool tree_source = is_single_value_tree_type_domain(attribute->required_type());
+    if (!tree_source && !is_single_value_table_type_domain(attribute->required_type())) {
         fail("OOF1122", "$/Table/DataPath", "unqualified ValueTable or ValueTree Attribute", attribute->name,
             "Table DataPath must target a supported named collection type");
     }
@@ -12185,7 +12221,7 @@ LV encode_table(
     const bool tree_mode = tree_source ? explicit_bool(control.properties(), "Tree", true) : true;
     const auto& table = std::get<model::TablePayload>(control.payload);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
-    auto info = canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table", tree_mode);
+    auto info = canonical_table_control_info(attribute->required_type(), table.columns, read_only, "$/Table", tree_mode);
     encode_named_control_border(info.items[2].items[0], model::ControlKind::table, control.properties(), "$/Table");
     info.items.at(4) = encode_control_event_collection(document, control, "$/Table/Events");
     auto& table_properties = info.items.at(2).items.at(1);
@@ -12715,11 +12751,12 @@ Result<AttributesRecord> decode_attributes(
             for (std::size_t member_index = 2; member_index < target.items.size(); ++member_index) {
                 const auto& member = target.items[member_index];
                 const auto member_path = child_path(target_path, member_index);
-                if (!member.is_list) {
-                    link.member_keys.emplace_back(integer_atom<std::int64_t>(member, member_path));
+                require_list(member, member_path);
+                const auto key = composite_id(member, member_path);
+                if (member.items.size() == 1) {
+                    link.member_keys.emplace_back(key.object_id);
                 } else {
                     require_arity(member, 2, member_path);
-                    const auto key = composite_id(member, member_path);
                     if (key.object_id != 0 || key.is_null || key.uuid.canonical == null_uuid)
                         fail("OOF1107", member_path, "metadata member UUID identity", describe(member),
                             "Attribute member link UUID must identify a concrete metadata member");
@@ -12879,7 +12916,7 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
                 if (const auto* uuid = std::get_if<model::UuidValue>(&key)) {
                     target.push_back(encoded_composite_id(model::CompositeIdValue{0, *uuid, false}, member_path));
                 } else {
-                    target.push_back(raw(std::to_string(std::get<std::int64_t>(key))));
+                    target.push_back(list({raw(std::to_string(std::get<std::int64_t>(key)))}));
                 }
             }
             links.push_back(list({raw(std::to_string(link.control_id)), list(std::move(target))}));
@@ -13390,17 +13427,62 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 model::DataPath{model::AttributeRef{model::ObjectId{
                                     static_cast<std::uint64_t>(root.id.object_id)}}, {}}});
                             if (!link.member_keys.empty()) {
-                                if (!metadata_context)
-                                    fail("OOF1123", "$/2/3", "metadata context for member links", "absent",
-                                        "Attribute member links require the configuration metadata context");
-                                const auto resolved = metadata_context->resolve_keys(root.type, link.member_keys);
-                                if (!resolved) throw DecodeFailure(resolved.diagnostics().front());
-                                if (!resolved.value().leaf_type)
-                                    fail("OOF1123", "$/2/3", "resolved member type", "unresolved named type",
-                                        "Attribute member link type is unavailable in the metadata context");
-                                binding->type = *resolved.value().leaf_type;
-                                binding->data_path.members = resolved.value().members;
-                                for (const auto& member : binding->data_path.members) binding->name += "." + member;
+                                std::optional<MetadataPath> resolved;
+                                if (metadata_context && std::ranges::all_of(link.member_keys,
+                                    [](const auto& key) { return std::holds_alternative<model::UuidValue>(key); })) {
+                                    const auto result = metadata_context->resolve_keys(root.type, link.member_keys);
+                                    if (!result) throw DecodeFailure(result.diagnostics().front());
+                                    resolved = result.value();
+                                }
+                                binding->type.reset();
+                                bool catalog_family = catalog_member_root(document.form(), binding->data_path);
+                                for (std::size_t index = 0; index < link.member_keys.size(); ++index) {
+                                    const auto* uuid = std::get_if<model::UuidValue>(&link.member_keys[index]);
+                                    std::string name;
+                                    if (uuid) {
+                                        if (resolved) name = resolved->members.at(index);
+                                        catalog_family = false;
+                                    } else {
+                                        const auto key = std::get<std::int64_t>(link.member_keys[index]);
+                                        const auto standard = std::ranges::find(catalog_standard_members, key,
+                                            &decltype(catalog_standard_members)::value_type::second);
+                                        if (!catalog_family || standard == catalog_standard_members.end())
+                                            fail("OOF1123", "$/2/3", "known CatalogItem standard member", "unsupported numeric member key",
+                                                "Numeric metadata member has no supported named descriptor");
+                                        name = standard->first;
+                                        if (name != "Parent" && index + 1 != link.member_keys.size())
+                                            fail("OOF1123", "$/2/3", "terminal Code or Description member", name,
+                                                "Only Parent preserves the CatalogItem member family for further segments");
+                                    }
+                                    binding->data_path.members.emplace_back(name,
+                                        uuid ? std::optional<model::UuidValue>{*uuid} : std::nullopt);
+                                    if (!name.empty()) binding->name += "." + name;
+                                }
+                                if (guid == input_descriptor.guid || radio_button_guid ||
+                                    guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
+                                    const auto info_path = child_path(record_path, 2);
+                                    binding->type = type_domain(at(at(record, 2, record_path), 1, info_path),
+                                        child_path(info_path, 1));
+                                } else if (guid == checkbox_descriptor.guid || calendar_field_guid ||
+                                           track_bar_guid || guid == list_box_descriptor.guid) {
+                                    model::TypeDomainEntry entry;
+                                    if (guid == checkbox_descriptor.guid) entry.term = model::TypeDomainTerm::boolean;
+                                    else if (calendar_field_guid) {
+                                        entry.term = model::TypeDomainTerm::date;
+                                        entry.date = model::DateQualifiers{true, true};
+                                    } else if (track_bar_guid) {
+                                        entry.term = model::TypeDomainTerm::numeric;
+                                        entry.numeric = model::NumericQualifiers{10, 0, true};
+                                    } else entry.term = model::TypeDomainTerm::value_list;
+                                    binding->type = model::TypeDomainPatternValue{{entry}};
+                                }
+                                if (resolved && resolved->leaf_type) {
+                                    if (binding->type && *binding->type != *resolved->leaf_type)
+                                        fail("OOF1123", "$/2/3", "member type matching metadata context", "type mismatch",
+                                            "Stored control type disagrees with the supplied metadata descriptor");
+                                    binding->type = resolved->leaf_type;
+                                }
+                                binding->data_path.members.back().type = binding->type;
                             }
                             linked_attribute = &*binding;
                         }
@@ -14119,18 +14201,7 @@ Result<list_stream::ListValue> encode_document(
                         static_cast<std::int64_t>(control->id.value()),
                         model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()),
                             model::UuidValue{std::string(null_uuid)}, true}, {}};
-                    if (!control->data_path->members.empty()) {
-                        if (!document.metadata_context())
-                            fail("OOF1123", std::string(path), "metadata context for member links", "absent",
-                                "DataPath members require the configuration metadata context");
-                        const auto* root = document.find_attribute(control->data_path->attribute.id());
-                        if (!root)
-                            fail("OOF1123", std::string(path), "declared DataPath root", control->name,
-                                "DataPath member root does not resolve");
-                        const auto resolved = document.metadata_context()->resolve_names(root->type, control->data_path->members);
-                        if (!resolved) throw DecodeFailure(resolved.diagnostics().front());
-                        link.member_keys = resolved.value().keys;
-                    }
+                    link.member_keys = encode_binding_members(document.form(), *control->data_path);
                     ordered_control_links.push_back(std::move(link));
                 }
                 max_id = std::max(max_id, control->id.value());

@@ -448,6 +448,14 @@ void write_type_domain(
     out.begin_list();
     out.write_string(std::string(type_domain_root));
     for (const auto& entry : value.entries) {
+        if (entry.type_name) {
+            const bool configured = entry.term == model::TypeDomainTerm::object ||
+                entry.term == model::TypeDomainTerm::reference || entry.term == model::TypeDomainTerm::list ||
+                entry.term == model::TypeDomainTerm::type;
+            if (!configured || !entry.type_uuid || entry.type_uuid->canonical == "00000000-0000-0000-0000-000000000000" ||
+                entry.type_name->value.empty() || entry.type_name->value.find_first_of(" \t\r\n") != std::string::npos)
+                throw std::runtime_error("Configuration type name requires a concrete type UUID and a nonempty qualified name");
+        }
         out.begin_list();
         out.write_string(std::string(term_token(entry.term)));
         switch (entry.term) {

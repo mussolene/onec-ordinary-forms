@@ -6158,10 +6158,54 @@ void test_chart_document_resource_budget() {
     }
 }
 
+
+void test_self_contained_field_type_model() {
+    TypeDomainEntry identity;
+    identity.term = TypeDomainTerm::reference;
+    identity.type_uuid = UuidValue{"11111111-1111-1111-1111-111111111111"};
+    identity.type_name = QualifiedName{"CatalogRef.First"};
+    auto renamed = identity;
+    renamed.type_name = QualifiedName{"CatalogRef.Second"};
+    expect(identity == renamed, "descriptive type names must not redefine GUID type identity");
+    renamed.type_uuid = UuidValue{"22222222-2222-2222-2222-222222222222"};
+    expect(identity != renamed, "different type GUIDs must remain different types despite descriptions");
+    TypeDomainPatternValue root_type{{TypeDomainEntry{.term = TypeDomainTerm::object,
+        .type_uuid = UuidValue{"33333333-3333-3333-3333-333333333333"}}}};
+    TypeDomainPatternValue field_type{{TypeDomainEntry{.term = TypeDomainTerm::string,
+        .string = LengthQualifiers{40, true}}}};
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "FieldModel";
+    form.children.push_back(ControlRef{ObjectId{2}});
+    OrdinaryFormDocument document(std::move(form));
+    document.add_attribute(Attribute{ObjectId{0}, "Root", root_type});
+    ControlNode field{ObjectId{2}, "Field", InputFieldPayload{}};
+    field.data_path = DataPath{AttributeRef{ObjectId{0}}, {{"Caption", UuidValue{"44444444-4444-4444-4444-444444444444"}, field_type}}};
+    document.add_control(std::move(field));
+    expect(document.validate().ok(), "a typed field reference must be valid without an external metadata index");
+    expect(document.resolve_data_path_type(*document.find_control(ObjectId{2})->data_path) == field_type,
+        "a field's explicit type must be available independently of its root object type");
+    const auto value_type = document.get_prop_val({ObjectCategory::control, ObjectId{2}}, PropertyId::from_name("ValueType"));
+    expect(value_type.value == PropertyValue{field_type}, "ValueType must return the field type through the shared property API");
+    const auto data = document.get_prop_val({ObjectCategory::control, ObjectId{2}}, PropertyId::from_name("Data"));
+    expect(data.value == PropertyValue{std::string{"Root.Caption"}}, "Data must preserve the explicit root and field names");
+    const auto missing_root = document.resolve_data_path_type(DataPath{AttributeRef{}, {{"Caption",
+        UuidValue{"44444444-4444-4444-4444-444444444444"}, field_type}}});
+    expect(!missing_root, "an absent root must not alias declared Attribute zero even when a field type is supplied");
+    const auto unknown_type = document.resolve_data_path_type(DataPath{AttributeRef{ObjectId{0}}, {{"Caption",
+        UuidValue{"44444444-4444-4444-4444-444444444444"}}}});
+    expect(!unknown_type, "a UUID-only field must not inherit its root's object type");
+    const_cast<Attribute*>(document.find_attribute(ObjectId{0}))->type = field_type;
+    expect(!document.validate().ok() &&
+        !document.resolve_data_path_type(*document.find_control(ObjectId{2})->data_path),
+        "an explicit leaf type must not disguise a scalar root as a metadata object");
+}
+
 }  // namespace
 
 int main() {
     try {
+        test_self_contained_field_type_model();
         test_descriptors();
         test_chart_refresh_runtime_property();
         test_input_list_choice_mode_api();

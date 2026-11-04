@@ -854,7 +854,12 @@ void test_data_path_position_and_bindings(
     const auto members =
         direct_children(sequence_for_type(schema, "DataPathType"), "element");
     expect(members.size() == 1, "DataPath member sequence drift");
-    expect_element_shape(members[0], "Member", "xs:string", "0", "unbounded");
+    expect_element_shape(members[0], "Member", "DataPathMemberType", "0", "128");
+    const auto member_fields = direct_children(sequence_for_type(schema, "DataPathMemberType"), "element");
+    expect(member_fields.size() == 1, "DataPath member must contain only its named type descriptor");
+    expect_element_shape(member_fields[0], "TypeDomain", "TypeDomainValueType", "0", "1");
+    expect_type_attribute(schema, "DataPathMemberType", "name", "NonEmptyTokenType", "optional");
+    expect_type_attribute(schema, "DataPathMemberType", "uuid", "UuidValueType", "optional");
     expect_type_attribute(
         schema,
         "DataPathType",
@@ -1809,6 +1814,20 @@ void test_attribute_id_zero_schema(xmlSchemaPtr schema, xmlNodePtr schema_root) 
         "AttributeRef XML values must use the zero-capable AttributeIdType");
 }
 
+void test_self_contained_field_schema(xmlSchemaPtr schema, xmlNodePtr schema_root) {
+    expect_type_attribute(schema_root, "TypeDomainEntryType", "typeName", "NonEmptyTokenType", "optional");
+    const std::string xml = R"XML(<Form id="1" name="Fields" ordinaryFormVersion="2.1"><Attributes><Attribute id="0" name="Object"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111" typeName="CatalogObject.Root"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="2" name="Field"><DataPath attributeId="0"><Member name="Text" uuid="22222222-2222-2222-2222-222222222222"><TypeDomain><Entry term="string" length="64"/></TypeDomain></Member></DataPath><Position/></InputField><LabelDecoration id="3" name="Label"><DataPath attributeId="0"><Member uuid="33333333-3333-3333-3333-333333333333"/></DataPath><Position/></LabelDecoration></ChildItems></Form>)XML";
+    expect(validate_document(schema, xml) == 0, "XSD must accept typed named fields and UUID-only field references");
+    auto malformed = xml;
+    const std::string field_uuid = "22222222-2222-2222-2222-222222222222";
+    malformed.replace(malformed.find(field_uuid), field_uuid.size(), "invalid");
+    expect(validate_document(schema, malformed) != 0, "XSD must reject malformed field UUIDs");
+    auto unknown = xml;
+    const auto offset = unknown.find("<Member name=");
+    unknown.insert(offset + std::string("<Member").size(), " storageIndex=\"1\"");
+    expect(validate_document(schema, unknown) != 0, "field schema must not accept indexed storage placeholders");
+}
+
 void test_tracked_schema_drift(const GeneratedSchemas& schemas) {
     const std::filesystem::path root = find_repository_root();
     expect(
@@ -1895,6 +1914,7 @@ int main() {
         test_standard_menu_action_schema(compiled_form.get());
         test_input_field_type_link_schema(schemas, compiled_form.get());
         test_attribute_id_zero_schema(compiled_form.get(), form_schema);
+        test_self_contained_field_schema(compiled_form.get(), form_schema);
         test_tracked_schema_drift(schemas);
     } catch (const std::exception& error) {
         std::cerr << "schema generator tests: FAIL: " << error.what() << '\n';
