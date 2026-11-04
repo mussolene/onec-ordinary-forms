@@ -2032,6 +2032,33 @@ void test_attributes() {
         list_stream::dump_compact(one_component_encoded.value()) == one_component_fixture,
         "one-component attribute record must remain canonical");
 
+    constexpr std::string_view legacy_row5_fixture =
+        "{{3},4,{1,{{3},1,1,\"LegacyValue\",{\"Pattern\",{\"S\",10,1}}}},{0}}";
+    const auto legacy_row5 = form_stream::decode_attributes(list_stream::parse(legacy_row5_fixture));
+    expect(legacy_row5.ok(), "proven legacy Attribute row5 must decode");
+    expect(legacy_row5.value().main_attribute && legacy_row5.value().main_attribute->object_id == 3,
+        "legacy Attribute top-level main reference must be preserved");
+    expect(legacy_row5.value().attributes.size() == 1 &&
+        legacy_row5.value().attributes.front().id.object_id == 3 &&
+        legacy_row5.value().attributes.front().main &&
+        !legacy_row5.value().attributes.front().stored_data &&
+        legacy_row5.value().attributes.front().name == "LegacyValue",
+        "legacy Attribute named fields and proven StoredData default must be preserved");
+    const auto legacy_row5_encoded = form_stream::encode_attributes(legacy_row5.value());
+    expect(legacy_row5_encoded.ok(), "legacy Attribute row5 must encode through the current writer");
+    expect(list_stream::dump_compact(legacy_row5_encoded.value()) ==
+        "{{3},4,{1,{{3},1,0,1,\"LegacyValue\",{\"Pattern\",{\"S\",10,1}}}},{0}}",
+        "legacy Attribute row5 must canonicalize as row6 with StoredData false");
+
+    auto legacy_bad_constant = list_stream::parse(legacy_row5_fixture);
+    legacy_bad_constant.items[2].items[1].items[2] = list_stream::ListValue::raw_atom("0");
+    expect_failure(form_stream::decode_attributes(legacy_bad_constant), "OOF1106", "$/2/2/1/2",
+        "legacy Attribute row5 must reject an unknown constant");
+    auto legacy_bad_arity = list_stream::parse(legacy_row5_fixture);
+    legacy_bad_arity.items[2].items[1].items.pop_back();
+    expect_failure(form_stream::decode_attributes(legacy_bad_arity), "OOF1102", "$/2/2/1",
+        "legacy Attribute row5 must reject an unsupported arity");
+
     expect_failure(
         form_stream::decode_attributes(list_stream::parse("{{-1},0,{1},{0}}")),
         "OOF1102",

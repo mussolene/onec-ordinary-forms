@@ -12551,14 +12551,22 @@ Result<AttributesRecord> decode_attributes(
         for (std::uint32_t index = 0; index < attribute_count; ++index) {
             const std::string record_path = child_path(child_path(path, 2), index + 1);
             const auto& item = table.items[index + 1];
-            require_arity(item, 6, record_path);
+            const bool legacy_row5 = item.is_list && item.items.size() == 5;
+            require_arity(item, legacy_row5 ? 5 : 6, record_path);
             AttributeRecord attribute;
             attribute.id = composite_id(item.items[0], child_path(record_path, 0));
             attribute.main = bool_atom(item.items[1], child_path(record_path, 1));
-            attribute.stored_data = bool_atom(item.items[2], child_path(record_path, 2));
-            require_raw_constant(item.items[3], "1", child_path(record_path, 3));
-            attribute.name = string_atom(item.items[4], child_path(record_path, 4));
-            attribute.type = type_domain(item.items[5], child_path(record_path, 5));
+            const std::size_t type_slot = legacy_row5 ? 4 : 5;
+            if (legacy_row5) {
+                require_raw_constant(item.items[2], "1", child_path(record_path, 2));
+                attribute.stored_data = false;
+            } else {
+                attribute.stored_data = bool_atom(item.items[2], child_path(record_path, 2));
+                require_raw_constant(item.items[3], "1", child_path(record_path, 3));
+            }
+            const std::size_t name_slot = legacy_row5 ? 3 : 4;
+            attribute.name = string_atom(item.items[name_slot], child_path(record_path, name_slot));
+            attribute.type = type_domain(item.items[type_slot], child_path(record_path, type_slot));
             result.attributes.push_back(std::move(attribute));
         }
         if (result.main_attribute && std::none_of(result.attributes.begin(), result.attributes.end(),
