@@ -12346,12 +12346,13 @@ void validate_form_extension_context(const model::OrdinaryFormDocument& document
                 "nondefault flags", "DataProcessorFormExtension main Attribute flags are not supported");
         return;
     }
-    if (*document.form().extension != model::FormExtensionKind::catalog_item)
+    if (*document.form().extension != model::FormExtensionKind::catalog_item &&
+        *document.form().extension != model::FormExtensionKind::catalog_list)
         fail("OOF1122", std::string(path), "declared ordinary-form extension", "unknown extension kind",
             "Form extension kind is unsupported by the storage codec");
     if (!document.form().main_attribute.has_value())
         fail("OOF1122", std::string(path), "selected MainAttribute reference", "absent",
-            "CatalogItemFormExtension requires an explicit object context");
+            "Catalog form extension requires an explicit object context");
     const auto* main = document.find_attribute(document.form().main_attribute.id());
     if (!main || main->type.entries.size() != 1 ||
         main->type.entries.front().term != model::TypeDomainTerm::object ||
@@ -12972,6 +12973,11 @@ Result<model::OrdinaryFormDocument> decode_document(
             require_exact(extension.items[2], parse_constant("{2,0,{0,0},{0},1}"), "$/3/2",
                 "DataProcessorFormExtension contains unsupported nondefault settings");
             form_extension = descriptor.kind;
+        } else if (extension_guid == model::metamodel::catalog_list_form_extension.guid) {
+            const auto& descriptor = model::metamodel::catalog_list_form_extension;
+            require_exact(extension, list({raw(std::string(descriptor.guid)), raw("0")}), "$/3",
+                "CatalogListFormExtension contains unsupported settings");
+            form_extension = descriptor.kind;
         } else if (extension_guid == model::metamodel::catalog_item_form_extension.guid) {
             const auto& descriptor = model::metamodel::catalog_item_form_extension;
             require_arity(extension, 3, "$/3");
@@ -13024,7 +13030,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         std::string(use_for_folders->enumeration_members[use_ordinal])});
             form_extension = descriptor.kind;
         } else {
-            fail("OOF1106", "$/3/0", "null, DataProcessor, or CatalogItem form extension GUID",
+            fail("OOF1106", "$/3/0", "null, DataProcessor, CatalogItem, or CatalogList form extension GUID",
                 extension_guid, "Ordinary-form extension GUID is unsupported");
         }
         const auto form_named_events = decode_form_events(payload.items[4], "$/4");
@@ -14381,6 +14387,9 @@ Result<list_stream::ListValue> encode_document(
                 const auto& descriptor = model::metamodel::data_processor_form_extension;
                 encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
                     parse_constant("{2,0,{0,0},{0},1}")});
+            } else if (*document.form().extension == model::FormExtensionKind::catalog_list) {
+                const auto& descriptor = model::metamodel::catalog_list_form_extension;
+                encoded_extension = list({raw(std::string(descriptor.guid)), raw("0")});
             } else if (*document.form().extension == model::FormExtensionKind::catalog_item) {
                 const auto use_for_folders = form_extension_ordinal(document.form().extension_properties,
                     "UseForFoldersAndItems", "$/CatalogItemFormExtension/UseForFoldersAndItems");

@@ -1833,16 +1833,19 @@ public:
             const std::string name = node_name(child);
             if (name == "MainAttribute") {
                 form.main_attribute = model::AttributeRef{parse_attribute_id(required_attribute(child, "attributeId"), child)};
-            } else if (name == mm::data_processor_form_extension.xml_name) {
+            } else if (name == mm::data_processor_form_extension.xml_name ||
+                name == mm::catalog_list_form_extension.xml_name) {
+                const auto& descriptor = name == mm::data_processor_form_extension.xml_name
+                    ? mm::data_processor_form_extension : mm::catalog_list_form_extension;
                 if (form_extension_seen)
                     fail("OOF2003", child, form_id, name, "one form extension", "duplicate extension",
                         "Form extension tags are mutually exclusive");
                 form_extension_seen = true;
                 if (child->properties != nullptr || !element_children(child).empty() ||
                     trim_ascii(node_text(child)).size() != 0)
-                    fail("OOF2003", child, form_id, name, "empty DataProcessorFormExtension", "settings",
-                        "DataProcessorFormExtension does not have public properties");
-                form.extension = mm::data_processor_form_extension.kind;
+                    fail("OOF2003", child, form_id, name, "empty " + std::string(descriptor.xml_name), "settings",
+                        std::string(descriptor.xml_name) + " does not have public properties");
+                form.extension = descriptor.kind;
             } else if (name == mm::catalog_item_form_extension.xml_name) {
                 if (form_extension_seen)
                     fail("OOF2003", child, form_id, name, "one form extension", "duplicate extension",
@@ -3526,6 +3529,8 @@ public:
             writer_.empty("MainAttribute", {{"attributeId", object_id_text(form.main_attribute.id())}});
         if (form.extension == mm::data_processor_form_extension.kind) {
             writer_.empty(mm::data_processor_form_extension.xml_name);
+        } else if (form.extension == mm::catalog_list_form_extension.kind) {
+            writer_.empty(mm::catalog_list_form_extension.xml_name);
         } else if (form.extension == mm::catalog_item_form_extension.kind) {
             writer_.open(mm::catalog_item_form_extension.xml_name);
             write_property_set(form.extension_properties,

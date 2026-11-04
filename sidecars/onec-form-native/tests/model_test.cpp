@@ -4288,6 +4288,19 @@ void test_document_property_api() {
         "a valid typed reference must round-trip through the property API");
 }
 
+void test_catalog_list_form_extension_model() {
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "CatalogList";
+    form.extension = FormExtensionKind::catalog_list;
+    OrdinaryFormDocument document(form);
+    expect(document.validate().ok(), "CatalogList must be a declared model extension");
+    form.extension_properties.set_explicit(PropertyId::from_name("Autonumeration"),
+        EnumerationValue{"AutonumerationInForm", "DontUse"});
+    document.set_form(form);
+    expect(!document.validate().ok(), "CatalogList must reject CatalogItem settings");
+}
+
 void test_catalog_item_form_extension_property_api() {
     Form form;
     form.id = ObjectId{1};
@@ -6272,6 +6285,7 @@ int main() {
         test_typed_value_document_budget();
         test_document_property_api();
         test_catalog_item_form_extension_property_api();
+        test_catalog_list_form_extension_model();
         test_control_position_property_api();
         test_input_field_type_link_model();
         test_control_collapse_runtime_property();

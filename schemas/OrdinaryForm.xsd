@@ -2033,6 +2033,7 @@
           <xs:element name="Autonumeration" type="AutonumerationInFormValueType" minOccurs="0" maxOccurs="1"/>
           <xs:element name="UseForFoldersAndItems" type="FoldersAndItemsUseValueType" minOccurs="0" maxOccurs="1"/>
         </xs:sequence></xs:complexType></xs:element>
+        <xs:element name="CatalogListFormExtension"><xs:complexType/></xs:element>
       </xs:choice>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>

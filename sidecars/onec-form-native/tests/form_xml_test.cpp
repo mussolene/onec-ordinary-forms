@@ -2982,6 +2982,26 @@ void test_data_processor_form_extension_xml_contract() {
     expect(!source::serialize_form_xml(document).ok(), "Unknown extension kinds must fail explicit serialization");
 }
 
+void test_catalog_list_form_extension_xml_contract() {
+    const auto parsed = source::parse_form_xml(
+        R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><CatalogListFormExtension/></Form>)XML");
+    expect(parsed.ok() && parsed.value().form().extension == model::FormExtensionKind::catalog_list,
+        "CatalogList extension must have an explicit named identity");
+    const auto xml = source::serialize_form_xml(parsed.value());
+    expect(xml.ok() && xml.value().find("<CatalogListFormExtension/>") != std::string::npos &&
+        xml.value().find("53fb5449") == std::string::npos,
+        "CatalogList XML must preserve only the named empty extension");
+    for (const auto invalid : {"<CatalogListFormExtension/><CatalogListFormExtension/>",
+        "<CatalogListFormExtension/><CatalogItemFormExtension/>",
+        "<DataProcessorFormExtension/><CatalogListFormExtension/>",
+        "<CatalogListFormExtension settings=\"0\"/>",
+        "<CatalogListFormExtension><Settings>0</Settings></CatalogListFormExtension>",
+        "<CatalogListFormExtension>0</CatalogListFormExtension>"})
+        expect(!source::parse_form_xml(std::string(
+            R"XML(<Form id="1" name="List" ordinaryFormVersion="2.1">)XML") + invalid + "</Form>"),
+            "CatalogList XML must reject settings and mutually exclusive extensions");
+}
+
 void test_catalog_item_form_extension_xml_contract() {
     for (const auto autonumeration : {std::string_view{"Auto"}, std::string_view{"DontUse"}}) {
         for (const auto folders : {std::string_view{"Items"}, std::string_view{"Folders"},
@@ -4272,6 +4292,7 @@ int main() {
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
         test_catalog_item_form_extension_xml_contract();
+        test_catalog_list_form_extension_xml_contract();
         test_chart_base_value_xml();
         test_chart_enum_properties_xml();
         test_chart_type_xml();

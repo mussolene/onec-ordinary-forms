@@ -3387,7 +3387,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
             "main form attribute must reference an existing Attribute");
     }
     if (form_.extension && *form_.extension != metamodel::data_processor_form_extension.kind &&
-        *form_.extension != metamodel::catalog_item_form_extension.kind) {
+        *form_.extension != metamodel::catalog_item_form_extension.kind &&
+        *form_.extension != metamodel::catalog_list_form_extension.kind) {
         add_violation(report, InvariantCode::invalid_property, form_.id, form_.id,
             "form extension is not declared by the executable metamodel");
     }

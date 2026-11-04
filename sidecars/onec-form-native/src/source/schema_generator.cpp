@@ -1412,7 +1412,9 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     append_xml_escaped(output, model::metamodel::catalog_item_form_extension.xml_name);
     output += "\"><xs:complexType><xs:sequence>\n";
     append_property_elements(output, metamodel.form_extension_properties(), "          ");
-    output += "        </xs:sequence></xs:complexType></xs:element>\n      </xs:choice>\n";
+    output += "        </xs:sequence></xs:complexType></xs:element>\n        <xs:element name=\"";
+    append_xml_escaped(output, model::metamodel::catalog_list_form_extension.xml_name);
+    output += "\"><xs:complexType/></xs:element>\n      </xs:choice>\n";
     output +=
         "      <xs:element name=\"Events\" type=\"FormEventsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Attributes\" type=\"AttributesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
@@ -1650,6 +1652,9 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     output += "/>\n        <NamedConcept";
     append_attribute(output, "name", model::metamodel::catalog_item_form_extension.xml_name);
     append_attribute(output, "russianName", as_utf8(model::metamodel::catalog_item_form_extension.russian_name));
+    output += "/>\n        <NamedConcept";
+    append_attribute(output, "name", model::metamodel::catalog_list_form_extension.xml_name);
+    append_attribute(output, "russianName", as_utf8(model::metamodel::catalog_list_form_extension.russian_name));
     output += "/>\n        <Controls>\n";
 
     for (const auto& control : metamodel.controls()) {

@@ -94,6 +94,7 @@
         <NamedConcept name="TypeLink" russianName="СвязьПоТипу"/>
         <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
         <NamedConcept name="CatalogItemFormExtension" russianName="Расширение формы элемента справочника"/>
+        <NamedConcept name="CatalogListFormExtension" russianName="Расширение формы списка справочника"/>
         <Controls>
           <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
             <Properties>

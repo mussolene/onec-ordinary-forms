@@ -219,6 +219,13 @@ inline constexpr FormExtensionDescriptor catalog_item_form_extension{
     u8"Расширение формы элемента справочника",
 };
 
+inline constexpr FormExtensionDescriptor catalog_list_form_extension{
+    FormExtensionKind::catalog_list,
+    "53fb5449-841a-459c-9a83-576f05941e1f",
+    "CatalogListFormExtension",
+    u8"Расширение формы списка справочника",
+};
+
 struct StandardMenuCommandDescriptor {
     StandardMenuCommand kind;
     std::string_view public_name;

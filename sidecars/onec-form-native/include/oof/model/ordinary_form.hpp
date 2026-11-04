@@ -1286,6 +1286,7 @@ struct Page {
 enum class FormExtensionKind : std::uint8_t {
     data_processor,
     catalog_item,
+    catalog_list,
 };
 
 struct Form {
