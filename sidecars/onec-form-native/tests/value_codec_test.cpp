@@ -445,6 +445,13 @@ void test_font() {
     model::FontValue automatic;
     expect(codec::encode_font(automatic) == "{8,3,0,1,100}", "automatic Font must match its exact default tuple");
     expect(codec::decode_font(codec::encode_font(automatic)) == automatic, "automatic Font must round-trip");
+    const auto legacy_automatic = codec::decode_font("{6,3,0,1}");
+    expect(legacy_automatic == automatic && codec::encode_font(legacy_automatic) == "{8,3,0,1,100}",
+        "observed legacy automatic Font6 must decode to the typed default and rebuild as Font8");
+    for (const auto legacy : {"{6,2,0,1}", "{6,3,4,1}", "{6,3,0,0}", "{6,3,0,1,100}"}) {
+        expect_rejected([legacy] { static_cast<void>(codec::decode_font(legacy)); },
+            "unobserved Font6 kinds, settings, and trailing fields must be rejected");
+    }
     model::FontValue automatic_bold_false = automatic;
     automatic_bold_false.bold = false;
     expect(codec::encode_font(automatic_bold_false) == "{8,3,4,400,1,100}" &&

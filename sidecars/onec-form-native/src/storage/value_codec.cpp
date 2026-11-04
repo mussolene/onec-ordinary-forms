@@ -768,7 +768,17 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
 
 model::FontValue read_font(list_stream::ListInStream& in) {
     in.begin_list();
-    if (in.read_uint32() != 8) throw std::runtime_error("Font version marker is unsupported");
+    const auto version = in.read_uint32();
+    if (version == 6) {
+        const auto kind = in.read_uint32();
+        const auto flags = in.read_uint32();
+        const auto reserved = in.read_uint32();
+        if (kind != 3 || flags != 0 || reserved != 1 || in.has_next())
+            throw std::runtime_error("legacy Font record is not the observed automatic default");
+        in.end_list();
+        return model::FontValue{};
+    }
+    if (version != 8) throw std::runtime_error("Font version marker is unsupported");
     model::FontValue value;
     value.kind = parse_font_kind(in.read_uint32());
     if (value.kind != model::FontKind::absolute) {

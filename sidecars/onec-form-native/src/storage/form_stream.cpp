@@ -1131,13 +1131,27 @@ LV encode_control_color(const model::ColorValue& color, std::string_view path) {
 }
 
 model::ColorValue decode_control_color(const LV& value, std::string_view path) {
-    require_arity(value, 4, path);
-    require_raw_constant(value.items[0], "4", child_path(path, 0));
+    require_list(value, path);
+    const bool legacy_v3 = value.items.size() == 3 &&
+        !value.items[0].is_list &&
+        value.items[0].atom_kind == LV::AtomKind::raw &&
+        value.items[0].atom == "3";
+    require_arity(value, legacy_v3 ? 3 : 4, path);
+    require_raw_constant(value.items[0], legacy_v3 ? "3" : "4", child_path(path, 0));
     const auto kind = integer_atom<std::int32_t>(value.items[1], child_path(path, 1));
     if (kind == 4) {
-        require_exact(value, list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
-            path, "Control automatic color record is malformed");
+        if (legacy_v3) {
+            require_exact(value, list({raw("3"), raw("4"), list({raw("0")})}),
+                path, "Legacy control automatic color record is malformed");
+        } else {
+            require_exact(value, list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
+                path, "Control automatic color record is malformed");
+        }
         return model::ColorValue{};
+    }
+    if (legacy_v3 && kind != 3) {
+        fail("OOF1114", child_path(path, 1), "legacy Color kind 3 or 4", std::to_string(kind),
+            "Legacy control color kind is unsupported");
     }
     if (kind == 0) {
         require_raw_constant(value.items[3], "0", child_path(path, 3));
@@ -1155,7 +1169,9 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
         return color;
     }
     if (kind >= 1 && kind <= 3) {
-        require_raw_constant(value.items[3], std::to_string(kind), child_path(path, 3));
+        if (!legacy_v3) {
+            require_raw_constant(value.items[3], std::to_string(kind), child_path(path, 3));
+        }
         require_arity(value.items[2], 1, child_path(path, 2));
         const auto native_id = integer_atom<std::int32_t>(value.items[2].items[0], child_path(path, 2) + "/0");
         const auto* descriptor = model::metamodel::find_named_color(kind, native_id);
@@ -1507,9 +1523,26 @@ void encode_named_control_colors(
     }
 }
 
-void normalize_named_control_colors(
+void normalize_control_base_appearance(
     LV& base, model::ControlKind control, std::string_view path,
     std::span<const ControlColorPropertySpec> specs = base_color_properties) {
+    if (base.is_list && base.items.size() == 21 && !base.items[0].is_list &&
+        base.items[0].atom_kind == LV::AtomKind::raw && base.items[0].atom == "19") {
+        if (base.items[4].is_list && !base.items[4].items.empty() && !base.items[4].items[0].is_list &&
+            base.items[4].items[0].atom_kind == LV::AtomKind::raw && base.items[4].items[0].atom == "6") {
+            base.items[4] = encode_control_font(
+                decode_control_font(base.items[4], child_path(path, 4)), child_path(path, 4));
+        }
+        constexpr std::array<std::size_t, 7> common_color_slots{2, 3, 6, 7, 8, 9, 10};
+        for (const auto slot : common_color_slots) {
+            const auto& color = base.items[slot];
+            if (color.is_list && !color.items.empty() && !color.items[0].is_list &&
+                color.items[0].atom_kind == LV::AtomKind::raw && color.items[0].atom == "3") {
+                const auto color_path = child_path(path, slot);
+                base.items[slot] = encode_control_color(decode_control_color(color, color_path), color_path);
+            }
+        }
+    }
     for (const auto& spec : specs) {
         if (spec.control != control) continue;
         const auto color_path = child_path(path, spec.slot);
@@ -5738,7 +5771,7 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     auto normalized_base = base;
     normalized_base.items[12] = encoded_localized_text(tool_tip, child_path(base_path, 12));
     normalized_base.items[5] = raw("0");
-    normalize_named_control_colors(normalized_base, model::ControlKind::usual_group, base_path);
+    normalize_control_base_appearance(normalized_base, model::ControlKind::usual_group, base_path);
     normalized.items[0] = std::move(normalized_base);
     normalized.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
     normalized.items[3] = encode_control_border(border, child_path(properties_path, 3),
@@ -6037,7 +6070,7 @@ DecodedControl decode_picture_decoration(
     const auto canonical_picture_base = canonical_picture_properties(enabled, tool_tip).items[0];
     normalized_base.items[4] = canonical_picture_base.items[4];
     normalized_base.items[6] = canonical_picture_base.items[6];
-    normalize_named_control_colors(normalized_base, model::ControlKind::picture_decoration, base_path);
+    normalize_control_base_appearance(normalized_base, model::ControlKind::picture_decoration, base_path);
     normalize_named_control_border(normalized_base, model::ControlKind::picture_decoration, base_path);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[4].items[2] = canonical_button_picture();
@@ -6242,7 +6275,7 @@ DecodedControl decode_radio_button(
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized_text(tool_tip, child_path(base_path, 12));
     normalized_base.items[5] = raw("0");
-    normalize_named_control_colors(normalized_base, model::ControlKind::radio_button, base_path);
+    normalize_control_base_appearance(normalized_base, model::ControlKind::radio_button, base_path);
     normalize_named_control_border(normalized_base, model::ControlKind::radio_button, base_path);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[2] = encoded_localized_text(caption, child_path(properties_path, 2));
@@ -6562,7 +6595,7 @@ DecodedControl decode_label(
     normalized_base_properties.items[12] = encoded_localized_text(
         common.tool_tip, child_path(base_properties_path, 12));
     normalized_base_properties.items[5] = raw("0");
-    normalize_named_control_colors(normalized_base_properties, model::ControlKind::label_decoration, base_properties_path);
+    normalize_control_base_appearance(normalized_base_properties, model::ControlKind::label_decoration, base_properties_path);
     normalize_named_control_border(normalized_base_properties, model::ControlKind::label_decoration,
         base_properties_path);
     normalized_properties.items[0] = std::move(normalized_base_properties);
@@ -8691,7 +8724,7 @@ DecodedControl decode_progress_bar(
     normalized_properties.items[12] = encoded_localized("");
     auto normalized_info = info_list;
     normalized_info.items[0] = std::move(normalized_properties);
-    normalize_named_control_colors(normalized_info.items[0], model::ControlKind::progress_bar, properties_path);
+    normalize_control_base_appearance(normalized_info.items[0], model::ControlKind::progress_bar, properties_path);
     normalize_named_control_border(normalized_info.items[0], model::ControlKind::progress_bar, properties_path);
     normalized_info.items[2] = raw("0");
     normalized_info.items[3] = raw("100");
@@ -8816,7 +8849,7 @@ DecodedControl decode_track_bar(
     }
 
     auto normalized_info = info;
-    normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::track_bar,
+    normalize_control_base_appearance(normalized_info.items[1].items[0], model::ControlKind::track_bar,
         child_path(child_path(info_path, 1), 0));
     normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::track_bar,
         child_path(child_path(info_path, 1), 0));
@@ -8927,7 +8960,7 @@ DecodedControl decode_list_box(
     auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2), model::ControlKind::list_box);
     auto normalized_info = info;
     normalized_info.items[2] = list({raw("0")});
-    normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::list_box,
+    normalize_control_base_appearance(normalized_info.items[1].items[0], model::ControlKind::list_box,
         child_path(child_path(info_path, 1), 0));
     normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::list_box,
         child_path(child_path(info_path, 1), 0));
@@ -9017,7 +9050,7 @@ DecodedControl decode_check_box(
         fail("OOF1114", child_path(properties_path, 5), "VerticalAlign storage value 0, 1, or 2",
             std::to_string(vertical_align), "CheckBox.VerticalAlign storage value is unsupported");
     auto normalized_info = info;
-    normalize_named_control_colors(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
+    normalize_control_base_appearance(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
         child_path(child_path(child_path(info_path, 1), 0), 0));
     normalize_named_control_border(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
         child_path(child_path(child_path(info_path, 1), 0), 0));
@@ -9120,7 +9153,7 @@ DecodedControl decode_choice_field(
     normalized_info.items[2] = list({raw("0")});
     normalized_info.items[1].items[28] = canonical_button_picture();
     normalized_info.items[1].items[29] = canonical_button_picture();
-    normalize_named_control_colors(normalized_info.items[1].items[0], model::ControlKind::choice_field,
+    normalize_control_base_appearance(normalized_info.items[1].items[0], model::ControlKind::choice_field,
         child_path(child_path(info_path, 1), 0));
     normalize_named_control_border(normalized_info.items[1].items[0], model::ControlKind::choice_field,
         child_path(child_path(info_path, 1), 0));
@@ -9260,7 +9293,7 @@ DecodedControl decode_calendar_field(
     auto named_events = decode_control_event_collection(info.items[2], child_path(info_path, 2),
         model::ControlKind::calendar_field);
     LV profile_info = info;
-    normalize_named_control_colors(profile_info.items[1].items[0], model::ControlKind::calendar_field,
+    normalize_control_base_appearance(profile_info.items[1].items[0], model::ControlKind::calendar_field,
         child_path(child_path(info_path, 1), 0));
     normalize_named_control_border(profile_info.items[1].items[0], model::ControlKind::calendar_field,
         child_path(child_path(info_path, 1), 0));
@@ -9275,7 +9308,7 @@ DecodedControl decode_calendar_field(
         const auto color = decode_control_color(properties.items[spec.slot], child_path(properties_path, spec.slot));
         if (color != control_color_property_default(spec)) common.named_colors.push_back({spec.property, color});
     }
-    normalize_named_control_colors(profile_info.items[1], model::ControlKind::calendar_field,
+    normalize_control_base_appearance(profile_info.items[1], model::ControlKind::calendar_field,
         properties_path, calendar_info_color_properties);
     const auto begin_path = child_path(properties_path, 5);
     const auto begin_atom = raw_atom(properties.items[5], begin_path);
@@ -10316,7 +10349,7 @@ DecodedControl decode_input_field(
     }
     normalized_info.items[2].items[0].items[28] = canonical_button_picture();
     normalized_info.items[2].items[0].items[29] = canonical_button_picture();
-    normalize_named_control_colors(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
+    normalize_control_base_appearance(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
         child_path(child_path(child_path(info_path, 2), 0), 0));
     normalize_named_control_border(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
         child_path(child_path(child_path(info_path, 2), 0), 0));

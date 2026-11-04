@@ -4323,8 +4323,8 @@ void test_radio_input_list_common_font_border_color_round_trip() {
         return document;
     };
     const auto common_base = [](list_stream::ListValue& encoded, model::ControlKind kind)
-        -> const list_stream::ListValue* {
-        const auto* record = find_record_with_guid(encoded, model::metamodel::descriptor_for(kind).guid);
+        -> list_stream::ListValue* {
+        auto* record = find_record_with_guid(encoded, model::metamodel::descriptor_for(kind).guid);
         if (record == nullptr) return nullptr;
         if (kind == model::ControlKind::radio_button)
             return &record->items[2].items[2].items[0].items[0];
@@ -4400,6 +4400,56 @@ void test_radio_input_list_common_font_border_color_round_trip() {
         };
         check_color(automatic_color);
         check_color(rgb_color);
+
+        auto legacy_automatic_color = form_stream::encode_document(
+            make_document(kind, supports_font ? std::optional{automatic_font} : std::nullopt,
+                automatic_color));
+        expect(legacy_automatic_color.ok(), "automatic-color form must encode before legacy Color3 probe");
+        if (legacy_automatic_color.ok()) {
+            auto* base = common_base(legacy_automatic_color.value(), kind);
+            expect(base != nullptr, "legacy Color3 probe must locate the owning base record");
+            if (base != nullptr) base->items[6] = list_stream::parse("{3,4,{0}}");
+            const auto decoded = form_stream::decode_document(legacy_automatic_color.value(), "LegacyAutomaticColor3");
+            expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " +
+                    decoded.diagnostics().front().message);
+            std::string diagnostic_locations;
+            for (const auto& diagnostic : decoded.diagnostics())
+                diagnostic_locations += diagnostic.code + "@" + diagnostic.path + ";";
+            expect(decoded.value().reconstruction_complete(),
+                "automatic Color3 must decode completely; diagnostics=" + diagnostic_locations);
+            expect(property(decoded.value(), "BorderColor") == nullptr,
+                "observed automatic Color3 must decode to the named implicit default");
+            if (decoded.ok()) {
+                auto rebuilt = form_stream::encode_document(decoded.value());
+                const auto* rebuilt_base = rebuilt ? common_base(rebuilt.value(), kind) : nullptr;
+                expect(rebuilt.ok() && rebuilt_base != nullptr &&
+                        list_stream::dump_compact(rebuilt_base->items[6]) == "{4,4,{0},4}",
+                    "legacy automatic Color3 must rebuild through canonical Color4");
+            }
+        }
+
+        if (supports_font && kind != model::ControlKind::usual_group) {
+            auto legacy_automatic_font = absent.value();
+            auto* base = common_base(legacy_automatic_font, kind);
+            expect(base != nullptr, "legacy Font6 probe must locate the owning base record");
+            if (base != nullptr) base->items[4] = list_stream::parse("{6,3,0,1}");
+            const auto decoded = form_stream::decode_document(legacy_automatic_font, "LegacyAutomaticFont6");
+            expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                    property(decoded.value(), "Font") == nullptr,
+                "observed automatic Font6 must decode to the named implicit default");
+            if (decoded.ok()) {
+                auto rebuilt = form_stream::encode_document(decoded.value());
+                const auto* rebuilt_base = rebuilt ? common_base(rebuilt.value(), kind) : nullptr;
+                expect(rebuilt.ok() && rebuilt_base != nullptr &&
+                        list_stream::dump_compact(rebuilt_base->items[4]) == "{8,3,0,1,100}",
+                    "legacy automatic Font6 must rebuild through canonical Font8");
+            }
+            auto unsupported_font6 = absent.value();
+            base = common_base(unsupported_font6, kind);
+            if (base != nullptr) base->items[4] = list_stream::parse("{6,2,0,1}");
+            expect(!form_stream::decode_document(unsupported_font6, "UnprovenFont6Kind"),
+                "unproven Font6 kind must remain rejected");
+        }
 
         if (supports_font) {
             for (const auto& font : {absolute_font, style_font}) {
@@ -10949,6 +10999,28 @@ void test_all_named_base_color_pairs_public_xml_round_trip() {
             (test_case.default_style == "StyleColors.ButtonBackColor" ? "{4,3,{-7},3}" : "{4,3,{-21},3}");
         expect(absent_base && list_stream::dump_compact(absent_base->items[test_case.slot]) == expected_default,
             "each named base color must retain its proven slot and default storage value");
+        if (!test_case.default_style.empty()) {
+            auto legacy_style_color = absent_encoded.value();
+            auto* legacy_base = base_for(legacy_style_color, test_case);
+            if (legacy_base != nullptr) {
+                legacy_base->items[test_case.slot].items[0] = list_stream::ListValue::raw_atom("3");
+                legacy_base->items[test_case.slot].items.pop_back();
+            }
+            const auto legacy_decoded = form_stream::decode_document(legacy_style_color, "LegacyStyleColor3");
+            const auto actual = legacy_decoded ? legacy_decoded.value().get_prop_val(
+                {model::ObjectCategory::control, model::ObjectId{2}},
+                model::PropertyId::from_name(test_case.property)).value : std::nullopt;
+            expect(legacy_decoded.ok() && actual &&
+                    *actual == model::PropertyValue{default_color(test_case.default_style)},
+                "observed named style Color3 must decode to its typed platform default");
+            if (legacy_decoded.ok()) {
+                const auto rebuilt = form_stream::encode_document(legacy_decoded.value());
+                expect(rebuilt.ok() &&
+                        list_stream::dump_compact(rebuilt.value()) ==
+                            list_stream::dump_compact(absent_encoded.value()),
+                    "named style Color3 must rebuild through canonical Color4");
+            }
+        }
 
         const auto explicit_default_xml = source::parse_form_xml(make_xml(
             test_case.default_style.empty() ?
@@ -10976,6 +11048,16 @@ void test_all_named_base_color_pairs_public_xml_round_trip() {
         expect(base && list_stream::dump_compact(base->items[test_case.slot]) ==
                 "{4,0,{" + std::to_string(packed_rgb) + "},0}",
             "RGB values must use the proven base19 slot and packed BGR codec");
+        if (!test_case.default_style.empty()) {
+            auto unproven_absolute_color3 = encoded.value();
+            auto* absolute_base = base_for(unproven_absolute_color3, test_case);
+            if (absolute_base != nullptr) {
+                absolute_base->items[test_case.slot].items[0] = list_stream::ListValue::raw_atom("3");
+                absolute_base->items[test_case.slot].items.pop_back();
+            }
+            expect(!form_stream::decode_document(unproven_absolute_color3, "UnprovenAbsoluteColor3"),
+                "unproven absolute Color3 kind must remain rejected");
+        }
         const auto decoded = form_stream::decode_document(encoded.value(), "NamedBaseColorPublicXml");
         const auto* decoded_control = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
         const auto* decoded_color = decoded_control ? decoded_control->properties().find(
