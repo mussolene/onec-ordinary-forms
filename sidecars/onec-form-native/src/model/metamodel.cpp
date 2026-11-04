@@ -611,6 +611,12 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
     context->value_codec = ValueCodec::context_menu_reference;
     context->persistence = PersistenceClass::persisted_editable;
     context->storage_codec = StorageCodec::root_record;
+    const auto value = std::ranges::find(descriptors, "Value", &PropertyDescriptor::api_name);
+    if (value == descriptors.end()) throw std::logic_error("missing control Value descriptor");
+    value->value_kind = ValueKind::variant;
+    value->persistence = PersistenceClass::runtime_only;
+    value->storage_codec = StorageCodec::none;
+    value->default_value = {DefaultKind::none, {}};
     const auto default_button = std::ranges::find(
         descriptors, std::string_view{"DefaultButton"}, &PropertyDescriptor::api_name);
     if (default_button == descriptors.end()) {
@@ -1328,7 +1334,7 @@ void apply_proven_storage_overrides(
 
 
     auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
-    for (const auto name : {"ChoiceMode", "CurrentRow", "CurrentData", "SelectedRows", "CurrentColumn"}) {
+    for (const auto name : {"ChoiceMode", "CurrentRow", "CurrentData", "SelectedRows", "CurrentColumn", "CurrentParent"}) {
         if (const auto property = std::ranges::find(table, name, &PropertyDescriptor::api_name);
             property != table.end()) {
             property->persistence = PersistenceClass::runtime_only;
@@ -1336,6 +1342,7 @@ void apply_proven_storage_overrides(
             property->default_value = {DefaultKind::none, {}};
         }
     }
+    std::ranges::find(table, "CurrentParent", &PropertyDescriptor::api_name)->value_kind = ValueKind::variant;
     for (const auto& spec : detail::table_enum_specs) {
         classify_property(table, spec.property, StorageCodec::control_info, DefaultKind::enumeration, spec.default_qualified);
         std::ranges::find(table, spec.property, &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;

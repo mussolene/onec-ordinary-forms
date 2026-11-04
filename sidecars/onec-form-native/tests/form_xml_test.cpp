@@ -3541,6 +3541,19 @@ void test_chart_source_mode_xml() {
         expect(!source::parse_form_xml(bad_xml), "Source-mode XML rejects cells, unknown attributes, and out-of-mode descriptions");
 }
 
+void test_control_value_is_not_persisted_xml() {
+    for (const auto kind : {"InputField", "CheckBox", "ChoiceField", "RadioButton"}) {
+        const auto xml = std::string("<Form id=\"1\" name=\"Values\" ordinaryFormVersion=\"2.1\"><ChildItems><") + kind +
+            " id=\"2\" name=\"C\"><Value><Undefined/></Value><Position/></" + kind + "></ChildItems></Form>";
+        expect(!source::parse_form_xml(xml), "runtime Value cannot enter public persisted XML");
+    }
+}
+
+void test_table_current_parent_is_not_persisted_xml() {
+    const auto result = source::parse_form_xml(R"XML(<Form id="1" name="Parents" ordinaryFormVersion="2.1"><ChildItems><Table id="2" name="T"><Position/><CurrentParent/><Columns/></Table></ChildItems></Form>)XML");
+    expect(!result, "runtime CurrentParent must not enter the persisted Table XML");
+}
+
 void test_graphical_current_item_is_not_persisted_xml() {
     const auto result = source::parse_form_xml(R"XML(<Form id="1" name="Graph" ordinaryFormVersion="2.1"><ChildItems><GraphicalSchemaField id="2" name="G"><Position/><CurrentItem><Undefined/></CurrentItem></GraphicalSchemaField></ChildItems></Form>)XML");
     expect(!result, "runtime CurrentItem must not enter the public persisted GraphicalSchemaField XML");
@@ -3909,6 +3922,8 @@ int main() {
         test_collapse_runtime_source_boundary();
         test_default_control_focus_groups_xml();
         test_chart_source_mode_xml();
+        test_control_value_is_not_persisted_xml();
+        test_table_current_parent_is_not_persisted_xml();
         test_graphical_current_item_is_not_persisted_xml();
         test_chart_active_point_xml_reference();
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();

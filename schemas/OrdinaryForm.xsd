@@ -2070,7 +2070,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2104,7 +2103,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ActionSource" type="ActionSourceReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
@@ -2137,7 +2135,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
@@ -2172,7 +2169,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2207,7 +2203,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2240,7 +2235,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2278,7 +2272,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2311,7 +2304,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2369,7 +2361,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2397,7 +2388,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2421,7 +2411,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2495,7 +2484,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2515,7 +2503,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2542,7 +2529,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2564,7 +2550,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2585,7 +2570,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2612,7 +2596,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2642,7 +2625,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2675,7 +2657,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2712,7 +2693,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2734,7 +2714,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2755,7 +2734,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2775,7 +2753,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2805,7 +2782,6 @@
       <xs:element name="RowInputMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="RowSelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CurrentParent" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FixedLeft" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FixedRight" type="xs:int" minOccurs="0" maxOccurs="1"/>
@@ -2835,7 +2811,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2862,7 +2837,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2899,7 +2873,6 @@
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

@@ -937,6 +937,12 @@ void test_control_surfaces_and_property_order(
         expect_element_shape(elements[cursor++], "DataPath", "DataPathType", "0", "1");
 
         for (const auto& descriptor : extension_properties) {
+            if (descriptor.persistence == PersistenceClass::runtime_only) {
+                expect(std::ranges::none_of(elements, [&](xmlNodePtr element) {
+                    return attribute(element, "name") == descriptor.xml_name;
+                }), "runtime control extension must not be exposed in persisted XML");
+                continue;
+            }
             if (descriptor.control_kind != oof::model::ControlKind::panel &&
                 descriptor.control_kind != control.kind) {
                 continue;

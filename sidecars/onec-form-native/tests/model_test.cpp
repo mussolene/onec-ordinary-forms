@@ -918,6 +918,58 @@ void test_list_and_html_live_property_boundaries() {
     expect(html->platform_type == u8"ВнешнийОбъект", "Linux HTML DOM must use the current platform type");
 }
 
+void test_control_extension_value_runtime_boundary() {
+    Form form; form.id = ObjectId{1}; form.name = "RuntimeValues";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    const auto property = PropertyId::from_name("Value");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const ObjectId id{100 + i};
+        if (i % 4 == 0) document.add_control(ControlNode{id, "Input" + std::to_string(i), InputFieldPayload{}});
+        else if (i % 4 == 1) document.add_control(ControlNode{id, "Check" + std::to_string(i), CheckBoxPayload{}});
+        else if (i % 4 == 2) document.add_control(ControlNode{id, "Choice" + std::to_string(i), ChoiceFieldPayload{}});
+        else document.add_control(ControlNode{id, "Radio" + std::to_string(i), RadioButtonPayload{}});
+        const auto* control = document.find_control(id);
+        const auto* descriptor = metamodel::find_property(control->kind(), property);
+        expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+            descriptor->storage_codec == metamodel::StorageCodec::none &&
+            descriptor->default_value.kind == metamodel::DefaultKind::none &&
+            descriptor->value_kind == metamodel::ValueKind::variant &&
+            descriptor->value_codec == metamodel::ValueCodec::unclassified,
+            "edited Value is typed by the live control, without persistent storage or a scalar universal default");
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface &&
+            document.set_prop_val(owner, property, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+            document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface &&
+            !control->extension_properties.contains(property),
+            "unfinished live Value access must not manufacture a default or persist a shadow value");
+    }
+}
+
+void test_table_current_parent_runtime_boundary() {
+    Form form; form.id = ObjectId{1}; form.name = "TableParents";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    const auto property = PropertyId::from_name("CurrentParent");
+    const auto* descriptor = metamodel::find_property(ControlKind::table, property);
+    expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+        descriptor->storage_codec == metamodel::StorageCodec::none &&
+        descriptor->default_value.kind == metamodel::DefaultKind::none &&
+        descriptor->value_kind == metamodel::ValueKind::variant &&
+        descriptor->value_codec == metamodel::ValueCodec::unclassified,
+        "Table CurrentParent is transient and depends on the bound data type, without a universal scalar default");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const ObjectId id{100 + i};
+        document.add_control(ControlNode{id, "Table" + std::to_string(i), TablePayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface &&
+            document.set_prop_val(owner, property, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+            document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface &&
+            !document.find_control(id)->properties().contains(property),
+            "unfinished current parent references must not create a scalar default or stored shadow");
+    }
+}
+
 void test_graphical_current_item_runtime_boundary() {
     Form form; form.id = ObjectId{1}; form.name = "GraphicalCurrentItems";
     for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
@@ -2863,7 +2915,7 @@ void test_help_metamodel() {
             event->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c",
             std::string(name) + " must have its observed Table event descriptor");
     }
-    for (const auto name : {"CurrentRow", "CurrentData", "SelectedRows", "CurrentColumn"}) {
+    for (const auto name : {"CurrentRow", "CurrentData", "SelectedRows", "CurrentColumn", "CurrentParent"}) {
         const auto* property = find_property(ControlKind::table, name);
         expect(property && property->persistence == PersistenceClass::runtime_only &&
                    property->storage_codec == StorageCodec::none,
@@ -5421,6 +5473,8 @@ int main() {
         test_chart_document_resource_budget();
         test_chart_scale_lines();
         test_list_and_html_live_property_boundaries();
+        test_control_extension_value_runtime_boundary();
+        test_table_current_parent_runtime_boundary();
         test_graphical_current_item_runtime_boundary();
         test_pivot_runtime_source_boundaries();
         test_form_runtime_variant_values();

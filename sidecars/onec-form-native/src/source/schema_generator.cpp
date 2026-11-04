@@ -1202,6 +1202,9 @@ void append_control_extension_elements(
     model::ControlKind control_kind
 ) {
     for (const auto& property : properties) {
+        if (property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+            continue;
+        }
         if (property.control_kind != model::ControlKind::panel &&
             property.control_kind != control_kind) {
             continue;
