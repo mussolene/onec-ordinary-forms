@@ -1909,9 +1909,9 @@ void test_layout_probe() {
 
     expect_failure(
         form_stream::probe_layout(list_stream::parse("{26}")),
-        "OOF1112",
-        "$/0",
-        "outer format without a proven nested layout must be rejected");
+        "OOF1102",
+        "$",
+        "outer format without its complete root record must be rejected");
 
     auto wrong_root_arity = layout_fixture(form_stream::LayoutKind::form_section_18);
     wrong_root_arity.items.pop_back();
@@ -1942,9 +1942,9 @@ void test_layout_probe() {
         list_stream::ListValue::raw_atom("3");
     expect_failure(
         form_stream::probe_layout(wrong_page_style_version),
-        "OOF1106",
-        "$/13/0",
-        "page-style section version drift must be rejected");
+        "OOF1113",
+        "$",
+        "unsupported outer/root/form/style tuple must be rejected");
 }
 
 void test_runtime_envelope() {
@@ -1985,9 +1985,9 @@ void test_runtime_envelope() {
     expect_failure(
         form_stream::decode_runtime_envelope(
             "{\"#\",01234567-89ab-cdef-0123-456789abcdef,{26}}"),
-        "OOF1112",
-        "$/2/0",
-        "runtime envelope must reject an outer format without a proven layout");
+        "OOF1102",
+        "$/2",
+        "runtime envelope must reject an incomplete root record");
 }
 
 void test_attributes() {
@@ -3105,6 +3105,19 @@ void test_shared_action_metadata_policies_and_rejections() {
         const auto cross_rebuilt = form_stream::encode_document(cross_decoded.value());
         expect(cross_rebuilt.ok() && list_stream::dump_compact(cross_rebuilt.value()) ==
             list_stream::dump_compact(cross_policy), "cross-owner Action metadata must round-trip without drift");
+        auto legacy_picture = encoded.value();
+        action_at(legacy_picture).items[2].items[5] =
+            list_stream::parse("{3,0,{0},\"\",-1,-1,1,0}");
+        const auto legacy_decoded = form_stream::decode_document(legacy_picture, "Actions");
+        expect(legacy_decoded.ok(), "all action owners must accept the legacy empty picture");
+        const auto legacy_rebuilt = form_stream::encode_document(legacy_decoded.value());
+        expect(legacy_rebuilt.ok() && list_stream::dump_compact(legacy_rebuilt.value()) ==
+                list_stream::dump_compact(encoded.value()),
+            "legacy action pictures must rebuild canonically without changing named action values");
+        action_at(legacy_picture).items[2].items[5].items[5] =
+            list_stream::ListValue::raw_atom("42");
+        expect(!form_stream::decode_document(legacy_picture, "Actions"),
+            "unrepresented legacy action picture settings must be rejected");
         for (unsigned field = 0; field < 7; ++field) {
             auto bad = encoded.value();
             action_at(bad).items[2].items[field] = list_stream::ListValue::raw_atom("999");
@@ -21436,11 +21449,15 @@ void test_chart_empty_render_cache_normalization_and_guards() {
         }), "neighboring unrepresented Chart cache must warn without extending normalization");
 }
 
-void test_platform_empty_document_fixture() {
+list_stream::ListValue platform_empty_document_payload() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
 )OOF";
-    const auto payload = list_stream::parse(fixture);
+    return list_stream::parse(fixture);
+}
+
+void test_platform_empty_document_fixture() {
+    const auto payload = platform_empty_document_payload();
     const auto decoded = form_stream::decode_document(payload, "Empty");
     expect(decoded.ok(), decoded ? "platform empty-form fixture must decode into the product model" :
         decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
@@ -21456,6 +21473,102 @@ void test_platform_empty_document_fixture() {
     expect(
         list_stream::dump_compact(encoded.value()) == list_stream::dump_compact(payload),
         "platform empty-form storage must canonicalize without semantic drift");
+}
+
+void test_supported_legacy_root_layout_decoding() {
+    const auto modern_payload = platform_empty_document_payload();
+    const auto modern_document = form_stream::decode_document(modern_payload, "Empty");
+    expect(modern_document.ok(), "modern synthetic empty-form fixture must decode");
+
+    const auto legacy16 = [&](std::uint32_t outer, std::size_t root_arity) {
+        auto payload = modern_payload;
+        payload.items[0] = list_stream::ListValue::raw_atom(std::to_string(outer));
+        payload.items[1].items[0] = list_stream::ListValue::raw_atom("16");
+        payload.items[1].items.resize(11);
+        payload.items[13] = list_stream::parse("{3,0,0}");
+        payload.items.resize(root_arity);
+        return payload;
+    };
+    auto legacy23 = legacy16(23, 18);
+    auto legacy25 = legacy16(25, 18);
+    auto legacy26 = legacy16(26, 19);
+    auto legacy27_section16 = legacy16(27, 20);
+
+    auto legacy_style8 = modern_payload;
+    legacy_style8.items[13].items[0] = list_stream::ListValue::raw_atom("8");
+    legacy_style8.items[13].items.resize(9);
+
+    struct LayoutCase {
+        const list_stream::ListValue* payload;
+        form_stream::StorageLayout expected;
+        std::string_view label;
+    };
+    const std::array<LayoutCase, 6> cases{{
+        {&legacy23, {form_stream::OuterFormat::v23, form_stream::LayoutKind::form_section_16, 18, 16, 11, 3, 3}, "23/18/16/3"},
+        {&legacy25, {form_stream::OuterFormat::v25, form_stream::LayoutKind::form_section_16, 18, 16, 11, 3, 3}, "25/18/16/3"},
+        {&legacy26, {form_stream::OuterFormat::v26, form_stream::LayoutKind::form_section_16, 19, 16, 11, 3, 3}, "26/19/16/3"},
+        {&legacy27_section16, {form_stream::OuterFormat::v27, form_stream::LayoutKind::form_section_16, 20, 16, 11, 3, 3}, "27/20/16/3"},
+        {&legacy_style8, {form_stream::OuterFormat::v27, form_stream::LayoutKind::form_section_18, 20, 18, 14, 8, 9}, "27/20/18/8"},
+        {&modern_payload, {form_stream::OuterFormat::v27, form_stream::LayoutKind::form_section_18, 20, 18, 14, 10, 11}, "27/20/18/10"},
+    }};
+
+    const model::OrdinaryFormDocument::ObjectKey form_owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const std::array<std::string_view, 7> compared_properties{
+        "Caption", "CaptionPicture", "Width", "Height", "EnterKeyBehavior", "AllowClose", "DesktopMode"};
+    const auto modern_xml = source::serialize_form_xml(modern_document.value());
+    expect(modern_xml.ok(), "modern fixture model must serialize for semantic comparison");
+
+    for (const auto& item : cases) {
+        const auto layout = form_stream::probe_layout(*item.payload);
+        expect(layout.ok() && layout.value() == item.expected,
+            std::string(item.label) + " must probe its exact root/form/style tuple");
+        const auto decoded = form_stream::decode_document(*item.payload, "Empty");
+        expect(decoded.ok(), decoded ? "" : std::string(item.label) + ": " +
+            decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value() == modern_xml.value(),
+            std::string(item.label) + " must produce the same named model and defaults as the modern fixture");
+        for (const auto name : compared_properties) {
+            const auto property = model::PropertyId::from_name(name);
+            expect(decoded.value().get_prop_val(form_owner, property).value ==
+                    modern_document.value().get_prop_val(form_owner, property).value,
+                std::string(item.label) + " changed typed Form." + std::string(name));
+        }
+        expect(decoded.value().get_prop_val(form_owner, model::PropertyId::from_name("AllowClose")).value ==
+                std::optional<model::PropertyValue>{model::PropertyValue{true}},
+            std::string(item.label) + " must expose the absent AllowClose value as true");
+
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok(), std::string(item.label) + " must rebuild through the canonical writer");
+        const auto rebuilt_layout = form_stream::probe_layout(rebuilt.value());
+        expect(rebuilt_layout.ok() && rebuilt_layout.value() == cases.back().expected,
+            std::string(item.label) + " rebuild must use canonical layout 27/20/18/10");
+    }
+
+    auto legacy_empty_picture = legacy23;
+    legacy_empty_picture.items[13].items[2] = list_stream::parse("{3,0,{0},\"\",-1,-1,1,0}");
+    const auto legacy_picture_document = form_stream::decode_document(legacy_empty_picture, "Empty");
+    expect(legacy_picture_document.ok(), "legacy empty caption picture must decode");
+    expect(source::serialize_form_xml(legacy_picture_document.value()).value() == modern_xml.value(),
+        "legacy empty caption picture must preserve the named empty value");
+    legacy_empty_picture.items[13].items[2].items[5] = list_stream::ListValue::raw_atom("42");
+    expect(!form_stream::decode_document(legacy_empty_picture, "UnknownLegacyPicture"),
+        "legacy picture settings without a named representation must be rejected");
+
+    auto unknown_style3_setting = legacy27_section16;
+    unknown_style3_setting.items[13].items[1] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(unknown_style3_setting, "UnknownStyle3Setting"),
+        "style3 must reject an unsupported setting instead of dropping it");
+
+    auto style8_trailing_field = legacy_style8;
+    style8_trailing_field.items[13].items.push_back(list_stream::ListValue::raw_atom("0"));
+    expect(!form_stream::decode_document(style8_trailing_field, "Style8TrailingField"),
+        "style8 must reject an unrecognized trailing field");
+
+    auto wrong_tuple = modern_payload;
+    wrong_tuple.items[0] = list_stream::ListValue::raw_atom("23");
+    expect(!form_stream::decode_document(wrong_tuple, "WrongRootTuple"),
+        "outer marker 23 with root arity 20 must be rejected");
 }
 
 void test_center_target_coordinates() {
@@ -22680,6 +22793,7 @@ int main() {
         test_chart_source_mode_storage();
         test_chart_gauge_bands_roundtrip_and_native_caches();
         test_chart_empty_render_cache_normalization_and_guards();
+        test_supported_legacy_root_layout_decoding();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

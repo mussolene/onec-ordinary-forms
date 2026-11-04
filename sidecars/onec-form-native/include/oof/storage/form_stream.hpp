@@ -16,6 +16,8 @@
 namespace oof::storage::form_stream {
 
 enum class OuterFormat : std::uint8_t {
+    v23 = 23,
+    v25 = 25,
     v26 = 26,
     v27 = 27,
 };
@@ -134,9 +136,9 @@ struct ControlGeometry {
     std::uint32_t page_index,
     std::optional<model::ControlRef> owner = std::nullopt);
 
-// Product storage boundary. The current executable slice accepts the proven
-// 8.5 section-18 layout and fails closed on storage concepts not represented
-// by OrdinaryFormDocument.
+// Product storage boundary. The executable slice accepts only explicitly
+// described root, form-section, and page-style layout tuples, and fails closed
+// on storage concepts not represented by OrdinaryFormDocument.
 [[nodiscard]] Result<model::OrdinaryFormDocument> decode_document(
     const list_stream::ListValue& payload,
     std::string_view form_name = "Form");

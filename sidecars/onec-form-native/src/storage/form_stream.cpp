@@ -850,11 +850,17 @@ model::PropertyValue explicit_localized_text(
 }
 
 LV canonical_style_record(std::uint32_t version) {
+    if (version == 3) {
+        return parse_constant("{3,0,0}");
+    }
     auto value = parse_constant(
         "{10,0,{4,0,{0},\"\",-1,-1,1,0,\"\"},"
         "{4,0,{0},\"\",-1,-1,1,0,\"\"},"
         "{4,0,{0},\"\",-1,-1,1,0,\"\"},100,0,0,0,0,0}");
     value.items[0] = raw(std::to_string(version));
+    if (version == 8) {
+        value.items.resize(9);
+    }
     return value;
 }
 
@@ -3255,6 +3261,8 @@ model::LocalizedStringValue decode_action_localized(const LV& value, std::string
     return decoded;
 }
 
+bool same_list_value(const LV& left, const LV& right);
+
 model::CommandBarAction decode_menu_action(const LV& payload, std::string_view path) {
     require_arity(payload, 3, path);
     require_raw_constant(payload.items[0], "3", child_path(path, 0));
@@ -3272,7 +3280,10 @@ model::CommandBarAction decode_menu_action(const LV& payload, std::string_view p
     action.tooltip = decode_action_localized(metadata.items[3], child_path(metadata_path, 3));
     action.description = decode_action_localized(metadata.items[4], child_path(metadata_path, 4));
     const auto expected = encode_menu_action(action, path).items[2];
-    require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5), "Action style record is unsupported");
+    if (!same_list_value(metadata.items[5], parse_constant("{3,0,{0},\"\",-1,-1,1,0}"))) {
+        require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5),
+            "Action style record is unsupported");
+    }
     require_exact(metadata.items[6], expected.items[6], child_path(metadata_path, 6), "Action tail record is unsupported");
     return action;
 }
@@ -4026,6 +4037,8 @@ LV encode_standard_button_picture(const model::metamodel::StandardPictureDescrip
 
 std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, std::string_view path) {
     if (same_list_value(value, canonical_button_picture())) return std::nullopt;
+    if (same_list_value(value, parse_constant("{3,0,{0},\"\",-1,-1,1,0}")))
+        return std::nullopt;
     if (value.items.size() >= 2 && value.items[0].atom == "4" && value.items[1].atom == "1") {
         require_arity(value, 9, path);
         require_raw_constant(value.items[0], "4", child_path(path, 0));
@@ -12318,6 +12331,12 @@ Result<OuterFormat> probe_outer_format(
         }
         const std::string marker_path = child_path(path, 0);
         const std::uint32_t marker = integer_atom<std::uint32_t>(payload.items[0], marker_path);
+        if (marker == 23) {
+            return OuterFormat::v23;
+        }
+        if (marker == 25) {
+            return OuterFormat::v25;
+        }
         if (marker == 26) {
             return OuterFormat::v26;
         }
@@ -12327,7 +12346,7 @@ Result<OuterFormat> probe_outer_format(
         fail(
             "OOF1111",
             marker_path,
-            "supported format marker 26 or 27",
+            "supported format marker 23, 25, 26, or 27",
             std::to_string(marker),
             "Ordinary-form stream format is unsupported");
     });
@@ -12337,21 +12356,15 @@ Result<StorageLayout> probe_layout(
     const list_stream::ListValue& payload,
     std::string_view path) {
     return capture_decode_failure<StorageLayout>([&payload, path] {
-        // 8.2 and 8.5 both emit outer 27; the paired nested records select the layout.
         const auto outer = probe_outer_format(payload, path);
         if (!outer) {
             throw DecodeFailure(outer.diagnostics().front());
         }
-        if (outer.value() != OuterFormat::v27) {
-            fail(
-                "OOF1112",
-                child_path(path, 0),
-                "outer format 27 with a proven nested layout",
-                "26",
-                "Ordinary-form outer format has no proven storage layout");
-        }
-
-        require_arity(payload, 20, path);
+        const auto outer_format = outer.value();
+        const std::size_t expected_root_arity =
+            outer_format == OuterFormat::v23 || outer_format == OuterFormat::v25 ? 18 :
+            outer_format == OuterFormat::v26 ? 19 : 20;
+        require_arity(payload, expected_root_arity, path);
         const std::string form_path = child_path(path, 1);
         const auto& form_section = at(payload, 1, path);
         require_list(form_section, form_path);
@@ -12362,47 +12375,49 @@ Result<StorageLayout> probe_layout(
         const std::string page_style_path = child_path(path, 13);
         const auto& page_style_section = at(payload, 13, path);
         require_list(page_style_section, page_style_path);
-
         if (form_version == 16) {
             require_arity(form_section, 11, form_path);
-            require_arity(page_style_section, 3, page_style_path);
-            require_raw_constant(
-                page_style_section.items[0],
-                "3",
-                child_path(page_style_path, 0));
-            return StorageLayout{
-                OuterFormat::v27,
-                LayoutKind::form_section_16,
-                20,
-                16,
-                11,
-                3,
-                3,
-            };
-        }
-        if (form_version == 18) {
+        } else if (form_version == 18) {
             require_arity(form_section, 14, form_path);
-            require_arity(page_style_section, 11, page_style_path);
-            require_raw_constant(
-                page_style_section.items[0],
-                "10",
-                child_path(page_style_path, 0));
-            return StorageLayout{
-                OuterFormat::v27,
-                LayoutKind::form_section_18,
-                20,
-                18,
-                14,
-                10,
-                11,
-            };
+        } else {
+            fail("OOF1113", child_path(form_path, 0),
+                "supported form section version 16 or 18", std::to_string(form_version),
+                "Ordinary-form nested storage layout is unsupported");
         }
-        fail(
-            "OOF1113",
-            child_path(form_path, 0),
-            "supported form section version 16 or 18",
-            std::to_string(form_version),
-            "Ordinary-form nested storage layout is unsupported");
+
+        const std::uint32_t style_version = integer_atom<std::uint32_t>(
+            at(page_style_section, 0, page_style_path), child_path(page_style_path, 0));
+        const std::size_t style_arity = page_style_section.items.size();
+        const bool known_tuple =
+            ((outer_format == OuterFormat::v23 || outer_format == OuterFormat::v25) &&
+                expected_root_arity == 18 &&
+                form_version == 16 && style_version == 3 && style_arity == 3) ||
+            (outer_format == OuterFormat::v26 && expected_root_arity == 19 &&
+                form_version == 16 && style_version == 3 && style_arity == 3) ||
+            (outer_format == OuterFormat::v27 && expected_root_arity == 20 &&
+                form_version == 16 && style_version == 3 && style_arity == 3) ||
+            (outer_format == OuterFormat::v27 && expected_root_arity == 20 &&
+                form_version == 18 && style_version == 8 && style_arity == 9) ||
+            (outer_format == OuterFormat::v27 && expected_root_arity == 20 &&
+                form_version == 18 && style_version == 10 && style_arity == 11);
+        if (!known_tuple) {
+            fail("OOF1113", std::string(path),
+                "supported outer/root/form/style layout tuple",
+                std::to_string(static_cast<unsigned>(outer_format)) + "/" +
+                    std::to_string(expected_root_arity) + "/" +
+                    std::to_string(form_version) + "/" +
+                    std::to_string(style_version) + "/" + std::to_string(style_arity),
+                "Ordinary-form storage layout tuple is unsupported");
+        }
+        return StorageLayout{
+            outer_format,
+            form_version == 16 ? LayoutKind::form_section_16 : LayoutKind::form_section_18,
+            expected_root_arity,
+            form_version,
+            form_section.items.size(),
+            style_version,
+            style_arity,
+        };
     });
 }
 
@@ -12682,14 +12697,6 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (!layout) {
             throw DecodeFailure(layout.diagnostics().front());
         }
-        if (layout.value().kind != LayoutKind::form_section_18) {
-            fail(
-                "OOF1112",
-                "$/1/0",
-                "form section 18",
-                std::to_string(layout.value().form_section_version),
-                "The typed product codec currently supports only the proven 8.5 layout");
-        }
         if (form_name.empty()) {
             fail("OOF1115", "$", "non-empty form name", "empty", "Form name is required");
         }
@@ -12737,11 +12744,24 @@ Result<model::OrdinaryFormDocument> decode_document(
                 fail("OOF1114", "$/12/1", "non-null configuration style UUID", std::string(null_uuid), "Form Style reference cannot use the null UUID");
         }
         const auto& root_style = payload.items[13];
-        require_arity(root_style, 11, "$/13");
-        const auto caption_picture = decode_button_picture(root_style.items[2], "$/13/2");
-        auto normalized_root_style = root_style;
-        normalized_root_style.items[2] = canonical_button_picture();
-        require_exact(normalized_root_style, canonical_style_record(10), "$/13", "Unsupported page-style record");
+        std::optional<DecodedPictureDescriptor> caption_picture;
+        if (layout.value().page_style_section_version == 3) {
+            auto normalized_root_style = root_style;
+            if (root_style.items[2].is_list) {
+                caption_picture = decode_button_picture(root_style.items[2], "$/13/2");
+                normalized_root_style.items[2] = raw("0");
+            }
+            require_exact(normalized_root_style, canonical_style_record(3), "$/13",
+                "Legacy page-style record contains unsupported settings");
+        } else {
+            require_arity(root_style, layout.value().page_style_section_arity, "$/13");
+            caption_picture = decode_button_picture(root_style.items[2], "$/13/2");
+            auto normalized_root_style = root_style;
+            normalized_root_style.items[2] = canonical_button_picture();
+            require_exact(normalized_root_style,
+                canonical_style_record(layout.value().page_style_section_version), "$/13",
+                "Unsupported page-style record");
+        }
         const auto appearance_mode = integer_atom<std::int32_t>(payload.items[14], "$/14");
         if (appearance_mode < 0 || appearance_mode > 2)
             fail("OOF1114", "$/14", "WindowAppearanceModeVariant ordinal 0..2", std::to_string(appearance_mode), "Unsupported window appearance mode");
@@ -12752,8 +12772,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (center_window && avoid_owner)
             fail("OOF1114", "$/Form/WindowLocation", "at most one location flag", "both flags set", "Conflicting window location modes");
         const bool desktop_mode = bool_atom(payload.items[17], "$/17");
-        const bool allow_close = bool_atom(payload.items[18], "$/18");
-        require_raw_constant(payload.items[19], "1", "$/19");
+        const bool allow_close = layout.value().root_arity < 19
+            ? true
+            : bool_atom(payload.items[18], "$/18");
+        if (layout.value().root_arity == 20) {
+            require_raw_constant(payload.items[19], "1", "$/19");
+        }
 
         const auto& form_section = payload.items[1];
         const auto& header = form_section.items[1];
@@ -12785,16 +12809,18 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(form_section.items[9], "4", "$/1/9");
         // Slot 10 is a platform serialization counter. It is normalized by the writer.
         static_cast<void>(integer_atom<std::uint32_t>(form_section.items[10], "$/1/10"));
-        if (integer_atom<std::int32_t>(form_section.items[11], "$/1/11") != width ||
-            integer_atom<std::int32_t>(form_section.items[12], "$/1/12") != height) {
-            fail(
-                "OOF1114",
-                "$/1/11",
-                "dimensions repeated from $/1/3 and $/1/4",
-                describe(form_section),
-                "Form dimension records disagree");
+        if (layout.value().kind == LayoutKind::form_section_18) {
+            if (integer_atom<std::int32_t>(form_section.items[11], "$/1/11") != width ||
+                integer_atom<std::int32_t>(form_section.items[12], "$/1/12") != height) {
+                fail(
+                    "OOF1114",
+                    "$/1/11",
+                    "dimensions repeated from $/1/3 and $/1/4",
+                    describe(form_section),
+                    "Form dimension records disagree");
+            }
+            require_raw_constant(form_section.items[13], "96", "$/1/13");
         }
-        require_raw_constant(form_section.items[13], "96", "$/1/13");
 
         const auto& root_panel = form_section.items[2];
         require_arity(root_panel, 3, "$/1/2");
