@@ -1103,6 +1103,13 @@ void apply_proven_storage_overrides(
         std::ranges::find(control_properties, "Output", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     }
 
+    auto& graphical_schema = properties[static_cast<std::size_t>(ControlKind::graphical_schema_field)];
+    auto current_item = std::ranges::find(graphical_schema, "CurrentItem", &PropertyDescriptor::api_name);
+    if (current_item == graphical_schema.end()) throw std::logic_error("missing GraphicalSchemaField CurrentItem");
+    current_item->persistence = PersistenceClass::runtime_only;
+    current_item->storage_codec = StorageCodec::none;
+    current_item->default_value = {DefaultKind::undefined, "undefined"};
+
     auto& geographical_schema = properties[static_cast<std::size_t>(ControlKind::geographical_schema_field)];
     for (const auto name : {"Scale", "ScaleKeeping"}) {
         auto property = std::ranges::find(geographical_schema, name, &PropertyDescriptor::api_name);

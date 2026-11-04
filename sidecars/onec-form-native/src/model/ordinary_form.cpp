@@ -1808,7 +1808,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
-            (control.kind() == ControlKind::html_document_field && descriptor->api_name == "Document"))
+            (control.kind() == ControlKind::html_document_field && descriptor->api_name == "Document") ||
+            (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem"))
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (descriptor->api_name == "Name")
             return {PropertyReadStatus::computed_value, PropertyValue{control.name}};
@@ -2247,7 +2248,8 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
             return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
-            (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource"))
+            (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
+            (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem"))
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
             const auto* type = effective_input_type(*this, control);
@@ -2755,7 +2757,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
             return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
-            (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource"))
+            (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
+            (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem"))
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
             const auto* type = effective_input_type(*this, control);

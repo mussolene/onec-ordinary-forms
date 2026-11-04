@@ -3541,6 +3541,11 @@ void test_chart_source_mode_xml() {
         expect(!source::parse_form_xml(bad_xml), "Source-mode XML rejects cells, unknown attributes, and out-of-mode descriptions");
 }
 
+void test_graphical_current_item_is_not_persisted_xml() {
+    const auto result = source::parse_form_xml(R"XML(<Form id="1" name="Graph" ordinaryFormVersion="2.1"><ChildItems><GraphicalSchemaField id="2" name="G"><Position/><CurrentItem><Undefined/></CurrentItem></GraphicalSchemaField></ChildItems></Form>)XML");
+    expect(!result, "runtime CurrentItem must not enter the public persisted GraphicalSchemaField XML");
+}
+
 void test_chart_active_point_xml_reference() {
     using namespace oof::model;
     std::string xml = R"XML(<Form id="1" name="ActivePoints" ordinaryFormVersion="2.1"><ChildItems>)XML";
@@ -3904,6 +3909,7 @@ int main() {
         test_collapse_runtime_source_boundary();
         test_default_control_focus_groups_xml();
         test_chart_source_mode_xml();
+        test_graphical_current_item_is_not_persisted_xml();
         test_chart_active_point_xml_reference();
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();

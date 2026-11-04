@@ -918,6 +918,30 @@ void test_list_and_html_live_property_boundaries() {
     expect(html->platform_type == u8"ВнешнийОбъект", "Linux HTML DOM must use the current platform type");
 }
 
+void test_graphical_current_item_runtime_boundary() {
+    Form form; form.id = ObjectId{1}; form.name = "GraphicalCurrentItems";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    const auto property = PropertyId::from_name("CurrentItem");
+    const auto* descriptor = metamodel::find_property(ControlKind::graphical_schema_field, property);
+    expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+        descriptor->storage_codec == metamodel::StorageCodec::none &&
+        descriptor->default_value.kind == metamodel::DefaultKind::undefined &&
+        descriptor->value_codec == metamodel::ValueCodec::unclassified,
+        "Graphical CurrentItem has proven transient storage but an unfinished live reference codec");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const ObjectId id{100 + i};
+        document.add_control(ControlNode{id, "Graph" + std::to_string(i), GraphicalSchemaFieldPayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface &&
+            document.set_prop_val(owner, property, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+            document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface,
+            "unfinished live graphical item API must not fabricate an Undefined scalar or stored shadow");
+        expect(!document.find_control(id)->properties().contains(property),
+            "unsupported graphical current item operations cannot alter stored properties");
+    }
+}
+
 void test_pivot_runtime_source_boundaries() {
     Form form; form.id = ObjectId{1}; form.name = "PivotSources";
     for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
@@ -5397,6 +5421,7 @@ int main() {
         test_chart_document_resource_budget();
         test_chart_scale_lines();
         test_list_and_html_live_property_boundaries();
+        test_graphical_current_item_runtime_boundary();
         test_pivot_runtime_source_boundaries();
         test_form_runtime_variant_values();
         test_window_options_aliases();
