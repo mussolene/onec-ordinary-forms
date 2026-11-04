@@ -1282,6 +1282,16 @@ void apply_proven_storage_overrides(
         current_date->default_value = {DefaultKind::none, {}};
     }
 
+    auto& pivot_runtime = properties[static_cast<std::size_t>(ControlKind::pivot_chart)];
+    for (const auto name : {"DataSource", "Fields"}) {
+        auto property = std::ranges::find(pivot_runtime, name, &PropertyDescriptor::api_name);
+        if (property == pivot_runtime.end()) throw std::logic_error("missing PivotChart source property");
+        property->persistence = PersistenceClass::runtime_only;
+        property->storage_codec = StorageCodec::none;
+        property->default_value = name == std::string_view{"DataSource"}
+            ? DefaultValue{DefaultKind::undefined, "undefined"} : DefaultValue{DefaultKind::none, {}};
+    }
+
     auto& list_box = properties[static_cast<std::size_t>(ControlKind::list_box)];
     classify_property(list_box, "ShowPicture", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(list_box, "ShowCheckBox", StorageCodec::control_info, DefaultKind::boolean, "false");

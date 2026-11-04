@@ -750,6 +750,35 @@ void test_list_and_html_live_property_boundaries() {
     expect(html->platform_type == u8"ВнешнийОбъект", "Linux HTML DOM must use the current platform type");
 }
 
+void test_pivot_runtime_source_boundaries() {
+    Form form; form.id = ObjectId{1}; form.name = "PivotSources";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const ObjectId id{100 + i};
+        document.add_control(ControlNode{id, "Pivot" + std::to_string(i), PivotChartPayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        for (const auto name : {"DataSource", "Fields"}) {
+            const auto property = PropertyId::from_name(name);
+            const auto* descriptor = metamodel::find_property(ControlKind::pivot_chart, property);
+            const bool source = name == std::string_view{"DataSource"};
+            expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+                descriptor->storage_codec == metamodel::StorageCodec::none &&
+                descriptor->value_codec == metamodel::ValueCodec::unclassified &&
+                descriptor->default_value.kind == (source ? metamodel::DefaultKind::undefined : metamodel::DefaultKind::none),
+                "proven Pivot source persistence must not imply completed query or field references");
+            expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface,
+                "unfinished Pivot source and field getters must not manufacture scalar substitutes");
+            const auto mutation = source ? PropertyMutationStatus::unsupported_surface : PropertyMutationStatus::read_only;
+            expect(document.set_prop_val(owner, property, UndefinedValue{}) == mutation &&
+                document.reset_prop_val(owner, property) == mutation,
+                "Pivot API must retain unfinished source and readonly field boundaries");
+            expect(!document.find_control(id)->properties().contains(property),
+                "rejected Pivot runtime operations cannot create persisted shadow properties");
+        }
+    }
+}
+
 void test_form_runtime_variant_values() {
     Form form; form.id = ObjectId{1}; form.name = "RuntimeVariants";
     OrdinaryFormDocument document(std::move(form));
@@ -5197,6 +5226,7 @@ int main() {
         test_chart_document_resource_budget();
         test_chart_scale_lines();
         test_list_and_html_live_property_boundaries();
+        test_pivot_runtime_source_boundaries();
         test_form_runtime_variant_values();
         test_window_options_aliases();
         test_form_runtime_boolean_values();

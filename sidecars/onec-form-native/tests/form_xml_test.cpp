@@ -3400,6 +3400,10 @@ void test_runtime_properties_are_not_public_xml() {
         expect(!source::parse_form_xml(std::string{"<Form id=\"1\" name=\"Runtime\" ordinaryFormVersion=\"2.1\"><ChildItems>"} + fragment + "</ChildItems></Form>"),
             "live selected rows and DOM must not enter public XML as empty placeholders");
     }
+    for (const auto name : {"DataSource", "Fields"}) {
+        expect(!source::parse_form_xml(std::string{"<Form id=\"1\" name=\"Runtime\" ordinaryFormVersion=\"2.1\"><ChildItems><PivotChart id=\"2\" name=\"Pivot\"><Position/><"} + name + "/></PivotChart></ChildItems></Form>"),
+            "live Pivot source and field references cannot enter XML as empty placeholders");
+    }
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><FormOwner/></Form>)XML"),
         "runtime FormOwner must not enter public XML as an empty or raw reference placeholder");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><CurrentControl/></Form>)XML"),

@@ -1771,6 +1771,9 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (control.kind() == ControlKind::pivot_chart &&
+            (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::html_document_field && descriptor->api_name == "Document"))
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
@@ -2205,6 +2208,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::pivot_chart &&
+            (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
+            return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow")
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
@@ -2707,6 +2713,9 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         }
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (control.kind() == ControlKind::pivot_chart &&
+            (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
+            return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow")
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
