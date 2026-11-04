@@ -14162,14 +14162,12 @@ void test_button_label_input_field_round_trip() {
     payload.items[12] = list_stream::ListValue::raw_atom("9");
     const auto partial_text_edit = form_stream::decode_document(malformed_text_edit, "Main");
     expect(!partial_text_edit.ok(), "invalid InputField TextEdit boolean must be rejected");
-    auto unsupported_text_edit_flag = encoded.value();
-    unsupported_text_edit_flag.items[1].items[2].items[2].items[3]
+    auto changed_text_edit_cache = encoded.value();
+    changed_text_edit_cache.items[1].items[2].items[2].items[3]
         .items[2].items[2].items[0].items[12] = list_stream::ListValue::raw_atom("1");
-    const auto partial_text_edit_flag = form_stream::decode_document(unsupported_text_edit_flag, "Main");
-    expect(partial_text_edit_flag.ok() && !partial_text_edit_flag.value().reconstruction_complete() &&
-               std::any_of(partial_text_edit_flag.diagnostics().begin(), partial_text_edit_flag.diagnostics().end(),
-                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
-        "mismatched InputField TextEdit flags must warn without rejecting the named model");
+    const auto decoded_text_edit_cache = form_stream::decode_document(changed_text_edit_cache, "Main");
+    expect(decoded_text_edit_cache.ok() && decoded_text_edit_cache.value().reconstruction_complete(),
+        "Boolean InputField TextEdit cache differences must normalize to the authoritative definition");
     expect(form_stream::encode_document(make_input_document(
         10, true, false, false, false, false, false, {{"TextEdit", false}})).ok(),
         "verified explicit TextEdit=false must encode");
@@ -14562,14 +14560,16 @@ void test_input_field_numeric_type_domain_round_trip() {
 }
 
 void test_input_field_text_edit_round_trip() {
-    for (const bool date : {false, true}) {
+    for (const auto term : {model::TypeDomainTerm::string, model::TypeDomainTerm::numeric, model::TypeDomainTerm::date}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "InputTextEdit";
         for (std::uint64_t i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{100 + i}});
         model::OrdinaryFormDocument document(std::move(form));
         model::TypeDomainPatternValue type;
         model::TypeDomainEntry entry;
-        if (date) { entry.term = model::TypeDomainTerm::date; entry.date = model::DateQualifiers{true, false}; }
-        else { entry.term = model::TypeDomainTerm::string; entry.string = model::LengthQualifiers{64, false}; }
+        entry.term = term;
+        if (term == model::TypeDomainTerm::date) entry.date = model::DateQualifiers{true, false};
+        else if (term == model::TypeDomainTerm::numeric) entry.numeric = model::NumericQualifiers{10, 2, false};
+        else entry.string = model::LengthQualifiers{64, false};
         type.entries.push_back(entry);
         document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
         const auto property = model::PropertyId::from_name("TextEdit");
@@ -14586,8 +14586,15 @@ void test_input_field_text_edit_round_trip() {
         const auto* outer_flag = record ? bounded_list_item(*record, {2, 5}) : nullptr;
         expect(payload_flag && outer_flag && payload_flag->atom == "1" && outer_flag->atom == "1",
             "disabled TextEdit must encode both platform-observed flags");
-        const auto decoded = form_stream::decode_document(encoded.value(), "InputTextEdit");
-        expect(decoded.ok(), "twelve InputFields with TextEdit must decode");
+        auto runtime = encoded.value();
+        auto& records = runtime.items[1].items[2].items[2];
+        for (std::size_t index = 1; index < records.items.size(); ++index) {
+            auto& info = records.items[index].items[2];
+            info.items[2].items[0].items[12] = list_stream::ListValue::raw_atom(info.items[5].atom == "0" ? "1" : "0");
+        }
+        const auto decoded = form_stream::decode_document(runtime, "InputTextEdit");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "Primitive InputField TextEdit derives from root definition regardless of the Boolean payload cache");
         for (std::uint64_t i = 0; i < 12; ++i) {
             const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{100 + i}};
             expect(decoded.value().get_prop_val(owner, property).value == model::PropertyValue{i % 2 != 0},
@@ -22724,6 +22731,122 @@ void test_catalog_item_form_extension_named_round_trip_and_guards() {
         "an InputField member binding requires its explicit leaf type descriptor");
 }
 
+void test_input_field_reference_extensions_round_trip_and_guards() {
+    for (const auto& extension : model::metamodel::input_field_extensions) {
+        list_stream::ListValue native_reference_pair;
+        for (unsigned variant = 0; variant < 4; ++variant) {
+            const auto xml = std::string(R"XML(<Form id="1" name="Reference" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Reference">)XML") +
+                (variant == 3 ? std::string{} : "<" + std::string(extension.xml_name) + "/>") + R"XML(<ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><Position/><ChoiceButton>)XML" +
+                (variant == 1 ? "false" : "true") + "</ChoiceButton><ClearButton>true</ClearButton><ChoiceListButton>" +
+                (variant == 3 ? "true" : "false") + "</ChoiceListButton><TextEdit>" +
+                (variant == 2 ? "false" : "true") + "</TextEdit><ListChoiceMode>" +
+                (variant == 3 ? "true" : "false") + "</ListChoiceMode></InputField></ChildItems></Form>";
+            const auto parsed = source::parse_form_xml(xml);
+            expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+            const auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+            const auto& info = encoded.value().items[1].items[2].items[2].items[1].items[2];
+            expect(info.items[1].items[1].items[0].atom == "#" &&
+                info.items[1].items[1].items[1].atom == "22222222-2222-2222-2222-222222222222" &&
+                info.items[3].items[1].items[0].atom == (variant == 3
+                    ? std::string_view{"763308b0-510d-4302-8689-9d9f2a562598"} : extension.guid) &&
+                info.items[3].items.size() == 2 && info.items[5].atom == (variant == 2 ? "1" : "0"),
+                "InputField must retain nominal UUID, one active extension and synchronized TextEdit copies");
+            if (variant == 0) native_reference_pair = info.items[3].items[1];
+            if (variant == 0) {
+                for (unsigned root_bit = 0; root_bit < 2; ++root_bit) {
+                    for (unsigned cache_bit = 0; cache_bit < 2; ++cache_bit) {
+                        auto observed = encoded.value();
+                        auto& observed_info = observed.items[1].items[2].items[2].items[1].items[2];
+                        observed_info.items[5] = list_stream::ListValue::raw_atom(std::to_string(root_bit));
+                        observed_info.items[2].items[0].items[12] = list_stream::ListValue::raw_atom(std::to_string(cache_bit));
+                        const auto read = form_stream::decode_document(observed, "Reference");
+                        expect(read.ok() && read.value().reconstruction_complete(),
+                            "All twelve reference root and cache combinations must decode completely");
+                        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+                        expect(read.value().get_prop_val(owner, model::PropertyId::from_name("TextEdit")).value ==
+                            model::PropertyValue{root_bit == 0},
+                            "Reference TextEdit must derive exclusively from the inverse root definition bit");
+                        const auto named_read = source::serialize_form_xml(read.value());
+                        expect(named_read.ok() && (named_read.value().find("<TextEdit>false</TextEdit>") != std::string::npos) == (root_bit == 1),
+                            "Named TextEdit must depend on the definition rather than the live payload cache");
+                        const auto saved = form_stream::encode_document(read.value());
+                        expect(saved.ok(), saved ? "" : saved.diagnostics().front().message);
+                        const auto& saved_info = saved.value().items[1].items[2].items[2].items[1].items[2];
+                        expect(saved_info.items[5].atom == std::to_string(root_bit) &&
+                            saved_info.items[2].items[0].items[12].atom == std::to_string(root_bit),
+                            "Reference writer must preserve the definition and regenerate its derived cache");
+                    }
+                }
+            }
+            const auto decoded = form_stream::decode_document(encoded.value(), "Reference");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                decoded ? "Reference extension must decode completely" : decoded.diagnostics().front().message);
+            const auto* field = decoded.value().find_control(model::ObjectId{2});
+            expect(field && std::get<model::InputFieldPayload>(field->payload).extension ==
+                (variant == 3 ? std::optional<model::InputFieldExtensionKind>{} : std::optional{extension.kind}),
+                "Decoded InputField must expose only its active reference family or generic list choice");
+            const auto named = source::serialize_form_xml(decoded.value());
+            expect(named.ok() && (named.value().find(extension.xml_name) != std::string::npos) == (variant != 3) &&
+                named.value().find(extension.guid) == std::string::npos,
+                "Reference extension XML must expose named family without raw pair identifiers");
+            const auto reparsed = source::parse_form_xml(named.value());
+            expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+            const auto rebuilt = form_stream::encode_document(reparsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                "Reference extension must round trip all twelve family and flag combinations canonically");
+            if (variant == 2 || variant == 3) {
+                auto runtime = encoded.value();
+                auto& runtime_info = runtime.items[1].items[2].items[2].items[1].items[2];
+                if (variant == 2) runtime_info.items[2].items[0].items[12] = list_stream::ListValue::raw_atom("0");
+                else runtime_info.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("2"),
+                    native_reference_pair, info.items[3].items[1]});
+                const auto runtime_decoded = form_stream::decode_document(runtime, "Reference");
+                expect(runtime_decoded.ok() && runtime_decoded.value().reconstruction_complete(),
+                    "Observed runtime TextEdit copy or inactive reference pair must normalize completely");
+                const auto runtime_xml = source::serialize_form_xml(runtime_decoded.value());
+                expect(runtime_xml.ok() && runtime_xml.value() == named.value(),
+                    "Runtime and persistent InputField states must have the same active named model");
+                if (variant == 2) {
+                    runtime_info.items[2].items[0].items[12] = list_stream::ListValue::raw_atom("99");
+                    expect(!form_stream::decode_document(runtime, "Reference"),
+                        "Only a Boolean derived TextEdit cache can be normalized");
+                }
+            }
+            auto corrupt = encoded.value();
+            auto& pair = corrupt.items[1].items[2].items[2].items[1].items[2].items[3].items[1];
+            pair.items[1].items[0] = list_stream::ListValue::raw_atom("99");
+            expect(!form_stream::decode_document(corrupt, "Reference"),
+                "Reference extension nondefault settings must fail closed");
+            pair.items[0] = list_stream::ListValue::raw_atom("33333333-3333-3333-3333-333333333333");
+            expect(!form_stream::decode_document(corrupt, "Reference"),
+                "Unknown reference extension pair must fail closed");
+        }
+        const auto defaults = source::parse_form_xml(std::string(
+            R"XML(<Form id="1" name="Defaults" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Default"><)XML") +
+            std::string(extension.xml_name) + R"XML(/><ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><Position/></InputField></ChildItems></Form>)XML");
+        expect(defaults.ok(), defaults ? "" : defaults.diagnostics().front().message);
+        const auto encoded = form_stream::encode_document(defaults.value());
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        const auto& payload = encoded.value().items[1].items[2].items[2].items[1].items[2].items[2].items[0];
+        expect(payload.items[7].atom == "0" && payload.items[8].atom == "0",
+            "Fresh named reference XML must preserve common ChoiceButton and ClearButton defaults");
+        auto conflicting_mode = defaults.value();
+        auto* conflicting = const_cast<model::ControlNode*>(conflicting_mode.find_control(model::ObjectId{2}));
+        conflicting->properties().set_explicit(model::PropertyId::from_name("ListChoiceMode"), true);
+        expect(!conflicting_mode.validate().ok() && !form_stream::encode_document(conflicting_mode),
+            "An explicit family extension must be rejected when list-choice mode is active");
+        auto wrong_type = defaults.value();
+        auto* field = const_cast<model::ControlNode*>(wrong_type.find_control(model::ObjectId{2}));
+        model::TypeDomainPatternValue scalar;
+        model::TypeDomainEntry entry; entry.term = model::TypeDomainTerm::string;
+        scalar.entries.push_back(entry);
+        field->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), scalar);
+        expect(!wrong_type.validate().ok() && !form_stream::encode_document(wrong_type),
+            "Reference extension must reject primitive ValueType in model and writer");
+    }
+}
+
 void test_catalog_list_form_extension_named_round_trip_and_guards() {
     std::string xml = R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><Height>400</Height><Width>600</Width><MainAttribute attributeId="0"/><CatalogListFormExtension/><Attributes><Attribute id="0" name="CatalogList"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute><Attribute id="30" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="31" name="Choices"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
     const std::array kinds{"Button", "LabelDecoration", "InputField", "CheckBox", "ChoiceField",
@@ -23398,6 +23521,7 @@ int main() {
         test_data_processor_form_extension_named_round_trip_and_guards();
         test_catalog_item_form_extension_named_round_trip_and_guards();
         test_catalog_list_form_extension_named_round_trip_and_guards();
+        test_input_field_reference_extensions_round_trip_and_guards();
         test_embedded_chart_dynamic_back_color();
         test_pivot_chart_types();
         test_complex_chart_back_color_pairs();

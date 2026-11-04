@@ -1485,6 +1485,15 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             "      <xs:element name=\"DataPath\" type=\"DataPathType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
         if (control.kind == model::ControlKind::input_field)
             output += "      <xs:element name=\"TypeLink\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"AttributeReferenceValueType\" use=\"required\"/></xs:complexType></xs:element>\n";
+        if (control.kind == model::ControlKind::input_field) {
+            output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n";
+            for (const auto& extension : model::metamodel::input_field_extensions) {
+                output += "        <xs:element";
+                append_attribute(output, "name", extension.xml_name);
+                output += "><xs:complexType/></xs:element>\n";
+            }
+            output += "      </xs:choice>\n";
+        }
         append_control_extension_elements(
             output,
             metamodel.control_extension_properties(),
@@ -1655,7 +1664,14 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     output += "/>\n        <NamedConcept";
     append_attribute(output, "name", model::metamodel::catalog_list_form_extension.xml_name);
     append_attribute(output, "russianName", as_utf8(model::metamodel::catalog_list_form_extension.russian_name));
-    output += "/>\n        <Controls>\n";
+    output += "/>\n";
+    for (const auto& extension : model::metamodel::input_field_extensions) {
+        output += "        <NamedConcept";
+        append_attribute(output, "name", extension.xml_name);
+        append_attribute(output, "russianName", as_utf8(extension.russian_name));
+        output += "/>\n";
+    }
+    output += "        <Controls>\n";
 
     for (const auto& control : metamodel.controls()) {
         output += "          <Control";

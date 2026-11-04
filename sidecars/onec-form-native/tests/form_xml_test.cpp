@@ -2982,6 +2982,25 @@ void test_data_processor_form_extension_xml_contract() {
     expect(!source::serialize_form_xml(document).ok(), "Unknown extension kinds must fail explicit serialization");
 }
 
+void test_input_field_reference_extension_xml_contract() {
+    const std::string begin = R"XML(<Form id="1" name="Ref" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Ref">)XML";
+    const std::string end = R"XML(<ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><Position/></InputField></ChildItems></Form>)XML";
+    for (const auto& extension : model::metamodel::input_field_extensions) {
+        const auto parsed = source::parse_form_xml(begin + "<" + std::string(extension.xml_name) + "/>" + end);
+        expect(parsed.ok() && std::get<model::InputFieldPayload>(parsed.value().find_control(model::ObjectId{2})->payload).extension == extension.kind,
+            "Each reference InputField family must have a named model identity");
+    }
+    expect(!source::parse_form_xml(begin + "<CatalogInputFieldExtension/>" +
+        R"XML(<ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><Position/><ListChoiceMode>true</ListChoiceMode></InputField></ChildItems></Form>)XML"),
+        "XML must reject an authored reference family that is inactive under list-choice mode");
+    for (const auto invalid : {"<CatalogInputFieldExtension/><ChartOfAccountsInputFieldExtension/>",
+        "<CatalogInputFieldExtension/><CatalogInputFieldExtension/>",
+        "<CatalogInputFieldExtension setting=\"0\"/>",
+        "<ChartOfCharacteristicTypesInputFieldExtension><Settings/></ChartOfCharacteristicTypesInputFieldExtension>"})
+        expect(!source::parse_form_xml(begin + invalid + end),
+            "InputField extension XML must reject settings and mutually exclusive identities");
+}
+
 void test_catalog_list_form_extension_xml_contract() {
     const auto parsed = source::parse_form_xml(
         R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><CatalogListFormExtension/></Form>)XML");
@@ -4293,6 +4312,7 @@ int main() {
         test_data_processor_form_extension_xml_contract();
         test_catalog_item_form_extension_xml_contract();
         test_catalog_list_form_extension_xml_contract();
+        test_input_field_reference_extension_xml_contract();
         test_chart_base_value_xml();
         test_chart_enum_properties_xml();
         test_chart_type_xml();

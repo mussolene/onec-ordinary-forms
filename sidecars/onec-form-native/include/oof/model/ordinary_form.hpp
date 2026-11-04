@@ -972,7 +972,13 @@ struct PictureDecorationPayload final
 struct CheckBoxPayload final : TypedControlPayload<ControlKind::check_box> {};
 struct ChoiceFieldPayload final : TypedControlPayload<ControlKind::choice_field> {};
 struct RadioButtonPayload final : TypedControlPayload<ControlKind::radio_button> {};
+enum class InputFieldExtensionKind : std::uint8_t {
+    catalog,
+    chart_of_accounts,
+    chart_of_characteristic_types,
+};
 struct InputFieldPayload final : TypedControlPayload<ControlKind::input_field> {
+    std::optional<InputFieldExtensionKind> extension;
     std::optional<AttributeRef> type_link;
 };
 struct UsualGroupPayload final : TypedControlPayload<ControlKind::usual_group> {};

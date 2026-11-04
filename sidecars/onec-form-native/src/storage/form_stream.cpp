@@ -2187,7 +2187,7 @@ constexpr std::array input_field_flag_mappings{
     InputFieldFlagMapping{"PasswordMode", InputFieldFlagScope::payload, 5, false, 5},
     InputFieldFlagMapping{"AutoMarkIncomplete", InputFieldFlagScope::payload, 35, false, no_paired_slot},
     InputFieldFlagMapping{"AutoChoiceIncomplete", InputFieldFlagScope::payload, 36, false, no_paired_slot},
-    InputFieldFlagMapping{"TextEdit", InputFieldFlagScope::payload, 12, true, no_paired_slot, true},
+    InputFieldFlagMapping{"TextEdit", InputFieldFlagScope::root_info, 5, true, no_paired_slot, true},
 };
 
 list_stream::ListValue& input_field_flag_value(LV& info, const InputFieldFlagMapping& mapping) {
@@ -2242,6 +2242,29 @@ bool is_single_track_bar_type_domain(const model::TypeDomainPatternValue& value)
     return value.entries.size() == 1 && value.entries.front() == expected;
 }
 
+bool is_concrete_input_reference_type(const model::TypeDomainPatternValue& type) {
+    return type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::object &&
+        type.entries.front().type_uuid && type.entries.front().type_uuid->canonical != null_uuid;
+}
+
+LV input_field_reference_pair(model::InputFieldExtensionKind kind) {
+    const auto descriptor = std::ranges::find(model::metamodel::input_field_extensions, kind,
+        &model::metamodel::InputFieldExtensionDescriptor::kind);
+    if (descriptor == std::end(model::metamodel::input_field_extensions))
+        fail("OOF1122", "$/InputField", "declared InputField extension", "unknown kind",
+            "InputField extension is not declared");
+    LV settings;
+    switch (kind) {
+        case model::InputFieldExtensionKind::catalog:
+            settings = parse_constant("{5,0,2,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
+        case model::InputFieldExtensionKind::chart_of_accounts:
+            settings = parse_constant("{1,0,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
+        case model::InputFieldExtensionKind::chart_of_characteristic_types:
+            settings = parse_constant("{0,0,2,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
+    }
+    return list({raw(std::string(descriptor->guid)), std::move(settings)});
+}
+
 struct InputFieldTextValues {
     model::PropertyValue tool_tip{std::string{}};
     std::string format;
@@ -2258,6 +2281,8 @@ struct InputFieldLayoutValues {
 
 InputFieldFlagValues decode_input_field_flags(
     const LV& info, std::string_view path, InputFieldPairMode pair_mode) {
+    static_cast<void>(bool_atom(info.items[2].items[0].items[12],
+        child_path(child_path(child_path(path, 2), 0), 12)));
     const auto paired_path = child_path(path, 3);
     if (pair_mode == InputFieldPairMode::require_matching_pair) {
         require_arity(info.items[3], 2, paired_path);
@@ -2294,7 +2319,8 @@ LV canonical_input_field_info(
     const InputFieldLayoutValues& layout_values,
     const model::FontValue* font = nullptr,
     const model::ColorValue* border_color = nullptr,
-    const model::ShortcutValue& shortcut = {}) {
+    const model::ShortcutValue& shortcut = {},
+    std::optional<model::InputFieldExtensionKind> extension = {}) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
 )OOF");
@@ -2303,7 +2329,19 @@ LV canonical_input_field_info(
         value.items[2].items[0].items[0].items.size() != 21) {
         throw std::logic_error("canonical InputField profile is malformed");
     }
+    const auto list_mode_flag = std::ranges::find(input_field_flag_mappings, "ListChoiceMode", &InputFieldFlagMapping::name);
+    const bool list_choice_mode = flags[static_cast<std::size_t>(list_mode_flag - input_field_flag_mappings.begin())];
+    if ((extension && list_choice_mode) ||
+        (is_concrete_input_reference_type(type) && !extension && !list_choice_mode))
+        fail("OOF1122", "$/InputField", "one active reference extension or generic list-choice mode", "incompatible modes",
+            "Reference extension is inapplicable in list-choice mode");
     value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
+    if (extension) {
+        if (!is_concrete_input_reference_type(type))
+            fail("OOF1122", "$/InputField/ValueType", "one concrete object type UUID", "incompatible type",
+                "Reference InputField extension requires its concrete nominal type");
+        value.items[3] = list({raw("1"), input_field_reference_pair(*extension)});
+    }
     encode_common_control_base(value.items[2].items[0].items[0],
         CommonControlBaseFields{enabled, text_values.tool_tip,
             font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
@@ -2324,17 +2362,17 @@ LV canonical_input_field_info(
     } else if (is_supported_input_numeric_type_domain(type)) {
         value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().numeric.length));
         value.items[2].items[0].items[15] = raw(std::to_string(type.entries.front().numeric.length == 0 ? 0 : type.entries.front().numeric.precision));
-    } else if (is_single_date_only_type_domain(type)) {
+    } else if (is_single_date_only_type_domain(type) || is_concrete_input_reference_type(type)) {
         value.items[2].items[0].items[14] = raw("0");
     } else {
-        throw std::logic_error("canonical InputField profile only supports empty, single-string, single-numeric, or Date-only TypeDomain");
+        throw std::logic_error("canonical InputField profile requires an empty, supported scalar, or concrete nominal reference TypeDomain");
     }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
         const bool encoded = flags[index] != mapping.inverted;
         input_field_flag_value(value, mapping) = raw(encoded ? "1" : "0");
-        if (mapping.name == "TextEdit") value.items[5] = raw(encoded ? "1" : "0");
-        if (mapping.paired_slot != no_paired_slot) {
+        if (mapping.name == "TextEdit") value.items[2].items[0].items[12] = raw(encoded ? "1" : "0");
+        if (mapping.paired_slot != no_paired_slot && !extension) {
             value.items[3].items[1].items[1].items[mapping.paired_slot] = raw(encoded ? "1" : "0");
         }
     }
@@ -2344,7 +2382,8 @@ LV canonical_input_field_info(
         value.items[3].items[1].items[1].items[4] = string_value(text_values.mask);
     }
     if (bool_atom(value.items[9], "$/InputField/ListChoiceMode")) {
-        value.items[3] = parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}");
+        const auto list_choice = parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}");
+        value.items[3] = list({raw("1"), list_choice});
     }
     return value;
 }
@@ -10322,13 +10361,33 @@ DecodedControl decode_input_field(
     require_arity(info, 10, info_path);
     require_raw_constant(info.items[0], "9", child_path(info_path, 0));
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
+    const bool list_choice_mode = bool_atom(info.items[9], child_path(info_path, 9));
+    std::optional<model::InputFieldExtensionKind> input_extension;
+    const auto& pairs = info.items[3];
+    require_list(pairs, child_path(info_path, 3));
+    if (pairs.items.size() > 1) {
+        const auto& pair = pairs.items[1];
+        require_list(pair, child_path(child_path(info_path, 3), 1));
+        if (!pair.items.empty()) {
+            const auto guid = raw_atom(pair.items[0], info_path);
+            const auto descriptor = std::ranges::find(model::metamodel::input_field_extensions, guid,
+                &model::metamodel::InputFieldExtensionDescriptor::guid);
+            if (descriptor != std::end(model::metamodel::input_field_extensions)) {
+                input_extension = descriptor->kind;
+                require_exact(pair, input_field_reference_pair(*input_extension), child_path(child_path(info_path, 3), 1),
+                    "Reference InputField extension settings are not represented by the named model");
+            }
+        }
+    }
     const bool supported_type = is_single_string_type_domain(control_type) || is_supported_input_numeric_type_domain(control_type) ||
-        is_single_date_only_type_domain(control_type);
-    if (!supported_type || (linked_attribute != nullptr && control_type != linked_attribute->required_type())) {
+        is_single_date_only_type_domain(control_type) ||
+        ((input_extension || list_choice_mode) && is_concrete_input_reference_type(control_type));
+    if ((input_extension && !is_concrete_input_reference_type(control_type)) ||
+        !supported_type || (linked_attribute != nullptr && control_type != linked_attribute->required_type())) {
         fail(
             "OOF1122",
             child_path(info_path, 1),
-            "single-string, single-numeric, or Date-only InputField TypeDomainPattern matching linked Attribute",
+            "supported scalar or concrete nominal InputField TypeDomainPattern matching linked Attribute",
             describe(info.items[1]),
             "InputField type must match its linked attribute");
     }
@@ -10344,11 +10403,10 @@ DecodedControl decode_input_field(
     require_arity(base_info, 21, base_info_path);
     require_raw_constant(base_info.items[0], "19", child_path(base_info_path, 0));
     const auto mask = string_atom(payload.items[21], child_path(payload_path, 21));
-    const bool list_choice_mode = bool_atom(info.items[9], child_path(info_path, 9));
     if (!mask.empty() && (!is_single_string_type_domain(control_type) || list_choice_mode))
         fail("OOF1122", child_path(payload_path, 21), "Mask on a single-string InputField without ListChoiceMode", {},
             "InputField Mask is unavailable for this editor");
-    if (!list_choice_mode) {
+    if (!list_choice_mode && !input_extension) {
         const auto& paired_mask = at(at(at(info.items[3], 1, child_path(info_path, 3)), 1,
             child_path(child_path(info_path, 3), 1)), 4, child_path(child_path(child_path(info_path, 3), 1), 1));
         if (string_atom(paired_mask, info_path) != mask)
@@ -10434,12 +10492,21 @@ DecodedControl decode_input_field(
         fail("OOF1114", child_path(payload_path, 37), "IncompleteChoiceMode storage value 0 or 1",
             std::to_string(incomplete_choice_mode), "InputField.IncompleteChoiceMode storage value is unsupported");
     }
-    if (list_choice_mode) {
+    const bool inactive_reference_pair = input_extension.has_value() && list_choice_mode;
+    if (input_extension) {
+        const auto expected_pairs = list_choice_mode
+            ? list({raw("2"), input_field_reference_pair(*input_extension),
+                parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}")})
+            : list({raw("1"), input_field_reference_pair(*input_extension)});
+        require_exact(info.items[3], expected_pairs, child_path(info_path, 3),
+            "Reference InputField requires its exact named extension and optional list choice");
+    } else if (list_choice_mode) {
         require_exact(info.items[3], parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}"),
             child_path(info_path, 3), "InputField list choice record is unsupported");
     }
+    if (list_choice_mode) input_extension.reset();
     const auto input_field_flags = decode_input_field_flags(info, info_path,
-        list_choice_mode ? InputFieldPairMode::payload_only : InputFieldPairMode::require_matching_pair);
+        list_choice_mode || input_extension ? InputFieldPairMode::payload_only : InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format, mask};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width,
         incomplete_choice_mode};
@@ -10460,6 +10527,9 @@ DecodedControl decode_input_field(
         }
     }
     LV normalized_info = info;
+    normalized_info.items[2].items[0].items[12] = raw(bool_atom(info.items[5], child_path(info_path, 5)) ? "1" : "0");
+    if (inactive_reference_pair)
+        normalized_info.items[3] = parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}");
     normalized_info.items[7] = raw("0");
     normalized_info.items[8] = list({raw("1"), raw("0")});
     normalized_info.items[4] = list({raw("0")});
@@ -10478,7 +10548,7 @@ DecodedControl decode_input_field(
         child_path(child_path(child_path(info_path, 2), 0), 0));
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
         canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values,
-            &*common.font, &*common.border_color, shortcut)))
+            &*common.font, &*common.border_color, shortcut, input_extension)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
 
     const auto geometry_path = child_path(path, 3);
@@ -10496,6 +10566,7 @@ DecodedControl decode_input_field(
     std::vector<DecodedControl::PicturePropertyAsset> decoded_picture_assets;
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
     std::get<model::InputFieldPayload>(control.payload).type_link = type_link;
+    std::get<model::InputFieldPayload>(control.payload).extension = input_extension;
     decode_control_metadata(metadata, metadata_path, control);
     if (linked_attribute == nullptr)
         control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), control_type);
@@ -12095,10 +12166,14 @@ LV encode_input_field(
     if (effective_type == nullptr)
         fail("OOF1122", "$/InputField/ValueType", "explicit local ValueType for an unbound InputField", "absent",
             "Unbound InputField requires an explicit ValueType");
-    if (!is_single_string_type_domain(*effective_type) && !is_supported_input_numeric_type_domain(*effective_type) &&
-        !is_single_date_only_type_domain(*effective_type)) {
+    const auto input_extension = std::get<model::InputFieldPayload>(control.payload).extension;
+    const bool list_choice_mode = explicit_bool(control.properties(), "ListChoiceMode", false);
+    if ((input_extension && (list_choice_mode || !is_concrete_input_reference_type(*effective_type))) ||
+        (!is_single_string_type_domain(*effective_type) && !is_supported_input_numeric_type_domain(*effective_type) &&
+        !is_single_date_only_type_domain(*effective_type) &&
+        !((input_extension || list_choice_mode) && is_concrete_input_reference_type(*effective_type)))) {
         fail("OOF1122", attribute.has_value() ? "$/InputField/DataPath" : "$/InputField/ValueType",
-            "single-string, single-numeric, or Date-only TypeDomainPattern", {},
+            "supported scalar or concrete nominal reference TypeDomainPattern", {},
             "InputField type is outside the supported profile");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -12132,7 +12207,7 @@ LV encode_input_field(
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     auto input_info = canonical_input_field_info(*effective_type, enabled, read_only, input_field_flags,
-        text_values, layout_values, &font, &border_color, shortcut);
+        text_values, layout_values, &font, &border_color, shortcut, input_extension);
     const auto type_link_item = explicit_integer(control.properties(), "TypeLinkItem", 1, "$/InputField/TypeLinkItem");
     if (type_link_item < 1 || type_link_item > std::numeric_limits<std::int32_t>::max())
         fail("OOF1122", "$/InputField/TypeLinkItem", "positive int32 item number", {},

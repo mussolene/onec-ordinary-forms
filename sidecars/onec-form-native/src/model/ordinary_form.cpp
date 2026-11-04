@@ -3901,6 +3901,22 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
         const auto& descriptor = metamodel::descriptor_for(control.kind());
         if (const auto* input = std::get_if<InputFieldPayload>(&control.payload)) {
+            if (input->extension && std::ranges::find(metamodel::input_field_extensions, *input->extension,
+                    &metamodel::InputFieldExtensionDescriptor::kind) == std::end(metamodel::input_field_extensions))
+                add_violation(report, InvariantCode::invalid_property, control.id, {},
+                    "InputField extension must be declared by the executable metamodel");
+            if (input->extension) {
+                const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
+                if (list_mode && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value))
+                    add_violation(report, InvariantCode::invalid_property, control.id, {},
+                        "InputField reference extension is inapplicable in active list-choice mode");
+                const auto type = effective_input_type(*this, control);
+                if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::object ||
+                    !type->entries.front().type_uuid ||
+                    !canonical_nonzero_uuid(type->entries.front().type_uuid->canonical))
+                    add_violation(report, InvariantCode::invalid_property, control.id, {},
+                        "InputField reference extension requires one concrete nominal object type");
+            }
             const auto* type_link_item = control.properties().find(PropertyId::from_name("TypeLinkItem"));
             const auto item_value = type_link_item != nullptr && std::holds_alternative<std::int64_t>(type_link_item->value)
                 ? std::get<std::int64_t>(type_link_item->value) : std::int64_t{1};

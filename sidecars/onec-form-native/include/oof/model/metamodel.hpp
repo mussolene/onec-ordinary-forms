@@ -226,6 +226,21 @@ inline constexpr FormExtensionDescriptor catalog_list_form_extension{
     u8"Расширение формы списка справочника",
 };
 
+struct InputFieldExtensionDescriptor {
+    InputFieldExtensionKind kind;
+    std::string_view guid;
+    std::string_view xml_name;
+    std::u8string_view russian_name;
+};
+inline constexpr InputFieldExtensionDescriptor input_field_extensions[]{
+    {InputFieldExtensionKind::catalog, "8585207b-9ca7-425b-9385-e8fd67c4e148",
+        "CatalogInputFieldExtension", u8"Расширение поля ввода справочника"},
+    {InputFieldExtensionKind::chart_of_accounts, "16ab4ef5-818b-4f8a-a958-51ed44e07bda",
+        "ChartOfAccountsInputFieldExtension", u8"Расширение поля ввода плана счетов"},
+    {InputFieldExtensionKind::chart_of_characteristic_types, "5f656c99-ee3b-4bb7-92a1-e6f5a93c2c9d",
+        "ChartOfCharacteristicTypesInputFieldExtension", u8"Расширение поля ввода вида характеристик"},
+};
+
 struct StandardMenuCommandDescriptor {
     StandardMenuCommand kind;
     std::string_view public_name;

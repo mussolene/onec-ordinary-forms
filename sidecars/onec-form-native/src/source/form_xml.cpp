@@ -2671,6 +2671,14 @@ private:
                 std::get<model::TablePayload>(control.payload).columns = parse_table_columns(child, id_text);
             } else if (name == "DataPath") {
                 control.data_path = parse_data_path(child, id_text);
+            } else if (input_field != nullptr && std::ranges::any_of(mm::input_field_extensions,
+                [&](const auto& extension) { return extension.xml_name == name; })) {
+                if (input_field->extension || child->properties != nullptr ||
+                    !element_children(child).empty() || !trim_ascii(node_text(child)).empty())
+                    fail("OOF2003", child, id_text, name, "one empty named InputField extension", "settings or duplicate",
+                        "InputField extensions must be empty and mutually exclusive");
+                input_field->extension = std::ranges::find(mm::input_field_extensions, name,
+                    &mm::InputFieldExtensionDescriptor::xml_name)->kind;
             } else if (name == "TypeLink" && input_field != nullptr) {
                 if (type_link_seen)
                     fail("OOF2003", child, id_text, name, "one TypeLink", "duplicate", "Duplicate InputField TypeLink");
@@ -4718,6 +4726,15 @@ private:
         if (const auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
             input_field != nullptr && input_field->type_link.has_value())
             writer_.empty("TypeLink", {{"attributeId", object_id_text(input_field->type_link->id())}});
+        if (const auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
+            input_field != nullptr && input_field->extension) {
+            const auto descriptor = std::ranges::find(mm::input_field_extensions, *input_field->extension,
+                &mm::InputFieldExtensionDescriptor::kind);
+            if (descriptor == std::end(mm::input_field_extensions))
+                serialization_fail(id, "InputFieldExtension", "declared extension", "unknown kind",
+                    "InputField extension is not declared");
+            writer_.empty(descriptor->xml_name);
+        }
         write_property_set(
             control.extension_properties,
             metamodel_.control_extension_properties(),

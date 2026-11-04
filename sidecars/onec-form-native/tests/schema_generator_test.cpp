@@ -749,6 +749,9 @@ void test_document_package_types(
                attribute(catalog_properties[1], "name") == "UseForFoldersAndItems" &&
                attribute(catalog_properties[1], "type") == "FoldersAndItemsUseValueType",
         "CatalogItemFormExtension XSD must expose its descriptor-backed enum properties");
+    const auto input_choices = direct_children(sequence_for_type(schema, "InputFieldType"), "choice");
+    expect(input_choices.size() == 1 && direct_children(input_choices[0], "element").size() == 3,
+        "InputField must expose exactly three mutually exclusive named reference extensions");
     constexpr std::array form_surface_names{
         "Events",
         "Attributes",

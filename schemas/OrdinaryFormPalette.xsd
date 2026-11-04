@@ -95,6 +95,9 @@
         <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
         <NamedConcept name="CatalogItemFormExtension" russianName="Расширение формы элемента справочника"/>
         <NamedConcept name="CatalogListFormExtension" russianName="Расширение формы списка справочника"/>
+        <NamedConcept name="CatalogInputFieldExtension" russianName="Расширение поля ввода справочника"/>
+        <NamedConcept name="ChartOfAccountsInputFieldExtension" russianName="Расширение поля ввода плана счетов"/>
+        <NamedConcept name="ChartOfCharacteristicTypesInputFieldExtension" russianName="Расширение поля ввода вида характеристик"/>
         <Controls>
           <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
             <Properties>
