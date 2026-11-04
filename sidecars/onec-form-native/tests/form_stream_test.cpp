@@ -21782,6 +21782,164 @@ void test_legacy_root_owner20_decoding() {
         "legacy root owner20 must reject an unproven outer tuple");
 }
 
+void test_legacy_root_owner21_decoding() {
+    auto modern_payload = platform_empty_document_payload();
+    auto legacy_payload = modern_payload;
+    legacy_payload.items[0] = list_stream::ListValue::raw_atom("27");
+    legacy_payload.items[1].items[0] = list_stream::ListValue::raw_atom("16");
+    legacy_payload.items[1].items.resize(11);
+    legacy_payload.items[13] = list_stream::parse("{3,0,0}");
+    legacy_payload.items.resize(20);
+
+    auto& owner_envelope = legacy_payload.items[1].items[2].items[1];
+    auto owner = owner_envelope.items[1];
+    owner.items.erase(owner.items.begin() + 2, owner.items.begin() + 8);
+    auto base = owner.items[0];
+    base.items[0] = list_stream::ListValue::raw_atom("10");
+    const auto legacy_color = [](const list_stream::ListValue& value) {
+        if (value.items[1].atom == "4")
+            return list_stream::parse("{3,4,{0}}");
+        auto result = value;
+        result.items[0] = list_stream::ListValue::raw_atom("3");
+        result.items.pop_back();
+        return result;
+    };
+    for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U})
+        base.items[slot] = legacy_color(base.items[slot]);
+    base.items[4] = list_stream::parse("{6,3,0,1}");
+    base.items.resize(13);
+    owner.items[0] = std::move(base);
+    owner.items[1] = list_stream::ListValue::raw_atom("21");
+    owner.items[2] = list_stream::parse("{3,1,{3,0,{0},\"\",-1,-1,1,0}}");
+    owner.items.resize(19);
+    owner.items.insert(owner.items.begin() + 2, 6, list_stream::ListValue::raw_atom("0"));
+    owner_envelope.items[1] = std::move(owner);
+
+    const auto modern = form_stream::decode_document(modern_payload, "Empty");
+    expect(modern.ok(), "modern owner fixture must decode");
+    const auto decoded = form_stream::decode_document(legacy_payload, "Empty");
+    expect(decoded.ok(), decoded ? "legacy root owner21 must decode" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    expect(decoded.value().reconstruction_complete(),
+        "proven legacy root owner21 must not produce partial reconstruction");
+    const auto modern_xml = source::serialize_form_xml(modern.value());
+    const auto legacy_xml = source::serialize_form_xml(decoded.value());
+    expect(modern_xml.ok() && legacy_xml.ok() && legacy_xml.value() == modern_xml.value(),
+        "legacy owner21 must materialize the same named model and defaults");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok(), "legacy owner21 must rebuild through the canonical writer");
+    const auto canonical_layout = form_stream::probe_layout(rebuilt.value());
+    expect(canonical_layout.ok() && canonical_layout.value().outer_format == form_stream::OuterFormat::v27 &&
+        canonical_layout.value().form_section_version == 18 && canonical_layout.value().root_arity == 20,
+        "legacy owner21 rebuild must use canonical root layout");
+
+    auto styled_back_color = legacy_payload;
+    styled_back_color.items[1].items[2].items[1].items[1].items[0].items[2] =
+        list_stream::parse("{3,3,{-7}}");
+    const auto styled_decoded = form_stream::decode_document(styled_back_color, "StyledOwner21BackColor");
+    expect(styled_decoded.ok() && styled_decoded.value().reconstruction_complete(),
+        styled_decoded ? "owner21 typed BackColor must reconstruct completely" :
+            "owner21 typed BackColor failed: " + styled_decoded.diagnostics().front().path + ": " +
+                styled_decoded.diagnostics().front().message);
+    model::ColorValue expected_back_color;
+    expected_back_color.kind = model::ColorKind::style_reference;
+    expected_back_color.style = model::QualifiedName{"StyleColors.ButtonBackColor"};
+    const auto* stored_back_color = styled_decoded.value().form().panel.properties.find(
+        model::PropertyId::from_name("BackColor"));
+    const auto* stored_back_color_value = stored_back_color
+        ? std::get_if<model::ColorValue>(&stored_back_color->value) : nullptr;
+    expect(stored_back_color_value && *stored_back_color_value == expected_back_color,
+        "owner21 Color3 BackColor must remain a named Panel.BackColor");
+    const auto styled_xml = source::serialize_form_xml(styled_decoded.value());
+    expect(styled_xml.ok() && styled_xml.value().find("<BackColor") != std::string::npos,
+        "owner21 typed BackColor must remain in public XML");
+    const auto styled_rebuilt = form_stream::encode_document(styled_decoded.value());
+    expect(styled_rebuilt.ok(), "owner21 typed BackColor must rebuild canonically");
+    const auto styled_roundtrip = form_stream::decode_document(styled_rebuilt.value(), "StyledOwner21BackColor");
+    const auto* roundtrip_back_color = styled_roundtrip
+        ? styled_roundtrip.value().form().panel.properties.find(model::PropertyId::from_name("BackColor"))
+        : nullptr;
+    const auto* roundtrip_back_color_value = roundtrip_back_color
+        ? std::get_if<model::ColorValue>(&roundtrip_back_color->value) : nullptr;
+    expect(styled_roundtrip.ok() && styled_roundtrip.value().reconstruction_complete() &&
+        roundtrip_back_color_value && *roundtrip_back_color_value == expected_back_color,
+        "canonical owner21 rebuild must preserve the named typed Panel.BackColor");
+
+    auto bad_style = legacy_payload;
+    bad_style.items[1].items[2].items[1].items[1].items[8].items[1] =
+        list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad_style, "BadLegacyRootOwner21Style"),
+        "legacy root owner21 must reject an unknown style setting");
+    auto bad_base = legacy_payload;
+    bad_base.items[1].items[2].items[1].items[1].items[0].items.push_back(
+        list_stream::ListValue::raw_atom("0"));
+    expect(!form_stream::decode_document(bad_base, "BadLegacyRootOwner21Base"),
+        "legacy root owner21 must reject an unrecognized base field");
+    auto trailing_owner = legacy_payload;
+    trailing_owner.items[1].items[2].items[1].items[1].items.push_back(
+        list_stream::ListValue::raw_atom("0"));
+    expect(!form_stream::decode_document(trailing_owner, "TrailingLegacyRootOwner21"),
+        "legacy root owner21 must reject unproven owner tail fields");
+    auto bad_version = legacy_payload;
+    bad_version.items[1].items[2].items[1].items[1].items[1] =
+        list_stream::ListValue::raw_atom("20");
+    expect(!form_stream::decode_document(bad_version, "BadLegacyRootOwner21Version"),
+        "outer27 legacy root owner must reject owner version20");
+    auto wrong_26_arity = legacy_payload;
+    wrong_26_arity.items[1].items[2].items[1].items[1].items[1] =
+        list_stream::ListValue::raw_atom("26");
+    const auto rejected_26_arity = form_stream::decode_document(wrong_26_arity, "WrongOwner26Arity");
+    expect(!rejected_26_arity && rejected_26_arity.diagnostics().front().code == "OOF1102",
+        "owner26 with owner21/19 arity must fail the common owner arity check");
+    auto wrong_tuple = legacy_payload;
+    wrong_tuple.items[0] = list_stream::ListValue::raw_atom("26");
+    expect(!form_stream::decode_document(wrong_tuple, "WrongLegacyRootOwner21Tuple"),
+        "legacy root owner21 must reject an unproven outer tuple");
+
+    model::Form paged_form;
+    paged_form.id = model::ObjectId{1};
+    paged_form.name = "Owner26Pages";
+    paged_form.children = {model::PageRef{model::ObjectId{30}}, model::PageRef{model::ObjectId{31}}};
+    model::OrdinaryFormDocument paged(std::move(paged_form));
+    for (const auto [id, name, button_id, button_name] : {
+             std::tuple{30ULL, std::string_view{"First"}, 40ULL, std::string_view{"FirstButton"}},
+             std::tuple{31ULL, std::string_view{"Second"}, 41ULL, std::string_view{"SecondButton"}}}) {
+        model::Page page;
+        page.id = model::ObjectId{id};
+        page.name = std::string(name);
+        model::Position position;
+        position.width.set(240);
+        position.height.set(120);
+        for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+            model::AnchorBinding binding;
+            binding.coordinate = edge;
+            binding.target_coordinate = edge;
+            position.bindings.anchors.push_back(std::move(binding));
+        }
+        page.position.set(std::move(position));
+        page.children = {model::ControlRef{model::ObjectId{button_id}}};
+        paged.add_page(std::move(page));
+        paged.add_control(model::ControlNode{model::ObjectId{button_id}, std::string(button_name), model::ButtonPayload{}});
+    }
+    const auto canonical_paged = form_stream::encode_document(paged);
+    expect(canonical_paged.ok(), canonical_paged ? "canonical owner26 two-page fixture must encode" :
+        canonical_paged.diagnostics().front().path + ": " + canonical_paged.diagnostics().front().message);
+    auto owner26_two_pages_legacy_outer = canonical_paged.value();
+    owner26_two_pages_legacy_outer.items[0] = list_stream::ListValue::raw_atom("27");
+    owner26_two_pages_legacy_outer.items[1].items[0] = list_stream::ListValue::raw_atom("16");
+    owner26_two_pages_legacy_outer.items[1].items.resize(11);
+    owner26_two_pages_legacy_outer.items[13] = list_stream::parse("{3,0,0}");
+    owner26_two_pages_legacy_outer.items.resize(20);
+    const auto retained_owner26 = form_stream::decode_document(owner26_two_pages_legacy_outer, "Owner26TwoPages");
+    expect(retained_owner26.ok() && retained_owner26.value().reconstruction_complete() &&
+               retained_owner26.value().collections().pages.size() == 2,
+        "owner26 with two pages must retain its previously supported page-dependent arity");
+    const auto retained_rebuild = form_stream::encode_document(retained_owner26.value());
+    expect(retained_rebuild.ok() && list_stream::dump_compact(retained_rebuild.value()) ==
+               list_stream::dump_compact(canonical_paged.value()),
+        "owner26 two-page legacy outer tuple must rebuild through the unchanged canonical writer");
+}
+
 void test_center_target_coordinates() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -23110,6 +23268,7 @@ int main() {
         test_chart_empty_render_cache_normalization_and_guards();
         test_supported_legacy_root_layout_decoding();
         test_legacy_root_owner20_decoding();
+        test_legacy_root_owner21_decoding();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

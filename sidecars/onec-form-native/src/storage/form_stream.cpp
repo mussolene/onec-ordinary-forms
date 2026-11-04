@@ -2847,13 +2847,27 @@ DecodedOwnerPages decode_owner_pages(
         (layout.outer_format == OuterFormat::v26 && layout.root_arity == 19);
     const bool legacy_root_owner20 = !panel && proven_root_owner_layout &&
         layout.kind == LayoutKind::form_section_16 && layout.page_style_section_version == 3 &&
-        normalized.items.size() == 18 &&
-        !normalized.items[1].is_list && normalized.items[1].atom_kind == LV::AtomKind::raw &&
-        normalized.items[1].atom == "20";
-    if (legacy_root_owner20) {
+        normalized.items.size() == 18 && !normalized.items[1].is_list &&
+        normalized.items[1].atom_kind == LV::AtomKind::raw && normalized.items[1].atom == "20";
+    const bool owner21_outer_tuple = !panel && layout.outer_format == OuterFormat::v27 &&
+        layout.root_arity == 20 && layout.kind == LayoutKind::form_section_16 &&
+        layout.page_style_section_version == 3;
+    const bool owner_version_is_raw = normalized.items.size() > 1 && !normalized.items[1].is_list &&
+        normalized.items[1].atom_kind == LV::AtomKind::raw;
+    const bool owner_version21 = owner_version_is_raw && normalized.items[1].atom == "21";
+    const bool owner_version26 = owner_version_is_raw && normalized.items[1].atom == "26";
+    if (owner21_outer_tuple && !owner_version21 && !owner_version26)
+        fail("OOF1114", child_path(child_path(path, 1), 1), "root owner version 21 or 26 for the proven outer27 tuple",
+            owner_version_is_raw ? normalized.items[1].atom : "non-raw owner version",
+            "Root owner version is unsupported for the outer27 legacy layout");
+    if (owner21_outer_tuple && owner_version21 && normalized.items.size() != 19)
+        fail("OOF1114", child_path(path, 1), "owner21/19 for the proven outer27 tuple",
+            std::to_string(normalized.items.size()), "Root owner version and arity do not match a proven layout");
+    const bool legacy_root_owner21 = owner21_outer_tuple && owner_version21 && normalized.items.size() == 19;
+    if (legacy_root_owner20 || legacy_root_owner21) {
         if (pages.size() != 1)
-            fail("OOF1114", child_path(path, 5), "one Page for the proven root-owner20 layout",
-                std::to_string(pages.size()), "Legacy root owner20 geometry is proven only for one Page");
+            fail("OOF1114", child_path(path, 5), "one Page for the proven legacy root-owner layout",
+                std::to_string(pages.size()), "Legacy root-owner geometry is proven only for one Page");
         const auto source_base_path = child_path(child_path(path, 1), 0);
         const auto& source_base = normalized.items[0];
         require_arity(source_base, 13, source_base_path);
@@ -2876,13 +2890,18 @@ DecodedOwnerPages decode_owner_pages(
         normalized.items[0] = std::move(canonical_base);
         normalized.items[1] = expected.items[1].items[1];
         normalized.items[2] = expected.items[1].items[2];
-        // The native owner20 record omits only the seven confirmed modern defaults.
-        normalized.items.insert(normalized.items.end(), expected.items[1].items.begin() + 18,
+        // The proven owner20 and owner21 layouts omit only their respective modern tail fields.
+        const auto first_omitted_slot = normalized.items.size();
+        normalized.items.insert(normalized.items.end(),
+            expected.items[1].items.begin() + static_cast<std::ptrdiff_t>(first_omitted_slot),
             expected.items[1].items.end());
         normalized.items[19] = normalized.items[0].items[2];
         for (const auto slot : {3U, 4U, 6U, 7U, 8U, 9U, 10U, 11U, 12U, 13U, 14U, 15U, 16U, 17U})
             require_exact(normalized.items[slot], expected.items[1].items[slot],
                 child_path(child_path(path, 1), slot), "Legacy root owner field is unsupported");
+        if (legacy_root_owner21)
+            require_exact(normalized.items[18], expected.items[1].items[18],
+                child_path(child_path(path, 1), 18), "Legacy root owner field is unsupported");
     }
     require_arity(normalized, expected.items[1].items.size(), child_path(path, 1));
     std::vector<std::uint32_t> default_controls;
