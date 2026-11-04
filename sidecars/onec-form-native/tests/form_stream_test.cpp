@@ -11359,6 +11359,8 @@ void test_calendar_field_scalar_properties() {
         model::ControlNode{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}});
     const model::OrdinaryFormDocument::ObjectKey calendar_key{
         model::ObjectCategory::control, model::ObjectId{2}};
+    const auto before_runtime = form_stream::encode_document(runtime_only_document);
+    expect(before_runtime.ok(), "calendar must encode before runtime initialization");
     expect(runtime_only_document.set_prop_val(calendar_key, model::PropertyId::from_name("CurrentDate"),
                model::DateValue{"2024-02-29T00:00:00"}) == model::PropertyMutationStatus::applied_runtime_only,
         "runtime-only CalendarField CurrentDate must remain writable through the named property API");
@@ -11368,9 +11370,18 @@ void test_calendar_field_scalar_properties() {
                "2024-02-29T00:00:00",
         "runtime-only CalendarField CurrentDate must retain its selected date in the object model");
     const auto runtime_only = form_stream::encode_document(runtime_only_document);
-    expect(!runtime_only && !runtime_only.diagnostics().empty() &&
-               runtime_only.diagnostics().front().message.find("runtime-only") != std::string::npos,
-        "CalendarField CurrentDate must fail explicitly when written into persisted Form.bin");
+    expect(runtime_only.ok() && before_runtime.ok() &&
+               list_stream::dump_compact(runtime_only.value()) == list_stream::dump_compact(before_runtime.value()),
+        "separate calendar runtime state must not change the persisted form stream");
+    model::OrdinaryFormDocument shadow(runtime_only_document.form());
+    auto shadow_calendar = *runtime_only_document.find_control(model::ObjectId{2});
+    shadow_calendar.properties().set_explicit(model::PropertyId::from_name("CurrentDate"),
+        model::DateValue{"2024-02-29T00:00:00"});
+    shadow.add_control(std::move(shadow_calendar));
+    const auto rejected_shadow = form_stream::encode_document(shadow);
+    expect(!rejected_shadow && !rejected_shadow.diagnostics().empty() &&
+               rejected_shadow.diagnostics().front().message.find("runtime-only") != std::string::npos,
+        "a manually persisted CurrentDate shadow must still fail explicitly");
 }
 
 void test_named_borders_for_ordinary_controls_and_calendar_selection_mode() {

@@ -1277,6 +1277,7 @@ void apply_proven_storage_overrides(
         selected_dates->persistence = PersistenceClass::runtime_only;
         selected_dates->storage_codec = StorageCodec::none;
         selected_dates->default_value = {DefaultKind::none, {}};
+        selected_dates->value_codec = ValueCodec::calendar_selected_dates;
     }
     classify_property(
         calendar_field,
@@ -2910,6 +2911,7 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "chart-series-reference";
         case ValueCodec::chart_point_reference:
             return "chart-point-reference";
+        case ValueCodec::calendar_selected_dates: return "calendar-selected-dates";
         case ValueCodec::chart_series_collection:
             return "chart-series-collection";
         case ValueCodec::chart_points_collection:

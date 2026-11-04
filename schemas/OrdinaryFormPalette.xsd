@@ -538,7 +538,7 @@
           </Control>
           <Control name="CalendarField" apiName="CalendarBox" russianName="ПолеКалендаря" children="none">
             <Properties>
-              <Property name="SelectedDates" apiName="SelectedDates" russianName="ВыделенныеДаты" russianType="КоллекцияВыделенныхДат" valueCodec="unclassified"/>
+              <Property name="SelectedDates" apiName="SelectedDates" russianName="ВыделенныеДаты" russianType="КоллекцияВыделенныхДат" valueCodec="calendar-selected-dates"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="EndOfDisplayPeriod" apiName="EndOfDisplayPeriod" russianName="КонецПериодаОтображения" russianType="Дата ; Неопределено" valueCodec="date"/>
               <Property name="BeginOfDisplayPeriod" apiName="BeginOfDisplayPeriod" russianName="НачалоПериодаОтображения" russianType="Дата ; Неопределено" valueCodec="date"/>

@@ -189,6 +189,11 @@ struct TableColumnsRef {
     friend bool operator==(const TableColumnsRef&, const TableColumnsRef&) = default;
 };
 
+struct CalendarSelectedDatesRef {
+    ObjectId owner{};
+    friend bool operator==(const CalendarSelectedDatesRef&, const CalendarSelectedDatesRef&) = default;
+};
+
 enum class ChartScaleKind : std::uint8_t { none, points, values, additional_values, series };
 struct ChartScaleRef {
     ObjectId owner{};
@@ -630,7 +635,8 @@ using PropertyValueVariant = std::variant<
     MapValue,
     ValueListValue,
     ValueListRef,
-    TableColumnsRef>;
+    TableColumnsRef,
+    CalendarSelectedDatesRef>;
 
 struct PropertyValue : PropertyValueVariant {
     using Variant = PropertyValueVariant;
@@ -1363,6 +1369,15 @@ public:
     [[nodiscard]] std::optional<std::vector<ChildItemRef>> form_item_refs(FormItemCollectionRef reference) const;
     [[nodiscard]] const std::vector<TableColumn>* table_columns(TableColumnsRef reference) const noexcept;
 
+    // Supplies the local date of the runtime which owns this source document.
+    [[nodiscard]] PropertyMutationStatus initialize_calendar_runtime(ObjectId calendar, DateValue local_date);
+    [[nodiscard]] std::optional<std::size_t> calendar_selected_date_count(CalendarSelectedDatesRef reference) const;
+    [[nodiscard]] std::optional<DateValue> calendar_selected_date_at(CalendarSelectedDatesRef reference, std::int64_t index) const;
+    [[nodiscard]] std::optional<bool> calendar_selected_dates_contains(CalendarSelectedDatesRef reference, const DateValue& date) const;
+    [[nodiscard]] PropertyMutationStatus add_calendar_selected_date(CalendarSelectedDatesRef reference, DateValue date);
+    [[nodiscard]] PropertyMutationStatus delete_calendar_selected_date(CalendarSelectedDatesRef reference, const DateValue& date);
+    [[nodiscard]] PropertyMutationStatus clear_calendar_selected_dates(CalendarSelectedDatesRef reference);
+
     [[nodiscard]] std::optional<ChartTrendlineRef> add_chart_trendline(ObjectId chart, ObjectId series);
     [[nodiscard]] PropertyReadResult insert_chart_trendline(ObjectId chart, ObjectId series, const PropertyValue& argument);
     [[nodiscard]] PropertyMutationStatus delete_chart_trendline(ObjectId chart, ObjectId series, std::int64_t index);
@@ -1385,6 +1400,12 @@ private:
     bool opening_started_ = false;
     PropertySet window_permissions_;
     PropertySet runtime_form_values_;
+    struct CalendarRuntimeState {
+        std::optional<DateValue> current_date;
+        // Inclusive spans retain selection order and the time shared by their dates.
+        std::vector<std::pair<DateValue, DateValue>> selected_date_spans;
+    };
+    std::unordered_map<ObjectId, CalendarRuntimeState, ObjectIdHash> runtime_calendars_;
     mutable std::unordered_map<ObjectId, ValueListRef, ObjectIdHash> runtime_choice_lists_;
     struct ObjectKeyHash {
         [[nodiscard]] std::size_t operator()(const ObjectKey& key) const noexcept {

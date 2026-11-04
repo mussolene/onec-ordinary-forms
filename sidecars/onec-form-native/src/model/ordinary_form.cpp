@@ -5,6 +5,8 @@
 #include <array>
 #include <algorithm>
 #include <charconv>
+#include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -103,6 +105,51 @@ bool valid_chart_gauge_quality_band_range(const DecimalValue& begin, const Decim
 }
 
 namespace {
+
+std::optional<std::chrono::sys_days> calendar_day(const DateValue& date) {
+    try {
+        const auto digits = storage::value_codec::date_to_platform(date.canonical);
+        const int year = std::stoi(digits.substr(0, 4));
+        const unsigned month = static_cast<unsigned>(std::stoi(digits.substr(4, 2)));
+        const unsigned day = static_cast<unsigned>(std::stoi(digits.substr(6, 2)));
+        return std::chrono::sys_days{std::chrono::year{year}/month/day};
+    } catch (const std::exception&) { return std::nullopt; }
+}
+
+DateValue calendar_date_at(std::chrono::sys_days day, const DateValue& time_source) {
+    const std::chrono::year_month_day parts{day};
+    std::array<char, 11> buffer{};
+    std::snprintf(buffer.data(), buffer.size(), "%04d-%02u-%02u", int(parts.year()),
+        unsigned(parts.month()), unsigned(parts.day()));
+    return DateValue{std::string(buffer.data()) + time_source.canonical.substr(10)};
+}
+
+std::optional<std::string_view> calendar_selection_mode(const ControlNode& control) {
+    if (const auto* entry = control.properties().find(PropertyId::from_name("SelectionMode"))) {
+        const auto* mode = std::get_if<EnumerationValue>(&entry->value);
+        if (!mode || mode->type_name != "DateSelectionMode" ||
+            (mode->member != "Single" && mode->member != "Multiple" && mode->member != "Interval")) return std::nullopt;
+        return mode->member;
+    }
+    return "Single";
+}
+
+void change_calendar_selection_mode(std::vector<std::pair<DateValue, DateValue>>& spans,
+    std::optional<std::string_view> old_mode, std::string_view new_mode) {
+    if (spans.empty() || (old_mode && *old_mode == new_mode)) return;
+    if (new_mode == "Single") {
+        const auto selected = spans.back().second;
+        spans.assign(1, {selected, selected});
+    } else if (new_mode == "Interval") {
+        auto first = spans.front().first, last = spans.front().second;
+        for (const auto& span : spans) {
+            if (span.first.canonical.substr(0, 10) < first.canonical.substr(0, 10)) first = span.first;
+            if (span.second.canonical.substr(0, 10) > last.canonical.substr(0, 10)) last = span.second;
+        }
+        last.canonical.replace(10, 9, first.canonical.substr(10));
+        spans.assign(1, {first, last});
+    }
+}
 
 bool valid_xs_language(std::string_view language) noexcept {
     if (language.empty()) return false;
@@ -416,6 +463,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::value_list_reference && typed_value.get();
             } else if constexpr (std::is_same_v<Value, TableColumnsRef>) {
                 return expected == metamodel::ValueCodec::table_columns;
+            } else if constexpr (std::is_same_v<Value, CalendarSelectedDatesRef>) {
+                return expected == metamodel::ValueCodec::calendar_selected_dates;
             } else if constexpr (std::is_same_v<Value, ChartSeriesRef>) {
                 return expected == metamodel::ValueCodec::chart_series_reference;
             } else if constexpr (std::is_same_v<Value, ChartPointRef>) {
@@ -547,6 +596,9 @@ bool property_value_references_resolve(
                 return document.find_control(typed_value.id()) != nullptr;
             } else if constexpr (std::is_same_v<Value, PageRef>) {
                 return document.find_page(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, CalendarSelectedDatesRef>) {
+                const auto* control = document.find_control(typed_value.owner);
+                return control && control->kind() == ControlKind::calendar_field;
             } else if constexpr (std::is_same_v<Value, CommandBarButtonRef>) {
                 return context_menu_button_resolves(document, typed_value);
             } else if constexpr (std::is_same_v<Value, FormRef>) {
@@ -1182,12 +1234,125 @@ void OrdinaryFormDocument::set_form(Form form) {
     form_ = std::move(form);
     window_permissions_.clear();
     runtime_form_values_.clear();
+    runtime_calendars_.clear();
     runtime_choice_lists_.clear();
     rebuild_index();
 }
 
 void OrdinaryFormDocument::set_module(FormModule module) {
     module_ = std::move(module);
+}
+
+PropertyMutationStatus OrdinaryFormDocument::initialize_calendar_runtime(ObjectId calendar, DateValue local_date) {
+    const auto* control = find_control(calendar);
+    if (!control || control->kind() != ControlKind::calendar_field) return PropertyMutationStatus::unknown_owner;
+    if (!calendar_day(local_date) || !calendar_selection_mode(*control)) return PropertyMutationStatus::invalid_value;
+    local_date.canonical.replace(11, 8, "00:00:00");
+    runtime_calendars_.insert_or_assign(calendar, CalendarRuntimeState{local_date, {{local_date, local_date}}});
+    return PropertyMutationStatus::applied_runtime_only;
+}
+
+std::optional<std::size_t> OrdinaryFormDocument::calendar_selected_date_count(CalendarSelectedDatesRef reference) const {
+    const auto* control = find_control(reference.owner);
+    const auto state = runtime_calendars_.find(reference.owner);
+    if (!control || control->kind() != ControlKind::calendar_field || state == runtime_calendars_.end()) return std::nullopt;
+    std::size_t count = 0;
+    for (const auto& span : state->second.selected_date_spans)
+        count += static_cast<std::size_t>((*calendar_day(span.second) - *calendar_day(span.first)).count()) + 1;
+    return count;
+}
+
+std::optional<DateValue> OrdinaryFormDocument::calendar_selected_date_at(CalendarSelectedDatesRef reference, std::int64_t index) const {
+    const auto* control = find_control(reference.owner);
+    const auto state = runtime_calendars_.find(reference.owner);
+    if (!control || control->kind() != ControlKind::calendar_field || state == runtime_calendars_.end() || index < 0) return std::nullopt;
+    for (const auto& span : state->second.selected_date_spans) {
+        const auto first = *calendar_day(span.first), last = *calendar_day(span.second);
+        const auto count = (last - first).count() + 1;
+        if (index < count) return calendar_date_at(first + std::chrono::days{index}, span.first);
+        index -= count;
+    }
+    return std::nullopt;
+}
+
+std::optional<bool> OrdinaryFormDocument::calendar_selected_dates_contains(CalendarSelectedDatesRef reference, const DateValue& date) const {
+    const auto* control = find_control(reference.owner);
+    const auto state = runtime_calendars_.find(reference.owner);
+    const auto day = calendar_day(date);
+    if (!control || control->kind() != ControlKind::calendar_field || state == runtime_calendars_.end() || !day)
+        return std::nullopt;
+    return std::ranges::any_of(state->second.selected_date_spans, [&](const auto& span) {
+        return *day >= *calendar_day(span.first) && *day <= *calendar_day(span.second);
+    });
+}
+
+PropertyMutationStatus OrdinaryFormDocument::add_calendar_selected_date(CalendarSelectedDatesRef reference, DateValue date) {
+    const auto* control = find_control(reference.owner);
+    if (!control || control->kind() != ControlKind::calendar_field) return PropertyMutationStatus::unknown_owner;
+    const auto day = calendar_day(date);
+    if (!day) return PropertyMutationStatus::invalid_value;
+    const auto state = runtime_calendars_.find(reference.owner);
+    if (state == runtime_calendars_.end()) return PropertyMutationStatus::unsupported_surface;
+    auto& spans = state->second.selected_date_spans;
+    const auto mode = calendar_selection_mode(*control);
+    if (!mode) return PropertyMutationStatus::invalid_value;
+    if (*mode == "Single") spans.assign(1, {date, date});
+    else if (!std::ranges::any_of(spans, [&](const auto& span) {
+            return *day >= *calendar_day(span.first) && *day <= *calendar_day(span.second);
+        })) {
+        if (*mode == "Multiple" || spans.empty()) spans.emplace_back(date, date);
+        else {
+            const auto first = *calendar_day(spans.front().first), last = *calendar_day(spans.back().second);
+            if (*day < first)
+                spans.insert(spans.begin(), {date, calendar_date_at(first - std::chrono::days{1}, date)});
+            else if (*day > last)
+                spans.emplace_back(calendar_date_at(last + std::chrono::days{1}, date), date);
+        }
+    }
+    return PropertyMutationStatus::applied_runtime_only;
+}
+
+PropertyMutationStatus OrdinaryFormDocument::delete_calendar_selected_date(CalendarSelectedDatesRef reference, const DateValue& date) {
+    const auto* control = find_control(reference.owner);
+    if (!control || control->kind() != ControlKind::calendar_field) return PropertyMutationStatus::unknown_owner;
+    const auto day = calendar_day(date);
+    const auto mode = calendar_selection_mode(*control);
+    if (!day || !mode) return PropertyMutationStatus::invalid_value;
+    const auto state = runtime_calendars_.find(reference.owner);
+    if (state == runtime_calendars_.end()) return PropertyMutationStatus::unsupported_surface;
+    auto& spans = state->second.selected_date_spans;
+    const auto found = std::ranges::find_if(spans, [&](const auto& span) {
+        return *day >= *calendar_day(span.first) && *day <= *calendar_day(span.second);
+    });
+    if (found != spans.end()) {
+        const auto first = *calendar_day(found->first), last = *calendar_day(found->second);
+        if (*mode == "Interval") {
+            if (*day == first) spans.erase(found, spans.end());
+            else {
+                found->second = calendar_date_at(*day - std::chrono::days{1}, found->first);
+                spans.erase(found + 1, spans.end());
+            }
+        } else if (first == last) spans.erase(found);
+        else if (*day == first) found->first = calendar_date_at(first + std::chrono::days{1}, found->first);
+        else if (*day == last) found->second = calendar_date_at(last - std::chrono::days{1}, found->first);
+        else {
+            const auto tail = std::pair{calendar_date_at(*day + std::chrono::days{1}, found->first), found->second};
+            const auto index = found - spans.begin();
+            const auto end = calendar_date_at(*day - std::chrono::days{1}, found->first);
+            spans.insert(found + 1, tail);
+            spans[static_cast<std::size_t>(index)].second = end;
+        }
+    }
+    return PropertyMutationStatus::applied_runtime_only;
+}
+
+PropertyMutationStatus OrdinaryFormDocument::clear_calendar_selected_dates(CalendarSelectedDatesRef reference) {
+    const auto* control = find_control(reference.owner);
+    if (!control || control->kind() != ControlKind::calendar_field) return PropertyMutationStatus::unknown_owner;
+    const auto state = runtime_calendars_.find(reference.owner);
+    if (state == runtime_calendars_.end()) return PropertyMutationStatus::unsupported_surface;
+    state->second.selected_date_spans.clear();
+    return PropertyMutationStatus::applied_runtime_only;
 }
 
 void OrdinaryFormDocument::add_asset(PictureAsset asset) {
@@ -1758,6 +1923,16 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
         const auto& control = collections_.controls[location->index];
+        if (control.kind() == ControlKind::calendar_field) {
+            if (property == PropertyId::from_name("SelectedDates"))
+                return {PropertyReadStatus::computed_value, PropertyValue{CalendarSelectedDatesRef{control.id}}};
+            if (property == PropertyId::from_name("CurrentDate")) {
+                const auto state = runtime_calendars_.find(control.id);
+                if (state == runtime_calendars_.end() || !state->second.current_date)
+                    return {PropertyReadStatus::no_default, std::nullopt};
+                return {PropertyReadStatus::computed_value, PropertyValue{*state->second.current_date}};
+            }
+        }
         if (control.kind() == ControlKind::table && property == PropertyId::from_name("Columns"))
             return {PropertyReadStatus::computed_value, PropertyValue{TableColumnsRef{ControlRef{control.id}}}};
         if ((control.kind() == ControlKind::input_field || control.kind() == ControlKind::choice_field) &&
@@ -2258,6 +2433,14 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::calendar_field && descriptor->api_name == "SelectedDates")
             return PropertyMutationStatus::read_only;
+        if (control.kind() == ControlKind::calendar_field && descriptor->api_name == "CurrentDate") {
+            const auto* date = std::get_if<DateValue>(&value);
+            if (!date || !calendar_day(*date) || !calendar_selection_mode(control)) return PropertyMutationStatus::invalid_value;
+            auto current = *date;
+            current.canonical.replace(11, 8, "00:00:00");
+            runtime_calendars_.insert_or_assign(control.id, CalendarRuntimeState{std::move(current), {{*date, *date}}});
+            return PropertyMutationStatus::applied_runtime_only;
+        }
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
@@ -2585,6 +2768,11 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
         return PropertyMutationStatus::applied;
     }
+    if (property_control && property_control->kind() == ControlKind::calendar_field && descriptor->api_name == "SelectionMode") {
+        if (auto state = runtime_calendars_.find(owner.id); state != runtime_calendars_.end())
+            change_calendar_selection_mode(state->second.selected_date_spans, calendar_selection_mode(*property_control),
+                std::get<EnumerationValue>(value).member);
+    }
     properties->set_explicit(descriptor->id, std::move(value));
     if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
         return PropertyMutationStatus::applied_runtime_only;
@@ -2773,6 +2961,11 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         if (control.kind() == ControlKind::calendar_field && descriptor->api_name == "SelectedDates")
             return PropertyMutationStatus::read_only;
+        if (control.kind() == ControlKind::calendar_field && descriptor->api_name == "CurrentDate") {
+            if (auto state = runtime_calendars_.find(control.id); state != runtime_calendars_.end())
+                state->second.current_date.reset();
+            return PropertyMutationStatus::reset_runtime_only;
+        }
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
@@ -2872,6 +3065,10 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     if (descriptor->owner == metamodel::DescriptorOwner::form && descriptor->api_name == "CaptionPicture") {
         if (const auto* old = properties->find(descriptor->id))
             if (const auto* picture = std::get_if<PictureRef>(&old->value)) old_caption_asset = picture->asset.id();
+    }
+    if (property_control && property_control->kind() == ControlKind::calendar_field && descriptor->api_name == "SelectionMode") {
+        if (auto state = runtime_calendars_.find(owner.id); state != runtime_calendars_.end())
+            change_calendar_selection_mode(state->second.selected_date_spans, calendar_selection_mode(*property_control), "Single");
     }
     properties->unset(descriptor->id);
     remove_unreferenced_caption_asset(old_caption_asset);
@@ -3188,6 +3385,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
             } else if (descriptor->value_codec == metamodel::ValueCodec::form_controls ||
                 descriptor->value_codec == metamodel::ValueCodec::panel_pages ||
                 descriptor->value_codec == metamodel::ValueCodec::value_list_reference ||
+                descriptor->value_codec == metamodel::ValueCodec::calendar_selected_dates ||
                 descriptor->value_codec == metamodel::ValueCodec::table_columns) {
                 add_violation(report, InvariantCode::invalid_property, source, {},
                     "form item collections are owned objects and cannot be stored as properties");

@@ -2723,8 +2723,8 @@ void test_help_metamodel() {
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
     expect(coverage.unclassified_properties == 0 && coverage.missing_storage_codecs == 0 &&
-            coverage.unclassified_value_codecs == 18,
-        "release coverage is blocked by 18 unclassified live value codecs");
+            coverage.unclassified_value_codecs == 17,
+        "release coverage is blocked by 17 unclassified live value codecs");
 
     expect(
         property_descriptors(ControlKind::input_field).size() == 45,
@@ -3468,7 +3468,7 @@ void test_recursive_typed_values() {
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     };
-    static_assert(std::variant_size_v<PropertyValue::Variant> == 42);
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 43);
     [&]<std::size_t... Index>(std::index_sequence<Index...>) {
         ([&] {
             using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
@@ -5221,8 +5221,8 @@ void test_control_border_and_calendar_selection_descriptors() {
             selected_dates->value_kind == ValueKind::collection &&
             selected_dates->storage_codec == StorageCodec::none &&
             selected_dates->default_value.kind == DefaultKind::none &&
-            selected_dates->value_codec == ValueCodec::unclassified,
-        "CalendarField SelectedDates must remain a runtime-only unclassified collection without a default");
+            selected_dates->value_codec == ValueCodec::calendar_selected_dates,
+        "CalendarField SelectedDates must expose its live collection codec without a permanent default");
     Form form; form.id = ObjectId{1}; form.name = "CalendarCollectionBoundary";
     for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
     OrdinaryFormDocument document(std::move(form));
@@ -5234,8 +5234,12 @@ void test_control_border_and_calendar_selection_descriptors() {
     const auto property = PropertyId::from_name("SelectedDates");
     for (std::uint64_t i = 0; i < 12; ++i) {
         const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
-        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface,
-            "unfinished live collection getter must remain explicit");
+        const auto selected_dates = document.get_prop_val(owner, property);
+        expect(selected_dates.status == PropertyReadStatus::computed_value && selected_dates.value &&
+                   std::get_if<CalendarSelectedDatesRef>(&*selected_dates.value) &&
+                   *std::get_if<CalendarSelectedDatesRef>(&*selected_dates.value) ==
+                       CalendarSelectedDatesRef{ObjectId{100 + i}},
+            "SelectedDates getter must return the computed owner reference");
         for (const PropertyValue& value : {PropertyValue{UndefinedValue{}}, PropertyValue{ArrayValue{}},
                 PropertyValue{DateValue{"2026-11-06T12:34:56"}}})
             expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::read_only,
@@ -5249,6 +5253,314 @@ void test_control_border_and_calendar_selection_descriptors() {
     expect(after_xml.ok() && after_xml.value() == before_xml.value() &&
         after_bin.ok() && after_bin.value() == before_bin.value(),
         "rejected collection replacement must preserve complete XML and BIN");
+}
+
+void test_calendar_selected_dates_live_collection() {
+    using namespace oof::model;
+    constexpr std::array ids{ObjectId{100}, ObjectId{101}, ObjectId{102}, ObjectId{103}, ObjectId{104},
+        ObjectId{105}, ObjectId{106}, ObjectId{107}, ObjectId{108}, ObjectId{109}, ObjectId{110}, ObjectId{111}};
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "CalendarRuntime";
+    for (const auto id : ids) form.children.emplace_back(ControlRef{id});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::size_t i = 0; i < ids.size(); ++i)
+        document.add_control(ControlNode{ids[i], "Calendar" + std::to_string(i), CalendarFieldPayload{}});
+
+    const auto mode_property = PropertyId::from_name("SelectionMode");
+    const auto current_property = PropertyId::from_name("CurrentDate");
+    const auto selected_property = PropertyId::from_name("SelectedDates");
+    const auto owner_key = [](ObjectId id) {
+        return OrdinaryFormDocument::ObjectKey{ObjectCategory::control, id};
+    };
+    const auto mode_value = [](std::string member) -> PropertyValue {
+        return EnumerationValue{"DateSelectionMode", std::move(member)};
+    };
+    const DateValue nov4{"2026-11-04T00:00:00"};
+    const DateValue nov5{"2026-11-05T00:00:00"};
+    const DateValue nov6_late{"2026-11-06T12:34:56"};
+    const auto get_dates = [&](ObjectId id) {
+        std::vector<DateValue> result;
+        const CalendarSelectedDatesRef ref{id};
+        const auto count = document.calendar_selected_date_count(ref);
+        if (!count) throw std::runtime_error("initialized calendar collection must have a count");
+        for (std::size_t index = 0; index < *count; ++index) {
+            const auto date = document.calendar_selected_date_at(ref, static_cast<std::int64_t>(index));
+            if (!date) throw std::runtime_error("valid calendar collection index must return a date");
+            result.push_back(*date);
+        }
+        return result;
+    };
+    const auto set_mode = [&](ObjectId id, std::string member) {
+        return document.set_prop_val(owner_key(id), mode_property, mode_value(std::move(member)));
+    };
+
+    const CalendarSelectedDatesRef uninitialized{ids[0]};
+    const auto initial_ref = document.get_prop_val(owner_key(ids[0]), selected_property);
+    expect(initial_ref.status == PropertyReadStatus::computed_value && initial_ref.value &&
+               std::get_if<CalendarSelectedDatesRef>(&*initial_ref.value) &&
+               *std::get_if<CalendarSelectedDatesRef>(&*initial_ref.value) == uninitialized,
+        "SelectedDates owner reference must be available before runtime initialization");
+    expect(!document.calendar_selected_date_count(uninitialized) &&
+               !document.calendar_selected_date_at(uninitialized, 0) &&
+               !document.calendar_selected_dates_contains(uninitialized, nov4),
+        "collection count, index, and membership must be absent before runtime initialization");
+    expect(document.add_calendar_selected_date(uninitialized, nov4) == PropertyMutationStatus::unsupported_surface &&
+               document.delete_calendar_selected_date(uninitialized, nov4) == PropertyMutationStatus::unsupported_surface &&
+               document.clear_calendar_selected_dates(uninitialized) == PropertyMutationStatus::unsupported_surface,
+        "collection mutations must require runtime initialization");
+    expect(document.initialize_calendar_runtime(ids[0], DateValue{"2026-11-04T19:20:21"}) ==
+               PropertyMutationStatus::applied_runtime_only && get_dates(ids[0]) == std::vector<DateValue>{nov4},
+        "calendar initialization must seed one midnight selection from the local day");
+
+    // The native probe exercises all twelve calendar controls and all nine mode transitions.
+    for (std::size_t index = 0; index < ids.size(); ++index) {
+        const auto id = ids[index];
+        expect(document.initialize_calendar_runtime(id, DateValue{"2026-11-04T07:08:09"}) ==
+                   PropertyMutationStatus::applied_runtime_only,
+            "each CalendarField must accept runtime initialization");
+        const auto ref = CalendarSelectedDatesRef{id};
+        expect(document.calendar_selected_date_count(ref) == std::optional<std::size_t>{1} &&
+                   document.calendar_selected_date_at(ref, 0) == std::optional<DateValue>{nov4} &&
+                   document.calendar_selected_dates_contains(ref, DateValue{"2026-11-04T22:00:00"}) == true &&
+                   document.calendar_selected_dates_contains(ref, nov5) == false,
+            "initial live collection must contain the runtime local date by day");
+        expect(document.add_calendar_selected_date(ref, nov6_late) == PropertyMutationStatus::applied_runtime_only,
+            "adding a valid selected date must mutate only runtime collection state");
+        const std::string_view current_mode = (index % 3 == 0) ? "Single" : (index % 3 == 1) ? "Multiple" : "Interval";
+        expect(set_mode(id, std::string(current_mode)) == PropertyMutationStatus::applied,
+            "setting a valid SelectionMode must update persisted mode");
+        expect(document.add_calendar_selected_date(ref, nov6_late) == PropertyMutationStatus::applied_runtime_only,
+            "adding a duplicate day must be an accepted no-op or newest single selection");
+        expect(document.calendar_selected_dates_contains(ref, DateValue{"2026-11-06T00:00:00"}) == true,
+            "membership comparison must ignore the time portion");
+        if (current_mode == "Single") {
+            expect(get_dates(id) == std::vector<DateValue>{nov6_late},
+                "Single mode must keep the newest selected timestamp");
+        }
+    }
+
+    const std::array<std::string_view, 3> modes{"Single", "Multiple", "Interval"};
+    for (const auto from : modes) for (const auto to : modes) {
+        const auto id = ids[3 + static_cast<std::size_t>(std::ranges::find(modes, from) - modes.begin()) * 3 +
+            static_cast<std::size_t>(std::ranges::find(modes, to) - modes.begin())];
+        const auto ref = CalendarSelectedDatesRef{id};
+        expect(document.initialize_calendar_runtime(id, nov4) == PropertyMutationStatus::applied_runtime_only,
+            "mode transition fixture must initialize");
+        expect(document.clear_calendar_selected_dates(ref) == PropertyMutationStatus::applied_runtime_only,
+            "mode transition fixture must start empty");
+        expect(set_mode(id, std::string(from)) == PropertyMutationStatus::applied,
+            "mode transition fixture must set source mode");
+        expect(document.add_calendar_selected_date(ref, DateValue{"2026-11-06T12:34:56"}) ==
+                   PropertyMutationStatus::applied_runtime_only &&
+                   document.add_calendar_selected_date(ref, DateValue{"2026-11-04T08:09:10"}) ==
+                   PropertyMutationStatus::applied_runtime_only,
+            "source mode must accept two test selections");
+        if (from == "Multiple") {
+            expect(document.add_calendar_selected_date(ref, DateValue{"2026-11-06T20:21:22"}) ==
+                       PropertyMutationStatus::applied_runtime_only &&
+                       get_dates(id) == std::vector<DateValue>{DateValue{"2026-11-06T12:34:56"},
+                           DateValue{"2026-11-04T08:09:10"}},
+                "a duplicate day in Multiple mode must retain its original timestamp and insertion position");
+        }
+        const auto before_change = get_dates(id);
+        if (from == "Interval")
+            expect(before_change == std::vector<DateValue>{DateValue{"2026-11-04T08:09:10"},
+                       DateValue{"2026-11-05T08:09:10"}, DateValue{"2026-11-06T12:34:56"}},
+                "prepending an interval must preserve the prior endpoint time in its separate span");
+        expect(set_mode(id, std::string(to)) == PropertyMutationStatus::applied,
+            "each source and destination mode pair must be accepted");
+        const auto actual = get_dates(id);
+        if (to == "Single") {
+            expect(actual.size() == 1 && actual.front() == before_change.back(),
+                "changing mode to Single must retain the final current selection");
+        } else if (to == "Multiple") {
+            expect(actual == before_change,
+                "changing mode to Multiple must preserve selection order and timestamps");
+        } else if (from == "Single") {
+            expect(actual == std::vector<DateValue>{before_change.back()},
+                "changing a Single selection to Interval must retain its one selected date");
+        } else if (from == "Interval") {
+            expect(actual == before_change, "reassigning Interval must preserve distinct adjacent span times");
+        } else {
+            expect(actual == std::vector<DateValue>{DateValue{"2026-11-04T08:09:10"},
+                       DateValue{"2026-11-05T08:09:10"}, DateValue{"2026-11-06T08:09:10"}},
+                "changing mode to Interval must build chronological days with the minimum date time");
+        }
+    }
+
+    const auto current_owner = ids[9];
+    const auto current_ref = CalendarSelectedDatesRef{current_owner};
+    for (const auto mode : modes) {
+        expect(set_mode(current_owner, std::string(mode)) == PropertyMutationStatus::applied &&
+                   document.initialize_calendar_runtime(current_owner, nov4) == PropertyMutationStatus::applied_runtime_only &&
+                   document.add_calendar_selected_date(current_ref, DateValue{"2026-11-06T12:34:56"}) == PropertyMutationStatus::applied_runtime_only &&
+                   document.set_prop_val(owner_key(current_owner), current_property,
+                       DateValue{"2026-11-10T08:09:10"}) == PropertyMutationStatus::applied_runtime_only &&
+                   get_dates(current_owner) == std::vector<DateValue>{DateValue{"2026-11-10T08:09:10"}},
+            "setting CurrentDate must replace the selection in every mode");
+    }
+    const auto current = document.get_prop_val(owner_key(current_owner), current_property);
+    expect(current.status == PropertyReadStatus::computed_value && current.value &&
+               *current.value == PropertyValue{DateValue{"2026-11-10T00:00:00"}} &&
+               get_dates(current_owner) == std::vector<DateValue>{DateValue{"2026-11-10T08:09:10"}},
+        "CurrentDate getter must be midnight while its selection retains the input timestamp");
+    expect(document.set_prop_val(owner_key(current_owner), current_property, std::string{"2026-11-11"}) ==
+               PropertyMutationStatus::invalid_value &&
+               document.get_prop_val(owner_key(current_owner), current_property).value ==
+                   std::optional<PropertyValue>{PropertyValue{DateValue{"2026-11-10T00:00:00"}}} &&
+               get_dates(current_owner) == std::vector<DateValue>{DateValue{"2026-11-10T08:09:10"}},
+        "invalid CurrentDate assignments must leave both current date and selection unchanged");
+    expect(document.set_prop_val(owner_key(current_owner), current_property,
+               DateValue{"2026-11-10T18:30:00"}) == PropertyMutationStatus::applied_runtime_only &&
+               get_dates(current_owner) == std::vector<DateValue>{DateValue{"2026-11-10T18:30:00"}},
+        "setting CurrentDate on its existing day must still replace selection timestamp");
+    expect(document.reset_prop_val(owner_key(current_owner), current_property) == PropertyMutationStatus::reset_runtime_only &&
+               document.get_prop_val(owner_key(current_owner), current_property).status == PropertyReadStatus::no_default &&
+               get_dates(current_owner) == std::vector<DateValue>{DateValue{"2026-11-10T18:30:00"}},
+        "resetting CurrentDate must unset the getter and preserve SelectedDates");
+
+    const auto mode_owner = ids[10];
+    const auto mode_ref = CalendarSelectedDatesRef{mode_owner};
+    expect(document.initialize_calendar_runtime(mode_owner, nov4) == PropertyMutationStatus::applied_runtime_only &&
+               set_mode(mode_owner, "Multiple") == PropertyMutationStatus::applied &&
+               document.clear_calendar_selected_dates(mode_ref) == PropertyMutationStatus::applied_runtime_only &&
+               document.add_calendar_selected_date(mode_ref, DateValue{"2024-02-28T12:00:00"}) == PropertyMutationStatus::applied_runtime_only &&
+               document.add_calendar_selected_date(mode_ref, DateValue{"2024-03-02T13:00:00"}) == PropertyMutationStatus::applied_runtime_only &&
+               set_mode(mode_owner, "Interval") == PropertyMutationStatus::applied,
+        "leap-day interval fixture must accept its endpoints and mode conversion");
+    expect(get_dates(mode_owner) == std::vector<DateValue>{DateValue{"2024-02-28T12:00:00"},
+               DateValue{"2024-02-29T12:00:00"}, DateValue{"2024-03-01T12:00:00"},
+               DateValue{"2024-03-02T12:00:00"}},
+        "Interval mode conversion must include leap day and preserve minimum endpoint time");
+    expect(document.delete_calendar_selected_date(mode_ref, DateValue{"2024-02-29T20:00:00"}) ==
+               PropertyMutationStatus::applied_runtime_only && get_dates(mode_owner) ==
+                   std::vector<DateValue>{DateValue{"2024-02-28T12:00:00"}},
+        "deleting a day inside Interval must truncate that day and every later day");
+    expect(document.initialize_calendar_runtime(mode_owner, nov4) == PropertyMutationStatus::applied_runtime_only &&
+               set_mode(mode_owner, "Multiple") == PropertyMutationStatus::applied &&
+               document.clear_calendar_selected_dates(mode_ref) == PropertyMutationStatus::applied_runtime_only &&
+               document.add_calendar_selected_date(mode_ref, DateValue{"2024-02-28T12:00:00"}) == PropertyMutationStatus::applied_runtime_only &&
+               document.add_calendar_selected_date(mode_ref, DateValue{"2024-03-02T13:00:00"}) == PropertyMutationStatus::applied_runtime_only &&
+               set_mode(mode_owner, "Interval") == PropertyMutationStatus::applied &&
+               set_mode(mode_owner, "Multiple") == PropertyMutationStatus::applied,
+        "Multiple mode after Interval must preserve all four contiguous dates");
+    expect(get_dates(mode_owner) == std::vector<DateValue>{DateValue{"2024-02-28T12:00:00"},
+               DateValue{"2024-02-29T12:00:00"}, DateValue{"2024-03-01T12:00:00"},
+               DateValue{"2024-03-02T12:00:00"}},
+        "conversion from Interval to Multiple must materialize the full chronological span");
+    expect(document.delete_calendar_selected_date(mode_ref, DateValue{"2024-03-01T20:00:00"}) ==
+               PropertyMutationStatus::applied_runtime_only && get_dates(mode_owner) ==
+                   std::vector<DateValue>{DateValue{"2024-02-28T12:00:00"}, DateValue{"2024-02-29T12:00:00"},
+                       DateValue{"2024-03-02T12:00:00"}},
+        "deleting an interior date after Interval conversion must split the span and retain remaining order and timestamps");
+    expect(document.delete_calendar_selected_date(mode_ref, DateValue{"2024-03-02T20:00:00"}) ==
+               PropertyMutationStatus::applied_runtime_only && get_dates(mode_owner) ==
+                   std::vector<DateValue>{DateValue{"2024-02-28T12:00:00"}, DateValue{"2024-02-29T12:00:00"}},
+        "deleting the end date after Interval conversion must retain all earlier dates");
+
+    const auto bounds_ref = CalendarSelectedDatesRef{ids[11]};
+    expect(document.initialize_calendar_runtime(ids[11], DateValue{"0001-01-01T00:00:00"}) ==
+               PropertyMutationStatus::applied_runtime_only &&
+               set_mode(ids[11], "Interval") == PropertyMutationStatus::applied &&
+               document.add_calendar_selected_date(bounds_ref, DateValue{"9999-12-31T23:59:59"}) ==
+                   PropertyMutationStatus::applied_runtime_only &&
+               document.calendar_selected_date_count(bounds_ref) == std::optional<std::size_t>{3652059} &&
+               document.calendar_selected_date_at(bounds_ref, 0) ==
+                   std::optional<DateValue>{DateValue{"0001-01-01T00:00:00"}} &&
+               document.calendar_selected_date_at(bounds_ref, 1154) ==
+                   std::optional<DateValue>{DateValue{"0004-02-29T23:59:59"}} &&
+               document.calendar_selected_date_at(bounds_ref, 3652058) ==
+                   std::optional<DateValue>{DateValue{"9999-12-31T23:59:59"}},
+        "Interval mode must count and index the complete Date1 through Date9999 range, including leap days");
+
+    const auto uninitialized_other = CalendarSelectedDatesRef{ObjectId{9999}};
+    expect(!document.calendar_selected_date_count(uninitialized_other) &&
+               document.add_calendar_selected_date(uninitialized_other, nov4) == PropertyMutationStatus::unknown_owner &&
+               document.initialize_calendar_runtime(ObjectId{9999}, nov4) == PropertyMutationStatus::unknown_owner &&
+               document.initialize_calendar_runtime(ObjectId{1}, nov4) == PropertyMutationStatus::unknown_owner,
+        "nonexistent and non-calendar owners must be rejected");
+    expect(document.initialize_calendar_runtime(ids[0], DateValue{"2026-02-30T12:00:00"}) == PropertyMutationStatus::invalid_value &&
+               document.initialize_calendar_runtime(ids[0], DateValue{"not-a-date"}) == PropertyMutationStatus::invalid_value &&
+               document.add_calendar_selected_date(uninitialized, DateValue{"2026-02-30T12:00:00"}) == PropertyMutationStatus::invalid_value &&
+               document.calendar_selected_dates_contains(current_ref, DateValue{"not-a-date"}) == std::nullopt &&
+               document.delete_calendar_selected_date(CalendarSelectedDatesRef{ids[0]}, DateValue{"not-a-date"}) == PropertyMutationStatus::invalid_value,
+        "invalid date values must be rejected by initialization and collection mutations");
+    expect(!document.calendar_selected_date_at(current_ref, -1) &&
+               !document.calendar_selected_date_at(current_ref, 100) &&
+               document.add_calendar_selected_date(current_ref, DateValue{"2026-11-11T00:00:00"}) == PropertyMutationStatus::applied_runtime_only,
+        "negative and out-of-range indexes must fail while valid mutations remain usable");
+
+    const auto isolated = ids[0];
+    expect(set_mode(isolated, "Multiple") == PropertyMutationStatus::applied &&
+               document.initialize_calendar_runtime(isolated, nov4) == PropertyMutationStatus::applied_runtime_only &&
+               document.add_calendar_selected_date(CalendarSelectedDatesRef{isolated}, nov6_late) == PropertyMutationStatus::applied_runtime_only,
+        "isolation fixture must acquire two selected dates");
+    OrdinaryFormDocument copied = document;
+    expect(copied.calendar_selected_date_count(CalendarSelectedDatesRef{isolated}) == std::optional<std::size_t>{2} &&
+               copied.clear_calendar_selected_dates(CalendarSelectedDatesRef{isolated}) == PropertyMutationStatus::applied_runtime_only &&
+               document.calendar_selected_date_count(CalendarSelectedDatesRef{isolated}) == std::optional<std::size_t>{2},
+        "document copies must carry independent runtime calendar state");
+    for (const auto id : ids)
+        expect(document.reset_prop_val(owner_key(id), mode_property) == PropertyMutationStatus::reset,
+            "restoring default SelectionMode must succeed before persistence comparison");
+    const auto xml_before_runtime = oof::source::serialize_form_xml(document);
+    const auto bin_before_runtime = oof::save_form_bin(document);
+    expect(xml_before_runtime.ok() && bin_before_runtime.ok(),
+        "calendar runtime persistence fixture must serialize before runtime-only operations");
+    expect(document.set_prop_val(owner_key(isolated), current_property, DateValue{"2026-11-07T09:10:11"}) ==
+               PropertyMutationStatus::applied_runtime_only &&
+               document.clear_calendar_selected_dates(CalendarSelectedDatesRef{isolated}) == PropertyMutationStatus::applied_runtime_only &&
+               document.add_calendar_selected_date(CalendarSelectedDatesRef{isolated}, DateValue{"2026-11-08T10:11:12"}) ==
+                   PropertyMutationStatus::applied_runtime_only,
+        "runtime-only changes must be accepted after resetting persisted modes");
+    const auto xml_after_runtime = oof::source::serialize_form_xml(document);
+    const auto bin_after_runtime = oof::save_form_bin(document);
+    expect(xml_after_runtime.ok() && xml_after_runtime.value() == xml_before_runtime.value() &&
+               bin_after_runtime.ok() && bin_after_runtime.value() == bin_before_runtime.value(),
+        "runtime CurrentDate and SelectedDates must not change complete XML or BIN output");
+    const auto cold = oof::source::parse_form_xml(xml_after_runtime.value());
+    expect(cold.ok() && !cold.value().calendar_selected_date_count(CalendarSelectedDatesRef{isolated}) &&
+        cold.value().get_prop_val(owner_key(isolated), current_property).status == PropertyReadStatus::no_default,
+        "a rebuilt source document must request a new runtime date instead of inheriting the previous selection");
+
+    Form shadow_form;
+    shadow_form.id = ObjectId{200};
+    shadow_form.name = "CalendarCollectionShadow";
+    shadow_form.children.emplace_back(ControlRef{ObjectId{201}});
+    ControlNode shadow_calendar{ObjectId{201}, "ShadowCalendar", CalendarFieldPayload{}};
+    shadow_calendar.properties().set_explicit(selected_property, CalendarSelectedDatesRef{ObjectId{201}});
+    OrdinaryFormDocument shadow_document(std::move(shadow_form));
+    shadow_document.add_control(std::move(shadow_calendar));
+    const auto shadow_report = shadow_document.validate();
+    expect(shadow_report.has(InvariantCode::invalid_property),
+        "a manually stored SelectedDates owner reference must be rejected by model validation");
+    for (const auto& bad_mode : {PropertyValue{true}, PropertyValue{EnumerationValue{"OtherMode", "Single"}},
+             PropertyValue{EnumerationValue{"DateSelectionMode", "Unknown"}}}) {
+        Form invalid_form; invalid_form.id = ObjectId{1}; invalid_form.name = "InvalidCalendarMode";
+        invalid_form.children.emplace_back(ControlRef{ObjectId{2}});
+        ControlNode invalid_calendar{ObjectId{2}, "Calendar", CalendarFieldPayload{}};
+        invalid_calendar.properties().set_explicit(mode_property, bad_mode);
+        OrdinaryFormDocument invalid(std::move(invalid_form));
+        invalid.add_control(std::move(invalid_calendar));
+        expect(invalid.initialize_calendar_runtime(ObjectId{2}, nov4) == PropertyMutationStatus::invalid_value &&
+            invalid.set_prop_val(owner_key(ObjectId{2}), current_property, nov4) == PropertyMutationStatus::invalid_value &&
+            !invalid.calendar_selected_date_count(CalendarSelectedDatesRef{ObjectId{2}}),
+            "an invalid source mode must not silently initialize a default or interval selection");
+        expect(invalid.set_prop_val(owner_key(ObjectId{2}), mode_property, mode_value("Single")) == PropertyMutationStatus::applied &&
+            invalid.initialize_calendar_runtime(ObjectId{2}, nov4) == PropertyMutationStatus::applied_runtime_only,
+            "assigning a valid mode must explicitly repair an invalid source mode");
+    }
+
+    Form replacement;
+    replacement.id = ObjectId{2};
+    replacement.name = "Replacement";
+    document.set_form(std::move(replacement));
+    const auto retained_owner = document.get_prop_val(owner_key(isolated), selected_property);
+    expect(!document.calendar_selected_date_count(CalendarSelectedDatesRef{isolated}) &&
+               retained_owner.status == PropertyReadStatus::computed_value && retained_owner.value &&
+               *retained_owner.value == PropertyValue{CalendarSelectedDatesRef{isolated}},
+        "replacing the form must clear runtime calendar state while retaining collection controls and computed owner references");
 }
 
 void test_form_item_collections() {
@@ -5644,6 +5956,7 @@ int main() {
         test_chart_summary_series_color_invariants();
         test_border_value_invariants();
         test_control_border_and_calendar_selection_descriptors();
+        test_calendar_selected_dates_live_collection();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;

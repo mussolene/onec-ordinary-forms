@@ -72,6 +72,8 @@ std::string as_utf8(std::u8string_view value) {
 
 std::string_view xsd_type(ValueCodec codec) {
     switch (codec) {
+        case ValueCodec::calendar_selected_dates:
+            throw std::logic_error("runtime calendar selection has no public XML type");
         case ValueCodec::command_bar_buttons:
             return "CommandBarButtonsType";
         case ValueCodec::owned_panel:
@@ -274,7 +276,8 @@ void validate_property_group(
             throw std::logic_error(
                 "ordinary-form property surface mismatch for " + std::string(owner));
         }
-        static_cast<void>(xsd_type(descriptor.value_codec));
+        if (descriptor.persistence != model::metamodel::PersistenceClass::runtime_only)
+            static_cast<void>(xsd_type(descriptor.value_codec));
     }
 }
 

@@ -3531,12 +3531,21 @@ void test_runtime_properties_are_not_public_xml() {
     auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/></CalendarField></ChildItems></Form>)XML");
     expect(parsed.ok(), "runtime boundary fixture must parse");
     if (!parsed) return;
+    const auto before_runtime = source::serialize_form_xml(parsed.value());
     expect(parsed.value().set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
                model::PropertyId::from_name("CurrentDate"), model::DateValue{"2026-12-25T00:00:00"}) ==
                model::PropertyMutationStatus::applied_runtime_only,
         "runtime-only properties remain available in the in-memory object model");
-    expect(!source::serialize_form_xml(parsed.value()),
-        "XML writer must reject explicit runtime state instead of silently losing it");
+    const auto after_runtime = source::serialize_form_xml(parsed.value());
+    expect(before_runtime.ok() && after_runtime.ok() && after_runtime.value() == before_runtime.value(),
+        "separate calendar runtime state must not change public XML");
+    model::OrdinaryFormDocument shadow(parsed.value().form());
+    auto shadow_calendar = *parsed.value().find_control(model::ObjectId{2});
+    shadow_calendar.properties().set_explicit(model::PropertyId::from_name("CurrentDate"),
+        model::DateValue{"2026-12-25T00:00:00"});
+    shadow.add_control(std::move(shadow_calendar));
+    expect(!source::serialize_form_xml(shadow),
+        "XML writer must still reject manually persisted runtime shadows");
 }
 
 void test_chart_source_mode_xml() {
