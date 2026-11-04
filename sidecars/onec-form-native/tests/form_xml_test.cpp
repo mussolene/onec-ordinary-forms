@@ -3461,6 +3461,47 @@ void test_runtime_properties_are_not_public_xml() {
         "XML writer must reject explicit runtime state instead of silently losing it");
 }
 
+void test_chart_source_mode_xml() {
+    std::string xml = R"XML(<Form id="1" name="SourceCharts" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto series_count = i % 4;
+        const auto point_count = i % 5;
+        xml += "<Chart id=\"" + std::to_string(100 + i) + "\" name=\"Source" + std::to_string(i) + "\"><Position/><Series>";
+        for (std::uint64_t j = 0; j < series_count; ++j)
+            xml += "<ChartSeries id=\"" + std::to_string(j + 2) + "\"><Text/><Color kind=\"automatic\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/></ChartSeries>";
+        xml += "</Series><Points>";
+        for (std::uint64_t j = 0; j < point_count; ++j)
+            xml += "<ChartPoint id=\"" + std::to_string(j + 1) + "\"><Text/><Color kind=\"automatic\"/></ChartPoint>";
+        xml += "</Points><Values dataMode=\"Source\" sourceDescription=\"Description &amp; chart " + std::to_string(i) + "\"/></Chart>";
+    }
+    xml += "</ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "Source-mode XML accepts twelve charts with varied dimensions and no dense Values");
+    if (parsed) {
+        for (std::uint64_t i = 0; i < 12; ++i) {
+            const auto* control = parsed.value().find_control(model::ObjectId{100 + i});
+            const auto* chart = control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
+            expect(chart && chart->data_mode == model::ChartDataMode::source && chart->values.empty() &&
+                chart->series.size() == i % 4 && chart->points.size() == i % 5 &&
+                chart->data_source_description == "Description & chart " + std::to_string(i),
+                "Source mode preserves collection dimensions and decoded descriptions");
+        }
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok(), "Source-mode XML serializes without dense values");
+        if (serialized) {
+            const auto restored = source::parse_form_xml(serialized.value());
+            expect(restored.ok() && std::get<model::ChartPayload>(restored.value().find_control(model::ObjectId{105})->payload).data_source_description == "Description & chart 5",
+                "Source-mode description survives serialization");
+        }
+    }
+    for (const auto bad_xml : {
+        R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values dataMode="Source" sourceDescription="source"><ChartValue seriesRef="1" pointRef="1"><Number>1</Number></ChartValue></Values></Chart></ChildItems></Form>)XML",
+        R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values dataMode="Source" unexpected="x"/></Chart></ChildItems></Form>)XML",
+        R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values sourceDescription="outside"/></Chart></ChildItems></Form>)XML",
+        R"XML(<Form id="1" name="Source" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values dataMode="Explicit" sourceDescription="outside"/></Chart></ChildItems></Form>)XML"})
+        expect(!source::parse_form_xml(bad_xml), "Source-mode XML rejects cells, unknown attributes, and out-of-mode descriptions");
+}
+
 void test_default_control_focus_groups_xml() {
     constexpr std::array<std::size_t, 12> page_indexes{0, 0, 0, 1, 1, 1, 2, 2, 3, 4, 4, 5};
     constexpr std::array<bool, 12> selected{false, false, true, false, false, true,
@@ -3773,6 +3814,7 @@ int main() {
         test_runtime_properties_are_not_public_xml();
         test_collapse_runtime_source_boundary();
         test_default_control_focus_groups_xml();
+        test_chart_source_mode_xml();
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();

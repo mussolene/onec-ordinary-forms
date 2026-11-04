@@ -1488,9 +1488,10 @@ bool chart_budget_fits(const std::vector<ControlNode>& controls, ObjectId resize
         const bool changed = resized && control.id == resized;
         const auto series = changed ? new_series : chart->series.size();
         const auto points = changed ? new_points : chart->points.size();
+        const bool source_mode = chart->data_mode == ChartDataMode::source;
         if (series > max_chart_collection_items || points > max_chart_collection_items ||
-            (points && series > max_chart_collection_items / points) ||
-            !add(series) || !add(points) || !add(series * points) || !add(chart->gauge_quality_bands.size()) ||
+            (!source_mode && points && series > max_chart_collection_items / points) ||
+            !add(series) || !add(points) || (!source_mode && !add(series * points)) || !add(chart->gauge_quality_bands.size()) ||
             !add(chart->summary_series.trendlines.size())) return false;
         const auto retained = std::min(series, chart->series.size());
         for (std::size_t i = 0; i < retained; ++i)
@@ -3816,13 +3817,21 @@ ValidationReport OrdinaryFormDocument::validate() const {
             if (control.kind() != ControlKind::chart) {
                 invalid_chart("Chart payload is attached to a non-Chart control");
             }
-            if (!chart->points.empty() && chart->series.size() >
-                std::numeric_limits<std::size_t>::max() / chart->points.size()) {
-                invalid_chart("Chart dense Values dimensions overflow");
-            } else if (chart->values.size() != chart->series.size() * chart->points.size()) {
-                invalid_chart("Chart Values must be a dense Series by Point matrix");
+            const bool source_mode = chart->data_mode == ChartDataMode::source;
+            if (source_mode) {
+                if (!chart->values.empty()) invalid_chart("Source-mode Chart cannot contain dense Values cells");
+                if (!valid_typed_utf8(chart->data_source_description)) invalid_chart("Chart source description is not valid UTF-8");
+            } else {
+                if (!chart->data_source_description.empty()) invalid_chart("Chart source description requires Source mode");
+                if (!chart->points.empty() && chart->series.size() >
+                    std::numeric_limits<std::size_t>::max() / chart->points.size()) {
+                    invalid_chart("Chart dense Values dimensions overflow");
+                } else if (chart->values.size() != chart->series.size() * chart->points.size()) {
+                    invalid_chart("Chart Values must be a dense Series by Point matrix");
+                }
             }
-            if (chart->data_mode && *chart->data_mode != ChartDataMode::sample && *chart->data_mode != ChartDataMode::explicit_values)
+            if (chart->data_mode && *chart->data_mode != ChartDataMode::sample && *chart->data_mode != ChartDataMode::explicit_values &&
+                *chart->data_mode != ChartDataMode::source)
                 invalid_chart("Chart Values dataMode is invalid");
             if (chart->summary_series.text && !std::holds_alternative<std::string>(*chart->summary_series.text) &&
                 !(std::holds_alternative<LocalizedStringValue>(*chart->summary_series.text) && valid_localized_string(std::get<LocalizedStringValue>(*chart->summary_series.text))))
@@ -4114,6 +4123,14 @@ std::optional<std::int64_t> OrdinaryFormDocument::chart_trendline_index(ChartTre
 }
 
 PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyId property, const PropertyValue& value) {
+    const auto location = find_location(ObjectCategory::control, id);
+    if (!location) return PropertyMutationStatus::unsupported_surface;
+    auto& control = collections_.controls[location->index];
+    auto* chart = std::get_if<ChartPayload>(&control.payload);
+    if (!chart) return PropertyMutationStatus::unsupported_surface;
+    if (chart->data_mode == ChartDataMode::source) return PropertyMutationStatus::read_only;
+    if (!reconstruction_complete_ || control.data_path || control.properties().contains(PropertyId::from_name("DataSource")))
+        return PropertyMutationStatus::unsupported_surface;
     try {
         std::string text;
         if (const auto* number = std::get_if<std::int64_t>(&value)) text = std::to_string(*number);
@@ -4132,12 +4149,6 @@ PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyI
         if (parsed.ec == std::errc::result_out_of_range) return PropertyMutationStatus::resource_limit;
         if (parsed.ec != std::errc{} || parsed.ptr != integral.data() + integral.size()) return PropertyMutationStatus::invalid_value;
         if (requested > max_chart_collection_items) return PropertyMutationStatus::resource_limit;
-        const auto location = find_location(ObjectCategory::control, id);
-        if (!location || !reconstruction_complete_) return PropertyMutationStatus::unsupported_surface;
-        auto& control = collections_.controls[location->index];
-        auto* chart = std::get_if<ChartPayload>(&control.payload);
-        if (!chart || control.data_path || control.properties().contains(PropertyId::from_name("DataSource")))
-            return PropertyMutationStatus::unsupported_surface;
         const bool series_axis = property == PropertyId::from_name("SeriesCount");
         const auto new_series_count = series_axis ? static_cast<std::size_t>(requested) : chart->series.size();
         const auto new_point_count = series_axis ? chart->points.size() : static_cast<std::size_t>(requested);

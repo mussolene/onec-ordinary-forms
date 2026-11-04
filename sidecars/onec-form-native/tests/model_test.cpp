@@ -715,6 +715,45 @@ void test_chart_computed_counts() {
     }
 }
 
+void test_chart_source_data_mode() {
+    Form form; form.id = ObjectId{1}; form.name = "SourceCharts";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        ChartPayload chart;
+        chart.data_mode = ChartDataMode::source;
+        chart.data_source_description = "Источник " + std::to_string(i);
+        for (std::uint64_t j = 0; j < 300; ++j) {
+            ChartSeries series; series.id = ObjectId{j + 2}; chart.series.push_back(std::move(series));
+            ChartPoint point; point.id = ObjectId{j + 1}; chart.points.push_back(std::move(point));
+        }
+        document.add_control(ControlNode{ObjectId{100 + i}, "Source" + std::to_string(i), std::move(chart)});
+    }
+    expect(document.validate().ok(), "Source mode permits varied dimensions without dense Values cells");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const ObjectId owner{100 + i};
+        const auto* chart = std::get_if<ChartPayload>(&document.find_control(owner)->payload);
+        expect(chart && chart->data_mode == ChartDataMode::source && chart->values.empty() && chart->series.size() == 300 && chart->points.size() == 300,
+            "Source mode retains dimensions and description without allocating matrix cells");
+        const OrdinaryFormDocument::ObjectKey key{ObjectCategory::control, owner};
+        const auto same_count = document.set_prop_val(key, PropertyId::from_name("SeriesCount"), std::int64_t{300});
+        const auto series = document.set_prop_val(key, PropertyId::from_name("SeriesCount"), std::string{"invalid"});
+        const auto points = document.set_prop_val(key, PropertyId::from_name("PointCount"), DecimalValue{"invalid"});
+        expect(same_count == PropertyMutationStatus::read_only && series == PropertyMutationStatus::read_only && points == PropertyMutationStatus::read_only &&
+            document.reset_prop_val(key, PropertyId::from_name("SeriesCount")) == PropertyMutationStatus::read_only &&
+            document.reset_prop_val(key, PropertyId::from_name("PointCount")) == PropertyMutationStatus::read_only,
+            "Source-mode Chart counts remain read-only for all assigned values");
+        const auto* unchanged = std::get_if<ChartPayload>(&document.find_control(owner)->payload);
+        expect(unchanged && unchanged->series.size() == 300 && unchanged->points.size() == 300,
+            "read-only Source count operations do not mutate collection sizes");
+    }
+    Form invalid_form; invalid_form.id = ObjectId{1}; invalid_form.name = "DescriptionWithoutSource"; invalid_form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument invalid(std::move(invalid_form));
+    ChartPayload invalid_chart; invalid_chart.data_source_description = "only valid in Source mode";
+    invalid.add_control(ControlNode{ObjectId{2}, "Chart", std::move(invalid_chart)});
+    expect(!invalid.validate().ok(), "nonempty source description requires Source mode");
+}
+
 void test_list_and_html_live_property_boundaries() {
     Form form; form.id = ObjectId{1}; form.name = "LiveObjects";
     for (std::uint64_t i = 0; i < 12; ++i) {
@@ -5222,6 +5261,7 @@ int main() {
         test_control_name_property();
         test_form_runtime_state_properties();
         test_chart_computed_counts();
+        test_chart_source_data_mode();
         test_chart_owned_collections();
         test_chart_document_resource_budget();
         test_chart_scale_lines();

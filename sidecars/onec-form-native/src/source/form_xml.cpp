@@ -2079,6 +2079,7 @@ private:
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         bool position_seen = false;
         bool chart_summary_series_seen = false;
+        bool chart_values_seen = false;
         bool chart_gauge_quality_bands_seen = false;
         bool gantt_series_seen = false;
         bool gantt_points_seen = false;
@@ -2230,10 +2231,24 @@ private:
                        (name == "Series" || name == "Points" || name == "Values")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
                 if (name == "Values") {
+                    if (chart_values_seen)
+                        fail("OOF2003", child, id_text, name, "one Values collection", "duplicate", "Duplicate Chart Values");
+                    chart_values_seen = true;
+                    for (xmlAttrPtr attribute = child->properties; attribute != nullptr; attribute = attribute->next) {
+                        const std::string_view attribute_name(reinterpret_cast<const char*>(attribute->name));
+                        if (attribute_name != "dataMode" && attribute_name != "sourceDescription")
+                            fail("OOF2003", child, id_text, std::string(attribute_name), "dataMode and sourceDescription attributes", std::string(attribute_name), "Unknown Chart Values attribute");
+                    }
                     if (const auto mode = optional_attribute(child, "dataMode")) {
                         if (*mode == "Sample") chart.data_mode = model::ChartDataMode::sample;
                         else if (*mode == "Explicit") chart.data_mode = model::ChartDataMode::explicit_values;
-                        else fail("OOF2003", child, id_text, "dataMode", "Sample or Explicit", *mode, "Invalid Chart data mode");
+                        else if (*mode == "Source") chart.data_mode = model::ChartDataMode::source;
+                        else fail("OOF2003", child, id_text, "dataMode", "Sample, Explicit, or Source", *mode, "Invalid Chart data mode");
+                    }
+                    if (const auto description = optional_attribute(child, "sourceDescription")) {
+                        if (chart.data_mode != model::ChartDataMode::source)
+                            fail("OOF2003", child, id_text, "sourceDescription", "attribute only in Source mode", *description, "Chart sourceDescription requires Source mode");
+                        chart.data_source_description = *description;
                     }
                 }
                 if (name == "Series" || name == "Points") {
@@ -2245,13 +2260,13 @@ private:
                 }
                 for (xmlNodePtr item : element_children(child)) {
                     if (name == "Series" && node_name(item) == "ChartSeries") {
-                        consume_chart_budget(chart_budget_, 1 + chart.points.size(), item, id_text);
+                        consume_chart_budget(chart_budget_, 1, item, id_text);
                         model::ChartSeries series;
                         series.id = parse_object_id(required_attribute(item, "id"), item);
                         parse_chart_series_fields(item, mm::ChartSeriesObject{&series}, id_text, chart_budget_, typed_budget_);
                         chart.series.push_back(std::move(series));
                     } else if (name == "Points" && node_name(item) == "ChartPoint") {
-                        consume_chart_budget(chart_budget_, 1 + chart.series.size(), item, id_text);
+                        consume_chart_budget(chart_budget_, 1, item, id_text);
                         model::ChartPoint point;
                         point.id = parse_object_id(required_attribute(item, "id"), item);
                         for (xmlNodePtr field : element_children(item)) {
@@ -2263,6 +2278,7 @@ private:
                         }
                         chart.points.push_back(std::move(point));
                     } else if (name == "Values" && node_name(item) == "ChartValue") {
+                        consume_chart_budget(chart_budget_, 1, item, id_text);
                         if (chart.values.size() >= chart.series.size() * chart.points.size())
                             fail("OOF2003", item, id_text, "ChartValue", "bounded dense Chart matrix", {}, "Chart Values exceed the declared Series by Point matrix");
                         model::ChartValue value;
@@ -2283,6 +2299,8 @@ private:
                         fail("OOF2003", item, id_text, node_name(item), name == "Series" ? "ChartSeries" : name == "Points" ? "ChartPoint" : "ChartValue", node_name(item), "Unknown Chart collection item");
                     }
                 }
+                if (name == "Values" && chart.data_mode == model::ChartDataMode::source && !chart.values.empty())
+                    fail("OOF2003", child, id_text, "Values", "no ChartValue cells in Source mode", std::to_string(chart.values.size()), "Source-mode Chart cannot contain dense Values cells");
             }
             else if (name == "Document" && descriptor->kind == model::ControlKind::spreadsheet_document_field) {
                 if (spreadsheet_document_seen)
@@ -4699,11 +4717,21 @@ private:
             }
             writer_.close("Points");
             const auto default_mode = chart->series.empty() || chart->points.empty() ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
-            if (chart->data_mode && *chart->data_mode != model::ChartDataMode::sample && *chart->data_mode != model::ChartDataMode::explicit_values)
-                serialization_fail(id, "dataMode", "Sample or Explicit", "invalid enum", "Invalid Chart data mode");
-            if (chart->data_mode && *chart->data_mode != default_mode)
-                writer_.open("Values", {{"dataMode", *chart->data_mode == model::ChartDataMode::sample ? "Sample" : "Explicit"}});
-            else writer_.open("Values");
+            if (chart->data_mode && *chart->data_mode != model::ChartDataMode::sample && *chart->data_mode != model::ChartDataMode::explicit_values &&
+                *chart->data_mode != model::ChartDataMode::source)
+                serialization_fail(id, "dataMode", "Sample, Explicit, or Source", "invalid enum", "Invalid Chart data mode");
+            if (chart->data_mode == model::ChartDataMode::source) {
+                if (!chart->values.empty()) serialization_fail(id, "Values", "no ChartValue cells in Source mode", std::to_string(chart->values.size()), "Source-mode Chart cannot contain dense Values cells");
+                XmlAttributes attributes{{"dataMode", "Source"}};
+                if (!chart->data_source_description.empty()) attributes.emplace_back("sourceDescription", chart->data_source_description);
+                writer_.open("Values", attributes);
+            } else {
+                if (!chart->data_source_description.empty())
+                    serialization_fail(id, "sourceDescription", "empty outside Source mode", chart->data_source_description, "Chart sourceDescription requires Source mode");
+                if (chart->data_mode && *chart->data_mode != default_mode)
+                    writer_.open("Values", {{"dataMode", *chart->data_mode == model::ChartDataMode::sample ? "Sample" : "Explicit"}});
+                else writer_.open("Values");
+            }
             for (const auto& item : chart->values) {
                 writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
                 write_typed_value_node(item.value, object_id_text(item.series_ref));

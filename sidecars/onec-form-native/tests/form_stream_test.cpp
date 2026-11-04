@@ -21060,6 +21060,63 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
         "SummarySeries named Color mirror mismatch must be rejected");
 }
 
+void test_chart_source_mode_storage() {
+    const std::array<std::pair<std::size_t, std::size_t>, 12> dimensions{{
+        {0, 0}, {0, 2}, {2, 0}, {1, 1}, {2, 3}, {3, 2}, {1, 0}, {1, 2}, {2, 0}, {1, 1}, {2, 3}, {3, 2}}};
+    model::Form form; form.id = model::ObjectId{1}; form.name = "SourceMode";
+    for (std::size_t i = 0; i < dimensions.size(); ++i) form.children.emplace_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t i = 0; i < dimensions.size(); ++i) {
+        model::ChartPayload chart; chart.data_mode = model::ChartDataMode::source;
+        if (i >= 6) chart.data_source_description = "R1C1:R3C3";
+        const auto [series_count, point_count] = dimensions[i];
+        for (std::size_t n = 0; n < series_count; ++n) {
+            model::ChartSeries series; series.id = model::ObjectId{n + 2}; series.text = "S" + std::to_string(n);
+            chart.series.push_back(std::move(series));
+        }
+        for (std::size_t n = 0; n < point_count; ++n) {
+            model::ChartPoint point; point.id = model::ObjectId{n + 1}; point.text = "P" + std::to_string(n);
+            chart.points.push_back(std::move(point));
+        }
+        if (i % 3 == 1) chart.gauge_quality_bands.emplace_back();
+        model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(chart)};
+        if (i > 0 && i % 3 == 0) {
+            control.events.push_back(model::EventRef{model::ObjectId{1000 + i}});
+            document.add_event(model::Event{model::ObjectId{1000 + i}, "Selection", "HandleSelection", model::ControlRef{control.id}});
+        }
+        document.add_control(std::move(control));
+        if (series_count && i % 2 == 1)
+            expect(document.add_chart_trendline(model::ObjectId{100 + i}, model::ObjectId{2}).has_value(), "source mode retains independent trendline owners");
+    }
+    auto stream = form_stream::encode_document(document);
+    expect(stream.ok(), stream ? "" : stream.diagnostics().front().message);
+    auto back = form_stream::decode_document(stream.value());
+    expect(back.ok() && back.value().reconstruction_complete(), "all twelve Source charts must decode without a fake matrix or baseline");
+    for (std::size_t i = 0; i < dimensions.size(); ++i) {
+        const auto* control = back.value().find_control(model::ObjectId{100 + i});
+        const auto& chart = std::get<model::ChartPayload>(control->payload);
+        expect(chart.data_mode == model::ChartDataMode::source && chart.values.empty() &&
+            chart.series.size() == dimensions[i].first && chart.points.size() == dimensions[i].second &&
+            chart.data_source_description == (i >= 6 ? "R1C1:R3C3" : ""), "Source mode, dimensions and description survive the primary codec");
+    }
+    auto rebuilt = form_stream::encode_document(back.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(stream.value()), "Source stream reconstruction is canonical");
+    auto cursors = stream.value();
+    auto* record = find_chart_record(cursors);
+    record->items[3].items[18] = list_stream::ListValue::raw_atom("0");
+    record->items[3].items[19] = list_stream::ListValue::raw_atom("0");
+    const auto cursor_back = form_stream::decode_document(cursors);
+    expect(cursor_back.ok() && cursor_back.value().reconstruction_complete(), "bounded empty-dimension cursors may normalize after native equivalence proof");
+    auto invalid_cursor = stream.value();
+    find_chart_record(invalid_cursor)->items[3].items[18] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(invalid_cursor), "cursor outside empty dimensions must reject");
+    auto invalid_flag = stream.value();
+    auto& info = find_chart_record(invalid_flag)->items[3];
+    const auto flag = std::size_t{18 + 97 + 1};
+    info.items[flag] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(invalid_flag), "unknown source-mode boolean cannot be accepted as Sample");
+}
+
 void test_chart_gauge_bands_roundtrip_and_native_caches() {
     const std::array<std::pair<std::string_view, std::string_view>, 12> bounds{{
         {"-4.875", "-0.125"}, {"-1.875", "1.875"}, {"0", "0"}, {"0.4999", "0.5001"}, {"1.5", "2.5"},
@@ -22456,6 +22513,7 @@ int main() {
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_automatic_collection_colors();
         test_chart_summary_series_color_roundtrip_and_guards();
+        test_chart_source_mode_storage();
         test_chart_gauge_bands_roundtrip_and_native_caches();
         test_chart_empty_render_cache_normalization_and_guards();
         test_platform_empty_document_fixture();

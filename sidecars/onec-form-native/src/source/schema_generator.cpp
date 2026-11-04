@@ -944,8 +944,8 @@ void append_value_types(std::string& output) {
   <xs:complexType name="ChartPointCollectionType"><xs:sequence><xs:element name="ChartPoint" type="ChartPointType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="lastAssignedId" type="ChartLastAssignedIdType" use="optional"/></xs:complexType>
   <xs:complexType name="GaugeChartQualityBandType"><xs:sequence><xs:element name="Begin" type="xs:decimal"/><xs:element name="End" type="xs:decimal"/><xs:element name="BackColor" type="ColorValueType"/><xs:element name="Text" type="LocalizedTextValueType"/><xs:element name="ToolTip" type="LocalizedTextValueType"/></xs:sequence></xs:complexType>
   <xs:complexType name="GaugeChartQualityBandsType"><xs:sequence><xs:element name="GaugeChartQualityBand" type="GaugeChartQualityBandType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
-  <xs:simpleType name="ChartDataModeType"><xs:restriction base="xs:string"><xs:enumeration value="Sample"/><xs:enumeration value="Explicit"/></xs:restriction></xs:simpleType>
-  <xs:complexType name="ChartValueCollectionType"><xs:sequence><xs:element name="ChartValue" type="ChartValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="dataMode" type="ChartDataModeType" use="optional"/></xs:complexType>
+  <xs:simpleType name="ChartDataModeType"><xs:restriction base="xs:string"><xs:enumeration value="Sample"/><xs:enumeration value="Explicit"/><xs:enumeration value="Source"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="ChartValueCollectionType"><xs:sequence><xs:element name="ChartValue" type="ChartValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="dataMode" type="ChartDataModeType" use="optional"/><xs:attribute name="sourceDescription" type="xs:string" use="optional"/></xs:complexType>
 
 )XSD";
     output += "  <xs:simpleType name=\"ChartTrendlineApproximationDegreeType\"><xs:restriction base=\"xs:int\"><xs:minInclusive value=\"1\"/></xs:restriction></xs:simpleType>\n";
