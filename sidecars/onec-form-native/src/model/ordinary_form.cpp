@@ -1706,6 +1706,15 @@ std::optional<TypeDomainPatternValue> effective_input_type(
     return type ? std::optional{*type} : std::nullopt;
 }
 
+bool supports_string_input_property(const TypeDomainPatternValue& type, std::string_view property) {
+    if (type.entries.size() == 1) return type.entries.front().term == TypeDomainTerm::string;
+    if (type.entries.size() != 2 || property == "Mask") return false;
+    const auto object = std::ranges::find(type.entries, TypeDomainTerm::object, &TypeDomainEntry::term);
+    const auto string = std::ranges::find(type.entries, TypeDomainTerm::string, &TypeDomainEntry::term);
+    return object != type.entries.end() && string != type.entries.end() && object->type_uuid &&
+        canonical_nonzero_uuid(object->type_uuid->canonical);
+}
+
 bool table_tree_property_available(const OrdinaryFormDocument& document, const ControlNode& control) {
     const auto type = control.data_path ? document.resolve_data_path_type(*control.data_path) : std::nullopt;
     TypeDomainEntry expected;
@@ -2155,7 +2164,8 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if (is_string_input_property(*descriptor) ||
             (control.kind() == ControlKind::input_field && descriptor->api_name == "TypeRestriction")) {
             const auto type = effective_input_type(*this, control);
-            if (!type || type->entries.size() != 1)
+            if (!type || (descriptor->api_name == "TypeRestriction" ? type->entries.size() != 1 :
+                !supports_string_input_property(*type, descriptor->api_name)))
                 return {PropertyReadStatus::unsupported_surface, std::nullopt};
             const auto term = type->entries.front().term;
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
@@ -2168,8 +2178,6 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
                 if (!control.properties().contains(property))
                     return {PropertyReadStatus::computed_value, PropertyValue{TypeDomainPatternValue{}}};
             } else {
-                if (term != TypeDomainTerm::string)
-                    return {PropertyReadStatus::unsupported_surface, std::nullopt};
                 if (descriptor->api_name == "Mask" && !control.properties().contains(property))
                     return {PropertyReadStatus::proven_default, PropertyValue{std::string{}}};
             }
@@ -2629,7 +2637,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (is_string_input_property(*descriptor)) {
             const auto type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
-            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string ||
+            if (!type || !supports_string_input_property(*type, descriptor->api_name) ||
                 (list_mode && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
                 return PropertyMutationStatus::unsupported_surface;
         }
@@ -3169,7 +3177,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (is_string_input_property(*descriptor)) {
             const auto type = effective_input_type(*this, control);
             const auto* list_mode = control.properties().find(PropertyId::from_name("ListChoiceMode"));
-            if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::string ||
+            if (!type || !supports_string_input_property(*type, descriptor->api_name) ||
                 (list_mode && std::get_if<bool>(&list_mode->value) && std::get<bool>(list_mode->value)))
                 return PropertyMutationStatus::unsupported_surface;
         }
@@ -3911,11 +3919,15 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     add_violation(report, InvariantCode::invalid_property, control.id, {},
                         "InputField reference extension is inapplicable in active list-choice mode");
                 const auto type = effective_input_type(*this, control);
-                if (!type || type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::object ||
-                    !type->entries.front().type_uuid ||
-                    !canonical_nonzero_uuid(type->entries.front().type_uuid->canonical))
+                const auto object = type ? std::ranges::find(type->entries, TypeDomainTerm::object,
+                    &TypeDomainEntry::term) : std::vector<TypeDomainEntry>::const_iterator{};
+                if (!type || type->entries.empty() || type->entries.size() > 2 || object == type->entries.end() ||
+                    !object->type_uuid || !canonical_nonzero_uuid(object->type_uuid->canonical) ||
+                    !std::ranges::all_of(type->entries, [&](const auto& entry) {
+                        return &entry == &*object || entry.term == TypeDomainTerm::string;
+                    }))
                     add_violation(report, InvariantCode::invalid_property, control.id, {},
-                        "InputField reference extension requires one concrete nominal object type");
+                        "InputField reference extension requires one concrete nominal object with an optional String context");
             }
             const auto* type_link_item = control.properties().find(PropertyId::from_name("TypeLinkItem"));
             const auto item_value = type_link_item != nullptr && std::holds_alternative<std::int64_t>(type_link_item->value)

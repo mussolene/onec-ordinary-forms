@@ -22847,6 +22847,122 @@ void test_input_field_reference_extensions_round_trip_and_guards() {
     }
 }
 
+void test_input_field_composite_reference_domains_round_trip_and_guards() {
+    constexpr std::array string_entries{
+        R"XML(<Entry term="string"/>)XML", R"XML(<Entry term="string" length="25"/>)XML",
+        R"XML(<Entry term="string" length="25" variable="false"/>)XML",
+        R"XML(<Entry term="string" length="100"/>)XML"};
+    constexpr std::array<std::string_view, 4> scalar_flags{"", "MultiLine", "PasswordMode", "ExtendedEdit"};
+    constexpr std::array<std::size_t, 4> scalar_slots{0, 3, 5, 6};
+    constexpr std::array<std::size_t, 4> payload_slots{0, 26, 5, 38};
+    constexpr std::array<unsigned, 4> lengths{0, 25, 25, 100};
+    for (const auto& extension : model::metamodel::input_field_extensions) {
+        for (std::size_t variant = 0; variant < string_entries.size(); ++variant) {
+            for (const bool string_first : {false, true}) {
+                const std::string object = R"XML(<Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/>)XML";
+                const std::string string = string_entries[variant];
+                const auto xml = std::string(R"XML(<Form id="1" name="Composite" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Composite"><)XML") +
+                    std::string(extension.xml_name) + "/><ValueType>" + (string_first ? string + object : object + string) +
+                    "</ValueType><Position/>" + (variant == 0 ? std::string{} :
+                        "<" + std::string(scalar_flags[variant]) + ">true</" + std::string(scalar_flags[variant]) + ">") +
+                    "</InputField></ChildItems></Form>";
+                const auto parsed = source::parse_form_xml(xml);
+                expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+                const auto encoded = form_stream::encode_document(parsed.value());
+                expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+                const auto& info = encoded.value().items[1].items[2].items[2].items[1].items[2];
+                expect(info.items[3].items[0].atom == "2" &&
+                    info.items[3].items[1].items[0].atom == "9a7643d2-19e9-45e2-8893-280bc9195a97" &&
+                    info.items[3].items[2].items[0].atom == extension.guid &&
+                    info.items[2].items[0].items[14].atom == "0" && info.items[2].items[0].items[15].atom == "0",
+                    "Composite writer must retain String qualifiers in the type and emit scalar then reference contexts with reference cache");
+                if (variant != 0)
+                    expect(info.items[3].items[1].items[1].items[scalar_slots[variant]].atom == "1" &&
+                        info.items[2].items[0].items[payload_slots[variant]].atom == "0",
+                        "Composite scalar definitions must be stored in their own context independently of the reference cache");
+                const auto decoded = form_stream::decode_document(encoded.value(), "Composite");
+                expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                    decoded ? "Composite reference cache must decode completely" : decoded.diagnostics().front().message);
+                const auto named = source::serialize_form_xml(decoded.value());
+                expect(named.ok(), named ? "" : named.diagnostics().front().message);
+                const auto reparsed = source::parse_form_xml(named.value());
+                expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+                const auto rebuilt = form_stream::encode_document(reparsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                    "Composite named XML must preserve both type entry orders, qualifiers, family and scalar definitions");
+                if (variant != 0) {
+                    const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control, model::ObjectId{2}};
+                    const auto property = model::PropertyId::from_name(scalar_flags[variant]);
+                    expect(decoded.value().get_prop_val(owner, property).value == model::PropertyValue{true},
+                        "Composite scalar property API must read its named definition");
+                    auto mutable_model = decoded.value();
+                    expect(mutable_model.set_prop_val(owner, property, false) == model::PropertyMutationStatus::applied &&
+                        mutable_model.reset_prop_val(owner, property) == model::PropertyMutationStatus::reset,
+                        "Composite scalar property API must support assignment and reset");
+                }
+                auto string_cache = encoded.value();
+                auto& string_info = string_cache.items[1].items[2].items[2].items[1].items[2];
+                string_info.items[2].items[0].items[14] = list_stream::ListValue::raw_atom(std::to_string(lengths[variant]));
+                if (variant != 0) string_info.items[2].items[0].items[payload_slots[variant]] = list_stream::ListValue::raw_atom("1");
+                const auto string_decoded = form_stream::decode_document(string_cache, "Composite");
+                expect(string_decoded.ok() && string_decoded.value().reconstruction_complete(),
+                    "The complete native String cache profile must decode without losing scalar definitions");
+                const auto string_xml = source::serialize_form_xml(string_decoded.value());
+                expect(string_xml.ok() && string_xml.value() == named.value(),
+                    "Reference and String caches must expose the same named composite definition");
+                for (unsigned mutation = 0; mutation < 10; ++mutation) {
+                    auto corrupt = encoded.value();
+                    auto& bad = corrupt.items[1].items[2].items[2].items[1].items[2];
+                    auto& pairs = bad.items[3];
+                    if (mutation == 0) pairs.items[0] = list_stream::ListValue::raw_atom("1");
+                    else if (mutation == 1) pairs.items[2].items[1].items[0] = list_stream::ListValue::raw_atom("99");
+                    else if (mutation == 2) pairs.items[1].items[1].items[4] = list_stream::ListValue::string_atom("mask");
+                    else if (mutation == 3 || mutation == 4) {
+                        pairs.items.push_back(pairs.items[mutation == 3 ? 1 : 2]);
+                        pairs.items[0] = list_stream::ListValue::raw_atom("3");
+                    } else if (mutation == 5) pairs.items[2].items[0] = list_stream::ListValue::raw_atom("33333333-3333-3333-3333-333333333333");
+                    else if (mutation == 6) bad.items[2].items[0].items[38] = list_stream::ListValue::raw_atom("9");
+                    else if (mutation == 7) bad.items[2].items[0].items[14] = list_stream::ListValue::raw_atom("7");
+                    else if (mutation == 8) {
+                        bad.items[2].items[0].items[14] = list_stream::ListValue::raw_atom(std::to_string(lengths[variant]));
+                        if (variant == 0) bad.items[2].items[0].items[26] = list_stream::ListValue::raw_atom("1");
+                    } else pairs.items[1].items[1].items[3] = list_stream::ListValue::raw_atom("9");
+                    expect(!form_stream::decode_document(corrupt, "Composite"),
+                        "Composite contexts must reject wrong counts, unknown or duplicate contexts, masks, invalid flags and mixed cache profiles");
+                }
+                if (variant == 0) {
+                    auto runtime_list = encoded.value();
+                    auto& list_info = runtime_list.items[1].items[2].items[2].items[1].items[2];
+                    list_info.items[9] = list_stream::ListValue::raw_atom("1");
+                    list_info.items[2].items[0].items[6] = list_stream::ListValue::raw_atom("1");
+                    list_info.items[3].items.push_back(list_stream::parse("{763308b0-510d-4302-8689-9d9f2a562598,{0}}"));
+                    list_info.items[3].items[0] = list_stream::ListValue::raw_atom("3");
+                    const auto list_decoded = form_stream::decode_document(runtime_list, "Composite");
+                    expect(list_decoded.ok() && list_decoded.value().reconstruction_complete() &&
+                        !std::get<model::InputFieldPayload>(list_decoded.value().find_control(model::ObjectId{2})->payload).extension,
+                        "Exact default scalar, reference and list contexts must map to the active generic list-choice model");
+                    const auto list_encoded = form_stream::encode_document(list_decoded.value());
+                    expect(list_encoded.ok() && list_stream::dump_compact(list_encoded.value().items[1].items[2].items[2].items[1].items[2].items[3]) ==
+                        "{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}",
+                        "Composite list-choice writer must emit its single active context through the primary codec");
+                    for (const auto flag : {"MultiLine", "PasswordMode", "ExtendedEdit"}) {
+                        auto authored = list_decoded.value();
+                        auto* field = const_cast<model::ControlNode*>(authored.find_control(model::ObjectId{2}));
+                        field->properties().set_explicit(model::PropertyId::from_name(flag), true);
+                        const auto authored_xml = source::serialize_form_xml(authored);
+                        expect(authored_xml.ok(), authored_xml ? "" : authored_xml.diagnostics().front().message);
+                        const auto authored_source = source::parse_form_xml(authored_xml.value());
+                        expect(authored_source.ok(), authored_source ? "" : authored_source.diagnostics().front().message);
+                        const auto rejected = form_stream::encode_document(authored_source.value());
+                        expect(!rejected && rejected.diagnostics().front().code == "OOF1122",
+                            "Authored public XML with nondefault composite list-choice definitions must fail instead of disappearing");
+                    }
+                }
+            }
+        }
+    }
+}
+
 void test_catalog_list_form_extension_named_round_trip_and_guards() {
     std::string xml = R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><Height>400</Height><Width>600</Width><MainAttribute attributeId="0"/><CatalogListFormExtension/><Attributes><Attribute id="0" name="CatalogList"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute><Attribute id="30" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="31" name="Choices"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
     const std::array kinds{"Button", "LabelDecoration", "InputField", "CheckBox", "ChoiceField",
@@ -23522,6 +23638,7 @@ int main() {
         test_catalog_item_form_extension_named_round_trip_and_guards();
         test_catalog_list_form_extension_named_round_trip_and_guards();
         test_input_field_reference_extensions_round_trip_and_guards();
+        test_input_field_composite_reference_domains_round_trip_and_guards();
         test_embedded_chart_dynamic_back_color();
         test_pivot_chart_types();
         test_complex_chart_back_color_pairs();

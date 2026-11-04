@@ -2211,7 +2211,7 @@ const list_stream::ListValue& input_field_flag_value(
 
 using InputFieldFlagValues = std::array<bool, input_field_flag_mappings.size()>;
 
-enum class InputFieldPairMode { payload_only, require_matching_pair };
+enum class InputFieldPairMode { payload_only, require_matching_pair, scalar_definition };
 
 bool is_single_numeric_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::numeric;
@@ -2243,8 +2243,12 @@ bool is_single_track_bar_type_domain(const model::TypeDomainPatternValue& value)
 }
 
 bool is_concrete_input_reference_type(const model::TypeDomainPatternValue& type) {
-    return type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::object &&
-        type.entries.front().type_uuid && type.entries.front().type_uuid->canonical != null_uuid;
+    if (type.entries.empty() || type.entries.size() > 2) return false;
+    const auto object = std::ranges::find(type.entries, model::TypeDomainTerm::object, &model::TypeDomainEntry::term);
+    if (object == type.entries.end() || !object->type_uuid || object->type_uuid->canonical == null_uuid) return false;
+    return std::ranges::all_of(type.entries, [&](const auto& entry) {
+        return &entry == &*object || entry.term == model::TypeDomainTerm::string;
+    });
 }
 
 LV input_field_reference_pair(model::InputFieldExtensionKind kind) {
@@ -2263,6 +2267,17 @@ LV input_field_reference_pair(model::InputFieldExtensionKind kind) {
             settings = parse_constant("{0,0,2,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
     }
     return list({raw(std::string(descriptor->guid)), std::move(settings)});
+}
+
+LV canonical_input_field_scalar_pair(const InputFieldFlagValues& flags, std::string_view mask) {
+    auto pair = parse_constant("{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{\"U\"},{\"U\"},0,\"\",0,0}}");
+    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+        const auto& mapping = input_field_flag_mappings[index];
+        if (mapping.paired_slot != no_paired_slot)
+            pair.items[1].items[mapping.paired_slot] = raw(flags[index] != mapping.inverted ? "1" : "0");
+    }
+    pair.items[1].items[4] = string_value(std::string(mask));
+    return pair;
 }
 
 struct InputFieldTextValues {
@@ -2284,8 +2299,10 @@ InputFieldFlagValues decode_input_field_flags(
     static_cast<void>(bool_atom(info.items[2].items[0].items[12],
         child_path(child_path(child_path(path, 2), 0), 12)));
     const auto paired_path = child_path(path, 3);
-    if (pair_mode == InputFieldPairMode::require_matching_pair) {
-        require_arity(info.items[3], 2, paired_path);
+    if (pair_mode != InputFieldPairMode::payload_only) {
+        require_list(info.items[3], paired_path);
+        if (info.items[3].items.size() < 2)
+            fail("OOF1102", paired_path, "scalar InputField context", "absent", "InputField scalar context is absent");
         require_arity(info.items[3].items[1], 2, child_path(paired_path, 1));
         require_arity(info.items[3].items[1].items[1], 7, child_path(child_path(paired_path, 1), 1));
     }
@@ -2297,11 +2314,12 @@ InputFieldFlagValues decode_input_field_flags(
                 child_path(child_path(child_path(child_path(path, 2), 0), 0), mapping.slot) :
                 child_path(child_path(child_path(path, 2), 0), mapping.slot);
         flags[index] = bool_atom(input_field_flag_value(info, mapping), flag_path) != mapping.inverted;
-        if (pair_mode == InputFieldPairMode::require_matching_pair && mapping.paired_slot != no_paired_slot) {
+        if (pair_mode != InputFieldPairMode::payload_only && mapping.paired_slot != no_paired_slot) {
             const auto paired_value = bool_atom(
                 info.items[3].items[1].items[1].items[mapping.paired_slot],
                 child_path(child_path(child_path(child_path(path, 3), 1), 1), mapping.paired_slot));
-            if (paired_value != flags[index]) {
+            if (pair_mode == InputFieldPairMode::scalar_definition) flags[index] = paired_value;
+            else if (paired_value != flags[index]) {
                 fail("OOF1122", flag_path, "matching paired InputField Boolean", paired_value ? "1" : "0",
                     "InputField payload and paired control-info flags disagree");
             }
@@ -2322,7 +2340,7 @@ LV canonical_input_field_info(
     const model::ShortcutValue& shortcut = {},
     std::optional<model::InputFieldExtensionKind> extension = {}) {
     auto value = parse_constant(R"OOF(
-{9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
+{9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{0},{0},0,1,0,{1,0},0}
 )OOF");
     if (value.items.size() != 10 || value.items[2].items.size() != 1 ||
         value.items[2].items[0].items.size() != 46 ||
@@ -2335,12 +2353,26 @@ LV canonical_input_field_info(
         (is_concrete_input_reference_type(type) && !extension && !list_choice_mode))
         fail("OOF1122", "$/InputField", "one active reference extension or generic list-choice mode", "incompatible modes",
             "Reference extension is inapplicable in list-choice mode");
+    const bool composite_reference = type.entries.size() == 2 && is_concrete_input_reference_type(type);
+    if (composite_reference && list_choice_mode) {
+        const auto string = std::ranges::find(type.entries, model::TypeDomainTerm::string, &model::TypeDomainEntry::term);
+        if (string->string != model::LengthQualifiers{})
+            fail("OOF1122", "$/InputField/ValueType", "default String qualifiers in list-choice mode", "nondefault qualifiers",
+                "Composite list-choice String qualifiers require independent native proof");
+        for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index)
+            if (input_field_flag_mappings[index].paired_slot != no_paired_slot && flags[index])
+                fail("OOF1122", "$/InputField/ListChoiceMode", "default inactive scalar settings", "nondefault settings",
+                    "Composite list-choice mode cannot discard named scalar definitions");
+    }
     value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
+    value.items[3] = list({raw("1"), canonical_input_field_scalar_pair(flags, text_values.mask)});
     if (extension) {
         if (!is_concrete_input_reference_type(type))
             fail("OOF1122", "$/InputField/ValueType", "one concrete object type UUID", "incompatible type",
                 "Reference InputField extension requires its concrete nominal type");
-        value.items[3] = list({raw("1"), input_field_reference_pair(*extension)});
+        value.items[3] = composite_reference
+            ? list({raw("2"), canonical_input_field_scalar_pair(flags, text_values.mask), input_field_reference_pair(*extension)})
+            : list({raw("1"), input_field_reference_pair(*extension)});
     }
     encode_common_control_base(value.items[2].items[0].items[0],
         CommonControlBaseFields{enabled, text_values.tool_tip,
@@ -2372,14 +2404,12 @@ LV canonical_input_field_info(
         const bool encoded = flags[index] != mapping.inverted;
         input_field_flag_value(value, mapping) = raw(encoded ? "1" : "0");
         if (mapping.name == "TextEdit") value.items[2].items[0].items[12] = raw(encoded ? "1" : "0");
-        if (mapping.paired_slot != no_paired_slot && !extension) {
-            value.items[3].items[1].items[1].items[mapping.paired_slot] = raw(encoded ? "1" : "0");
-        }
+        if (composite_reference && mapping.paired_slot != no_paired_slot)
+            input_field_flag_value(value, mapping) = raw("0");
     }
     if (!text_values.mask.empty()) {
         value.items[2].items[0].items[14] = raw("0");
         value.items[2].items[0].items[21] = string_value(text_values.mask);
-        value.items[3].items[1].items[1].items[4] = string_value(text_values.mask);
     }
     if (bool_atom(value.items[9], "$/InputField/ListChoiceMode")) {
         const auto list_choice = parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}");
@@ -10365,18 +10395,35 @@ DecodedControl decode_input_field(
     std::optional<model::InputFieldExtensionKind> input_extension;
     const auto& pairs = info.items[3];
     require_list(pairs, child_path(info_path, 3));
-    if (pairs.items.size() > 1) {
-        const auto& pair = pairs.items[1];
-        require_list(pair, child_path(child_path(info_path, 3), 1));
-        if (!pair.items.empty()) {
-            const auto guid = raw_atom(pair.items[0], info_path);
+    if (pairs.items.empty())
+        fail("OOF1102", child_path(info_path, 3), "counted InputField contexts", "empty", "InputField context count is absent");
+    require_raw_constant(pairs.items[0], std::to_string(pairs.items.size() - 1), child_path(child_path(info_path, 3), 0));
+    bool scalar_pair_present = false;
+    bool list_pair_present = false;
+    for (std::size_t index = 1; index < pairs.items.size(); ++index) {
+        const auto& pair = pairs.items[index];
+        const auto pair_path = child_path(child_path(info_path, 3), index);
+        require_arity(pair, 2, pair_path);
+        const auto guid = uuid_atom(pair.items[0], child_path(pair_path, 0)).canonical;
+        if (guid == "9a7643d2-19e9-45e2-8893-280bc9195a97") {
+            if (scalar_pair_present)
+                fail("OOF1122", pair_path, "one scalar context", "duplicate", "InputField scalar context is duplicated");
+            scalar_pair_present = true;
+        } else if (guid == "763308b0-510d-4302-8689-9d9f2a562598") {
+            if (list_pair_present)
+                fail("OOF1122", pair_path, "one list-choice context", "duplicate", "InputField list-choice context is duplicated");
+            list_pair_present = true;
+            require_exact(pair, parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}"), pair_path,
+                "InputField list-choice context settings are unsupported");
+        } else {
             const auto descriptor = std::ranges::find(model::metamodel::input_field_extensions, guid,
                 &model::metamodel::InputFieldExtensionDescriptor::guid);
-            if (descriptor != std::end(model::metamodel::input_field_extensions)) {
-                input_extension = descriptor->kind;
-                require_exact(pair, input_field_reference_pair(*input_extension), child_path(child_path(info_path, 3), 1),
-                    "Reference InputField extension settings are not represented by the named model");
-            }
+            if (descriptor == std::end(model::metamodel::input_field_extensions) || input_extension)
+                fail("OOF1122", pair_path, "one declared reference context", guid,
+                    "InputField context is unknown or duplicated");
+            input_extension = descriptor->kind;
+            require_exact(pair, input_field_reference_pair(*input_extension), pair_path,
+                "Reference InputField extension settings are not represented by the named model");
         }
     }
     const bool supported_type = is_single_string_type_domain(control_type) || is_supported_input_numeric_type_domain(control_type) ||
@@ -10493,20 +10540,34 @@ DecodedControl decode_input_field(
             std::to_string(incomplete_choice_mode), "InputField.IncompleteChoiceMode storage value is unsupported");
     }
     const bool inactive_reference_pair = input_extension.has_value() && list_choice_mode;
-    if (input_extension) {
-        const auto expected_pairs = list_choice_mode
-            ? list({raw("2"), input_field_reference_pair(*input_extension),
-                parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}")})
-            : list({raw("1"), input_field_reference_pair(*input_extension)});
-        require_exact(info.items[3], expected_pairs, child_path(info_path, 3),
-            "Reference InputField requires its exact named extension and optional list choice");
-    } else if (list_choice_mode) {
-        require_exact(info.items[3], parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}"),
-            child_path(info_path, 3), "InputField list choice record is unsupported");
-    }
-    if (list_choice_mode) input_extension.reset();
+    const bool composite_reference = control_type.entries.size() == 2 && is_concrete_input_reference_type(control_type);
     const auto input_field_flags = decode_input_field_flags(info, info_path,
-        list_choice_mode || input_extension ? InputFieldPairMode::payload_only : InputFieldPairMode::require_matching_pair);
+        composite_reference && scalar_pair_present && !list_choice_mode ? InputFieldPairMode::scalar_definition :
+            scalar_pair_present ? InputFieldPairMode::require_matching_pair : InputFieldPairMode::payload_only);
+    if (composite_reference) {
+        const auto string = std::ranges::find(control_type.entries, model::TypeDomainTerm::string, &model::TypeDomainEntry::term);
+        if (integer_atom<std::uint32_t>(payload.items[15], child_path(payload_path, 15)) != 0)
+            fail("OOF1122", payload_path, "zero composite input precision cache", "nonzero precision",
+                "Composite InputField cache precision is unsupported");
+        bool reference_cache = stored_length == 0;
+        bool string_cache = stored_length == string->string.length;
+        for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+            const auto& mapping = input_field_flag_mappings[index];
+            if (mapping.paired_slot == no_paired_slot) continue;
+            const bool cached = bool_atom(input_field_flag_value(info, mapping), payload_path);
+            reference_cache = reference_cache && !cached;
+            string_cache = string_cache && cached == input_field_flags[index];
+            if (list_choice_mode && input_field_flags[index])
+                fail("OOF1122", info_path, "default inactive scalar settings", "nondefault settings",
+                    "Composite list-choice mode cannot discard named scalar definitions");
+        }
+        if (list_choice_mode && string->string != model::LengthQualifiers{})
+            fail("OOF1122", info_path, "default String qualifiers in list-choice mode", "nondefault qualifiers",
+                "Composite list-choice String qualifiers require independent native proof");
+        if (!reference_cache && !string_cache)
+            fail("OOF1122", payload_path, "consistent reference or String editor cache", "mixed cache fields",
+                "Composite InputField cache fields describe incompatible editors");
+    }
     const InputFieldTextValues text_values{tool_tip, format, mask};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height, choice_list_width,
         incomplete_choice_mode};
@@ -10526,8 +10587,30 @@ DecodedControl decode_input_field(
                 fail("OOF1114", info_path, "matching InputField bound copies", {}, "InputField bound copies differ");
         }
     }
+    std::vector<LV> expected_contexts{raw("0")};
+    if ((!input_extension && !list_choice_mode) || (input_extension && composite_reference)) {
+        auto scalar_pair = canonical_input_field_scalar_pair(input_field_flags, mask);
+        if (is_supported_input_numeric_type_domain(control_type) && !list_choice_mode) {
+            scalar_pair.items[1].items[1] = payload.items[19];
+            scalar_pair.items[1].items[2] = payload.items[20];
+        }
+        expected_contexts.push_back(std::move(scalar_pair));
+    }
+    if (input_extension) expected_contexts.push_back(input_field_reference_pair(*input_extension));
+    if (list_choice_mode)
+        expected_contexts.push_back(parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}"));
+    expected_contexts[0] = raw(std::to_string(expected_contexts.size() - 1));
+    require_exact(info.items[3], list(std::move(expected_contexts)), child_path(info_path, 3),
+        "InputField contexts must exactly match their named type, flags, mask, and active mode");
+    if (list_choice_mode) input_extension.reset();
     LV normalized_info = info;
     normalized_info.items[2].items[0].items[12] = raw(bool_atom(info.items[5], child_path(info_path, 5)) ? "1" : "0");
+    if (composite_reference) {
+        normalized_info.items[2].items[0].items[14] = raw("0");
+        normalized_info.items[2].items[0].items[15] = raw("0");
+        for (const auto& mapping : input_field_flag_mappings)
+            if (mapping.paired_slot != no_paired_slot) input_field_flag_value(normalized_info, mapping) = raw("0");
+    }
     if (inactive_reference_pair)
         normalized_info.items[3] = parse_constant("{1,{763308b0-510d-4302-8689-9d9f2a562598,{0}}}");
     normalized_info.items[7] = raw("0");
