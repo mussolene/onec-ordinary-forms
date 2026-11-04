@@ -2256,6 +2256,8 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (control.kind() == ControlKind::pivot_chart &&
             (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
             return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
+        if (control.kind() == ControlKind::calendar_field && descriptor->api_name == "SelectedDates")
+            return PropertyMutationStatus::read_only;
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
@@ -2769,6 +2771,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (control.kind() == ControlKind::pivot_chart &&
             (descriptor->api_name == "DataSource" || descriptor->api_name == "Fields"))
             return descriptor->api_name == "Fields" ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
+        if (control.kind() == ControlKind::calendar_field && descriptor->api_name == "SelectedDates")
+            return PropertyMutationStatus::read_only;
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||

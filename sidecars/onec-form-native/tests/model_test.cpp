@@ -5223,6 +5223,32 @@ void test_control_border_and_calendar_selection_descriptors() {
             selected_dates->default_value.kind == DefaultKind::none &&
             selected_dates->value_codec == ValueCodec::unclassified,
         "CalendarField SelectedDates must remain a runtime-only unclassified collection without a default");
+    Form form; form.id = ObjectId{1}; form.name = "CalendarCollectionBoundary";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i)
+        document.add_control(ControlNode{ObjectId{100 + i}, "Calendar" + std::to_string(i), CalendarFieldPayload{}});
+    const auto before_xml = oof::source::serialize_form_xml(document);
+    const auto before_bin = oof::save_form_bin(document);
+    expect(before_xml.ok() && before_bin.ok(), "calendar collection boundary fixture must serialize");
+    const auto property = PropertyId::from_name("SelectedDates");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface,
+            "unfinished live collection getter must remain explicit");
+        for (const PropertyValue& value : {PropertyValue{UndefinedValue{}}, PropertyValue{ArrayValue{}},
+                PropertyValue{DateValue{"2026-11-06T12:34:56"}}})
+            expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::read_only,
+                "SelectedDates assignment must reject replacement independently of its value type");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::read_only &&
+            !document.find_control(owner.id)->properties().contains(property),
+            "SelectedDates reset cannot replace the collection or create a stored shadow");
+    }
+    const auto after_xml = oof::source::serialize_form_xml(document);
+    const auto after_bin = oof::save_form_bin(document);
+    expect(after_xml.ok() && after_xml.value() == before_xml.value() &&
+        after_bin.ok() && after_bin.value() == before_bin.value(),
+        "rejected collection replacement must preserve complete XML and BIN");
 }
 
 void test_form_item_collections() {
