@@ -12223,11 +12223,40 @@ LV encode_table(
         list({raw("0")})});
 }
 
+std::size_t form_extension_ordinal(const model::PropertySet& properties, std::string_view name,
+    std::string_view path) {
+    const auto* descriptor = model::metamodel::find_form_extension_property(
+        model::FormExtensionKind::catalog_item, name);
+    if (!descriptor || descriptor->enumeration_type.empty())
+        fail("OOF1122", std::string(path), "declared form-extension enumeration", std::string(name),
+            "Form extension enumeration descriptor is unavailable");
+    const auto default_separator = descriptor->default_value.canonical.find('.');
+    if (descriptor->default_value.kind != model::metamodel::DefaultKind::enumeration ||
+        default_separator == std::string_view::npos ||
+        descriptor->default_value.canonical.substr(0, default_separator) != descriptor->enumeration_type)
+        fail("OOF1122", std::string(path), "enumeration descriptor default", "unavailable",
+            "Form extension enumeration default is unavailable");
+    std::string_view member = descriptor->default_value.canonical.substr(default_separator + 1);
+    if (const auto* entry = properties.find(descriptor->id)) {
+        const auto* enumeration = std::get_if<model::EnumerationValue>(&entry->value);
+        if (!enumeration || enumeration->type_name != descriptor->enumeration_type)
+            fail("OOF1122", std::string(path), std::string(descriptor->enumeration_type),
+                "different value type", "Form extension enumeration has the wrong type");
+        member = enumeration->member;
+    }
+    const auto found = std::ranges::find(descriptor->enumeration_members, member);
+    if (found == descriptor->enumeration_members.end())
+        fail("OOF1122", std::string(path), "declared enumeration member", std::string(member),
+            "Form extension enumeration member is unsupported");
+    return static_cast<std::size_t>(found - descriptor->enumeration_members.begin());
+}
+
 void validate_form_extension_context(const model::OrdinaryFormDocument& document, std::string_view path) {
     if (document.form().main_attribute.id() && !document.form().extension)
         fail("OOF1122", std::string(path), "declared extension for the main object context",
             "absent extension", "MainAttribute context has no supported form extension");
-    if (document.form().extension) {
+    if (!document.form().extension) return;
+    if (*document.form().extension == model::FormExtensionKind::data_processor) {
         const auto* main = document.find_attribute(document.form().main_attribute.id());
         if (!main || main->type.entries.size() != 1 ||
             main->type.entries.front().term != model::TypeDomainTerm::object ||
@@ -12237,7 +12266,25 @@ void validate_form_extension_context(const model::OrdinaryFormDocument& document
         if (main->main.value() || main->stored_data.value())
             fail("OOF1122", std::string(path), "default flags for the main object Attribute",
                 "nondefault flags", "DataProcessorFormExtension main Attribute flags are not supported");
+        return;
     }
+    if (*document.form().extension != model::FormExtensionKind::catalog_item)
+        fail("OOF1122", std::string(path), "declared ordinary-form extension", "unknown extension kind",
+            "Form extension kind is unsupported by the storage codec");
+    const auto* main = document.find_attribute(document.form().main_attribute.id());
+    if (!main || main->type.entries.size() != 1 ||
+        main->type.entries.front().term != model::TypeDomainTerm::object ||
+        !main->type.entries.front().type_uuid ||
+        main->type.entries.front().type_uuid->canonical == null_uuid)
+        fail("OOF1122", std::string(path), "one concrete object Attribute selected by MainAttribute",
+            "missing or incompatible object type", "Form extension requires its concrete object context");
+    if (main->main.value() || main->stored_data.value())
+        fail("OOF1122", std::string(path), "default flags for the main object Attribute",
+            "nondefault flags", "Form extension main Attribute flags must remain false");
+    for (const auto& control : document.collections().controls)
+        if (control.data_path && !control.data_path->members.empty())
+            fail("OOF1122", std::string(path), "root Attribute DataPath without member segments",
+                "member path", "CatalogItemFormExtension does not establish member-path storage");
 }
 
 }  // namespace
@@ -12799,6 +12846,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
 
         std::optional<model::FormExtensionKind> form_extension;
+        model::PropertySet form_extension_properties;
         const auto& extension = payload.items[3];
         require_list(extension, "$/3");
         if (extension.items.empty())
@@ -12808,7 +12856,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (extension_guid == null_uuid) {
             require_exact(extension, parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
                 "$/3", "Absent Form extension must not contain settings");
-        } else {
+        } else if (extension_guid == model::metamodel::data_processor_form_extension.guid) {
             const auto& descriptor = model::metamodel::data_processor_form_extension;
             require_arity(extension, 3, "$/3");
             require_raw_constant(extension.items[0], descriptor.guid, "$/3/0");
@@ -12816,6 +12864,60 @@ Result<model::OrdinaryFormDocument> decode_document(
             require_exact(extension.items[2], parse_constant("{2,0,{0,0},{0},1}"), "$/3/2",
                 "DataProcessorFormExtension contains unsupported nondefault settings");
             form_extension = descriptor.kind;
+        } else if (extension_guid == model::metamodel::catalog_item_form_extension.guid) {
+            const auto& descriptor = model::metamodel::catalog_item_form_extension;
+            require_arity(extension, 3, "$/3");
+            require_raw_constant(extension.items[0], descriptor.guid, "$/3/0");
+            require_raw_constant(extension.items[1], "1", "$/3/1");
+            const auto& settings = extension.items[2];
+            require_arity(settings, 4, "$/3/2");
+            require_raw_constant(settings.items[0], "2", "$/3/2/0");
+            const auto* autonumeration = model::metamodel::find_form_extension_property(
+                model::FormExtensionKind::catalog_item, "Autonumeration");
+            const auto* use_for_folders = model::metamodel::find_form_extension_property(
+                model::FormExtensionKind::catalog_item, "UseForFoldersAndItems");
+            if (!autonumeration || !use_for_folders)
+                fail("OOF1114", "$/3/2", "CatalogItemFormExtension property descriptors", "unavailable",
+                    "CatalogItemFormExtension property descriptors are unavailable");
+            const auto read_ordinal = [](const LV& value, const model::metamodel::PropertyDescriptor& property,
+                std::string_view property_path) {
+                const auto ordinal = integer_atom<std::size_t>(value, property_path);
+                if (ordinal >= property.enumeration_members.size())
+                    fail("OOF1114", std::string(property_path), "declared " + std::string(property.enumeration_type) + " ordinal",
+                        std::to_string(ordinal), "CatalogItemFormExtension enumeration ordinal is unsupported");
+                return ordinal;
+            };
+            const auto default_ordinal = [](const model::metamodel::PropertyDescriptor& property,
+                std::string_view property_path) {
+                const auto separator = property.default_value.canonical.find('.');
+                if (property.default_value.kind != model::metamodel::DefaultKind::enumeration ||
+                    separator == std::string_view::npos ||
+                    property.default_value.canonical.substr(0, separator) != property.enumeration_type)
+                    fail("OOF1114", std::string(property_path), "typed enum descriptor default", "unavailable",
+                        "CatalogItemFormExtension enum default is unavailable");
+                const auto member = property.default_value.canonical.substr(separator + 1);
+                const auto found = std::ranges::find(property.enumeration_members, member);
+                if (found == property.enumeration_members.end())
+                    fail("OOF1114", std::string(property_path), "declared enum default member", std::string(member),
+                        "CatalogItemFormExtension enum default is unsupported");
+                return static_cast<std::size_t>(found - property.enumeration_members.begin());
+            };
+            const auto use_ordinal = read_ordinal(settings.items[1], *use_for_folders, "$/3/2/1");
+            require_exact(settings.items[2], list({raw("0")}), "$/3/2/2",
+                "CatalogItemFormExtension contains unsupported events");
+            const auto auto_ordinal = read_ordinal(settings.items[3], *autonumeration, "$/3/2/3");
+            if (auto_ordinal != default_ordinal(*autonumeration, "$/3/2/3"))
+                form_extension_properties.set_explicit(autonumeration->id,
+                    model::EnumerationValue{std::string(autonumeration->enumeration_type),
+                        std::string(autonumeration->enumeration_members[auto_ordinal])});
+            if (use_ordinal != default_ordinal(*use_for_folders, "$/3/2/1"))
+                form_extension_properties.set_explicit(use_for_folders->id,
+                    model::EnumerationValue{std::string(use_for_folders->enumeration_type),
+                        std::string(use_for_folders->enumeration_members[use_ordinal])});
+            form_extension = descriptor.kind;
+        } else {
+            fail("OOF1106", "$/3/0", "null, DataProcessor, or CatalogItem form extension GUID",
+                extension_guid, "Ordinary-form extension GUID is unsupported");
         }
         const auto form_named_events = decode_form_events(payload.items[4], "$/4");
         const bool auto_title = bool_atom(payload.items[5], "$/5");
@@ -12958,6 +13060,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         model::Form form;
         form.id = model::ObjectId{1};
         form.extension = form_extension;
+        form.extension_properties = std::move(form_extension_properties);
         if (attributes.main_attribute)
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
@@ -14117,9 +14220,23 @@ Result<list_stream::ListValue> encode_document(
         });
         LV encoded_extension = parse_constant("{00000000-0000-0000-0000-000000000000,0}");
         if (document.form().extension) {
-            const auto& descriptor = model::metamodel::data_processor_form_extension;
-            encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
-                parse_constant("{2,0,{0,0},{0},1}")});
+            if (*document.form().extension == model::FormExtensionKind::data_processor) {
+                const auto& descriptor = model::metamodel::data_processor_form_extension;
+                encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
+                    parse_constant("{2,0,{0,0},{0},1}")});
+            } else if (*document.form().extension == model::FormExtensionKind::catalog_item) {
+                const auto use_for_folders = form_extension_ordinal(document.form().extension_properties,
+                    "UseForFoldersAndItems", "$/CatalogItemFormExtension/UseForFoldersAndItems");
+                const auto autonumeration = form_extension_ordinal(document.form().extension_properties,
+                    "Autonumeration", "$/CatalogItemFormExtension/Autonumeration");
+                const auto& descriptor = model::metamodel::catalog_item_form_extension;
+                encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
+                    list({raw("2"), raw(std::to_string(use_for_folders)), list({raw("0")}),
+                        raw(std::to_string(autonumeration))})});
+            } else {
+                fail("OOF1122", "$/3", "declared form extension kind", "unknown extension kind",
+                    "Form extension kind is unsupported by the storage writer");
+            }
         }
         std::vector<LV> context_rows{raw("0")};
         std::size_t context_count = 0;

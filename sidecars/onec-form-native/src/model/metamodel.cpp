@@ -535,6 +535,35 @@ std::vector<PropertyDescriptor> make_form_property_descriptors() {
     return descriptors;
 }
 
+std::vector<PropertyDescriptor> make_form_extension_property_descriptors() {
+    static constexpr std::array autonumeration_members{
+        std::string_view{"Auto"}, std::string_view{"DontUse"}};
+    static constexpr std::array folders_and_items_members{
+        std::string_view{"Items"}, std::string_view{"Folders"}, std::string_view{"FoldersAndItems"}};
+    const auto make_descriptor = [](std::size_t order, std::string_view xml_name,
+        std::string_view api_name, std::u8string_view russian_name,
+        std::u8string_view platform_type, std::string_view enumeration_type,
+        std::span<const std::string_view> members, std::string_view default_value) {
+        PropertyDescriptor descriptor{
+            PropertyId::from_name(api_name), DescriptorOwner::form, PropertySurface::form_extension,
+            ControlKind::panel, order, xml_name, api_name, russian_name, platform_type,
+            ValueKind::enumeration, ValueCodec::enumeration, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable, StorageCodec::root_record,
+            {DefaultKind::enumeration, default_value}};
+        descriptor.enumeration_type = enumeration_type;
+        descriptor.enumeration_members = members;
+        descriptor.extension_kind = FormExtensionKind::catalog_item;
+        return descriptor;
+    };
+    return {
+        make_descriptor(0, "Autonumeration", "Autonumeration", u8"Автонумерация",
+            u8"АвтонумерацияВФорме", "AutonumerationInForm", autonumeration_members, "AutonumerationInForm.Auto"),
+        make_descriptor(1, "UseForFoldersAndItems", "UseForFoldersAndItems",
+            u8"ИспользованиеДляГруппИЭлементов", u8"ИспользованиеГруппИЭлементов",
+            "FoldersAndItemsUse", folders_and_items_members, "FoldersAndItemsUse.Items"),
+    };
+}
+
 std::vector<EventDescriptor> make_form_event_descriptors() {
     return {
 #define OOF_HELP_CONTROL(...)
@@ -1866,6 +1895,7 @@ struct Metamodel::Impl {
     std::vector<PropertyDescriptor> control_extension_properties;
     std::vector<PropertyDescriptor> panel_placement_properties;
     std::vector<PropertyDescriptor> form_properties;
+    std::vector<PropertyDescriptor> form_extension_properties;
     std::vector<EventDescriptor> form_events;
 
     std::unordered_map<std::string_view, const ControlDescriptor*> controls_by_guid;
@@ -1880,6 +1910,7 @@ struct Metamodel::Impl {
         events_by_name;
     std::unordered_map<std::string_view, const PropertyDescriptor*> form_properties_by_name;
     std::unordered_map<PropertyId, const PropertyDescriptor*, PropertyIdHash> form_properties_by_id;
+    std::unordered_map<FormExtensionKind, std::vector<PropertyDescriptor>> form_extension_properties_by_kind;
     std::unordered_map<std::string_view, const EventDescriptor*> form_events_by_name;
     MetamodelCoverage coverage;
 
@@ -1951,6 +1982,7 @@ struct Metamodel::Impl {
         control_extension_properties = make_control_extension_property_descriptors();
         panel_placement_properties = make_panel_placement_property_descriptors();
         form_properties = make_form_property_descriptors();
+        form_extension_properties = make_form_extension_property_descriptors();
         form_events = make_form_event_descriptors();
         constexpr std::array form_event_storage{
             std::pair{"BeforeOpen", 70000U}, std::pair{"OnOpen", 70001U},
@@ -2018,6 +2050,14 @@ struct Metamodel::Impl {
         sort_and_validate_order(control_extension_properties, "Form control extension");
         sort_and_validate_order(panel_placement_properties, "Panel control extension");
         sort_and_validate_order(form_properties, "Form properties");
+        std::ranges::sort(form_extension_properties, [](const auto& left, const auto& right) {
+            return std::tie(left.extension_kind, left.order) < std::tie(right.extension_kind, right.order);
+        });
+        for (std::size_t index = 1; index < form_extension_properties.size(); ++index) {
+            if (form_extension_properties[index - 1].extension_kind == form_extension_properties[index].extension_kind &&
+                form_extension_properties[index - 1].order == form_extension_properties[index].order)
+                throw std::logic_error("duplicate ordinary-form help order for Form extension");
+        }
         sort_and_validate_order(form_events, "Form events");
 
         for (const auto& descriptor : controls) {
@@ -2163,6 +2203,13 @@ struct Metamodel::Impl {
             index_property(form_properties_by_name, form_properties_by_id, descriptor);
             account_property(descriptor);
         }
+        for (const auto& descriptor : form_extension_properties) {
+            if (!descriptor.extension_kind || *descriptor.extension_kind != FormExtensionKind::catalog_item ||
+                descriptor.enumeration_type.empty() || descriptor.enumeration_members.empty())
+                throw std::logic_error("incomplete CatalogItemFormExtension property descriptor");
+            form_extension_properties_by_kind[*descriptor.extension_kind].push_back(descriptor);
+            account_property(descriptor);
+        }
         for (const auto& descriptor : form_events) {
             index_event(form_events_by_name, descriptor);
             account_event(descriptor);
@@ -2194,6 +2241,17 @@ std::span<const ControlDescriptor> Metamodel::controls() const noexcept {
 
 std::span<const PropertyDescriptor> Metamodel::form_properties() const noexcept {
     return impl_->form_properties;
+}
+
+std::span<const PropertyDescriptor> Metamodel::form_extension_properties() const noexcept {
+    return impl_->form_extension_properties;
+}
+
+std::span<const PropertyDescriptor> Metamodel::form_extension_properties(FormExtensionKind kind) const noexcept {
+    const auto found = impl_->form_extension_properties_by_kind.find(kind);
+    return found == impl_->form_extension_properties_by_kind.end()
+        ? std::span<const PropertyDescriptor>{}
+        : std::span<const PropertyDescriptor>{found->second};
 }
 
 std::span<const EventDescriptor> Metamodel::form_events() const noexcept {
@@ -2278,6 +2336,18 @@ const PropertyDescriptor* Metamodel::form_property(PropertyId id) const noexcept
     return found == impl_->form_properties_by_id.end() ? nullptr : found->second;
 }
 
+const PropertyDescriptor* Metamodel::form_extension_property(FormExtensionKind kind, std::string_view name) const noexcept {
+    const auto properties = form_extension_properties(kind);
+    const auto found = std::ranges::find(properties, name, &PropertyDescriptor::api_name);
+    return found == properties.end() ? nullptr : &*found;
+}
+
+const PropertyDescriptor* Metamodel::form_extension_property(FormExtensionKind kind, PropertyId id) const noexcept {
+    const auto properties = form_extension_properties(kind);
+    const auto found = std::ranges::find(properties, id, &PropertyDescriptor::id);
+    return found == properties.end() ? nullptr : &*found;
+}
+
 const EventDescriptor* Metamodel::event(ControlKind kind, std::string_view name) const noexcept {
     const auto index = static_cast<std::size_t>(kind);
     if (index >= control_kind_count) {
@@ -2306,6 +2376,10 @@ std::span<const ControlDescriptor> control_descriptors() noexcept {
 
 std::span<const PropertyDescriptor> form_property_descriptors() noexcept {
     return Metamodel::instance().form_properties();
+}
+
+std::span<const PropertyDescriptor> form_extension_property_descriptors() noexcept {
+    return Metamodel::instance().form_extension_properties();
 }
 
 std::span<const EventDescriptor> form_event_descriptors() noexcept {
@@ -2723,6 +2797,14 @@ const PropertyDescriptor* find_property(ControlKind kind, PropertyId id) noexcep
 
 const PropertyDescriptor* find_form_property(PropertyId id) noexcept {
     return Metamodel::instance().form_property(id);
+}
+
+const PropertyDescriptor* find_form_extension_property(FormExtensionKind kind, std::string_view name) noexcept {
+    return Metamodel::instance().form_extension_property(kind, name);
+}
+
+const PropertyDescriptor* find_form_extension_property(FormExtensionKind kind, PropertyId id) noexcept {
+    return Metamodel::instance().form_extension_property(kind, id);
 }
 
 const EventDescriptor* find_event(ControlKind kind, std::string_view name) noexcept {

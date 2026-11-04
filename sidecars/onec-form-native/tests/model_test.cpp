@@ -4288,6 +4288,48 @@ void test_document_property_api() {
         "a valid typed reference must round-trip through the property API");
 }
 
+void test_catalog_item_form_extension_property_api() {
+    Form form;
+    form.id = ObjectId{1};
+    form.extension = FormExtensionKind::catalog_item;
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto autonumeration = PropertyId::from_name("Autonumeration");
+    const auto folders = PropertyId::from_name("UseForFoldersAndItems");
+    expect(document.get_prop_val(owner, autonumeration).status == PropertyReadStatus::proven_default &&
+               document.get_prop_val(owner, autonumeration).value ==
+                   PropertyValue{EnumerationValue{"AutonumerationInForm", "Auto"}} &&
+               document.get_prop_val(owner, folders).status == PropertyReadStatus::proven_default &&
+               document.get_prop_val(owner, folders).value ==
+                   PropertyValue{EnumerationValue{"FoldersAndItemsUse", "Items"}},
+        "CatalogItemFormExtension must expose its typed Auto and Items defaults");
+    for (const auto& [property, type, member] : std::array{
+             std::tuple{autonumeration, std::string_view{"AutonumerationInForm"}, std::string_view{"DontUse"}},
+             std::tuple{folders, std::string_view{"FoldersAndItemsUse"}, std::string_view{"Folders"}},
+             std::tuple{folders, std::string_view{"FoldersAndItemsUse"}, std::string_view{"FoldersAndItems"}}}) {
+        expect(document.set_prop_val(owner, property, EnumerationValue{std::string(type), std::string(member)}) ==
+                   PropertyMutationStatus::applied &&
+                   document.get_prop_val(owner, property).status == PropertyReadStatus::explicit_value,
+            "CatalogItemFormExtension must accept each declared enumeration member");
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset,
+            "CatalogItemFormExtension enum properties must reset to their defaults");
+    }
+    expect(document.set_prop_val(owner, autonumeration, EnumerationValue{"FoldersAndItemsUse", "Items"}) ==
+               PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(owner, folders, EnumerationValue{"FoldersAndItemsUse", "Unknown"}) ==
+                   PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(owner, folders, true) == PropertyMutationStatus::invalid_value,
+        "CatalogItemFormExtension must reject unknown enum types, members, and value kinds");
+
+    Form unextended_form;
+    unextended_form.id = ObjectId{1};
+    OrdinaryFormDocument unextended(std::move(unextended_form));
+    expect(unextended.get_prop_val(owner, autonumeration).status == PropertyReadStatus::unsupported_surface &&
+               unextended.set_prop_val(owner, autonumeration, EnumerationValue{"AutonumerationInForm", "Auto"}) ==
+                   PropertyMutationStatus::unsupported_surface,
+        "CatalogItemFormExtension properties must be unavailable when no extension is selected");
+}
+
 void test_control_position_property_api() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
@@ -6137,6 +6179,7 @@ int main() {
         test_value_list_named_values();
         test_typed_value_document_budget();
         test_document_property_api();
+        test_catalog_item_form_extension_property_api();
         test_control_position_property_api();
         test_input_field_type_link_model();
         test_control_collapse_runtime_property();

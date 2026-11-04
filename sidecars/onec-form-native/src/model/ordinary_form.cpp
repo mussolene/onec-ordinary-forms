@@ -307,6 +307,12 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::type_domain && type_domain_numeric_precision_normalized(typed_value);
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 if (expected != metamodel::ValueCodec::enumeration) return false;
+                if (descriptor.surface == metamodel::PropertySurface::form_extension) {
+                    return descriptor.extension_kind.has_value() &&
+                        typed_value.type_name == descriptor.enumeration_type &&
+                        std::ranges::find(descriptor.enumeration_members, typed_value.member) !=
+                            descriptor.enumeration_members.end();
+                }
                 if (descriptor.surface == metamodel::PropertySurface::panel_placement && descriptor.api_name == "Collapse")
                     return typed_value.type_name == "ControlCollapseMode" &&
                         (typed_value.member == "None" || typed_value.member == "Left" || typed_value.member == "Right" ||
@@ -495,6 +501,8 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
+    if (descriptor.surface == metamodel::PropertySurface::form_extension)
+        return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.surface == metamodel::PropertySurface::panel_placement && descriptor.api_name == "Collapse")
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.owner == metamodel::DescriptorOwner::form && descriptor.api_name == "EnterKeyBehavior")
@@ -2011,8 +2019,20 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
                 (property == PropertyId::from_name("AllowJoinWindow") && connectable);
             return {PropertyReadStatus::computed_value, PropertyValue{value}};
         }
-        descriptor = metamodel::find_form_property(property);
-        properties = &form_.properties;
+        const auto* extension_descriptor = form_.extension
+            ? metamodel::find_form_extension_property(*form_.extension, property) : nullptr;
+        if (!extension_descriptor && std::ranges::any_of(metamodel::form_extension_property_descriptors(),
+                [&](const auto& candidate) { return candidate.id == property; }))
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        if (extension_descriptor) {
+            if (extension_descriptor->extension_kind != form_.extension)
+                return {PropertyReadStatus::unsupported_surface, std::nullopt};
+            descriptor = extension_descriptor;
+            properties = &form_.extension_properties;
+        } else {
+            descriptor = metamodel::find_form_property(property);
+            properties = &form_.properties;
+        }
     } else if (owner.category == ObjectCategory::control) {
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
@@ -2501,8 +2521,20 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 return PropertyMutationStatus::window_requires_connectable_after_assignment;
             return is_permission ? PropertyMutationStatus::applied_runtime_only : PropertyMutationStatus::applied;
         }
-        descriptor = metamodel::find_form_property(property);
-        properties = &form_.properties;
+        const auto* extension_descriptor = form_.extension
+            ? metamodel::find_form_extension_property(*form_.extension, property) : nullptr;
+        if (!extension_descriptor && std::ranges::any_of(metamodel::form_extension_property_descriptors(),
+                [&](const auto& candidate) { return candidate.id == property; }))
+            return PropertyMutationStatus::unsupported_surface;
+        if (extension_descriptor) {
+            if (extension_descriptor->extension_kind != form_.extension)
+                return PropertyMutationStatus::unsupported_surface;
+            descriptor = extension_descriptor;
+            properties = &form_.extension_properties;
+        } else {
+            descriptor = metamodel::find_form_property(property);
+            properties = &form_.properties;
+        }
     } else if (owner.category == ObjectCategory::control) {
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return PropertyMutationStatus::unknown_owner;
@@ -3050,8 +3082,20 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             property == PropertyId::from_name("AllowNormalState") || property == PropertyId::from_name("AllowDockedState") ||
             property == PropertyId::from_name("AllowAutohideState") || property == PropertyId::from_name("AllowFloatState") ||
             property == PropertyId::from_name("AllowJoinWindow")) return PropertyMutationStatus::unsupported_surface;
-        descriptor = metamodel::find_form_property(property);
-        properties = &form_.properties;
+        const auto* extension_descriptor = form_.extension
+            ? metamodel::find_form_extension_property(*form_.extension, property) : nullptr;
+        if (!extension_descriptor && std::ranges::any_of(metamodel::form_extension_property_descriptors(),
+                [&](const auto& candidate) { return candidate.id == property; }))
+            return PropertyMutationStatus::unsupported_surface;
+        if (extension_descriptor) {
+            if (extension_descriptor->extension_kind != form_.extension)
+                return PropertyMutationStatus::unsupported_surface;
+            descriptor = extension_descriptor;
+            properties = &form_.extension_properties;
+        } else {
+            descriptor = metamodel::find_form_property(property);
+            properties = &form_.properties;
+        }
     } else if (owner.category == ObjectCategory::control) {
         const auto location = find_location(ObjectCategory::control, owner.id);
         if (!location) return PropertyMutationStatus::unknown_owner;
@@ -3225,6 +3269,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
         });
     };
     check_property_values(form_.properties, [](PropertyId id) { return metamodel::find_form_property(id); });
+    check_property_values(form_.extension_properties,
+        [&](PropertyId id) { return form_.extension
+            ? metamodel::find_form_extension_property(*form_.extension, id) : nullptr; });
     check_property_values(form_.panel.properties, [](PropertyId id) { return metamodel::find_property(ControlKind::panel, id); });
     for (const auto& control : collections_.controls) {
         const auto resolve = [&](PropertyId id) { return metamodel::find_property(control.kind(), id); };
@@ -3309,7 +3356,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
         add_violation(report, InvariantCode::dangling_reference, form_.id, form_.main_attribute.id(),
             "main form attribute must reference an existing Attribute");
     }
-    if (form_.extension && *form_.extension != metamodel::data_processor_form_extension.kind) {
+    if (form_.extension && *form_.extension != metamodel::data_processor_form_extension.kind &&
+        *form_.extension != metamodel::catalog_item_form_extension.kind) {
         add_violation(report, InvariantCode::invalid_property, form_.id, form_.id,
             "form extension is not declared by the executable metamodel");
     }
@@ -3666,6 +3714,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
         [](PropertyId id) { return metamodel::find_form_property(id); },
         [](const metamodel::PropertyDescriptor& descriptor) {
             return descriptor.surface == metamodel::PropertySurface::form;
+        });
+    validate_property_set(form_.id, form_.extension_properties,
+        [&](PropertyId id) { return form_.extension
+            ? metamodel::find_form_extension_property(*form_.extension, id) : nullptr; },
+        [&](const metamodel::PropertyDescriptor& descriptor) {
+            return descriptor.surface == metamodel::PropertySurface::form_extension &&
+                form_.extension && descriptor.extension_kind == form_.extension;
         });
 
     validate_property_set(form_.id, form_.panel.properties,

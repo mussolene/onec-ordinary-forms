@@ -1735,13 +1735,44 @@ public:
                 *value, root, "reconstructionComplete", object_id_text(form.id));
         }
         const std::string form_id = object_id_text(form.id);
+        bool form_extension_seen = false;
 
         for (xmlNodePtr child : element_children(root)) {
             const std::string name = node_name(child);
             if (name == "MainAttribute") {
                 form.main_attribute = model::AttributeRef{parse_object_id(required_attribute(child, "attributeId"), child)};
             } else if (name == mm::data_processor_form_extension.xml_name) {
+                if (form_extension_seen)
+                    fail("OOF2003", child, form_id, name, "one form extension", "duplicate extension",
+                        "Form extension tags are mutually exclusive");
+                form_extension_seen = true;
+                if (child->properties != nullptr || !element_children(child).empty() ||
+                    trim_ascii(node_text(child)).size() != 0)
+                    fail("OOF2003", child, form_id, name, "empty DataProcessorFormExtension", "settings",
+                        "DataProcessorFormExtension does not have public properties");
                 form.extension = mm::data_processor_form_extension.kind;
+            } else if (name == mm::catalog_item_form_extension.xml_name) {
+                if (form_extension_seen)
+                    fail("OOF2003", child, form_id, name, "one form extension", "duplicate extension",
+                        "Form extension tags are mutually exclusive");
+                form_extension_seen = true;
+                form.extension = mm::catalog_item_form_extension.kind;
+                std::set<model::PropertyId> seen_extension_properties;
+                for (xmlNodePtr property_node : element_children(child)) {
+                    const auto property_name = node_name(property_node);
+                    const auto* descriptor = metamodel_.form_extension_property(*form.extension, property_name);
+                    if (descriptor == nullptr || descriptor->extension_kind != form.extension)
+                        fail("OOF2003", property_node, form_id, property_name,
+                            "declared CatalogItemFormExtension property", property_name,
+                            "CatalogItemFormExtension property is not declared by the executable metamodel");
+                    if (!seen_extension_properties.insert(descriptor->id).second)
+                        fail("OOF2003", property_node, form_id, property_name,
+                            "one CatalogItemFormExtension property", property_name,
+                            "Duplicate CatalogItemFormExtension property");
+                    auto value = parse_property_value(property_node, descriptor->value_codec, form_id, typed_budget_);
+                    if (!equals_descriptor_default(*descriptor, value))
+                        form.extension_properties.set_explicit(descriptor->id, std::move(value));
+                }
             } else if (name == "Panel") {
                 for (xmlNodePtr property : element_children(child)) {
                     const auto property_name = node_name(property);
@@ -3359,8 +3390,13 @@ public:
         write_property_set(form.properties, metamodel_.form_properties(), form_id);
         if (form.main_attribute.id())
             writer_.empty("MainAttribute", {{"attributeId", object_id_text(form.main_attribute.id())}});
-        if (form.extension) {
+        if (form.extension == mm::data_processor_form_extension.kind) {
             writer_.empty(mm::data_processor_form_extension.xml_name);
+        } else if (form.extension == mm::catalog_item_form_extension.kind) {
+            writer_.open(mm::catalog_item_form_extension.xml_name);
+            write_property_set(form.extension_properties,
+                metamodel_.form_extension_properties(*form.extension), form_id);
+            writer_.close(mm::catalog_item_form_extension.xml_name);
         }
         write_events("Events", form.events, metamodel_.form_events(), form_id);
         write_attributes();

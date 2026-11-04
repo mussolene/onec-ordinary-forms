@@ -336,6 +336,12 @@ void validate_metamodel(const Metamodel& metamodel) {
         "Form",
         DescriptorOwner::form,
         PropertySurface::form);
+    std::set<model::FormExtensionKind> form_extension_kinds;
+    for (const auto& property : metamodel.form_extension_properties()) {
+        if (!property.extension_kind || !form_extension_kinds.insert(*property.extension_kind).second) continue;
+        validate_property_group(metamodel.form_extension_properties(*property.extension_kind), "FormExtension",
+            DescriptorOwner::form, PropertySurface::form_extension);
+    }
     validate_ordered_descriptors(metamodel.form_events(), "Form");
     for (const auto& event : metamodel.form_events()) {
         if (event.owner != DescriptorOwner::form) {
@@ -815,6 +821,11 @@ void append_value_types(std::string& output) {
         output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType>\n";
     }
     std::set<std::string_view> scale_enum_types;
+    std::set<std::string_view> form_extension_enum_types;
+    for (const auto& property : model::metamodel::form_extension_property_descriptors())
+        if (property.value_codec == ValueCodec::enumeration)
+            append_chart_enum_type(output, property.enumeration_type, property.enumeration_members,
+                form_extension_enum_types);
     for (const auto fields : {model::metamodel::chart_scale_property_descriptors(), model::metamodel::chart_label_area_property_descriptors()})
         for (const auto& field : fields) if (field.value_codec == ValueCodec::enumeration) append_chart_enum_type(output, field.enumeration_type, field.members, scale_enum_types);
     for (const auto fields : {model::metamodel::chart_series_property_descriptors(), model::metamodel::chart_trendline_property_descriptors()})
@@ -1178,7 +1189,9 @@ void append_property_element(
     output.append(indent);
     output += "<xs:element";
     append_attribute(output, "name", property.xml_name);
-    append_attribute(output, "type", xsd_type(property));
+    append_attribute(output, "type", property.surface == PropertySurface::form_extension &&
+        !property.enumeration_type.empty()
+            ? std::string(property.enumeration_type) + "ValueType" : std::string(xsd_type(property)));
     output += " minOccurs=\"0\" maxOccurs=\"1\"/>\n";
 }
 
@@ -1378,9 +1391,13 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     output += "  <xs:complexType name=\"FormType\">\n    <xs:sequence>\n";
     append_property_elements(output, metamodel.form_properties());
     output += "      <xs:element name=\"MainAttribute\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"ObjectIdType\" use=\"required\"/></xs:complexType></xs:element>\n";
-    output += "      <xs:element name=\"";
+    output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n        <xs:element name=\"";
     append_xml_escaped(output, model::metamodel::data_processor_form_extension.xml_name);
-    output += "\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType/></xs:element>\n";
+    output += "\"><xs:complexType/></xs:element>\n        <xs:element name=\"";
+    append_xml_escaped(output, model::metamodel::catalog_item_form_extension.xml_name);
+    output += "\"><xs:complexType><xs:sequence>\n";
+    append_property_elements(output, metamodel.form_extension_properties(), "          ");
+    output += "        </xs:sequence></xs:complexType></xs:element>\n      </xs:choice>\n";
     output +=
         "      <xs:element name=\"Events\" type=\"FormEventsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Attributes\" type=\"AttributesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
@@ -1596,6 +1613,10 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     output +=
         "          </Events>\n"
         "        </Form>\n"
+        "        <SharedProperties surface=\"formExtension\">\n";
+    append_palette_properties(output, metamodel.form_extension_properties(), "          ");
+    output +=
+        "        </SharedProperties>\n"
         "        <SharedProperties surface=\"controlExtension\">\n";
     append_palette_properties(
         output,
@@ -1611,6 +1632,9 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     output += "        </SharedProperties>\n        <NamedConcept name=\"MainAttribute\" russianName=\"Основной реквизит\"/>\n        <NamedConcept name=\"TypeLink\" russianName=\"СвязьПоТипу\"/>\n        <NamedConcept";
     append_attribute(output, "name", model::metamodel::data_processor_form_extension.xml_name);
     append_attribute(output, "russianName", as_utf8(model::metamodel::data_processor_form_extension.russian_name));
+    output += "/>\n        <NamedConcept";
+    append_attribute(output, "name", model::metamodel::catalog_item_form_extension.xml_name);
+    append_attribute(output, "russianName", as_utf8(model::metamodel::catalog_item_form_extension.russian_name));
     output += "/>\n        <Controls>\n";
 
     for (const auto& control : metamodel.controls()) {

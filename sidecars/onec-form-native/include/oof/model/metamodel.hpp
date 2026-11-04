@@ -180,6 +180,7 @@ enum class DescriptorOwner : std::uint8_t {
 
 enum class PropertySurface : std::uint8_t {
     form,
+    form_extension,
     control_extension,
     panel_placement,
     control_payload,
@@ -211,6 +212,13 @@ inline constexpr FormExtensionDescriptor data_processor_form_extension{
     u8"Расширение формы обработки",
 };
 
+inline constexpr FormExtensionDescriptor catalog_item_form_extension{
+    FormExtensionKind::catalog_item,
+    "c5251418-7f99-4a2f-ba62-7f3c9e7bf914",
+    "CatalogItemFormExtension",
+    u8"Расширение формы элемента справочника",
+};
+
 struct StandardMenuCommandDescriptor {
     StandardMenuCommand kind;
     std::string_view public_name;
@@ -239,6 +247,9 @@ struct PropertyDescriptor {
     PersistenceClass persistence = PersistenceClass::unclassified;
     StorageCodec storage_codec = StorageCodec::unclassified;
     DefaultValue default_value{};
+    std::string_view enumeration_type{};
+    std::span<const std::string_view> enumeration_members{};
+    std::optional<FormExtensionKind> extension_kind{};
 };
 
 enum class ChartSeriesStorage : std::uint8_t { row, style, companion, computed };
@@ -454,6 +465,9 @@ public:
 
     [[nodiscard]] std::span<const ControlDescriptor> controls() const noexcept;
     [[nodiscard]] std::span<const PropertyDescriptor> form_properties() const noexcept;
+    [[nodiscard]] std::span<const PropertyDescriptor> form_extension_properties() const noexcept;
+    [[nodiscard]] std::span<const PropertyDescriptor> form_extension_properties(
+        FormExtensionKind kind) const noexcept;
     [[nodiscard]] std::span<const EventDescriptor> form_events() const noexcept;
     [[nodiscard]] std::span<const PropertyDescriptor> control_extension_properties() const noexcept;
     [[nodiscard]] std::span<const PropertyDescriptor> panel_placement_properties() const noexcept;
@@ -479,6 +493,10 @@ public:
     [[nodiscard]] const PropertyDescriptor* form_property(
         std::string_view name) const noexcept;
     [[nodiscard]] const PropertyDescriptor* form_property(PropertyId id) const noexcept;
+    [[nodiscard]] const PropertyDescriptor* form_extension_property(
+        FormExtensionKind kind, std::string_view name) const noexcept;
+    [[nodiscard]] const PropertyDescriptor* form_extension_property(
+        FormExtensionKind kind, PropertyId id) const noexcept;
     [[nodiscard]] const EventDescriptor* event(
         ControlKind kind,
         std::string_view name) const noexcept;
@@ -495,6 +513,7 @@ private:
 
 [[nodiscard]] std::span<const ControlDescriptor> control_descriptors() noexcept;
 [[nodiscard]] std::span<const PropertyDescriptor> form_property_descriptors() noexcept;
+[[nodiscard]] std::span<const PropertyDescriptor> form_extension_property_descriptors() noexcept;
 [[nodiscard]] std::span<const EventDescriptor> form_event_descriptors() noexcept;
 [[nodiscard]] std::span<const PropertyDescriptor> control_extension_property_descriptors() noexcept;
 [[nodiscard]] std::span<const PropertyDescriptor> panel_placement_property_descriptors() noexcept;
@@ -518,6 +537,10 @@ private:
     PropertyId id) noexcept;
 [[nodiscard]] const PropertyDescriptor* find_form_property(std::string_view name) noexcept;
 [[nodiscard]] const PropertyDescriptor* find_form_property(PropertyId id) noexcept;
+[[nodiscard]] const PropertyDescriptor* find_form_extension_property(
+    FormExtensionKind kind, std::string_view name) noexcept;
+[[nodiscard]] const PropertyDescriptor* find_form_extension_property(
+    FormExtensionKind kind, PropertyId id) noexcept;
 [[nodiscard]] const EventDescriptor* find_event(
     ControlKind kind,
     std::string_view name) noexcept;

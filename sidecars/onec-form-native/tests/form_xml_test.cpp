@@ -2921,6 +2921,64 @@ void test_data_processor_form_extension_xml_contract() {
     expect(!source::serialize_form_xml(document).ok(), "Unknown extension kinds must fail explicit serialization");
 }
 
+void test_catalog_item_form_extension_xml_contract() {
+    for (const auto autonumeration : {std::string_view{"Auto"}, std::string_view{"DontUse"}}) {
+        for (const auto folders : {std::string_view{"Items"}, std::string_view{"Folders"},
+                 std::string_view{"FoldersAndItems"}}) {
+            const auto xml = std::string(R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><CatalogItemFormExtension><Autonumeration type="AutonumerationInForm" member=")XML") +
+                std::string(autonumeration) + R"XML("/><UseForFoldersAndItems type="FoldersAndItemsUse" member=")XML" +
+                std::string(folders) + R"XML("/></CatalogItemFormExtension></Form>)XML";
+            const auto parsed = source::parse_form_xml(xml);
+            expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+            expect(parsed.value().form().extension == model::FormExtensionKind::catalog_item &&
+                       parsed.value().get_prop_val(
+                           model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::form, model::ObjectId{1}},
+                           model::PropertyId::from_name("Autonumeration")).value ==
+                           model::PropertyValue{model::EnumerationValue{"AutonumerationInForm", std::string(autonumeration)}} &&
+                       parsed.value().get_prop_val(
+                           model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::form, model::ObjectId{1}},
+                           model::PropertyId::from_name("UseForFoldersAndItems")).value ==
+                           model::PropertyValue{model::EnumerationValue{"FoldersAndItemsUse", std::string(folders)}},
+                "CatalogItemFormExtension XML must populate its named typed properties");
+            const auto serialized = source::serialize_form_xml(parsed.value());
+            expect(serialized.ok() && serialized.value().find("CatalogItemFormExtension") != std::string::npos &&
+                       serialized.value().find("c5251418") == std::string::npos,
+                "CatalogItemFormExtension XML must serialize named values without platform identifiers");
+            const auto reparsed = source::parse_form_xml(serialized.value());
+            expect(reparsed.ok() && reparsed.value().get_prop_val(
+                       model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::form, model::ObjectId{1}},
+                       model::PropertyId::from_name("Autonumeration")).value ==
+                           parsed.value().get_prop_val(
+                               model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::form, model::ObjectId{1}},
+                               model::PropertyId::from_name("Autonumeration")).value &&
+                       reparsed.value().get_prop_val(
+                           model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::form, model::ObjectId{1}},
+                           model::PropertyId::from_name("UseForFoldersAndItems")).value ==
+                           parsed.value().get_prop_val(
+                               model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::form, model::ObjectId{1}},
+                               model::PropertyId::from_name("UseForFoldersAndItems")).value,
+                "CatalogItemFormExtension XML must preserve all six enum combinations");
+        }
+    }
+    const auto defaults = source::parse_form_xml(
+        R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><CatalogItemFormExtension/></Form>)XML");
+    expect(defaults.ok() && defaults.value().form().extension == model::FormExtensionKind::catalog_item &&
+               defaults.value().form().extension_properties.empty(),
+        "omitted CatalogItemFormExtension properties must use typed descriptor defaults");
+    for (const auto body : {
+             "<Autonumeration type=\"Unknown\" member=\"Auto\"/>",
+             "<Autonumeration type=\"AutonumerationInForm\" member=\"Unknown\"/>",
+             "<Unknown>0</Unknown>",
+             "<Autonumeration type=\"AutonumerationInForm\" member=\"Auto\"/><Autonumeration type=\"AutonumerationInForm\" member=\"DontUse\"/>"}) {
+        const auto invalid = std::string(R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><CatalogItemFormExtension>)XML") +
+            body + "</CatalogItemFormExtension></Form>";
+        expect(!source::parse_form_xml(invalid), "unknown, duplicate, or malformed CatalogItemFormExtension fields must fail closed");
+    }
+    expect(!source::parse_form_xml(
+               R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><CatalogItemFormExtension/><DataProcessorFormExtension/></Form>)XML"),
+        "form extension XML choices must be mutually exclusive");
+}
+
 void test_main_panel_typed_xml_contract() {
     const std::string xml = R"XML(<Form id="1" name="Traversal" ordinaryFormVersion="2.1"><Panel><AutoTabOrder>false</AutoTabOrder></Panel></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
@@ -3984,6 +4042,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
+        test_catalog_item_form_extension_xml_contract();
         test_chart_base_value_xml();
         test_chart_enum_properties_xml();
         test_chart_type_xml();

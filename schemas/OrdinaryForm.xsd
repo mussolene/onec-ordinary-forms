@@ -412,6 +412,8 @@
   <xs:simpleType name="ChartLegendAreaPlacementType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Left"/><xs:enumeration value="Right"/><xs:enumeration value="Top"/><xs:enumeration value="Bottom"/><xs:enumeration value="UseCoordinates"/><xs:enumeration value="None"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ChartTitleAreaPlacementType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="UseCoordinates"/><xs:enumeration value="LeftTop"/><xs:enumeration value="Top"/><xs:enumeration value="RightTop"/><xs:enumeration value="LeftBottom"/><xs:enumeration value="Bottom"/><xs:enumeration value="RightBottom"/><xs:enumeration value="None"/></xs:restriction></xs:simpleType>
   <xs:complexType name="RadarChartScaleTypeValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="RadarChartScaleType"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Circle"/><xs:enumeration value="Polygon"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
+  <xs:complexType name="AutonumerationInFormValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="AutonumerationInForm"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="DontUse"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
+  <xs:complexType name="FoldersAndItemsUseValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="FoldersAndItemsUse"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Items"/><xs:enumeration value="Folders"/><xs:enumeration value="FoldersAndItems"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="ChartScaleLocationValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="ChartScaleLocation"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="BaseValue"/><xs:enumeration value="Edge"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="ChartScaleMarkLocationValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="ChartScaleMarkLocation"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Outside"/><xs:enumeration value="Inside"/><xs:enumeration value="Center"/><xs:enumeration value="None"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="ShowChartScaleTitleValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="ShowChartScaleTitle"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="DontShow"/><xs:enumeration value="Show"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
@@ -2010,7 +2012,13 @@
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MainAttribute" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="ObjectIdType" use="required"/></xs:complexType></xs:element>
-      <xs:element name="DataProcessorFormExtension" minOccurs="0" maxOccurs="1"><xs:complexType/></xs:element>
+      <xs:choice minOccurs="0" maxOccurs="1">
+        <xs:element name="DataProcessorFormExtension"><xs:complexType/></xs:element>
+        <xs:element name="CatalogItemFormExtension"><xs:complexType><xs:sequence>
+          <xs:element name="Autonumeration" type="AutonumerationInFormValueType" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="UseForFoldersAndItems" type="FoldersAndItemsUseValueType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence></xs:complexType></xs:element>
+      </xs:choice>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Commands" type="CommandsType" minOccurs="0" maxOccurs="1"/>

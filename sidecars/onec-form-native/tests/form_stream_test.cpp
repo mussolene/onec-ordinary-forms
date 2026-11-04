@@ -22448,6 +22448,83 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
         "{00000000-0000-0000-0000-000000000000,0}", "Removing the named extension must remove its controller");
 }
 
+void test_catalog_item_form_extension_named_round_trip_and_guards() {
+    for (const auto autonumeration : {std::string_view{"Auto"}, std::string_view{"DontUse"}}) {
+        for (const auto folders : {std::string_view{"Items"}, std::string_view{"Folders"},
+                 std::string_view{"FoldersAndItems"}}) {
+            const auto xml = std::string(R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><Height>120</Height><Width>240</Width><MainAttribute attributeId="2"/><CatalogItemFormExtension><Autonumeration type="AutonumerationInForm" member=")XML") +
+                std::string(autonumeration) + R"XML("/><UseForFoldersAndItems type="FoldersAndItemsUse" member=")XML" +
+                std::string(folders) + R"XML("/></CatalogItemFormExtension><Events><OnOpen id="9">HandleOpen</OnOpen></Events><Attributes><Attribute id="2" name="CatalogObject"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute></Attributes></Form>)XML";
+            const auto parsed = oof::source::parse_form_xml(xml);
+            expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+            const auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+            const auto& extension = encoded.value().items[3];
+            expect(extension.items.size() == 3 && extension.items[0].atom == "c5251418-7f99-4a2f-ba62-7f3c9e7bf914" &&
+                       extension.items[2].items.size() == 4,
+                "CatalogItemFormExtension must encode only its named native settings");
+            const auto decoded = form_stream::decode_document(encoded.value(), "Catalog");
+            expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                       decoded.value().form().extension == model::FormExtensionKind::catalog_item &&
+                       decoded.value().form().events.size() == 1 &&
+                       decoded.value().find_attribute(model::ObjectId{2}) != nullptr,
+                "CatalogItemFormExtension must decode completely with its concrete MainAttribute and ordinary Form events");
+            const model::OrdinaryFormDocument::ObjectKey form_owner{
+                model::ObjectCategory::form, model::ObjectId{1}};
+            expect(decoded.value().get_prop_val(form_owner, model::PropertyId::from_name("Autonumeration")).value ==
+                       model::PropertyValue{model::EnumerationValue{"AutonumerationInForm", std::string(autonumeration)}} &&
+                       decoded.value().get_prop_val(form_owner, model::PropertyId::from_name("UseForFoldersAndItems")).value ==
+                       model::PropertyValue{model::EnumerationValue{"FoldersAndItemsUse", std::string(folders)}},
+                "CatalogItemFormExtension native ordinals must map to the named enum members");
+            const auto public_xml = oof::source::serialize_form_xml(decoded.value());
+            expect(public_xml.ok() && public_xml.value().find("c5251418") == std::string::npos &&
+                       public_xml.value().find("<CatalogItemFormExtension>") != std::string::npos,
+                "CatalogItemFormExtension must serialize only its named public representation");
+            const auto reparsed = oof::source::parse_form_xml(public_xml.value());
+            expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+            const auto rebuilt = form_stream::encode_document(reparsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                       list_stream::dump_compact(encoded.value()),
+                "CatalogItemFormExtension must rebuild canonical Form.bin bytes from named XML");
+        }
+    }
+
+    const auto parsed = oof::source::parse_form_xml(
+        R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><Height>120</Height><Width>240</Width><MainAttribute attributeId="2"/><CatalogItemFormExtension/><Attributes><Attribute id="2" name="CatalogObject"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute></Attributes></Form>)XML");
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    auto corrupt = encoded.value();
+    corrupt.items[3].items[2].items[1] = list_stream::ListValue::raw_atom("3");
+    expect_failure(form_stream::decode_document(corrupt, "Catalog"), "OOF1114", "$/3/2/1",
+        "unknown folder and item ordinals must be rejected");
+    corrupt = encoded.value();
+    corrupt.items[3].items[2].items[2] = list_stream::parse("{0,1}");
+    expect_failure(form_stream::decode_document(corrupt, "Catalog"), "OOF1114", "$/3/2/2",
+        "nonempty extension event table must be rejected without named extension event support");
+    for (const auto flag : {1u, 2u}) {
+        corrupt = encoded.value();
+        corrupt.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
+        expect_failure(form_stream::decode_document(corrupt, "Catalog"), "OOF1122", "$/2/0",
+            "CatalogItemFormExtension MainAttribute flags must remain at their proven defaults");
+    }
+    auto missing_main = parsed.value();
+    auto form = missing_main.form();
+    form.main_attribute = {};
+    missing_main.set_form(std::move(form));
+    expect(!form_stream::encode_document(missing_main),
+        "CatalogItemFormExtension must require one selected concrete object Attribute");
+    auto member_path = parsed.value();
+    model::ControlNode field{model::ObjectId{3}, "CatalogCode", model::InputFieldPayload{}};
+    field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {"Code"}};
+    member_path.add_control(std::move(field));
+    form = member_path.form();
+    form.children.emplace_back(model::ControlRef{model::ObjectId{3}});
+    member_path.set_form(std::move(form));
+    expect_failure(form_stream::encode_document(member_path), "OOF1122", "$/MainAttribute",
+        "CatalogItemFormExtension must reject metadata member paths until their storage context is modeled");
+}
+
 void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
     const auto parsed = oof::source::parse_form_xml(R"XML(<Form id="1" name="DefaultSchemas" ordinaryFormVersion="2.1"><ChildItems>
       <GraphicalSchemaField id="19" name="Flow"><Position><Top>20</Top><Height>90</Height><Left>10</Left><TabOrder>2</TabOrder><Width>140</Width></Position></GraphicalSchemaField>
@@ -22821,6 +22898,7 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
 int main() {
     try {
         test_data_processor_form_extension_named_round_trip_and_guards();
+        test_catalog_item_form_extension_named_round_trip_and_guards();
         test_embedded_chart_dynamic_back_color();
         test_pivot_chart_types();
         test_complex_chart_back_color_pairs();

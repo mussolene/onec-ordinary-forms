@@ -1235,6 +1235,7 @@ struct Page {
 
 enum class FormExtensionKind : std::uint8_t {
     data_processor,
+    catalog_item,
 };
 
 struct Form {
@@ -1244,6 +1245,7 @@ struct Form {
     std::vector<EventRef> events;
     std::vector<ChildItemRef> children;
     std::optional<FormExtensionKind> extension;
+    PropertySet extension_properties;
     AttributeRef main_attribute;
     PanelPayload panel;
 };

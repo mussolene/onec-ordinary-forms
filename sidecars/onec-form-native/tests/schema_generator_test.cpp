@@ -723,15 +723,31 @@ void test_document_package_types(
     const Metamodel& metamodel,
     xmlNodePtr schema
 ) {
-    const auto form_elements =
-        direct_children(sequence_for_type(schema, "FormType"), "element");
+    const auto form_sequence = sequence_for_type(schema, "FormType");
+    std::vector<xmlNodePtr> form_elements;
+    for (xmlNodePtr node = form_sequence->children; node != nullptr; node = node->next)
+        if (is_element(node, "element") || is_element(node, "choice")) form_elements.push_back(node);
     std::size_t cursor = expect_property_sequence(
         metamodel.form_properties(),
         form_elements);
     expect_element_shape(form_elements[cursor++], "MainAttribute", "", "0", "1");
-    expect_element_shape(form_elements[cursor++], "DataProcessorFormExtension", "", "0", "1");
-    expect(direct_children(form_elements[cursor - 1], "complexType").size() == 1,
-        "Form extension must use an empty named default type, without raw settings");
+    expect(is_element(form_elements[cursor], "choice") && attribute(form_elements[cursor], "minOccurs") == "0" &&
+               attribute(form_elements[cursor], "maxOccurs") == "1",
+        "Form extensions must be a mutually exclusive optional choice");
+    const auto extension_elements = direct_children(form_elements[cursor++], "element");
+    expect(extension_elements.size() == 2 && attribute(extension_elements[0], "name") == "DataProcessorFormExtension" &&
+               attribute(extension_elements[1], "name") == "CatalogItemFormExtension",
+        "Form extension choice must expose both named extension concepts");
+    expect(direct_children(extension_elements[0], "complexType").size() == 1 &&
+               direct_children(extension_elements[1], "complexType").size() == 1,
+        "Form extension concepts must use named types without raw settings");
+    const auto catalog_properties = direct_children(
+        direct_child(direct_children(extension_elements[1], "complexType")[0], "sequence"), "element");
+    expect(catalog_properties.size() == 2 && attribute(catalog_properties[0], "name") == "Autonumeration" &&
+               attribute(catalog_properties[0], "type") == "AutonumerationInFormValueType" &&
+               attribute(catalog_properties[1], "name") == "UseForFoldersAndItems" &&
+               attribute(catalog_properties[1], "type") == "FoldersAndItemsUseValueType",
+        "CatalogItemFormExtension XSD must expose its descriptor-backed enum properties");
     constexpr std::array form_surface_names{
         "Events",
         "Attributes",
@@ -1813,6 +1829,11 @@ int main() {
         Schema compiled_palette =
             compile_schema(schemas.ordinary_form_palette_xsd, "OrdinaryFormPalette.xsd");
         expect(compiled_palette != nullptr, "palette XSD must compile");
+        expect(validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><CatalogItemFormExtension><Autonumeration type="AutonumerationInForm" member="DontUse"/><UseForFoldersAndItems type="FoldersAndItemsUse" member="FoldersAndItems"/></CatalogItemFormExtension></Form>)XML") == 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><CatalogItemFormExtension/><DataProcessorFormExtension/></Form>)XML") != 0,
+            "generated XSD must accept named catalog enum values and reject simultaneous extensions");
         expect(schemas.ordinary_form_xsd.find("<xs:complexType name=\"StyleValueType\">") != std::string::npos &&
                schemas.ordinary_form_xsd.find("<xs:attribute name=\"styleId\" type=\"UuidValueType\" use=\"optional\"/>") != std::string::npos,
             "Form.Style schema is a named optional UUID reference");

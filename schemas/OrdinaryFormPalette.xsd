@@ -62,6 +62,10 @@
             <Event name="OnReopen" apiName="OnReopen" russianName="ПриПовторномОткрытии"/>
           </Events>
         </Form>
+        <SharedProperties surface="formExtension">
+          <Property name="Autonumeration" apiName="Autonumeration" russianName="Автонумерация" russianType="АвтонумерацияВФорме" valueCodec="enumeration"/>
+          <Property name="UseForFoldersAndItems" apiName="UseForFoldersAndItems" russianName="ИспользованиеДляГруппИЭлементов" russianType="ИспользованиеГруппИЭлементов" valueCodec="enumeration"/>
+        </SharedProperties>
         <SharedProperties surface="controlExtension">
           <Property name="AutoContextMenu" apiName="AutoContextMenu" russianName="АвтоКонтекстноеМеню" russianType="Булево" valueCodec="boolean"/>
           <Property name="Data" apiName="Data" russianName="Данные" russianType="Строка" valueCodec="string"/>
@@ -89,6 +93,7 @@
         <NamedConcept name="MainAttribute" russianName="Основной реквизит"/>
         <NamedConcept name="TypeLink" russianName="СвязьПоТипу"/>
         <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
+        <NamedConcept name="CatalogItemFormExtension" russianName="Расширение формы элемента справочника"/>
         <Controls>
           <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
             <Properties>
