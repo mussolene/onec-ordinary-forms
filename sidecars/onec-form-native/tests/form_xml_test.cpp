@@ -3559,6 +3559,11 @@ void test_graphical_current_item_is_not_persisted_xml() {
     expect(!result, "runtime CurrentItem must not enter the public persisted GraphicalSchemaField XML");
 }
 
+void test_geographical_showed_area_is_not_persisted_xml() {
+    const auto result = source::parse_form_xml(R"XML(<Form id="1" name="Map" ordinaryFormVersion="2.1"><ChildItems><GeographicalSchemaField id="2" name="Geo"><Position/><ShowedArea/></GeographicalSchemaField></ChildItems></Form>)XML");
+    expect(!result, "runtime ShowedArea must not enter the persisted geographical XML");
+}
+
 void test_chart_active_point_xml_reference() {
     using namespace oof::model;
     std::string xml = R"XML(<Form id="1" name="ActivePoints" ordinaryFormVersion="2.1"><ChildItems>)XML";
@@ -3925,6 +3930,7 @@ int main() {
         test_control_value_is_not_persisted_xml();
         test_table_current_parent_is_not_persisted_xml();
         test_graphical_current_item_is_not_persisted_xml();
+        test_geographical_showed_area_is_not_persisted_xml();
         test_chart_active_point_xml_reference();
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();

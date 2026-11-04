@@ -970,6 +970,30 @@ void test_table_current_parent_runtime_boundary() {
     }
 }
 
+void test_geographical_showed_area_runtime_boundary() {
+    Form form; form.id = ObjectId{1}; form.name = "GeographicalAreas";
+    for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
+    OrdinaryFormDocument document(std::move(form));
+    const auto property = PropertyId::from_name("ShowedArea");
+    const auto* descriptor = metamodel::find_property(ControlKind::geographical_schema_field, property);
+    expect(descriptor && descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+        descriptor->storage_codec == metamodel::StorageCodec::none &&
+        descriptor->default_value.kind == metamodel::DefaultKind::none &&
+        descriptor->value_kind == metamodel::ValueKind::object &&
+        descriptor->value_codec == metamodel::ValueCodec::unclassified,
+        "ShowedArea is a transient object, without persistent storage or a scalar default");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const ObjectId id{100 + i};
+        document.add_control(ControlNode{id, "Geo" + std::to_string(i), GeographicalSchemaFieldPayload{}});
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, id};
+        expect(document.get_prop_val(owner, property).status == PropertyReadStatus::unsupported_surface &&
+            document.set_prop_val(owner, property, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+            document.reset_prop_val(owner, property) == PropertyMutationStatus::unsupported_surface &&
+            !document.find_control(id)->properties().contains(property),
+            "unfinished area object must not manufacture undefined or persist a shadow value");
+    }
+}
+
 void test_graphical_current_item_runtime_boundary() {
     Form form; form.id = ObjectId{1}; form.name = "GraphicalCurrentItems";
     for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
@@ -5475,6 +5499,7 @@ int main() {
         test_list_and_html_live_property_boundaries();
         test_control_extension_value_runtime_boundary();
         test_table_current_parent_runtime_boundary();
+        test_geographical_showed_area_runtime_boundary();
         test_graphical_current_item_runtime_boundary();
         test_pivot_runtime_source_boundaries();
         test_form_runtime_variant_values();

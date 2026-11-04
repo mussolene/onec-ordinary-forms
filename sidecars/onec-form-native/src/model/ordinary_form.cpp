@@ -1812,6 +1812,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::html_document_field && descriptor->api_name == "Document") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
+            (control.kind() == ControlKind::geographical_schema_field && descriptor->api_name == "ShowedArea") ||
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
         if (descriptor->api_name == "Name")
@@ -2255,6 +2256,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
+            (control.kind() == ControlKind::geographical_schema_field && descriptor->api_name == "ShowedArea") ||
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {
@@ -2767,6 +2769,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if ((control.kind() == ControlKind::list_box && descriptor->api_name == "CurrentRow") ||
             (control.kind() == ControlKind::chart && descriptor->api_name == "DataSource") ||
             (control.kind() == ControlKind::graphical_schema_field && descriptor->api_name == "CurrentItem") ||
+            (control.kind() == ControlKind::geographical_schema_field && descriptor->api_name == "ShowedArea") ||
             (control.kind() == ControlKind::table && descriptor->api_name == "CurrentParent"))
             return PropertyMutationStatus::unsupported_surface;
         if (is_string_input_property(*descriptor)) {

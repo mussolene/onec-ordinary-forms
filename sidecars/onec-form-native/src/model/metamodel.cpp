@@ -1117,6 +1117,12 @@ void apply_proven_storage_overrides(
     current_item->default_value = {DefaultKind::undefined, "undefined"};
 
     auto& geographical_schema = properties[static_cast<std::size_t>(ControlKind::geographical_schema_field)];
+    const auto showed_area = std::ranges::find(geographical_schema, "ShowedArea", &PropertyDescriptor::api_name);
+    if (showed_area == geographical_schema.end()) throw std::logic_error("missing geographical ShowedArea descriptor");
+    showed_area->persistence = PersistenceClass::runtime_only;
+    showed_area->storage_codec = StorageCodec::none;
+    showed_area->value_kind = ValueKind::object;
+    showed_area->default_value = {DefaultKind::none, {}};
     for (const auto name : {"Scale", "ScaleKeeping"}) {
         auto property = std::ranges::find(geographical_schema, name, &PropertyDescriptor::api_name);
         if (property == geographical_schema.end()) throw std::logic_error("missing geographical schema property");
