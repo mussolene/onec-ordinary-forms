@@ -21060,6 +21060,102 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
         "SummarySeries named Color mirror mismatch must be rejected");
 }
 
+void test_chart_gauge_bands_roundtrip_and_native_caches() {
+    const std::array<std::pair<std::string_view, std::string_view>, 12> bounds{{
+        {"-4.875", "-0.125"}, {"-1.875", "1.875"}, {"0", "0"}, {"0.4999", "0.5001"}, {"1.5", "2.5"},
+        {"2147483646.875", "2147483647.875"}, {"2147483648.125", "2147483650.5"},
+        {"-2147483650.5", "-2147483648.125"},
+        {"9999999999999999999999999999999999998", "9999999999999999999999999999999999999"},
+        {"-9999999999999999999999999999999999999", "-9999999999999999999999999999999999998"},
+        {"-0.0000000000000000000000000000000000001", "0.0000000000000000000000000000000000001"},
+        {"-2147483648", "2147483647"}}};
+    const std::array<std::pair<std::int64_t, std::int64_t>, 12> native_caches{{
+        {-4, 0}, {-1, 1}, {0, 0}, {0, 0}, {1, 2}, {2147483646, 2147483647},
+        {-2147483648, -2147483646}, {2147483646, -2147483648}, {-2, -1}, {1, 2}, {0, 0}, {-2147483648, 2147483647}}};
+    model::Form form; form.id = model::ObjectId{1}; form.name = "GaugeBands";
+    for (std::uint64_t index = 0; index < 12; ++index) form.children.emplace_back(model::ControlRef{model::ObjectId{100 + index}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < bounds.size(); ++index) {
+        model::ChartPayload chart;
+        for (std::size_t band_index = 0; band_index <= index % 3; ++band_index) {
+            model::ChartGaugeQualityBand band;
+            band.begin = model::DecimalValue{std::string(bounds[index].first)};
+            band.end = model::DecimalValue{std::string(bounds[index].second)};
+            band.back_color = model::ColorValue{model::ColorKind::absolute, static_cast<std::uint8_t>(20 + index), 30,
+                static_cast<std::uint8_t>(40 + index + band_index), 255, std::monostate{}};
+            band.text = std::string{"Band Chart"} + std::to_string(index);
+            band.tool_tip = std::string{"Tip Chart"} + std::to_string(index);
+            chart.gauge_quality_bands.push_back(std::move(band));
+        }
+        document.add_control(model::ControlNode{model::ObjectId{100 + index}, "Chart" + std::to_string(index), std::move(chart)});
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value());
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "all 12 named gauge-band collections must decode completely");
+    for (std::size_t index = 0; index < bounds.size(); ++index) {
+        const auto id = model::ObjectId{100 + index};
+        expect(std::get<model::ChartPayload>(decoded.value().find_control(id)->payload).gauge_quality_bands ==
+            std::get<model::ChartPayload>(document.find_control(id)->payload).gauge_quality_bands,
+            "gauge-band order, exact decimals, colors and text must survive the primary stream codec");
+    }
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "gauge-band reconstruction must not depend on a baseline stream");
+    auto observed = encoded.value();
+    const auto check_records = [&](const auto& self, const list_stream::ListValue& node) -> void {
+        if (!node.is_list) return;
+        if (node.items.size() == 7 && node.items[0].atom == "a8b97779-1a4b-4059-b09c-807f86d2a461") {
+            const auto index = static_cast<std::size_t>(std::stoull(node.items[1].atom) - 100);
+            const auto& first = node.items[3].items[87].items[2];
+            expect(first.items[1].atom == std::to_string(native_caches[index].first) &&
+                first.items[2].atom == std::to_string(native_caches[index].second),
+                "legacy integer mirrors must match all 12 native boundary cases, including wrapping and truncation");
+            expect(first.items[10].atom == bounds[index].first && first.items[11].atom == bounds[index].second,
+                "the exact bounds must remain authoritative rather than using the integer mirrors");
+            return;
+        }
+        for (const auto& child : node.items) self(self, child);
+    };
+    check_records(check_records, observed);
+    for (const std::size_t slot : {0U, 1U, 2U, 3U}) {
+        auto malformed = encoded.value();
+        auto& collection = find_chart_record(malformed)->items[3].items[87];
+        if (slot == 0) collection.items[1] = list_stream::ListValue::raw_atom("1000001");
+        if (slot == 1) collection.items[2].items[0] = list_stream::ListValue::raw_atom("777");
+        if (slot == 2) collection.items[2].items[1] = list_stream::ListValue::raw_atom("99");
+        if (slot == 3) collection.items[2].items[7] = list_stream::ListValue::raw_atom("0");
+        expect(!form_stream::decode_document(malformed), "unbounded counts, unknown versions, wrong mirrors and conflicting text must reject");
+    }
+    for (const std::size_t slot : {4U, 5U}) {
+        for (const auto value : {"{1,0,777}", "{1,1,{\"ru\",\"text\",777}}"}) {
+            auto malformed = encoded.value();
+            auto& band = find_chart_record(malformed)->items[3].items[87].items[2];
+            band.items[slot] = list_stream::parse(value);
+            band.items[slot == 4 ? 6 : 8] = list_stream::ListValue::string_atom("");
+            band.items[slot == 4 ? 7 : 9] = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(malformed),
+                "outer and nested localized trailing fields must reject before band canonicalization");
+        }
+    }
+    model::Form localized_form; localized_form.id = model::ObjectId{1}; localized_form.name = "LocalizedBands";
+    localized_form.children.emplace_back(model::ControlRef{model::ObjectId{2}});
+    model::OrdinaryFormDocument localized(std::move(localized_form));
+    model::ChartPayload localized_chart;
+    model::ChartGaugeQualityBand translated;
+    translated.text = model::LocalizedStringValue{{{"ru", "Полоса"}, {"en", "Band"}}};
+    translated.tool_tip = model::LocalizedStringValue{{{"ru", "Подсказка"}}};
+    localized_chart.gauge_quality_bands.push_back(translated);
+    localized_chart.gauge_quality_bands.emplace_back();
+    localized.add_control(model::ControlNode{model::ObjectId{2}, "Localized", localized_chart});
+    const auto localized_stream = form_stream::encode_document(localized);
+    expect(localized_stream.ok(), "localized and default bands must encode");
+    const auto localized_back = form_stream::decode_document(localized_stream.value());
+    expect(localized_back.ok() && localized_back.value().reconstruction_complete() &&
+        std::get<model::ChartPayload>(localized_back.value().find_control(model::ObjectId{2})->payload).gauge_quality_bands == localized_chart.gauge_quality_bands,
+        "localized representation, including one Russian translation, must not silently become a plain string");
+}
+
 void test_chart_empty_render_cache_normalization_and_guards() {
     constexpr std::string_view empty_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Empty"><Position><Height>64</Height><Width>110</Width></Position><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(empty_xml);
@@ -22360,6 +22456,7 @@ int main() {
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_automatic_collection_colors();
         test_chart_summary_series_color_roundtrip_and_guards();
+        test_chart_gauge_bands_roundtrip_and_native_caches();
         test_chart_empty_render_cache_normalization_and_guards();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {

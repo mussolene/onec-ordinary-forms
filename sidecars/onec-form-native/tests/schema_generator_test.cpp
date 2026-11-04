@@ -1037,6 +1037,13 @@ void test_control_surfaces_and_property_order(
                 attribute(point_fields[1], "name") == "Color" && attribute(point_fields[1], "type") == "ColorValueType" &&
                 attribute(point_fields[2], "name") == "Value" && attribute(point_fields[2], "type") == "TypedValueType",
                 "ChartPoint schema must expose named Text, Color, and typed Value fields");
+            const auto gauge_band_fields = direct_children(sequence_for_type(schema, "GaugeChartQualityBandType"), "element");
+            expect(gauge_band_fields.size() == 5 && attribute(gauge_band_fields[0], "name") == "Begin" &&
+                attribute(gauge_band_fields[1], "name") == "End" && attribute(gauge_band_fields[2], "name") == "BackColor" &&
+                attribute(gauge_band_fields[3], "name") == "Text" && attribute(gauge_band_fields[4], "name") == "ToolTip" &&
+                attribute(gauge_band_fields[0], "type") == "xs:decimal" && attribute(gauge_band_fields[2], "type") == "ColorValueType" &&
+                attribute(gauge_band_fields[3], "type") == "LocalizedTextValueType" && attribute(gauge_band_fields[4], "type") == "LocalizedTextValueType",
+                "GaugeChartQualityBand schema exposes ordered typed boundaries, color, text, and tooltip");
         } else {
             if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
                 expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");

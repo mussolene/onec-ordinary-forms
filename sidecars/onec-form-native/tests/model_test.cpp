@@ -599,10 +599,11 @@ void test_chart_owned_collections() {
             descriptor->value_codec == codec && descriptor->default_value.kind == DefaultKind::none,
             "root Chart areas expose persisted readonly named object codecs");
     }
-    for (const auto& [name, codec] : {std::pair{"Series", ValueCodec::chart_series_collection}, std::pair{"Points", ValueCodec::chart_points_collection}}) {
+    for (const auto& [name, codec] : {std::pair{"Series", ValueCodec::chart_series_collection}, std::pair{"Points", ValueCodec::chart_points_collection},
+             std::pair{"GaugeChartQualityBands", ValueCodec::chart_gauge_quality_bands}}) {
         const auto* descriptor = find_property(ControlKind::chart, name);
         expect(descriptor && descriptor->api_access == ApiAccess::read_only && descriptor->persistence == PersistenceClass::persisted_readonly &&
-            descriptor->storage_codec == StorageCodec::collection_record && descriptor->value_codec == codec && descriptor->default_value.kind == DefaultKind::none,
+            descriptor->value_kind == ValueKind::collection && descriptor->storage_codec == StorageCodec::collection_record && descriptor->value_codec == codec && descriptor->default_value.kind == DefaultKind::none,
             "Chart collection descriptor must expose its owned collection");
     }
     Form form; form.id = ObjectId{1}; form.name = "OwnedCollections";
@@ -619,13 +620,16 @@ void test_chart_owned_collections() {
                 document.set_prop_val(owner, id, UndefinedValue{}) == PropertyMutationStatus::read_only && document.reset_prop_val(owner, id) == PropertyMutationStatus::read_only,
                 "root Chart owned areas cannot be replaced or reset");
         }
-        const auto series_id = PropertyId::from_name("Series"), points_id = PropertyId::from_name("Points");
-        const auto series = document.get_prop_val(owner, series_id), points = document.get_prop_val(owner, points_id);
+        const auto series_id = PropertyId::from_name("Series"), points_id = PropertyId::from_name("Points"), bands_id = PropertyId::from_name("GaugeChartQualityBands");
+        const auto series = document.get_prop_val(owner, series_id), points = document.get_prop_val(owner, points_id), bands = document.get_prop_val(owner, bands_id);
         expect(series.status == PropertyReadStatus::computed_value && series.value == PropertyValue{ChartCollectionRef{owner.id, ChartCollectionKind::series}} &&
-            points.status == PropertyReadStatus::computed_value && points.value == PropertyValue{ChartCollectionRef{owner.id, ChartCollectionKind::points}}, "owned Chart collection references must name owner and kind");
+            points.status == PropertyReadStatus::computed_value && points.value == PropertyValue{ChartCollectionRef{owner.id, ChartCollectionKind::points}} &&
+            bands.status == PropertyReadStatus::computed_value && bands.value == PropertyValue{ChartCollectionRef{owner.id, ChartCollectionKind::gauge_quality_bands}}, "owned Chart collection references must name owner and kind");
         expect(document.set_prop_val(owner, series_id, *series.value) == PropertyMutationStatus::read_only &&
             document.set_prop_val(owner, points_id, ChartCollectionRef{ObjectId{999}, ChartCollectionKind::points}) == PropertyMutationStatus::read_only &&
-            document.reset_prop_val(owner, points_id) == PropertyMutationStatus::read_only, "collection assignment and reset must be readonly");
+            document.reset_prop_val(owner, points_id) == PropertyMutationStatus::read_only &&
+            document.set_prop_val(owner, bands_id, ChartCollectionRef{owner.id, ChartCollectionKind::gauge_quality_bands}) == PropertyMutationStatus::read_only &&
+            document.reset_prop_val(owner, bands_id) == PropertyMutationStatus::read_only, "collection assignment and reset must be readonly");
         for (const auto& [series_count, point_count] : {std::pair{3, 4}, std::pair{0, 0}, std::pair{2, 3}}) {
             expect(document.set_prop_val(owner, PropertyId::from_name("SeriesCount"), std::int64_t{series_count}) == PropertyMutationStatus::applied &&
                 document.set_prop_val(owner, PropertyId::from_name("PointCount"), std::int64_t{point_count}) == PropertyMutationStatus::applied, "collection resize must succeed");
@@ -654,6 +658,25 @@ void test_chart_owned_collections() {
         bad_document.add_control(std::move(bad_control));
         expect(!bad_document.validate().ok(), "computed root Chart area references cannot be duplicated in scalar bags");
     }
+    Form invalid_form; invalid_form.id = ObjectId{1}; invalid_form.name = "InvalidGaugeBand"; invalid_form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument invalid_band_document(std::move(invalid_form));
+    ChartPayload invalid_payload;
+    ChartGaugeQualityBand invalid_band; invalid_band.begin = DecimalValue{"2"}; invalid_band.end = DecimalValue{"1"};
+    invalid_payload.gauge_quality_bands.push_back(invalid_band);
+    invalid_band_document.add_control(ControlNode{ObjectId{2}, "Gauge", std::move(invalid_payload)});
+    expect(!invalid_band_document.validate().ok(), "direct model rejects gauge quality bands whose Begin exceeds End");
+    Form shadow_form; shadow_form.id = ObjectId{1}; shadow_form.name = "BandShadow";
+    shadow_form.children.emplace_back(ControlRef{ObjectId{2}});
+    OrdinaryFormDocument clean_shadow(shadow_form);
+    ControlNode shadow_control{ObjectId{2}, "Gauge", ChartPayload{}};
+    clean_shadow.add_control(shadow_control);
+    expect(clean_shadow.validate().ok(), "scalar-shadow negative fixture must start valid");
+    shadow_control.properties().set_explicit(PropertyId::from_name("GaugeChartQualityBands"),
+        ChartCollectionRef{ObjectId{2}, ChartCollectionKind::gauge_quality_bands});
+    OrdinaryFormDocument invalid_shadow(std::move(shadow_form));
+    invalid_shadow.add_control(std::move(shadow_control));
+    expect(!invalid_shadow.validate().ok(), "owned gauge bands cannot be duplicated as a scalar collection reference");
+
 }
 
 void test_chart_computed_counts() {

@@ -205,7 +205,7 @@ struct ChartAreaRef {
     friend bool operator==(const ChartAreaRef&, const ChartAreaRef&) = default;
 };
 
-enum class ChartCollectionKind : std::uint8_t { series, points };
+enum class ChartCollectionKind : std::uint8_t { series, points, gauge_quality_bands };
 
 struct ChartCollectionRef {
     ObjectId owner{};
@@ -907,6 +907,18 @@ struct ChartPoint {
     PropertyValue value{UndefinedValue{}};
 };
 
+struct ChartGaugeQualityBand {
+    DecimalValue begin{"0"};
+    DecimalValue end{"10"};
+    ColorValue back_color{ColorKind::absolute, 50, 205, 50, 255, std::monostate{}};
+    PropertyValue text{std::string{}};
+    PropertyValue tool_tip{std::string{}};
+
+    friend bool operator==(const ChartGaugeQualityBand&, const ChartGaugeQualityBand&) = default;
+};
+
+[[nodiscard]] bool valid_chart_gauge_quality_band_range(const DecimalValue& begin, const DecimalValue& end) noexcept;
+
 struct ChartValue {
     ObjectId series_ref{};
     ObjectId point_ref{};
@@ -987,6 +999,7 @@ struct ChartPayload final : TypedControlPayload<ControlKind::chart> {
     std::optional<std::uint64_t> last_point_id;
     std::vector<ChartSeries> series;
     std::vector<ChartPoint> points;
+    std::vector<ChartGaugeQualityBand> gauge_quality_bands;
     std::vector<ChartValue> values;
 };
 struct PivotChartPayload final : TypedControlPayload<ControlKind::pivot_chart> {};

@@ -70,6 +70,38 @@ bool valid_border_value(const BorderValue& value) noexcept {
     return false;
 }
 
+bool valid_chart_gauge_quality_band_range(const DecimalValue& begin, const DecimalValue& end) noexcept {
+    try {
+        const std::string left = storage::value_codec::canonical_decimal(begin.canonical);
+        const std::string right = storage::value_codec::canonical_decimal(end.canonical);
+        const auto magnitude_compare = [](std::string_view a, std::string_view b) {
+            const auto a_dot = a.find('.');
+            const auto b_dot = b.find('.');
+            const auto a_integer = a.substr(0, a_dot);
+            const auto b_integer = b.substr(0, b_dot);
+            if (a_integer.size() != b_integer.size()) return a_integer.size() < b_integer.size() ? -1 : 1;
+            if (a_integer != b_integer) return a_integer < b_integer ? -1 : 1;
+            const auto a_fraction = a_dot == std::string_view::npos ? std::string_view{} : a.substr(a_dot + 1);
+            const auto b_fraction = b_dot == std::string_view::npos ? std::string_view{} : b.substr(b_dot + 1);
+            const auto count = std::max(a_fraction.size(), b_fraction.size());
+            for (std::size_t i = 0; i < count; ++i) {
+                const char ac = i < a_fraction.size() ? a_fraction[i] : '0';
+                const char bc = i < b_fraction.size() ? b_fraction[i] : '0';
+                if (ac != bc) return ac < bc ? -1 : 1;
+            }
+            return 0;
+        };
+        const bool left_negative = left.starts_with('-');
+        const bool right_negative = right.starts_with('-');
+        if (left_negative != right_negative) return left_negative;
+        const std::string_view left_abs = left_negative ? std::string_view(left).substr(1) : std::string_view(left);
+        const std::string_view right_abs = right_negative ? std::string_view(right).substr(1) : std::string_view(right);
+        return magnitude_compare(left_abs, right_abs) * (left_negative ? -1 : 1) <= 0;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
 namespace {
 
 bool valid_xs_language(std::string_view language) noexcept {
@@ -352,7 +384,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::context_menu_reference;
             } else if constexpr (std::is_same_v<Value, ChartCollectionRef>) {
                 return (expected == metamodel::ValueCodec::chart_series_collection && typed_value.kind == ChartCollectionKind::series) ||
-                    (expected == metamodel::ValueCodec::chart_points_collection && typed_value.kind == ChartCollectionKind::points);
+                    (expected == metamodel::ValueCodec::chart_points_collection && typed_value.kind == ChartCollectionKind::points) ||
+                    (expected == metamodel::ValueCodec::chart_gauge_quality_bands && typed_value.kind == ChartCollectionKind::gauge_quality_bands);
             } else if constexpr (std::is_same_v<Value, FormItemCollectionRef>) {
                 return (expected == metamodel::ValueCodec::form_controls && typed_value.kind == FormItemCollectionKind::controls) ||
                     (expected == metamodel::ValueCodec::panel_pages && typed_value.kind == FormItemCollectionKind::pages);
@@ -520,6 +553,7 @@ bool is_typed_collection_property(const metamodel::PropertyDescriptor& descripto
         descriptor.value_codec == ValueCodec::chart_plot_area ||
         descriptor.value_codec == ValueCodec::chart_title_area ||
         descriptor.value_codec == ValueCodec::chart_legend_area ||
+        descriptor.value_codec == ValueCodec::chart_gauge_quality_bands ||
         (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "SummarySeries") ||
         descriptor.value_codec == ValueCodec::dendrogram_items ||
         descriptor.value_codec == ValueCodec::dendrogram_links;
@@ -1456,7 +1490,7 @@ bool chart_budget_fits(const std::vector<ControlNode>& controls, ObjectId resize
         const auto points = changed ? new_points : chart->points.size();
         if (series > max_chart_collection_items || points > max_chart_collection_items ||
             (points && series > max_chart_collection_items / points) ||
-            !add(series) || !add(points) || !add(series * points) ||
+            !add(series) || !add(points) || !add(series * points) || !add(chart->gauge_quality_bands.size()) ||
             !add(chart->summary_series.trendlines.size())) return false;
         const auto retained = std::min(series, chart->series.size());
         for (std::size_t i = 0; i < retained; ++i)
@@ -1719,9 +1753,11 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             return {PropertyReadStatus::computed_value, PropertyValue{static_cast<std::int64_t>(count)}};
         }
         if (control.kind() == ControlKind::chart &&
-            (property == PropertyId::from_name("Series") || property == PropertyId::from_name("Points")))
+            (property == PropertyId::from_name("Series") || property == PropertyId::from_name("Points") ||
+             property == PropertyId::from_name("GaugeChartQualityBands")))
             return {PropertyReadStatus::computed_value, PropertyValue{ChartCollectionRef{control.id,
-                property == PropertyId::from_name("Series") ? ChartCollectionKind::series : ChartCollectionKind::points}}};
+                property == PropertyId::from_name("Series") ? ChartCollectionKind::series :
+                    property == PropertyId::from_name("Points") ? ChartCollectionKind::points : ChartCollectionKind::gauge_quality_bands}}};
         if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActiveSeries")) {
             if (const auto* entry = control.properties().find(property)) return {PropertyReadStatus::explicit_value, entry->value};
             const auto& chart = std::get<ChartPayload>(control.payload);
@@ -2322,7 +2358,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
-            return (descriptor->value_codec == metamodel::ValueCodec::panel_pages || descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
+            return (descriptor->value_codec == metamodel::ValueCodec::panel_pages || descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection || descriptor->value_codec == metamodel::ValueCodec::chart_gauge_quality_bands ||
                 descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area || descriptor->api_name == "SummarySeries") ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
@@ -2694,7 +2730,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         if (control.kind() == ControlKind::table && descriptor->api_name == "Tree" &&
             !table_tree_property_available(*this, control)) return PropertyMutationStatus::unsupported_surface;
         if (is_typed_collection_property(*descriptor)) {
-            return (descriptor->value_codec == metamodel::ValueCodec::panel_pages || descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection ||
+            return (descriptor->value_codec == metamodel::ValueCodec::panel_pages || descriptor->value_codec == metamodel::ValueCodec::chart_series_collection || descriptor->value_codec == metamodel::ValueCodec::chart_points_collection || descriptor->value_codec == metamodel::ValueCodec::chart_gauge_quality_bands ||
                 descriptor->value_codec == metamodel::ValueCodec::chart_plot_area || descriptor->value_codec == metamodel::ValueCodec::chart_title_area || descriptor->value_codec == metamodel::ValueCodec::chart_legend_area || descriptor->api_name == "SummarySeries") ? PropertyMutationStatus::read_only : PropertyMutationStatus::unsupported_surface;
         }
         if (descriptor->surface == metamodel::PropertySurface::panel_placement) {
@@ -3701,6 +3737,23 @@ ValidationReport OrdinaryFormDocument::validate() const {
             const auto invalid_chart = [&](std::string reason) {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
+            for (const auto& band : chart->gauge_quality_bands) {
+                bool valid_text = false;
+                bool valid_tool_tip = false;
+                const auto check_band_text = [](const PropertyValue& value) {
+                    if (const auto* text = std::get_if<std::string>(&value)) return valid_typed_utf8(*text);
+                    if (const auto* localized = std::get_if<LocalizedStringValue>(&value)) return valid_localized_string(*localized);
+                    return false;
+                };
+                valid_text = check_band_text(band.text);
+                valid_tool_tip = check_band_text(band.tool_tip);
+                if (!valid_chart_gauge_quality_band_range(band.begin, band.end) ||
+                    storage::value_codec::canonical_decimal(band.begin.canonical) != band.begin.canonical ||
+                    storage::value_codec::canonical_decimal(band.end.canonical) != band.end.canonical ||
+                    !valid_chart_style(metamodel::ValueCodec::color, PropertyValue{band.back_color}) ||
+                    !valid_text || !valid_tool_tip)
+                    invalid_chart("Invalid GaugeChartQualityBand value");
+            }
             for (const auto& field : metamodel::chart_area_color_descriptors()) {
                 const auto& area = field.kind == ChartAreaKind::plot ? chart->plot_area : field.kind == ChartAreaKind::title ? chart->title_area : chart->legend_area;
                 if (area && ((*area).*(field.member)) && !valid_chart_style(metamodel::ValueCodec::color, PropertyValue{*((*area).*(field.member))}))
@@ -3745,7 +3798,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
             }
             if (control.properties().contains(PropertyId::from_name("Series")) ||
                 control.properties().contains(PropertyId::from_name("Points")) ||
-                control.properties().contains(PropertyId::from_name("SummarySeries")))
+                control.properties().contains(PropertyId::from_name("SummarySeries")) ||
+                control.properties().contains(PropertyId::from_name("GaugeChartQualityBands")))
                 invalid_chart("Chart collections are owned objects and cannot be stored as properties");
             if (control.properties().contains(PropertyId::from_name("SeriesCount")) ||
                 control.properties().contains(PropertyId::from_name("PointCount")))

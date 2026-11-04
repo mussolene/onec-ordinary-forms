@@ -386,7 +386,7 @@
               <Property name="GaugeChartValuesScaleLabelsArcDirection" apiName="GaugeChartValuesScaleLabelsArcDirection" russianName="ПодписиШкалыЗначенийИзмерительнойДиаграммыВдольШкалы" russianType="Булево" valueCodec="boolean"/>
               <Property name="LabelLocation" apiName="LabelLocation" russianName="ПоложениеПодписей" russianType="ПоложениеПодписейКДиаграмме" valueCodec="enumeration"/>
               <Property name="GaugeChartValuesScaleLabelsLocation" apiName="GaugeChartValuesScaleLabelsLocation" russianName="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы" russianType="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы" valueCodec="enumeration"/>
-              <Property name="GaugeChartQualityBands" apiName="GaugeChartQualityBands" russianName="ПолосыИзмерительнойДиаграммы" russianType="ПолосыИзмерительнойДиаграммы" valueCodec="unclassified"/>
+              <Property name="GaugeChartQualityBands" apiName="GaugeChartQualityBands" russianName="ПолосыИзмерительнойДиаграммы" russianType="ПолосыИзмерительнойДиаграммы" valueCodec="chart-gauge-quality-bands"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
               <Property name="TransparentLabel" apiName="TransparentLabel" russianName="ПрозрачныйФонПодписей" russianType="Булево" valueCodec="boolean"/>
               <Property name="HideBaseValue" apiName="HideBaseValue" russianName="ПропускатьБазовоеЗначение" russianType="Булево" valueCodec="boolean"/>
@@ -1290,6 +1290,9 @@
         </Properties></NamedConcept>
         <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="GaugeChartQualityBand" russianName="ПолосаИзмерительнойДиаграммы"><Properties>
+          <Property name="Begin" russianName="Начало" russianType="Число"/><Property name="End" russianName="Конец" russianType="Число"/><Property name="BackColor" russianName="ЦветФона" russianType="Цвет"/><Property name="Text" russianName="Текст" russianType="Строка"/><Property name="ToolTip" russianName="Подсказка" russianType="Строка"/>
         </Properties></NamedConcept>
         <NamedConcept name="CommandBarButton" russianName="КнопкаКоманднойПанели"><Properties>
           <Property name="Name" russianName="Имя"/><Property name="Type" russianName="ТипКнопки"/>

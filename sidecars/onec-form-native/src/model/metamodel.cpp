@@ -752,14 +752,16 @@ void apply_proven_storage_overrides(
     classify_property(gantt_properties, "PeriodicVariantRepetition", StorageCodec::control_info, DefaultKind::decimal, "1");
 
     auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
-    for (const auto name : {"Series", "Points"}) {
+    for (const auto name : {"Series", "Points", "GaugeChartQualityBands"}) {
         auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
         if (property == chart_properties.end()) throw std::logic_error("missing Chart collection descriptor");
         property->api_access = ApiAccess::read_only;
         property->persistence = PersistenceClass::persisted_readonly;
         property->storage_codec = StorageCodec::collection_record;
-        property->value_codec = name == std::string_view{"Series"} ? ValueCodec::chart_series_collection : ValueCodec::chart_points_collection;
+        property->value_codec = name == std::string_view{"Series"} ? ValueCodec::chart_series_collection :
+            name == std::string_view{"Points"} ? ValueCodec::chart_points_collection : ValueCodec::chart_gauge_quality_bands;
         property->default_value = {DefaultKind::none, {}};
+        if (name == std::string_view{"GaugeChartQualityBands"}) property->value_kind = ValueKind::collection;
     }
     for (const auto& [name, codec] : {std::pair{"PlotArea", ValueCodec::chart_plot_area}, std::pair{"TitleArea", ValueCodec::chart_title_area}, std::pair{"LegendArea", ValueCodec::chart_legend_area}}) {
         auto property = std::ranges::find(chart_properties, name, &PropertyDescriptor::api_name);
@@ -2859,6 +2861,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "chart-series-collection";
         case ValueCodec::chart_points_collection:
             return "chart-points-collection";
+        case ValueCodec::chart_gauge_quality_bands:
+            return "chart-gauge-quality-bands";
         case ValueCodec::chart_plot_area: return "chart-plot-area";
         case ValueCodec::chart_title_area: return "chart-title-area";
         case ValueCodec::chart_legend_area: return "chart-legend-area";

@@ -105,6 +105,7 @@ enum class ValueCodec : std::uint8_t {
     chart_series_reference,
     chart_series_collection,
     chart_points_collection,
+    chart_gauge_quality_bands,
     chart_plot_area,
     chart_title_area,
     chart_legend_area,

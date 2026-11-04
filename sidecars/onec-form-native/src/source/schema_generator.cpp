@@ -145,6 +145,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "ChartSeriesCollectionType";
         case ValueCodec::chart_points_collection:
             return "ChartPointCollectionType";
+        case ValueCodec::chart_gauge_quality_bands:
+            return "GaugeChartQualityBandsType";
         case ValueCodec::action_source_reference:
             return "ActionSourceReferenceValueType";
         case ValueCodec::control_reference:
@@ -940,6 +942,8 @@ void append_value_types(std::string& output) {
   <xs:simpleType name="ChartLastAssignedIdType"><xs:restriction base="xs:unsignedLong"><xs:maxInclusive value="9223372036854775807"/></xs:restriction></xs:simpleType>
   <xs:complexType name="ChartSeriesCollectionType"><xs:sequence><xs:element name="ChartSeries" type="ChartSeriesType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="lastAssignedId" type="ChartLastAssignedIdType" use="optional"/></xs:complexType>
   <xs:complexType name="ChartPointCollectionType"><xs:sequence><xs:element name="ChartPoint" type="ChartPointType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="lastAssignedId" type="ChartLastAssignedIdType" use="optional"/></xs:complexType>
+  <xs:complexType name="GaugeChartQualityBandType"><xs:sequence><xs:element name="Begin" type="xs:decimal"/><xs:element name="End" type="xs:decimal"/><xs:element name="BackColor" type="ColorValueType"/><xs:element name="Text" type="LocalizedTextValueType"/><xs:element name="ToolTip" type="LocalizedTextValueType"/></xs:sequence></xs:complexType>
+  <xs:complexType name="GaugeChartQualityBandsType"><xs:sequence><xs:element name="GaugeChartQualityBand" type="GaugeChartQualityBandType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
   <xs:simpleType name="ChartDataModeType"><xs:restriction base="xs:string"><xs:enumeration value="Sample"/><xs:enumeration value="Explicit"/></xs:restriction></xs:simpleType>
   <xs:complexType name="ChartValueCollectionType"><xs:sequence><xs:element name="ChartValue" type="ChartValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="dataMode" type="ChartDataModeType" use="optional"/></xs:complexType>
 
@@ -1724,6 +1728,9 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPoint\" russianName=\"ТочкаДиаграммы\"><Properties>\n"
         "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"GaugeChartQualityBand\" russianName=\"ПолосаИзмерительнойДиаграммы\"><Properties>\n"
+        "          <Property name=\"Begin\" russianName=\"Начало\" russianType=\"Число\"/><Property name=\"End\" russianName=\"Конец\" russianType=\"Число\"/><Property name=\"BackColor\" russianName=\"ЦветФона\" russianType=\"Цвет\"/><Property name=\"Text\" russianName=\"Текст\" russianType=\"Строка\"/><Property name=\"ToolTip\" russianName=\"Подсказка\" russianType=\"Строка\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"CommandBarButton\" russianName=\"КнопкаКоманднойПанели\"><Properties>\n"
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"Type\" russianName=\"ТипКнопки\"/>\n"

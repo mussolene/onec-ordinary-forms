@@ -1386,6 +1386,7 @@ model::PropertyValue parse_property_value(
         case mm::ValueCodec::chart_legend_area:
         case mm::ValueCodec::chart_series_collection:
         case mm::ValueCodec::chart_points_collection:
+        case mm::ValueCodec::chart_gauge_quality_bands:
             fail("OOF2003", node, std::string(object_id), property, "owned Chart collection", "scalar", "Chart collection is not a scalar property");
         case mm::ValueCodec::command_bar_buttons:
             fail("OOF2003", node, std::string(object_id), property, "owned Buttons collection", "scalar", "Buttons is not a scalar property");
@@ -2078,6 +2079,7 @@ private:
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         bool position_seen = false;
         bool chart_summary_series_seen = false;
+        bool chart_gauge_quality_bands_seen = false;
         bool gantt_series_seen = false;
         bool gantt_points_seen = false;
         bool gantt_intervals_seen = false;
@@ -2086,6 +2088,39 @@ private:
         bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
+            if (descriptor->kind == model::ControlKind::chart && name == "GaugeChartQualityBands") {
+                if (chart_gauge_quality_bands_seen)
+                    fail("OOF2003", child, id_text, name, "one GaugeChartQualityBands collection", "duplicate", "Duplicate GaugeChartQualityBands");
+                chart_gauge_quality_bands_seen = true;
+                if (child->properties != nullptr)
+                    fail("OOF2003", child, id_text, name, "collection without attributes", "present", "GaugeChartQualityBands does not accept attributes");
+                auto& bands = std::get<model::ChartPayload>(control.payload).gauge_quality_bands;
+                for (xmlNodePtr item : element_children(child)) {
+                    if (node_name(item) != "GaugeChartQualityBand")
+                        fail("OOF2003", item, id_text, node_name(item), "GaugeChartQualityBand", node_name(item), "Unknown GaugeChartQualityBands item");
+                    if (item->properties != nullptr)
+                        fail("OOF2003", item, id_text, "GaugeChartQualityBand", "item without attributes", "present", "GaugeChartQualityBand does not accept attributes");
+                    consume_chart_budget(chart_budget_, 1, item, id_text);
+                    const auto fields = element_children(item);
+                    if (fields.size() != 5 || node_name(fields[0]) != "Begin" || node_name(fields[1]) != "End" ||
+                        node_name(fields[2]) != "BackColor" || node_name(fields[3]) != "Text" || node_name(fields[4]) != "ToolTip")
+                        fail("OOF2003", item, id_text, "GaugeChartQualityBand", "Begin, End, BackColor, Text, ToolTip in order", "invalid fields", "Invalid GaugeChartQualityBand fields");
+                    for (xmlNodePtr decimal_node : {fields[0], fields[1]}) {
+                        if (decimal_node->properties != nullptr || !element_children(decimal_node).empty())
+                            fail("OOF2003", decimal_node, id_text, node_name(decimal_node), "plain decimal", "attributes or child elements", "Gauge quality band boundaries must be plain decimals");
+                    }
+                    model::ChartGaugeQualityBand band;
+                    band.begin = model::DecimalValue{canonical_decimal(node_text(fields[0]), fields[0], "Begin", id_text)};
+                    band.end = model::DecimalValue{canonical_decimal(node_text(fields[1]), fields[1], "End", id_text)};
+                    if (!model::valid_chart_gauge_quality_band_range(band.begin, band.end))
+                        fail("OOF2003", item, id_text, "Begin/End", "Begin less than or equal to End", band.begin.canonical + ">" + band.end.canonical, "Invalid GaugeChartQualityBand range");
+                    band.back_color = parse_color(fields[2]);
+                    band.text = parse_property_value(fields[3], mm::ValueCodec::localized_text, id_text, typed_budget_);
+                    band.tool_tip = parse_property_value(fields[4], mm::ValueCodec::localized_text, id_text, typed_budget_);
+                    bands.push_back(std::move(band));
+                }
+                continue;
+            }
             if (descriptor->kind == model::ControlKind::chart && (name == "PlotArea" || name == "LegendArea" || name == "TitleArea")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
                 const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
@@ -3890,6 +3925,7 @@ private:
             case mm::ValueCodec::chart_legend_area:
             case mm::ValueCodec::chart_series_collection:
             case mm::ValueCodec::chart_points_collection:
+            case mm::ValueCodec::chart_gauge_quality_bands:
                 serialization_fail(std::string(object_id), std::string(name), "owned Chart collection", "scalar", "Chart collection cannot be serialized as a scalar property");
             case mm::ValueCodec::dendrogram_items:
                 serialization_fail(std::string(object_id), std::string(name), "owned Items collection", "scalar", "Dendrogram Items is not a scalar property");
@@ -4462,6 +4498,29 @@ private:
         } else if (control.kind() == model::ControlKind::chart) {
             for (const auto& descriptor : metamodel_.properties_for(control.kind())) {
                 if (descriptor.xml_name == "Title") continue;
+                if (descriptor.api_name == "GaugeChartQualityBands") {
+                    if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload);
+                        chart != nullptr && !chart->gauge_quality_bands.empty()) {
+                        writer_.open("GaugeChartQualityBands");
+                        for (const auto& band : chart->gauge_quality_bands) {
+                            if (!model::valid_chart_gauge_quality_band_range(band.begin, band.end))
+                                serialization_fail(id, "GaugeChartQualityBands", "Begin less than or equal to End", band.begin.canonical + ">" + band.end.canonical, "Invalid GaugeChartQualityBand range");
+                            writer_.open("GaugeChartQualityBand");
+                            writer_.text("Begin", canonical_decimal(band.begin.canonical, nullptr, "Begin", id));
+                            writer_.text("End", canonical_decimal(band.end.canonical, nullptr, "End", id));
+                            write_color("BackColor", band.back_color, id);
+                            for (const auto& [name, value] : {std::pair<std::string_view, const model::PropertyValue*>{"Text", &band.text},
+                                                              {"ToolTip", &band.tool_tip}}) {
+                                if (const auto* translations = std::get_if<model::LocalizedStringValue>(value))
+                                    write_localized(name, *translations, id);
+                                else writer_.text(name, std::get<std::string>(*value));
+                            }
+                            writer_.close("GaugeChartQualityBand");
+                        }
+                        writer_.close("GaugeChartQualityBands");
+                    }
+                    continue;
+                }
                 write_property_set(control.properties(), std::span{&descriptor, 1}, id);
             }
         } else {

@@ -7222,6 +7222,102 @@ model::ChartTrendline decode_chart_trendline(const LV& record, model::ObjectId i
     return trend;
 }
 
+std::string gauge_band_integer_cache(std::string_view value) {
+    const bool negative = value.starts_with('-');
+    std::uint32_t magnitude = 0;
+    for (std::size_t index = negative ? 1U : 0U; index < value.size() && value[index] != '.'; ++index)
+        magnitude = magnitude * 10U + static_cast<std::uint32_t>(value[index] - '0');
+    const std::uint32_t bits = negative ? 0U - magnitude : magnitude;
+    return std::to_string(bits <= INT32_MAX ? static_cast<std::int64_t>(bits)
+        : static_cast<std::int64_t>(bits) - 4294967296LL);
+}
+
+LV encode_chart_gauge_bands(const std::vector<model::ChartGaugeQualityBand>& bands, std::string_view path) {
+    if (bands.size() > model::max_chart_collection_items)
+        fail("OOF1122", std::string(path), "bounded quality bands", {}, "Gauge quality bands exceed the collection limit");
+    std::vector<LV> records{raw("1"), raw(std::to_string(bands.size()))};
+    records.reserve(4 + bands.size());
+    for (const auto& band : bands) {
+        std::string begin, end;
+        try {
+            begin = value_codec::canonical_decimal(band.begin.canonical);
+            end = value_codec::canonical_decimal(band.end.canonical);
+        } catch (const std::exception& error) {
+            fail("OOF1122", std::string(path), "decimal quality-band bounds", {}, error.what());
+        }
+        LV localized_text = encoded_localized("");
+        LV localized_tip = encoded_localized("");
+        const auto* text = std::get_if<std::string>(&band.text);
+        const auto* tip = std::get_if<std::string>(&band.tool_tip);
+        if (!text) localized_text = encoded_localized_text(band.text, path, false);
+        if (!tip) localized_tip = encoded_localized_text(band.tool_tip, path, false);
+        records.push_back(list({raw("3"), raw(gauge_band_integer_cache(begin)), raw(gauge_band_integer_cache(end)),
+            encode_control_color(band.back_color, path), std::move(localized_text), std::move(localized_tip),
+            string_value(text ? *text : ""), raw(text && !text->empty() ? "1" : "0"),
+            string_value(tip ? *tip : ""), raw(tip && !tip->empty() ? "1" : "0"),
+            raw(begin), raw(end)}));
+    }
+    records.push_back(raw("0"));
+    records.push_back(raw("0"));
+    return list(std::move(records));
+}
+
+std::vector<model::ChartGaugeQualityBand> decode_chart_gauge_bands(
+    const LV& record, std::string_view path, std::size_t available_items) {
+    require_list(record, path);
+    require_raw_constant(at(record, 0, path), "1", child_path(path, 0));
+    const auto count = integer_atom<std::size_t>(at(record, 1, path), child_path(path, 1));
+    if (count > available_items)
+        fail("OOF1102", std::string(path), "quality bands within shared document budget", {}, "Gauge quality bands exceed the collection budget");
+    require_arity(record, count + 4, path);
+    require_raw_constant(record.items[count + 2], "0", child_path(path, count + 2));
+    require_raw_constant(record.items[count + 3], "0", child_path(path, count + 3));
+    std::vector<model::ChartGaugeQualityBand> bands;
+    bands.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto item_path = child_path(path, index + 2);
+        const auto& item = record.items[index + 2];
+        require_arity(item, 12, item_path);
+        require_raw_constant(item.items[0], "3", child_path(item_path, 0));
+        model::ChartGaugeQualityBand band;
+        try {
+            band.begin.canonical = value_codec::canonical_platform_decimal(raw_atom(item.items[10], child_path(item_path, 10)));
+            band.end.canonical = value_codec::canonical_platform_decimal(raw_atom(item.items[11], child_path(item_path, 11)));
+        } catch (const std::exception& error) {
+            fail("OOF1115", item_path, "decimal quality-band bounds", {}, error.what());
+        }
+        require_raw_constant(item.items[1], gauge_band_integer_cache(band.begin.canonical), child_path(item_path, 1));
+        require_raw_constant(item.items[2], gauge_band_integer_cache(band.end.canonical), child_path(item_path, 2));
+        band.back_color = decode_control_color(item.items[3], child_path(item_path, 3));
+        const auto read_text = [&](std::size_t localized, std::size_t literal, std::size_t mode) -> model::PropertyValue {
+            const bool use_literal = bool_atom(item.items[mode], child_path(item_path, mode));
+            const auto translations_path = child_path(item_path, localized);
+            const auto translations_count = integer_atom<std::uint32_t>(at(item.items[localized], 1, translations_path),
+                child_path(translations_path, 1));
+            if (translations_count > model::max_localized_text_items)
+                fail("OOF1108", translations_path, "bounded localized band text", {}, "Band text exceeds the translation limit");
+            require_arity(item.items[localized], static_cast<std::size_t>(translations_count) + 2, translations_path);
+            for (std::size_t translation = 0; translation < translations_count; ++translation)
+                require_arity(item.items[localized].items[translation + 2], 2, child_path(translations_path, translation + 2));
+            list_stream::ListInStream stream(item.items[localized]);
+            model::LocalizedStringValue translations;
+            try { translations = value_codec::read_localized_string(stream); }
+            catch (const std::exception& error) { fail("OOF1108", item_path, "localized band text", {}, error.what()); }
+            if (stream.has_next())
+                fail("OOF1108", translations_path, "complete localized band text", {}, "Band text has trailing fields");
+            const auto plain = string_atom(item.items[literal], child_path(item_path, literal));
+            if ((use_literal && !translations.items.empty()) || (!use_literal && !plain.empty()))
+                fail("OOF1114", item_path, "one active band text representation", {}, "Gauge band text representations disagree");
+            if (use_literal || translations.items.empty()) return plain;
+            return translations;
+        };
+        band.text = read_text(4, 6, 7);
+        band.tool_tip = read_text(5, 8, 9);
+        bands.push_back(std::move(band));
+    }
+    return bands;
+}
+
 LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValue& title,
     const model::PropertySet& properties = {}, model::ObjectId owner = {}) {
     int chart_type = 4;
@@ -7307,6 +7403,7 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
     }
     auto middle = canonical_chart_middle_defaults();
     middle[2] = raw(std::to_string(chart_type));
+    middle[69] = encode_chart_gauge_bands(chart.gauge_quality_bands, "$/Chart/GaugeChartQualityBands");
     if (middle.size() <= 11) fail("OOF1122", "$/Chart/Title", "canonical Chart title slot", std::to_string(middle.size()), "Chart defaults do not contain the title slot");
     middle[11] = encoded_localized_text(title, "$/Chart/TitleArea/Text");
     append(std::move(middle));
@@ -7729,7 +7826,10 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         require_arity(record, 3 + count, record_path);
         chart_collection_items += count;
     }
-    decoded_collection_items += chart_collection_items;
+    const auto band_slot = points_count_offset + 1 + static_cast<std::size_t>(point_count) * 11 + 69;
+    auto gauge_bands = decode_chart_gauge_bands(at(stored_info, band_slot, info_path),
+        child_path(info_path, band_slot), available_items - chart_collection_items);
+    decoded_collection_items += chart_collection_items + gauge_bands.size();
     LV info = stored_info;
     std::vector<DecodedControlEvent> chart_events;
     if (has_events) {
@@ -7741,6 +7841,7 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         info.items[event_flag_index] = raw("0");
     }
     model::ChartPayload payload;
+    payload.gauge_quality_bands = std::move(gauge_bands);
     const auto last_series_id = integer_atom<std::uint64_t>(at(info, 1, info_path), child_path(info_path, 1));
     const auto last_point_id = integer_atom<std::uint64_t>(at(info, 2, info_path), child_path(info_path, 2));
     for (std::size_t index = 0; index < series_count; ++index) {
@@ -7775,6 +7876,8 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     if (last_series_id != max_series_id) payload.last_series_id = last_series_id;
     if (last_point_id != max_point_id) payload.last_point_id = last_point_id;
     const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
+    info.items[middle_start + 69] = encode_chart_gauge_bands(payload.gauge_quality_bands,
+        child_path(info_path, middle_start + 69));
     const auto active_series_path = child_path(info_path, middle_start + 52);
     const auto active_series = integer_atom<std::size_t>(at(info, middle_start + 52, info_path), active_series_path);
     if ((!payload.series.empty() && active_series >= payload.series.size()) || (payload.series.empty() && active_series != 0))

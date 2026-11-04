@@ -3416,6 +3416,36 @@ void test_runtime_properties_are_not_public_xml() {
     }
     expect(source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML").ok(),
         "runtime Chart rejection fixture must otherwise parse");
+    const auto bands_xml = R"XML(<Form id="1" name="Bands" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Gauge"><Position/><GaugeChartQualityBands><GaugeChartQualityBand><Begin>-5.25</Begin><End>0</End><BackColor kind="absolute" red="12" green="34" blue="56"/><Text>Low</Text><ToolTip><Item language="ru">Низкое значение</Item></ToolTip></GaugeChartQualityBand><GaugeChartQualityBand><Begin>0.125</Begin><End>10.875</End><BackColor kind="absolute" red="200" green="100" blue="50"/><Text><Item language="en">High</Item></Text><ToolTip>Details</ToolTip></GaugeChartQualityBand></GaugeChartQualityBands><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    auto bands_document = source::parse_form_xml(bands_xml);
+    expect(bands_document.ok(), "named gauge quality bands parse as chart objects");
+    if (bands_document) {
+        const auto& chart = std::get<model::ChartPayload>(bands_document.value().find_control(model::ObjectId{2})->payload);
+        expect(chart.gauge_quality_bands.size() == 2 && chart.gauge_quality_bands[0].begin.canonical == "-5.25" &&
+            chart.gauge_quality_bands[1].end.canonical == "10.875" && std::holds_alternative<model::LocalizedStringValue>(chart.gauge_quality_bands[0].tool_tip) &&
+            std::holds_alternative<model::LocalizedStringValue>(chart.gauge_quality_bands[1].text),
+            "GaugeChartQualityBand retains decimal boundaries and localized text values");
+        const auto serialized_bands = source::serialize_form_xml(bands_document.value());
+        expect(serialized_bands.ok(), "gauge quality bands serialize through their named object model");
+        if (serialized_bands) {
+            const auto parsed_again = source::parse_form_xml(serialized_bands.value());
+            expect(parsed_again.ok() && std::get<model::ChartPayload>(parsed_again.value().find_control(model::ObjectId{2})->payload).gauge_quality_bands == chart.gauge_quality_bands,
+                "gauge quality bands round trip with their typed values");
+        }
+    }
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Bands" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Gauge"><Position/><GaugeChartQualityBands><GaugeChartQualityBand><Begin>2</Begin><End>1</End><BackColor kind="automatic"/><Text/><ToolTip/></GaugeChartQualityBand></GaugeChartQualityBands><Series/><Points/><Values/></Chart></ChildItems></Form>)XML"),
+        "gauge quality bands reject inverted ranges");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Bands" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Gauge"><Position/><GaugeChartQualityBands/><GaugeChartQualityBands/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML"),
+        "gauge quality bands reject duplicate collections");
+    auto empty_bands = source::parse_form_xml(R"XML(<Form id="1" name="Bands" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Gauge"><Position/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML");
+    bool empty_bands_omitted = false;
+    if (empty_bands) {
+        const auto empty_bands_xml = source::serialize_form_xml(empty_bands.value());
+        empty_bands_omitted = empty_bands_xml.ok() && empty_bands_xml.value().find("GaugeChartQualityBands") == std::string::npos;
+    }
+    expect(empty_bands_omitted, "empty gauge quality bands are omitted canonically");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Bands" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Gauge"><Position/><GaugeChartQualityBands><GaugeChartQualityBand><Begin>not-a-number</Begin><End>1</End><BackColor kind="automatic"/><Text/><ToolTip/></GaugeChartQualityBand></GaugeChartQualityBands><Series/><Points/><Values/></Chart></ChildItems></Form>)XML"),
+        "gauge quality bands reject non-decimal boundaries");
     auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="C"><Position/></CalendarField></ChildItems></Form>)XML");
     expect(parsed.ok(), "runtime boundary fixture must parse");
     if (!parsed) return;
