@@ -187,6 +187,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::date ||
                        expected == metamodel::ValueCodec::action_source_reference ||
                        expected == metamodel::ValueCodec::context_menu_reference ||
+                       (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ActivePoint" &&
+                        expected == metamodel::ValueCodec::chart_point_reference) ||
                        (descriptor.control_kind == ControlKind::radio_button &&
                         descriptor.api_name == "SelectionValue" && expected == metamodel::ValueCodec::decimal);
             } else if constexpr (std::is_same_v<Value, bool>) {
@@ -395,6 +397,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::table_columns;
             } else if constexpr (std::is_same_v<Value, ChartSeriesRef>) {
                 return expected == metamodel::ValueCodec::chart_series_reference;
+            } else if constexpr (std::is_same_v<Value, ChartPointRef>) {
+                return expected == metamodel::ValueCodec::chart_point_reference;
             } else if constexpr (std::is_same_v<Value, FormRef>) {
                 return expected == metamodel::ValueCodec::action_source_reference || expected == metamodel::ValueCodec::form_reference;
             } else if constexpr (std::is_same_v<Value, AttributeRef>) {
@@ -1765,6 +1769,12 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             if (chart.series.empty()) return {PropertyReadStatus::computed_value, PropertyValue{UndefinedValue{}}};
             return {PropertyReadStatus::computed_value, PropertyValue{ChartSeriesRef{control.id, chart.series.front().id}}};
         }
+        if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActivePoint")) {
+            if (const auto* entry = control.properties().find(property)) return {PropertyReadStatus::explicit_value, entry->value};
+            const auto& chart = std::get<ChartPayload>(control.payload);
+            if (chart.points.empty()) return {PropertyReadStatus::computed_value, PropertyValue{UndefinedValue{}}};
+            return {PropertyReadStatus::computed_value, PropertyValue{ChartPointRef{control.id, chart.points.front().id}}};
+        }
         if (control.kind() == ControlKind::chart &&
             (property == PropertyId::from_name("PlotArea") || property == PropertyId::from_name("LegendArea") || property == PropertyId::from_name("TitleArea"))) {
             const auto kind = property == PropertyId::from_name("PlotArea") ? ChartAreaKind::plot : property == PropertyId::from_name("TitleArea") ? ChartAreaKind::title : ChartAreaKind::legend;
@@ -2207,6 +2217,8 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             control.properties().set_explicit(property, value);
             return PropertyMutationStatus::applied;
         }
+        if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActivePoint"))
+            return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (control.kind() == ControlKind::pivot_chart &&
@@ -2713,6 +2725,8 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
             const auto status = resize_chart(owner.id, property, std::int64_t{0});
             return status == PropertyMutationStatus::applied ? PropertyMutationStatus::reset : status;
         }
+        if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActivePoint"))
+            return PropertyMutationStatus::unsupported_surface;
         descriptor = metamodel::find_property(control.kind(), property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (control.kind() == ControlKind::pivot_chart &&
@@ -3904,6 +3918,16 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     invalid_chart("Chart Point Color must be automatic or an absolute opaque RGB value");
                 }
             }
+            if (const auto* active_point = control.properties().find(PropertyId::from_name("ActivePoint")); active_point != nullptr) {
+                if (std::holds_alternative<UndefinedValue>(active_point->value)) {
+                    // Explicit Undefined is a valid persisted ActivePoint value.
+                } else if (const auto* reference = std::get_if<ChartPointRef>(&active_point->value)) {
+                    if (reference->owner != control.id || !point_ids.contains(reference->point))
+                        invalid_chart("Chart ActivePoint must reference an existing Point in the same Chart");
+                } else {
+                    invalid_chart("Chart ActivePoint must be Undefined or a named Point reference");
+                }
+            }
             std::uint64_t max_series_id = 1;
             for (const auto& series : chart->series) max_series_id = std::max(max_series_id, series.id.value());
             std::uint64_t max_point_id = 0;
@@ -4161,6 +4185,16 @@ PropertyMutationStatus OrdinaryFormDocument::resize_chart(ObjectId id, PropertyI
             return PropertyMutationStatus::unsupported_surface;
         const auto old_count = series_axis ? chart->series.size() : chart->points.size();
         if (requested == old_count) return PropertyMutationStatus::applied;
+        if (!series_axis && requested < old_count) {
+            if (const auto* active = control.properties().find(PropertyId::from_name("ActivePoint")); active != nullptr) {
+                if (const auto* reference = std::get_if<ChartPointRef>(&active->value)) {
+                    const auto retained_end = chart->points.begin() + static_cast<std::ptrdiff_t>(requested);
+                    if (std::ranges::none_of(chart->points.begin(), retained_end,
+                            [&](const ChartPoint& point) { return point.id == reference->point; }))
+                        return PropertyMutationStatus::invalid_reference;
+                }
+            }
+        }
         std::uint64_t last_series = chart->last_series_id.value_or(1);
         std::uint64_t last_point = chart->last_point_id.value_or(0);
         for (const auto& series : chart->series) last_series = std::max(last_series, series.id.value());

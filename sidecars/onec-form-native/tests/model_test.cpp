@@ -715,6 +715,82 @@ void test_chart_computed_counts() {
     }
 }
 
+void test_chart_active_point_reference() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    Form form; form.id = ObjectId{1}; form.name = "ActivePoint";
+    OrdinaryFormDocument document(std::move(form));
+    const auto active_id = PropertyId::from_name("ActivePoint");
+    const auto* descriptor = find_property(ControlKind::chart, active_id);
+    expect(descriptor && descriptor->api_access == ApiAccess::read_write &&
+        descriptor->persistence == PersistenceClass::persisted_editable &&
+        descriptor->storage_codec == StorageCodec::control_info &&
+        descriptor->value_codec == ValueCodec::chart_point_reference &&
+        descriptor->default_value.kind == DefaultKind::none,
+        "Chart ActivePoint is a persisted named point reference with no scalar default");
+
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        ChartPayload chart;
+        for (std::uint64_t j = 0; j < i % 5; ++j) {
+            ChartPoint point; point.id = ObjectId{10 + j * 10}; chart.points.push_back(std::move(point));
+        }
+        document.add_control(ControlNode{ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(chart)});
+    }
+
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        const auto& chart = std::get<ChartPayload>(document.find_control(owner.id)->payload);
+        const auto initial = document.get_prop_val(owner, active_id);
+        if (chart.points.empty()) {
+            expect(initial.status == PropertyReadStatus::computed_value && initial.value == PropertyValue{UndefinedValue{}},
+                "Chart ActivePoint is Undefined when there are no points");
+            continue;
+        }
+        const ChartPointRef first{owner.id, chart.points.front().id};
+        expect(initial.status == PropertyReadStatus::computed_value && initial.value == PropertyValue{first},
+            "Chart ActivePoint defaults to the first named point");
+        const ChartPointRef selected{owner.id, chart.points.back().id};
+        auto selected_form = document.form();
+        selected_form.children = {ControlRef{owner.id}};
+        OrdinaryFormDocument selected_document(std::move(selected_form));
+        auto selected_control = *document.find_control(owner.id);
+        selected_control.properties().set_explicit(active_id, selected);
+        selected_document.add_control(std::move(selected_control));
+        expect(selected_document.get_prop_val(owner, active_id).status == PropertyReadStatus::explicit_value &&
+            selected_document.get_prop_val(owner, active_id).value == PropertyValue{selected},
+            "explicit Chart ActivePoint preserves the selected point identity");
+        expect(selected_document.set_prop_val(owner, active_id, selected) == PropertyMutationStatus::unsupported_surface &&
+            selected_document.set_prop_val(owner, active_id, UndefinedValue{}) == PropertyMutationStatus::unsupported_surface &&
+            selected_document.reset_prop_val(owner, active_id) == PropertyMutationStatus::unsupported_surface &&
+            selected_document.get_prop_val(owner, active_id).value == PropertyValue{selected},
+            "ActivePoint API mutations remain unsupported and do not alter stored state");
+        if (chart.points.size() > 1) {
+            expect(selected_document.set_prop_val(owner, PropertyId::from_name("PointCount"), std::int64_t{1}) == PropertyMutationStatus::invalid_reference &&
+                selected_document.get_prop_val(owner, active_id).value == PropertyValue{selected},
+                "PointCount shrink that would remove explicit ActivePoint is rejected atomically");
+        }
+    }
+
+    Form valid_form; valid_form.id = ObjectId{1}; valid_form.children = {ControlRef{ObjectId{2}}};
+    OrdinaryFormDocument valid(std::move(valid_form));
+    ChartPayload payload; ChartPoint point; point.id = ObjectId{10}; payload.points.push_back(point);
+    ControlNode control{ObjectId{2}, "Chart", std::move(payload)};
+    control.properties().set_explicit(active_id, UndefinedValue{});
+    valid.add_control(std::move(control));
+    expect(valid.validate().ok(), "explicit Undefined is a valid persisted ActivePoint state");
+
+    for (const ChartPointRef invalid : {ChartPointRef{ObjectId{99}, ObjectId{10}}, ChartPointRef{ObjectId{2}, ObjectId{99}}}) {
+        Form invalid_form; invalid_form.id = ObjectId{1}; invalid_form.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        ChartPayload invalid_payload; invalid_payload.points.push_back(point);
+        ControlNode invalid_control{ObjectId{2}, "Chart", std::move(invalid_payload)};
+        invalid_control.properties().set_explicit(active_id, invalid);
+        invalid_document.add_control(std::move(invalid_control));
+        expect(invalid_document.validate().has(InvariantCode::invalid_property),
+            "foreign owner and missing Chart ActivePoint identities fail model validation");
+    }
+}
+
 void test_chart_source_data_mode() {
     Form form; form.id = ObjectId{1}; form.name = "SourceCharts";
     for (std::uint64_t i = 0; i < 12; ++i) form.children.emplace_back(ControlRef{ObjectId{100 + i}});
@@ -3203,7 +3279,7 @@ void test_recursive_typed_values() {
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     };
-    static_assert(std::variant_size_v<PropertyValue::Variant> == 40);
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 41);
     [&]<std::size_t... Index>(std::index_sequence<Index...>) {
         ([&] {
             using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
@@ -5281,6 +5357,7 @@ int main() {
         test_control_name_property();
         test_form_runtime_state_properties();
         test_chart_computed_counts();
+        test_chart_active_point_reference();
         test_chart_source_data_mode();
         test_chart_owned_collections();
         test_chart_document_resource_budget();

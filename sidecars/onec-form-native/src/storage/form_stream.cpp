@@ -7546,6 +7546,19 @@ LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValu
             cells_end;
         info.at(base + companion.offset) = raw(std::to_string(value));
     }
+    if (const auto* entry = properties.find(model::PropertyId::from_name("ActivePoint"))) {
+        if (std::holds_alternative<model::UndefinedValue>(entry->value)) {
+            info.at(middle_start + 51) = raw("-1");
+        } else {
+            const auto* reference = std::get_if<model::ChartPointRef>(&entry->value);
+            if (!reference || reference->owner != owner)
+                fail("OOF1122", "$/Chart/ActivePoint", "point owned by Chart", "invalid owner or type", "Invalid active point reference");
+            const auto found = std::ranges::find(chart.points, reference->point, &model::ChartPoint::id);
+            if (found == chart.points.end())
+                fail("OOF1122", "$/Chart/ActivePoint", "existing Chart point", "missing", "Active point does not exist");
+            info.at(middle_start + 51) = raw(std::to_string(std::distance(chart.points.begin(), found)));
+        }
+    }
     if (const auto* entry = properties.find(model::PropertyId::from_name("ActiveSeries"))) {
         const auto* reference = std::get_if<model::ChartSeriesRef>(&entry->value);
         if (!reference || reference->owner != owner)
@@ -7774,7 +7787,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
         "GaugeChartValuesScaleLabelsArcDirection", "AutoMaxValue", "AutoMinValue", "TransparentLabel",
         "LabelDelimiter", "MaxSeriesCount", "MaxSeriesPercent", "BeginGaugeAngle", "EndGaugeAngle",
         "GaugeThickness", "GaugeBushThickness", "ValueLabelFormat", "PercentLabelFormat", "BackColor",
-        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue", "MaxValue", "MinValue", "ActiveSeries",
+        "Border", "LabelBorder", "BorderColor", "LabelBorderColor", "LabelTextColor", "LabelBackColor", "GaugeBushColor", "LabelFont", "ChartType", "BaseValue", "MaxValue", "MinValue", "ActiveSeries", "ActivePoint",
         "AutoSeriesSeparation", "LabelType", "MaxSeries", "Orientation", "GaugeChartValueRepresentation", "LabelLocation", "GaugeChartValuesScaleLabelsLocation", "SpaceMode", "ColorPalette"}, "$/Chart");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
     const auto title = explicit_localized_text(control.properties(), "Title", "$/Chart/TitleArea");
@@ -7898,6 +7911,11 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             fail("OOF1115", path, "bounded Chart cursor cache", std::to_string(cursor), "Chart cursor cache is outside the collection");
         info.items[middle_start + offset] = raw(canonical);
     }
+    const auto active_point_path = child_path(info_path, middle_start + 51);
+    const auto active_point = integer_atom<std::int64_t>(at(info, middle_start + 51, info_path), active_point_path);
+    if (active_point < -1 || (payload.points.empty() ? active_point > 0 :
+            active_point >= static_cast<std::int64_t>(payload.points.size())))
+        fail("OOF1115", active_point_path, "valid active point position or no active point", std::to_string(active_point), "Active point position is outside the Chart");
     const auto active_series_path = child_path(info_path, middle_start + 52);
     const auto active_series = integer_atom<std::size_t>(at(info, middle_start + 52, info_path), active_series_path);
     if ((!payload.series.empty() && active_series >= payload.series.size()) || (payload.series.empty() && active_series != 0))
@@ -8311,6 +8329,10 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
         area_defaults(model::ChartAreaKind::legend), "$/Chart/LegendArea");
     payload.title_area = read_area(14, 23, model::metamodel::chart_area_placements(model::ChartAreaKind::title),
         area_defaults(model::ChartAreaKind::title), "$/Chart/TitleArea");
+    if (active_point == -1)
+        properties.set_explicit(model::PropertyId::from_name("ActivePoint"), model::UndefinedValue{});
+    else if (active_point != 0)
+        properties.set_explicit(model::PropertyId::from_name("ActivePoint"), model::ChartPointRef{model::ObjectId{id}, payload.points[static_cast<std::size_t>(active_point)].id});
     if (active_series != 0) properties.set_explicit(model::PropertyId::from_name("ActiveSeries"), model::ChartSeriesRef{model::ObjectId{id}, payload.series[active_series].id});
     auto scale_normalized_info = info;
     const auto scale_tail_start = render_start + canonical_chart_render_defaults().size() + payload.values.size();

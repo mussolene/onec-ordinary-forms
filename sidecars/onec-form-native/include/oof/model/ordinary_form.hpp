@@ -219,6 +219,12 @@ struct ChartSeriesRef {
     friend bool operator==(const ChartSeriesRef&, const ChartSeriesRef&) = default;
 };
 
+struct ChartPointRef {
+    ObjectId owner{};
+    ObjectId point{};
+    friend bool operator==(const ChartPointRef&, const ChartPointRef&) = default;
+};
+
 struct ChartTrendlinesRef {
     ObjectId owner{};
     ObjectId series{};
@@ -605,6 +611,7 @@ using PropertyValueVariant = std::variant<
     ChartAreaRef,
     ChartScaleRef,
     ChartSeriesRef,
+    ChartPointRef,
     ChartTrendlinesRef,
     ChartTrendlineRef,
     ChartEquationAreaRef,

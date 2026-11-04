@@ -534,6 +534,15 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
     constexpr std::string_view chart_with_refresh = R"XML(<Form id="1" name="Runtime" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><RefreshEnabled>false</RefreshEnabled><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
     expect(validate_document(compiled_schema, chart_without_refresh) == 0 && validate_document(compiled_schema, chart_with_refresh) != 0,
         "Chart XSD must accept the ordinary fixture and reject runtime refresh state");
+    const auto chart_active_point = [](std::string_view active) {
+        return std::string(R"XML(<Form id="1" name="ActivePoint" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/>)XML") +
+            std::string(active) + R"XML(<Series/><Points><ChartPoint id="10"><Text>Point</Text><Color kind="automatic"/></ChartPoint></Points><Values/></Chart></ChildItems></Form>)XML";
+    };
+    expect(element_type("ChartType", "ActivePoint") == "NullableObjectIdValueType" &&
+        validate_document(compiled_schema, chart_active_point("<ActivePoint/>")) == 0 &&
+        validate_document(compiled_schema, chart_active_point("<ActivePoint>10</ActivePoint>")) == 0 &&
+        validate_document(compiled_schema, chart_active_point("<ActivePoint>0</ActivePoint>")) != 0,
+        "Chart ActivePoint schema must allow empty Undefined or positive IDs and reject the zero sentinel");
 
     const auto chart_area = [](std::string_view placement, std::string_view left) {
         return std::string(R"XML(<Form id="1" name="Area" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><LegendArea><Placement>)XML") +

@@ -103,6 +103,7 @@ enum class ValueCodec : std::uint8_t {
     action_source_reference,
     context_menu_reference,
     chart_series_reference,
+    chart_point_reference,
     chart_series_collection,
     chart_points_collection,
     chart_gauge_quality_bands,

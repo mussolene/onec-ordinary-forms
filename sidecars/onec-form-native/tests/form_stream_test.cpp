@@ -21060,6 +21060,61 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
         "SummarySeries named Color mirror mismatch must be rejected");
 }
 
+void test_chart_active_point_storage() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "ActivePoints";
+    for (std::size_t i = 0; i < 12; ++i) form.children.emplace_back(model::ControlRef{model::ObjectId{100 + i}});
+    model::OrdinaryFormDocument document(std::move(form));
+    const auto property = model::PropertyId::from_name("ActivePoint");
+    for (std::size_t i = 0; i < 12; ++i) {
+        model::ChartPayload chart;
+        if (i % 2) chart.data_mode = model::ChartDataMode::source;
+        for (std::uint64_t n = 0; n < 2; ++n) {
+            model::ChartSeries series; series.id = model::ObjectId{n + 2}; chart.series.push_back(series);
+        }
+        for (std::uint64_t n = 0; n < 3; ++n) {
+            model::ChartPoint point; point.id = model::ObjectId{10 + n * 10}; chart.points.push_back(point);
+        }
+        if (!(i % 2)) for (const auto& series : chart.series) for (const auto& point : chart.points) {
+            model::ChartValue value; value.series_ref = series.id; value.point_ref = point.id;
+            value.value = model::DecimalValue{"0"};
+            chart.values.push_back(value);
+        }
+        model::ControlNode control{model::ObjectId{100 + i}, "Chart" + std::to_string(i), std::move(chart)};
+        control.properties().set_explicit(property, i % 3 == 0 ? model::PropertyValue{model::UndefinedValue{}} :
+            model::PropertyValue{model::ChartPointRef{control.id, model::ObjectId{10 + (i % 3) * 10}}});
+        document.add_control(std::move(control));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value());
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "twelve persisted active points and no-selection states must decode completely");
+    for (std::size_t i = 0; i < 12; ++i) {
+        const model::ObjectId id{100 + i};
+        expect(decoded.value().find_control(id)->properties().find(property)->value ==
+            document.find_control(id)->properties().find(property)->value,
+            "active point storage maps position to stable named point identity, not point ID arithmetic");
+    }
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "named ActivePoint roundtrip is canonical for dense and source modes");
+    for (const auto invalid : {"-2", "3"}) {
+        auto bad = encoded.value();
+        auto& info = find_chart_record(bad)->items[3];
+        info.items[18 + 11 * (2 + 3) + 51] = list_stream::ListValue::raw_atom(invalid);
+        expect(!form_stream::decode_document(bad), "active point storage rejects negative or out-of-range selection");
+    }
+    for (const auto bad_ref : {model::ChartPointRef{model::ObjectId{999}, model::ObjectId{10}},
+                                model::ChartPointRef{model::ObjectId{100}, model::ObjectId{999}}}) {
+        auto bad_form = document.form();
+        bad_form.children = {model::ControlRef{model::ObjectId{100}}};
+        model::OrdinaryFormDocument bad(std::move(bad_form));
+        auto chart = *document.find_control(model::ObjectId{100});
+        chart.properties().set_explicit(property, bad_ref);
+        bad.add_control(std::move(chart));
+        expect(!form_stream::encode_document(bad), "active point writer rejects foreign and missing point references");
+    }
+}
+
 void test_chart_source_mode_storage() {
     const std::array<std::pair<std::size_t, std::size_t>, 12> dimensions{{
         {0, 0}, {0, 2}, {2, 0}, {1, 1}, {2, 3}, {3, 2}, {1, 0}, {1, 2}, {2, 0}, {1, 1}, {2, 3}, {3, 2}}};
@@ -22513,6 +22568,7 @@ int main() {
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_automatic_collection_colors();
         test_chart_summary_series_color_roundtrip_and_guards();
+        test_chart_active_point_storage();
         test_chart_source_mode_storage();
         test_chart_gauge_bands_roundtrip_and_native_caches();
         test_chart_empty_render_cache_normalization_and_guards();

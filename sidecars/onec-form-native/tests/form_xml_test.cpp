@@ -3503,6 +3503,56 @@ void test_chart_source_mode_xml() {
         expect(!source::parse_form_xml(bad_xml), "Source-mode XML rejects cells, unknown attributes, and out-of-mode descriptions");
 }
 
+void test_chart_active_point_xml_reference() {
+    using namespace oof::model;
+    std::string xml = R"XML(<Form id="1" name="ActivePoints" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        xml += "<Chart id=\"" + std::to_string(100 + i) + "\" name=\"C" + std::to_string(i) + "\"><Position/>";
+        if (i % 3 == 1) xml += "<ActivePoint>20</ActivePoint>";
+        else if (i % 3 == 2) xml += "<ActivePoint/>";
+        xml += "<Series/><Points>";
+        if (i % 3 != 0)
+            xml += R"XML(<ChartPoint id="10"><Text>First</Text><Color kind="automatic"/></ChartPoint><ChartPoint id="20"><Text>Second</Text><Color kind="automatic"/></ChartPoint>)XML";
+        xml += "</Points><Values/></Chart>";
+    }
+    xml += "</ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "Chart ActivePoint references and Undefined must parse" :
+        parsed.diagnostics().front().code + ":" + parsed.diagnostics().front().message);
+    if (!parsed) return;
+    const auto active_id = PropertyId::from_name("ActivePoint");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        const auto active = parsed.value().get_prop_val(owner, active_id);
+        if (i % 3 == 0) {
+            expect(active.status == PropertyReadStatus::computed_value && active.value == PropertyValue{UndefinedValue{}},
+                "empty Chart computes Undefined ActivePoint");
+        } else if (i % 3 == 1) {
+            expect(active.status == PropertyReadStatus::explicit_value && active.value == PropertyValue{ChartPointRef{owner.id, ObjectId{20}}},
+                "Chart ActivePoint XML resolves an owner-local point ID");
+        } else {
+            expect(active.status == PropertyReadStatus::explicit_value && active.value == PropertyValue{UndefinedValue{}},
+                "empty ActivePoint element represents explicit Undefined");
+        }
+    }
+    const auto written = source::serialize_form_xml(parsed.value());
+    expect(written.ok(), "Chart ActivePoint references and explicit Undefined must serialize");
+    if (!written) return;
+    expect(written.value().find("<ActivePoint/>") != std::string::npos,
+        "explicit Undefined must serialize as an empty ActivePoint element");
+    const auto restored = source::parse_form_xml(written.value());
+    expect(restored.ok(), "serialized Chart ActivePoint values must reparse");
+    if (restored) for (std::uint64_t i = 0; i < 12; ++i) {
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{100 + i}};
+        expect(restored.value().get_prop_val(owner, active_id).value == parsed.value().get_prop_val(owner, active_id).value,
+            "Chart ActivePoint identities and Undefined must survive XML roundtrip");
+    }
+    const std::string invalid = R"XML(<Form id="1" name="BadPoint" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><ActivePoint>99</ActivePoint><Series/><Points><ChartPoint id="10"><Text>Only</Text><Color kind="automatic"/></ChartPoint></Points><Values/></Chart></ChildItems></Form>)XML";
+    const std::string invalid_shape = R"XML(<Form id="1" name="BadPoint" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="C"><Position/><ActivePoint><Unexpected/></ActivePoint><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(invalid).ok(), "ActivePoint XML must reject a missing point ID");
+    expect(!source::parse_form_xml(invalid_shape).ok(), "ActivePoint XML must reject nested content");
+}
+
 void test_default_control_focus_groups_xml() {
     constexpr std::array<std::size_t, 12> page_indexes{0, 0, 0, 1, 1, 1, 2, 2, 3, 4, 4, 5};
     constexpr std::array<bool, 12> selected{false, false, true, false, false, true,
@@ -3816,6 +3866,7 @@ int main() {
         test_collapse_runtime_source_boundary();
         test_default_control_focus_groups_xml();
         test_chart_source_mode_xml();
+        test_chart_active_point_xml_reference();
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();

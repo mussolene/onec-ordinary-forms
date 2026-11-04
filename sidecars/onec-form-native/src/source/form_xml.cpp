@@ -1325,6 +1325,14 @@ model::PropertyValue parse_property_value(
         case mm::ValueCodec::chart_series_reference:
             return model::ChartSeriesRef{parse_object_id(object_id, node, property, object_id),
                 parse_object_id(node_text(node), node, property, object_id)};
+        case mm::ValueCodec::chart_point_reference: {
+            if (node->properties != nullptr || !element_children(node).empty())
+                fail("OOF2003", node, std::string(object_id), property, "plain positive point ID or empty element", "attributes or child elements", "Chart ActivePoint must contain only a point ID");
+            const std::string point_id(trim_ascii(node_text(node)));
+            if (point_id.empty()) return model::UndefinedValue{};
+            return model::ChartPointRef{parse_object_id(object_id, node, property, object_id),
+                parse_object_id(point_id, node, property, object_id)};
+        }
         case mm::ValueCodec::context_menu_reference: {
             const auto control_id = optional_attribute(node, "controlId");
             const auto children = element_children(node);
@@ -3897,6 +3905,21 @@ private:
                 if (!chart || std::ranges::none_of(chart->series, [&](const auto& series) { return series.id == reference.series; }))
                     serialization_fail(std::string(object_id), std::string(name), "existing Chart series", "missing", "Chart series reference does not exist");
                 writer_.text(name, object_id_text(reference.series));
+                return;
+            }
+            case mm::ValueCodec::chart_point_reference: {
+                if (std::holds_alternative<model::UndefinedValue>(value)) {
+                    writer_.empty(name);
+                    return;
+                }
+                const auto& reference = require_value<model::ChartPointRef>(value, object_id, name, "Chart point reference");
+                if (object_id_text(reference.owner) != object_id)
+                    serialization_fail(std::string(object_id), std::string(name), "point owned by Chart", "different owner", "Chart point reference has a different owner");
+                const auto* control = document_.find_control(reference.owner);
+                const auto* chart = control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
+                if (!chart || std::ranges::none_of(chart->points, [&](const auto& point) { return point.id == reference.point; }))
+                    serialization_fail(std::string(object_id), std::string(name), "existing Chart point", "missing", "Chart point reference does not exist");
+                writer_.text(name, object_id_text(reference.point));
                 return;
             }
             case mm::ValueCodec::context_menu_reference:

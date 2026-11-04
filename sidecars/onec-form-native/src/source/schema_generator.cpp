@@ -136,6 +136,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "ContextMenuReferenceValueType";
         case ValueCodec::chart_series_reference:
             return "ObjectIdType";
+        case ValueCodec::chart_point_reference:
+            return "NullableObjectIdValueType";
         case ValueCodec::chart_trendlines: return "ChartTrendlinesType";
         case ValueCodec::chart_equation_area: return "ChartLabelAreaType";
         case ValueCodec::chart_plot_area: return "ChartPlotAreaType";
@@ -394,6 +396,12 @@ void append_value_types(std::string& output) {
     <xs:restriction base="xs:string">
       <xs:enumeration value="undefined"/>
     </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="NullableObjectIdValueType">
+    <xs:union memberTypes="ObjectIdType"><xs:simpleType>
+      <xs:restriction base="xs:string"><xs:enumeration value=""/></xs:restriction>
+    </xs:simpleType></xs:union>
   </xs:simpleType>
 
   <xs:simpleType name="LocalDateValueType">
