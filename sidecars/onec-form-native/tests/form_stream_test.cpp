@@ -21772,6 +21772,32 @@ void test_page_table_codec() {
                decoded.value()[0].visible.value() && decoded.value()[0].enabled.value(),
         "default Page table must decode named properties and assign caller-selected IDs");
 
+    auto legacy_v3 = expected;
+    auto& legacy_row = legacy_v3.items[2];
+    legacy_row.items[0] = list_stream::ListValue::raw_atom("3");
+    legacy_row.items[2] = list_stream::parse("{3,0,{3,0,{0},\"\",-1,-1,1,0}}");
+    legacy_row.items.resize(8);
+    const auto legacy_decoded = form_stream::decode_page_table(legacy_v3, 40);
+    expect(legacy_decoded.ok() && legacy_decoded.value().size() == 1 &&
+               legacy_decoded.value()[0].id == model::ObjectId{40} &&
+               legacy_decoded.value()[0].name == page.name &&
+               legacy_decoded.value()[0].title.value() == page.title.value() &&
+               legacy_decoded.value()[0].visible.value() && legacy_decoded.value()[0].enabled.value(),
+        "observed Page3 row must decode its shared named fields and defaults");
+    const auto legacy_rebuilt = form_stream::encode_page_table(legacy_decoded.value());
+    expect(legacy_rebuilt.ok() &&
+               list_stream::dump_compact(legacy_rebuilt.value()) == list_stream::dump_compact(table.value()),
+        "Page3 decode must rebuild through the canonical Page6 writer with confirmed appended defaults");
+
+    auto unobserved_legacy_style = legacy_v3;
+    unobserved_legacy_style.items[2].items[2] = list_stream::parse("{3,0,0}");
+    expect_failure(form_stream::decode_page_table(unobserved_legacy_style, 40), "OOF1114", "$/Pages/2/2",
+        "unobserved Page3 style aliases must remain rejected");
+    auto trailing_legacy_field = legacy_v3;
+    trailing_legacy_field.items[2].items.push_back(list_stream::ListValue::raw_atom("0"));
+    expect_failure(form_stream::decode_page_table(trailing_legacy_field, 40), "OOF1102", "$/Pages/2",
+        "Page3 rows with trailing fields must be rejected");
+
     auto edited = page;
     edited.id = model::ObjectId{8};
     edited.name = "Operations";

@@ -912,8 +912,13 @@ LV encode_page_record(const model::Page& page, std::string_view path) {
 }
 
 model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_view path) {
-    require_arity(row, 12, path);
-    require_raw_constant(row.items[0], "6", child_path(path, 0));
+    require_list(row, path);
+    const bool legacy_v3 = row.items.size() == 8 &&
+        !row.items[0].is_list &&
+        row.items[0].atom_kind == LV::AtomKind::raw &&
+        row.items[0].atom == "3";
+    require_arity(row, legacy_v3 ? 8 : 12, path);
+    require_raw_constant(row.items[0], legacy_v3 ? "3" : "6", child_path(path, 0));
     model::LocalizedStringValue title;
     try {
         list_stream::ListInStream in(row.items[1]);
@@ -928,8 +933,14 @@ model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_vi
         fail("OOF1108", child_path(path, 1), "LocalizedString record", describe(row.items[1]), error.what());
     }
     validate_localized_languages(title, child_path(path, 1));
-    require_exact(row.items[2], canonical_style_record(10), child_path(path, 2),
-        "Page style contains an unsupported variation");
+    if (legacy_v3) {
+        require_exact(row.items[2],
+            parse_constant("{3,0,{3,0,{0},\"\",-1,-1,1,0}}"), child_path(path, 2),
+            "Legacy Page style contains an unsupported variation");
+    } else {
+        require_exact(row.items[2], canonical_style_record(10), child_path(path, 2),
+            "Page style contains an unsupported variation");
+    }
     require_raw_constant(row.items[3], "-1", child_path(path, 3));
     const bool visible = bool_atom(row.items[4], child_path(path, 4));
     const bool enabled = bool_atom(row.items[5], child_path(path, 5));
@@ -938,13 +949,15 @@ model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_vi
         fail("OOF1115", child_path(path, 6), "non-empty Page Name", "empty", "Page Name is required");
     }
     require_raw_constant(row.items[7], "1", child_path(path, 7));
-    require_exact(row.items[8], parse_constant("{4,4,{0},4}"), child_path(path, 8),
-        "Page default property contains an unsupported variation");
-    require_exact(row.items[9], parse_constant("{4,4,{0},4}"), child_path(path, 9),
-        "Page default property contains an unsupported variation");
-    require_exact(row.items[10], parse_constant("{8,3,0,1,100}"), child_path(path, 10),
-        "Page default property contains an unsupported variation");
-    require_raw_constant(row.items[11], "1", child_path(path, 11));
+    if (!legacy_v3) {
+        require_exact(row.items[8], parse_constant("{4,4,{0},4}"), child_path(path, 8),
+            "Page default property contains an unsupported variation");
+        require_exact(row.items[9], parse_constant("{4,4,{0},4}"), child_path(path, 9),
+            "Page default property contains an unsupported variation");
+        require_exact(row.items[10], parse_constant("{8,3,0,1,100}"), child_path(path, 10),
+            "Page default property contains an unsupported variation");
+        require_raw_constant(row.items[11], "1", child_path(path, 11));
+    }
 
     model::Page page;
     page.id = id;
