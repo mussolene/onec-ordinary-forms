@@ -1362,6 +1362,9 @@ void expect_palette_events(
         expect(attribute(nodes[index], "available") ==
                    (descriptor.persistence == PersistenceClass::unsupported_by_platform ? "false" : ""),
             "palette must identify events unavailable on target ordinary-form owners");
+        expect(attribute(nodes[index], "formExtension") ==
+                (descriptor.extension_kind ? "CatalogItemFormExtension" : ""),
+            "palette must distinguish extension events from common Form events");
     }
 }
 

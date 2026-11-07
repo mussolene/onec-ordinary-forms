@@ -437,6 +437,7 @@ struct EventDescriptor {
     StorageCodec storage_codec = StorageCodec::unclassified;
     std::string_view storage_tag;
     std::optional<std::uint32_t> storage_event_id{};
+    std::optional<FormExtensionKind> extension_kind{};
 };
 
 struct PlatformValueTypeDescriptor {

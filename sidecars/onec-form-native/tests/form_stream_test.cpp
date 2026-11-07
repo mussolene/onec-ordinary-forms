@@ -2,6 +2,7 @@
 #include "../src/model/table_properties.hpp"
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -22655,6 +22656,19 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
 }
 
 void test_catalog_item_form_extension_named_round_trip_and_guards() {
+    constexpr std::array catalog_event_names{
+        std::string_view{"BeforeWrite"}, std::string_view{"OnWrite"},
+        std::string_view{"AfterWrite"}, std::string_view{"OnDataChange"}};
+    std::array<const model::metamodel::EventDescriptor*, catalog_event_names.size()> catalog_events{};
+    for (std::size_t index = 0; index < catalog_event_names.size(); ++index) {
+        catalog_events[index] = model::metamodel::find_form_event(catalog_event_names[index]);
+        expect(catalog_events[index] != nullptr &&
+                   catalog_events[index]->extension_kind == model::FormExtensionKind::catalog_item &&
+                   catalog_events[index]->storage_event_id.has_value() &&
+                   !catalog_events[index]->storage_tag.empty(),
+            "CatalogItemFormExtension event descriptors must provide their scoped native identity");
+    }
+
     for (const auto autonumeration : {std::string_view{"Auto"}, std::string_view{"DontUse"}}) {
         for (const auto folders : {std::string_view{"Items"}, std::string_view{"Folders"},
                  std::string_view{"FoldersAndItems"}}) {
@@ -22705,9 +22719,9 @@ void test_catalog_item_form_extension_named_round_trip_and_guards() {
     expect_failure(form_stream::decode_document(corrupt, "Catalog"), "OOF1114", "$/3/2/1",
         "unknown folder and item ordinals must be rejected");
     corrupt = encoded.value();
-    corrupt.items[3].items[2].items[2] = list_stream::parse("{0,1}");
-    expect_failure(form_stream::decode_document(corrupt, "Catalog"), "OOF1114", "$/3/2/2",
-        "nonempty extension event table must be rejected without named extension event support");
+    corrupt.items[3].items[2].items[2].items[0] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(corrupt, "Catalog"), "OOF1102", "$/3/2/2",
+        "extension event table count must match its records");
     for (const auto flag : {1u, 2u}) {
         corrupt = encoded.value();
         corrupt.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
@@ -22729,6 +22743,186 @@ void test_catalog_item_form_extension_named_round_trip_and_guards() {
     member_path.set_form(std::move(form));
     expect(!form_stream::encode_document(member_path),
         "an InputField member binding requires its explicit leaf type descriptor");
+
+    const model::EventActionMetadata action_metadata{
+        "RunCatalogAction", {{{"ru", "Текст события"}, {"en", "Catalog event text"}}},
+        {{{"en", "Catalog event tooltip"}}}, {{{"ru", "Описание события"}}}};
+    const auto make_document = [&](std::uint8_t mask, bool include_ordinary_events = true) {
+        auto document = parsed.value();
+        auto form = document.form();
+        if (include_ordinary_events) {
+            form.events.emplace_back(model::ObjectId{9});
+            document.add_event(model::Event{model::ObjectId{9}, "OnOpen", "HandleOpen",
+                model::FormRef{model::ObjectId{1}}});
+            form.events.emplace_back(model::ObjectId{8});
+            document.add_event(model::Event{model::ObjectId{8}, "BeforeOpen", "HandleBeforeOpen",
+                model::FormRef{model::ObjectId{1}}, action_metadata});
+        }
+        for (std::size_t index = 0; index < catalog_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            const model::ObjectId id{100U + index};
+            form.events.emplace_back(id);
+            document.add_event(model::Event{id, std::string(catalog_event_names[index]),
+                "Handle" + std::string(catalog_event_names[index]), model::FormRef{model::ObjectId{1}},
+                index == 0 ? std::optional<model::EventActionMetadata>{action_metadata} : std::nullopt});
+        }
+        document.set_form(std::move(form));
+        return document;
+    };
+    const auto catalog_table = [](auto& stream) -> auto& {
+        return stream.items.at(3).items.at(2).items.at(2);
+    };
+    const auto check_catalog_event_mask = [&](std::uint8_t mask, bool include_ordinary_events = true) {
+        const auto document = make_document(mask, include_ordinary_events);
+        const auto encoded_events = form_stream::encode_document(document);
+        expect(encoded_events.ok(), encoded_events ? "CatalogItemFormExtension events must encode" :
+            encoded_events.diagnostics().front().message);
+        if (!encoded_events) return;
+        const std::size_t catalog_count = static_cast<std::size_t>(std::popcount(mask));
+        const auto& catalog_records = catalog_table(encoded_events.value());
+        expect(catalog_records.items.size() == catalog_count + 1 &&
+                   catalog_records.items.front().atom == std::to_string(catalog_count),
+            "CatalogItemFormExtension event count must match the selected named events");
+        const auto& ordinary_records = encoded_events.value().items.at(4);
+        const std::size_t ordinary_count = include_ordinary_events ? 2U : 0U;
+        expect(ordinary_records.items.size() == ordinary_count + 1 &&
+                   ordinary_records.items.front().atom == std::to_string(ordinary_count),
+            "ordinary Form events must remain in their separate table");
+        for (std::size_t index = 0; index < catalog_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            expect(std::ranges::any_of(catalog_records.items.begin() + 1, catalog_records.items.end(),
+                    [&](const auto& record) {
+                        return record.items.at(0).atom == std::to_string(*catalog_events[index]->storage_event_id) &&
+                            record.items.at(1).atom == catalog_events[index]->storage_tag;
+                    }), "CatalogItem event must use its descriptor's scoped ID and tag");
+        }
+
+        const auto decoded = form_stream::decode_document(encoded_events.value(), "Catalog");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "CatalogItemFormExtension events must decode completely");
+        if (!decoded) return;
+        expect(decoded.value().form().events.size() == catalog_count + ordinary_count,
+            "ordinary and extension events must all survive decoding");
+        const auto find_named_event = [&](std::string_view name) -> const model::Event* {
+            for (const auto& reference : decoded.value().form().events) {
+                const auto* event = decoded.value().find_event(reference.id());
+                if (event && event->name == name) return event;
+            }
+            return nullptr;
+        };
+        if (include_ordinary_events) {
+            const auto* before_open = find_named_event("BeforeOpen");
+            const auto* on_open = find_named_event("OnOpen");
+            expect(before_open && before_open->handler == "HandleBeforeOpen" &&
+                       before_open->action_metadata == action_metadata &&
+                       on_open && on_open->handler == "HandleOpen" && !on_open->action_metadata,
+                "ordinary BeforeOpen and OnOpen events and their independent action metadata must survive");
+        }
+        for (std::size_t index = 0; index < catalog_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            const auto* event = find_named_event(catalog_event_names[index]);
+            expect(event && event->handler == "Handle" + std::string(catalog_event_names[index]) &&
+                       std::holds_alternative<model::FormRef>(event->owner) &&
+                       std::get<model::FormRef>(event->owner).id() == decoded.value().form().id &&
+                       event->action_metadata == (index == 0
+                           ? std::optional<model::EventActionMetadata>{action_metadata}
+                           : std::nullopt),
+                "CatalogItem event name, handler, owner, and action metadata must survive");
+        }
+        const auto xml = oof::source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "CatalogItemFormExtension events must serialize as named XML");
+        if (!xml) return;
+        for (std::size_t index = 0; index < catalog_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            expect(xml.value().find("<" + std::string(catalog_event_names[index]) +
+                       " id=\"") != std::string::npos,
+                "CatalogItem extension events must appear by their named public XML event");
+        }
+        const auto reparsed = oof::source::parse_form_xml(xml.value());
+        expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+        if (!reparsed) return;
+        const auto rebuilt = oof::save_form_bin(reparsed.value());
+        const auto original = oof::save_form_bin(document);
+        expect(original.ok() && rebuilt.ok() && rebuilt.value() == original.value(),
+            "CatalogItem event decode, named XML, and rebuild must preserve exact Form.bin bytes");
+    };
+    for (std::uint8_t mask = 0; mask < (1U << catalog_event_names.size()); ++mask)
+        check_catalog_event_mask(mask);
+
+    auto extension_event_without_extension = make_document(1U, false);
+    auto form_without_extension = extension_event_without_extension.form();
+    form_without_extension.extension.reset();
+    form_without_extension.extension_properties = {};
+    form_without_extension.main_attribute = {};
+    extension_event_without_extension.set_form(std::move(form_without_extension));
+    expect(!form_stream::encode_document(extension_event_without_extension),
+        "CatalogItem events must reject a form without a matching extension");
+    auto extension_event_with_wrong_extension = make_document(1U, false);
+    auto form_with_wrong_extension = extension_event_with_wrong_extension.form();
+    form_with_wrong_extension.extension = model::FormExtensionKind::catalog_list;
+    form_with_wrong_extension.extension_properties = {};
+    form_with_wrong_extension.main_attribute = {};
+    extension_event_with_wrong_extension.set_form(std::move(form_with_wrong_extension));
+    expect(!form_stream::encode_document(extension_event_with_wrong_extension),
+        "CatalogItem events must reject a different form extension kind");
+
+    auto extension_only = form_stream::encode_document(make_document(1U, false));
+    expect(extension_only.ok(), "extension-only event corruption fixture must encode");
+    if (extension_only) {
+        auto catalog_in_ordinary = extension_only.value();
+        auto& ordinary_table = catalog_in_ordinary.items.at(4);
+        const auto catalog_record = catalog_table(catalog_in_ordinary).items.at(1);
+        ordinary_table = list_stream::parse("{1}");
+        ordinary_table.items.push_back(catalog_record);
+        catalog_in_ordinary.items.at(3).items.at(2).items.at(2) = list_stream::parse("{0}");
+        expect(!form_stream::decode_document(catalog_in_ordinary, "Catalog"),
+            "CatalogItem events must not be accepted in the ordinary Form event table");
+    }
+    auto ordinary_only = form_stream::encode_document(make_document(0U, true));
+    expect(ordinary_only.ok(), "ordinary-only event corruption fixture must encode");
+    if (ordinary_only) {
+        auto ordinary_in_catalog = ordinary_only.value();
+        auto& ordinary_table = ordinary_in_catalog.items.at(4);
+        const auto ordinary_record = ordinary_table.items.at(1);
+        ordinary_table = list_stream::parse("{0}");
+        ordinary_in_catalog.items.at(3).items.at(2).items.at(2) = list_stream::parse("{1}");
+        ordinary_in_catalog.items.at(3).items.at(2).items.at(2).items.push_back(ordinary_record);
+        expect(!form_stream::decode_document(ordinary_in_catalog, "Catalog"),
+            "ordinary Form events must not be accepted in the CatalogItem event table");
+    }
+
+    auto corruption_fixture = form_stream::encode_document(make_document(3U, false));
+    expect(corruption_fixture.ok(), "CatalogItem event corruption fixture must encode");
+    if (corruption_fixture) {
+        const auto reject_catalog_event_stream = [&](auto mutate, std::string_view code,
+                                                       std::string_view path, std::string_view message) {
+            auto corrupt = corruption_fixture.value();
+            mutate(catalog_table(corrupt));
+            expect_failure(form_stream::decode_document(corrupt, "Catalog"), code, path, message);
+        };
+        reject_catalog_event_stream([](auto& table) {
+            table.items[2].items[0] = table.items[1].items[0];
+        }, "OOF1114", "$/3/2/2/2", "duplicate CatalogItem event ID must fail");
+        reject_catalog_event_stream([](auto& table) {
+            table.items[1].items[0] =
+                list_stream::ListValue::raw_atom(std::to_string(std::numeric_limits<std::uint32_t>::max()));
+        }, "OOF1114", "$/3/2/2/1", "unknown CatalogItem event ID must fail");
+        reject_catalog_event_stream([](auto& table) {
+            table.items[1].items[1] =
+                list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+        }, "OOF1106", "$/3/2/2/1/1", "invalid CatalogItem event tag must fail");
+        reject_catalog_event_stream([](auto& table) {
+            table.items[0] = list_stream::ListValue::raw_atom("3");
+        }, "OOF1102", "$/3/2/2", "CatalogItem event count must match the records");
+    }
+    auto duplicate_named_event = make_document(1U, false);
+    auto duplicate_form = duplicate_named_event.form();
+    duplicate_form.events.emplace_back(model::ObjectId{101});
+    duplicate_named_event.add_event(model::Event{model::ObjectId{101}, "BeforeWrite", "OtherHandler",
+        model::FormRef{model::ObjectId{1}}});
+    duplicate_named_event.set_form(std::move(duplicate_form));
+    expect(!form_stream::encode_document(duplicate_named_event),
+        "duplicate CatalogItem event names must reject instead of choosing one handler");
 }
 
 void test_input_field_reference_extensions_round_trip_and_guards() {

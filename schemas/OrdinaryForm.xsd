@@ -1761,6 +1761,10 @@
       <xs:element name="OnClose" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="OnOpen" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="OnReopen" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeWrite" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnWrite" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AfterWrite" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnDataChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
   </xs:complexType>
 

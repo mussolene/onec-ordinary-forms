@@ -2932,7 +2932,14 @@ void test_help_metamodel() {
         coverage.panel_placement_property_count == 9,
         "panel-control extension must retain its 9 properties");
     expect(coverage.form_property_count == 39, "Form descriptors must include the two platform-confirmed context properties");
-    expect(coverage.form_event_count == 13, "Form help must retain 13 events");
+    expect(coverage.form_event_count == 17, "Form must retain 13 common and four CatalogItem extension events");
+    for (const auto name : {"BeforeWrite", "OnWrite", "AfterWrite", "OnDataChange"}) {
+        const auto* descriptor = find_form_event(name);
+        expect(descriptor && descriptor->extension_kind == FormExtensionKind::catalog_item &&
+            descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == StorageCodec::event_record && descriptor->storage_event_id &&
+            !descriptor->storage_tag.empty(), "CatalogItem events require scoped storage descriptors");
+    }
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
     expect(coverage.unclassified_properties == 0 && coverage.missing_storage_codecs == 0 &&

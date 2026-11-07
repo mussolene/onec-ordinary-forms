@@ -565,7 +565,7 @@ std::vector<PropertyDescriptor> make_form_extension_property_descriptors() {
 }
 
 std::vector<EventDescriptor> make_form_event_descriptors() {
-    return {
+    auto descriptors = std::vector<EventDescriptor>{
 #define OOF_HELP_CONTROL(...)
 #define OOF_HELP_PROPERTY(...)
 #define OOF_HELP_EVENT(...)
@@ -583,6 +583,24 @@ std::vector<EventDescriptor> make_form_event_descriptors() {
 #undef OOF_HELP_PROPERTY
 #undef OOF_HELP_CONTROL
     };
+    struct ExtensionEvent {
+        std::string_view name;
+        std::u8string_view russian_name;
+        std::uint32_t storage_id;
+    };
+    constexpr std::array<ExtensionEvent, 4> catalog_events{{
+        {"BeforeWrite", u8"ПередЗаписью", 80000U},
+        {"OnWrite", u8"ПриЗаписи", 80001U},
+        {"AfterWrite", u8"ПослеЗаписи", 80002U},
+        {"OnDataChange", u8"ПриИзмененииДанных", 80003U},
+    }};
+    for (const auto& event : catalog_events) {
+        descriptors.push_back({DescriptorOwner::form, ControlKind::panel, descriptors.size(),
+            event.name, event.name, event.russian_name, VersionMask::platform_8_5,
+            PersistenceClass::persisted_editable, StorageCodec::event_record,
+            "e1692cc2-605b-4535-84dd-28440238746c", event.storage_id, FormExtensionKind::catalog_item});
+    }
+    return descriptors;
 }
 
 std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
@@ -2210,7 +2228,13 @@ struct Metamodel::Impl {
             form_extension_properties_by_kind[*descriptor.extension_kind].push_back(descriptor);
             account_property(descriptor);
         }
+        std::set<std::pair<std::optional<FormExtensionKind>, std::uint32_t>> form_event_storage_ids;
         for (const auto& descriptor : form_events) {
+            if (descriptor.extension_kind && *descriptor.extension_kind != FormExtensionKind::catalog_item)
+                throw std::logic_error("form event extension has no storage serializer");
+            if (descriptor.storage_event_id &&
+                !form_event_storage_ids.emplace(descriptor.extension_kind, *descriptor.storage_event_id).second)
+                throw std::logic_error("duplicate form event ID in the same storage table");
             index_event(form_events_by_name, descriptor);
             account_event(descriptor);
         }

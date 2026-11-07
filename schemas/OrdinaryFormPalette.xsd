@@ -60,6 +60,10 @@
             <Event name="OnClose" apiName="OnClose" russianName="ПриЗакрытии"/>
             <Event name="OnOpen" apiName="OnOpen" russianName="ПриОткрытии"/>
             <Event name="OnReopen" apiName="OnReopen" russianName="ПриПовторномОткрытии"/>
+            <Event name="BeforeWrite" apiName="BeforeWrite" russianName="ПередЗаписью" formExtension="CatalogItemFormExtension"/>
+            <Event name="OnWrite" apiName="OnWrite" russianName="ПриЗаписи" formExtension="CatalogItemFormExtension"/>
+            <Event name="AfterWrite" apiName="AfterWrite" russianName="ПослеЗаписи" formExtension="CatalogItemFormExtension"/>
+            <Event name="OnDataChange" apiName="OnDataChange" russianName="ПриИзмененииДанных" formExtension="CatalogItemFormExtension"/>
           </Events>
         </Form>
         <SharedProperties surface="formExtension">

@@ -1609,6 +1609,11 @@ void append_palette_events(
         append_attribute(output, "name", event.xml_name);
         append_attribute(output, "apiName", event.api_name);
         append_attribute(output, "russianName", as_utf8(event.russian_name));
+        if (event.extension_kind) {
+            if (*event.extension_kind != model::FormExtensionKind::catalog_item)
+                throw std::logic_error("ordinary-form event extension is not registered");
+            append_attribute(output, "formExtension", model::metamodel::catalog_item_form_extension.xml_name);
+        }
         if (event.persistence == model::metamodel::PersistenceClass::unsupported_by_platform)
             append_attribute(output, "available", "false");
         output += "/>\n";

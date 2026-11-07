@@ -3587,7 +3587,8 @@ std::optional<DecodedControlEvent> decode_button_event(
     return DecodedControlEvent{"Click", std::move(action.handler), std::move(metadata)};
 }
 
-LV encode_form_events(const model::OrdinaryFormDocument& document) {
+LV encode_form_events(const model::OrdinaryFormDocument& document,
+    std::optional<model::FormExtensionKind> extension_kind = std::nullopt) {
     struct EncodedEvent { std::uint32_t storage_id; std::string_view tag; const model::Event* event; };
     std::vector<EncodedEvent> encoded;
     std::unordered_set<std::uint64_t> reference_ids;
@@ -3605,6 +3606,10 @@ LV encode_form_events(const model::OrdinaryFormDocument& document) {
             descriptor->storage_codec != model::metamodel::StorageCodec::event_record ||
             descriptor->storage_tag.empty() || !descriptor->storage_event_id)
             fail("OOF1122", "$/Form/Events", "known persisted Form event", event->name, "Form event has no proven storage descriptor");
+        if (descriptor->extension_kind && descriptor->extension_kind != document.form().extension)
+            fail("OOF1122", "$/Form/Events", "matching Form extension", event->name,
+                "Form event requires its declared extension");
+        if (descriptor->extension_kind != extension_kind) continue;
         if (!names.insert(event->name).second || !storage_ids.insert(*descriptor->storage_event_id).second)
             fail("OOF1122", "$/Form/Events", "unique event name and storage ID", event->name, "Form event is duplicated");
         encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event});
@@ -3621,13 +3626,16 @@ LV encode_form_events(const model::OrdinaryFormDocument& document) {
     return list(std::move(items));
 }
 
-std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string_view path) {
+std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string_view path,
+    std::optional<model::FormExtensionKind> extension_kind = std::nullopt) {
     require_list(value, path);
     if (value.items.empty()) fail("OOF1103", std::string(path), "event count", "missing", "Form event table has no count");
     const auto count = integer_atom<std::uint32_t>(value.items[0], child_path(path, 0));
     require_arity(value, static_cast<std::size_t>(count) + 1, path);
     const auto descriptors = model::metamodel::form_event_descriptors();
-    if (count > descriptors.size()) fail("OOF1114", std::string(path), "supported Form event count", std::to_string(count), "Form event count is unsupported");
+    const auto supported_count = std::ranges::count(descriptors, extension_kind,
+        &model::metamodel::EventDescriptor::extension_kind);
+    if (count > static_cast<std::size_t>(supported_count)) fail("OOF1114", std::string(path), "supported Form event count", std::to_string(count), "Form event count is unsupported");
     std::vector<std::pair<const model::metamodel::EventDescriptor*, DecodedControlEvent>> decoded;
     std::unordered_set<std::uint32_t> storage_ids;
     std::unordered_set<std::string_view> names;
@@ -3638,8 +3646,9 @@ std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string
         const auto id = integer_atom<std::uint32_t>(record.items[0], child_path(event_path, 0));
         if (!storage_ids.insert(id).second)
             fail("OOF1114", event_path, "unique Form event ID", std::to_string(id), "Form event ID is duplicated");
-        const auto found = std::ranges::find_if(descriptors, [id](const auto& d) {
+        const auto found = std::ranges::find_if(descriptors, [id, extension_kind](const auto& d) {
             return d.storage_event_id && *d.storage_event_id == id &&
+                d.extension_kind == extension_kind &&
                 d.persistence == model::metamodel::PersistenceClass::persisted_editable &&
                 d.storage_codec == model::metamodel::StorageCodec::event_record && !d.storage_tag.empty();
         });
@@ -13114,6 +13123,7 @@ Result<model::OrdinaryFormDocument> decode_document(
 
         std::optional<model::FormExtensionKind> form_extension;
         model::PropertySet form_extension_properties;
+        std::vector<DecodedControlEvent> extension_named_events;
         const auto& extension = payload.items[3];
         require_list(extension, "$/3");
         if (extension.items.empty())
@@ -13175,8 +13185,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 return static_cast<std::size_t>(found - property.enumeration_members.begin());
             };
             const auto use_ordinal = read_ordinal(settings.items[1], *use_for_folders, "$/3/2/1");
-            require_exact(settings.items[2], list({raw("0")}), "$/3/2/2",
-                "CatalogItemFormExtension contains unsupported events");
+            extension_named_events = decode_form_events(settings.items[2], "$/3/2/2", descriptor.kind);
             const auto auto_ordinal = read_ordinal(settings.items[3], *autonumeration, "$/3/2/3");
             if (auto_ordinal != default_ordinal(*autonumeration, "$/3/2/3"))
                 form_extension_properties.set_explicit(autonumeration->id,
@@ -13191,7 +13200,8 @@ Result<model::OrdinaryFormDocument> decode_document(
             fail("OOF1106", "$/3/0", "null, DataProcessor, CatalogItem, or CatalogList form extension GUID",
                 extension_guid, "Ordinary-form extension GUID is unsupported");
         }
-        const auto form_named_events = decode_form_events(payload.items[4], "$/4");
+        auto form_named_events = decode_form_events(payload.items[4], "$/4");
+        for (auto& event : extension_named_events) form_named_events.push_back(std::move(event));
         const bool auto_title = bool_atom(payload.items[5], "$/5");
         const auto window_state = integer_atom<std::int32_t>(payload.items[6], "$/6");
         if (window_state != 4 && window_state != 1 && window_state != 16 && window_state != 2)
@@ -14555,7 +14565,7 @@ Result<list_stream::ListValue> encode_document(
                     "Autonumeration", "$/CatalogItemFormExtension/Autonumeration");
                 const auto& descriptor = model::metamodel::catalog_item_form_extension;
                 encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
-                    list({raw("2"), raw(std::to_string(use_for_folders)), list({raw("0")}),
+                    list({raw("2"), raw(std::to_string(use_for_folders)), encode_form_events(document, descriptor.kind),
                         raw(std::to_string(autonumeration))})});
             } else {
                 fail("OOF1122", "$/3", "declared form extension kind", "unknown extension kind",
