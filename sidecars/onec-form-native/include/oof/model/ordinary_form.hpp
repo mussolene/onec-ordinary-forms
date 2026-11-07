@@ -664,6 +664,49 @@ private:
     std::shared_ptr<ValueListRef::ItemIdentity> identity_;
 };
 
+inline constexpr std::size_t max_runtime_collection_nodes = 100000;
+inline constexpr std::size_t max_runtime_collection_entries = 1000000;
+enum class RuntimeCollectionKind : std::uint8_t { array, structure, map };
+
+class RuntimeCollectionRef {
+public:
+    RuntimeCollectionRef() = default;
+    RuntimeCollectionRef(const RuntimeCollectionRef& other);
+    RuntimeCollectionRef(RuntimeCollectionRef&& other) noexcept;
+    RuntimeCollectionRef& operator=(const RuntimeCollectionRef& other);
+    RuntimeCollectionRef& operator=(RuntimeCollectionRef&& other) noexcept;
+    ~RuntimeCollectionRef();
+
+    [[nodiscard]] static std::optional<RuntimeCollectionRef> create(RuntimeCollectionKind kind);
+    [[nodiscard]] bool valid() const noexcept;
+    [[nodiscard]] std::optional<RuntimeCollectionKind> kind() const noexcept;
+    [[nodiscard]] bool fixed() const noexcept;
+    [[nodiscard]] std::optional<std::size_t> size() const noexcept;
+    [[nodiscard]] std::optional<PropertyValue> at(std::size_t index) const;
+    [[nodiscard]] std::optional<PropertyValue> field(std::string_view name) const;
+    [[nodiscard]] std::optional<PropertyValue> find_key(const PropertyValue& key) const;
+    [[nodiscard]] bool append(PropertyValue value) const;
+    [[nodiscard]] bool set_at(std::size_t index, PropertyValue value) const;
+    [[nodiscard]] bool set_field(std::string name, PropertyValue value) const;
+    [[nodiscard]] bool set_key(PropertyValue key, PropertyValue value) const;
+    [[nodiscard]] bool erase_at(std::size_t index) const;
+    [[nodiscard]] bool erase_field(std::string_view name) const;
+    [[nodiscard]] bool erase_key(const PropertyValue& key) const;
+    [[nodiscard]] bool clear() const;
+    [[nodiscard]] std::optional<RuntimeCollectionRef> fixed_copy() const;
+
+    // A non-owning lifetime observer for bindings and resource verification.
+    [[nodiscard]] std::weak_ptr<const void> observe_lifetime() const noexcept;
+    friend bool operator==(const RuntimeCollectionRef& left, const RuntimeCollectionRef& right) noexcept;
+
+private:
+    struct State;
+    std::shared_ptr<State> state_;
+    std::uint64_t id_ = 0;
+    RuntimeCollectionRef(std::shared_ptr<State> state, std::uint64_t id);
+    void release() noexcept;
+};
+
 using PropertyValueVariant = std::variant<
     UndefinedValue,
     NullValue,
@@ -708,7 +751,8 @@ using PropertyValueVariant = std::variant<
     ValueListRef,
     TableColumnsRef,
     CalendarSelectedDatesRef,
-    ValueListItemRef>;
+    ValueListItemRef,
+    RuntimeCollectionRef>;
 
 struct PropertyValue : PropertyValueVariant {
     using Variant = PropertyValueVariant;
@@ -746,6 +790,9 @@ struct TypedValueBudget {
 
 [[nodiscard]] bool validate_typed_value(const PropertyValue& value, TypedValueBudget& budget) noexcept;
 [[nodiscard]] std::optional<std::string> typed_map_key(const PropertyValue& value);
+
+enum class RuntimeValueValidation : std::uint8_t { valid, invalid, unsupported };
+[[nodiscard]] RuntimeValueValidation validate_runtime_value(const PropertyValue& value) noexcept;
 
 struct PropertyEntry {
     PropertyId id{};

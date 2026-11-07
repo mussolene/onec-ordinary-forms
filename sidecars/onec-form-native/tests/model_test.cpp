@@ -15,6 +15,8 @@
 #include "oof/form_bin.hpp"
 #include "oof/source/form_xml.hpp"
 
+void run_runtime_collection_tests();
+
 namespace {
 
 using namespace oof::model;
@@ -1282,7 +1284,9 @@ void test_form_runtime_variant_values() {
     const auto original_bin = oof::save_form_bin(document);
     expect(original_xml.ok() && original_bin.ok(), "form with runtime variants must serialize");
     const std::vector<PropertyValue> values{UndefinedValue{}, NullValue{}, true, std::int64_t{123}, DecimalValue{"123.45"},
-        std::string{"Ключ Ω"}, DateValue{"2026-10-27T12:34:56"}, EnumerationValue{"WindowStateVariant", "Float"}};
+        std::string{"Ключ Ω"}, DateValue{"2026-10-27T12:34:56"}, EnumerationValue{"WindowStateVariant", "Float"},
+        UuidValue{"22222222-2222-2222-2222-222222222222"}, PlatformTypeValue{"String"},
+        ColorValue{}, FontValue{}, BorderValue{}, TypeDomainPatternValue{}};
     for (const auto name : {"UniqueKey", "ChoiceInitialValue"}) {
         const auto property = PropertyId::from_name(name);
         expect(document.get_prop_val(owner, property).value == PropertyValue{UndefinedValue{}}, "runtime variant must initially be undefined");
@@ -1290,8 +1294,13 @@ void test_form_runtime_variant_values() {
             expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::applied_runtime_only &&
                 document.get_prop_val(owner, property).value == value, "runtime variant must retain the exact supported type and value");
         expect(document.set_prop_val(owner, property, DecimalValue{"bad"}) == PropertyMutationStatus::invalid_value &&
-            document.set_prop_val(owner, property, TypeDomainPatternValue{}) == PropertyMutationStatus::unsupported_surface,
+            document.set_prop_val(owner, property, ArrayValue{}) == PropertyMutationStatus::unsupported_surface,
             "invalid or unimplemented variant types must not report success");
+        expect(document.set_prop_val(owner, property, std::string(1, static_cast<char>(0xff))) ==
+            PropertyMutationStatus::invalid_value &&
+            document.set_prop_val(owner, property, EnumerationValue{"Type", std::string(1, static_cast<char>(0xff))}) ==
+            PropertyMutationStatus::invalid_value,
+            "runtime scalar validation must reject malformed UTF-8 without replacing the prior value");
     }
     const auto xml = oof::source::serialize_form_xml(document);
     const auto bin = oof::save_form_bin(document);
@@ -3672,7 +3681,7 @@ void test_recursive_typed_values() {
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     };
-    static_assert(std::variant_size_v<PropertyValue::Variant> == 44);
+    static_assert(std::variant_size_v<PropertyValue::Variant> == 45);
     [&]<std::size_t... Index>(std::index_sequence<Index...>) {
         ([&] {
             using Value = std::variant_alternative_t<Index, PropertyValue::Variant>;
@@ -6249,6 +6258,7 @@ int main() {
         test_graphical_current_item_runtime_boundary();
         test_pivot_runtime_source_boundaries();
         test_form_runtime_variant_values();
+        run_runtime_collection_tests();
         test_window_options_aliases();
         test_form_runtime_boolean_values();
         test_window_permission_mutations();

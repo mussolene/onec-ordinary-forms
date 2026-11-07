@@ -1,5 +1,6 @@
 find_package(LibXml2 2.14.6 REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(ICU 60 REQUIRED COMPONENTS uc)
 
 function(oof_enable_project_warnings target_name)
   if(MSVC)
@@ -16,6 +17,7 @@ add_library(
     src/metadata_context.cpp
     src/model/metamodel.cpp
     src/model/ordinary_form.cpp
+    src/model/runtime_collection.cpp
     src/source/form_xml.cpp
     src/source/metadata_xml.cpp
     src/source/schema_generator.cpp
@@ -39,7 +41,7 @@ target_include_directories(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
 )
 oof_enable_project_warnings(liboof)
-target_link_libraries(liboof PRIVATE LibXml2::LibXml2 ZLIB::ZLIB)
+target_link_libraries(liboof PRIVATE LibXml2::LibXml2 ZLIB::ZLIB ICU::uc)
 
 add_executable(oof src/cli/main.cpp)
 set_target_properties(
@@ -53,7 +55,7 @@ target_link_libraries(oof PRIVATE oof::liboof)
 oof_enable_project_warnings(oof)
 
 if(BUILD_TESTING)
-  add_executable(oof-model-test tests/model_test.cpp)
+  add_executable(oof-model-test tests/model_test.cpp tests/runtime_collection_test.cpp)
   set_target_properties(
     oof-model-test
     PROPERTIES

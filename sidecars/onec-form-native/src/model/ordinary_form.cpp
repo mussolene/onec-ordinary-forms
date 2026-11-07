@@ -1134,6 +1134,30 @@ bool validate_typed_value(const PropertyValue& value, TypedValueBudget& budget) 
     }
 }
 
+RuntimeValueValidation validate_runtime_value(const PropertyValue& value) noexcept {
+    if (value.valueless_by_exception()) return RuntimeValueValidation::invalid;
+    return std::visit([&](const auto& item) -> RuntimeValueValidation {
+        using Value = std::remove_cvref_t<decltype(item)>;
+        if constexpr (std::is_same_v<Value, RuntimeCollectionRef>)
+            return item.valid() ? RuntimeValueValidation::valid : RuntimeValueValidation::invalid;
+        else if constexpr (std::is_same_v<Value, ValueListRef>)
+            return item.get() ? RuntimeValueValidation::valid : RuntimeValueValidation::invalid;
+        else if constexpr (std::is_same_v<Value, EnumerationValue>)
+            return !item.type_name.empty() && !item.member.empty() && valid_typed_utf8(item.type_name) &&
+                valid_typed_utf8(item.member) ? RuntimeValueValidation::valid : RuntimeValueValidation::invalid;
+        else if constexpr (std::is_same_v<Value, UndefinedValue> || std::is_same_v<Value, NullValue> ||
+            std::is_same_v<Value, bool> || std::is_same_v<Value, std::int64_t> ||
+            std::is_same_v<Value, DecimalValue> || std::is_same_v<Value, std::string> ||
+            std::is_same_v<Value, FormattedStringValue> || std::is_same_v<Value, DateValue> ||
+            std::is_same_v<Value, UuidValue> || std::is_same_v<Value, PlatformTypeValue> ||
+            std::is_same_v<Value, ColorValue> || std::is_same_v<Value, FontValue> ||
+            std::is_same_v<Value, BorderValue> || std::is_same_v<Value, TypeDomainPatternValue>) {
+            TypedValueBudget budget;
+            return validate_typed_value(value, budget) ? RuntimeValueValidation::valid : RuntimeValueValidation::invalid;
+        } else return RuntimeValueValidation::unsupported;
+    }, value);
+}
+
 struct ValueListRef::ItemIdentity {
     std::uint64_t id = 0;
     std::shared_ptr<const ValueListItem> payload;
@@ -2481,16 +2505,10 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         if (property == PropertyId::from_name("CurrentControl") || property == PropertyId::from_name("FormOwner")) return PropertyMutationStatus::unsupported_surface;
         if (property == PropertyId::from_name("Controls")) return PropertyMutationStatus::read_only;
         if (property == PropertyId::from_name("UniqueKey") || property == PropertyId::from_name("ChoiceInitialValue")) {
-            if (const auto* decimal = std::get_if<DecimalValue>(&value)) {
-                if (!canonical_chart_decimal(decimal->canonical)) return PropertyMutationStatus::invalid_value;
-            } else if (const auto* date = std::get_if<DateValue>(&value)) {
-                try { static_cast<void>(storage::value_codec::date_to_platform(date->canonical)); }
-                catch (const std::exception&) { return PropertyMutationStatus::invalid_value; }
-            } else if (const auto* enumeration = std::get_if<EnumerationValue>(&value)) {
-                if (enumeration->type_name.empty() || enumeration->member.empty()) return PropertyMutationStatus::invalid_value;
-            } else if (!std::holds_alternative<UndefinedValue>(value) && !std::holds_alternative<NullValue>(value) &&
-                       !std::holds_alternative<bool>(value) && !std::holds_alternative<std::int64_t>(value) &&
-                       !std::holds_alternative<std::string>(value)) return PropertyMutationStatus::unsupported_surface;
+            const auto validation = validate_runtime_value(value);
+            if (validation != RuntimeValueValidation::valid)
+                return validation == RuntimeValueValidation::invalid ? PropertyMutationStatus::invalid_value :
+                    PropertyMutationStatus::unsupported_surface;
             runtime_form_values_.set_explicit(property, std::move(value));
             return PropertyMutationStatus::applied_runtime_only;
         }
