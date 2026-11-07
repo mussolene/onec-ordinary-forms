@@ -13138,8 +13138,13 @@ Result<model::OrdinaryFormDocument> decode_document(
             require_arity(extension, 3, "$/3");
             require_raw_constant(extension.items[0], descriptor.guid, "$/3/0");
             require_raw_constant(extension.items[1], "1", "$/3/1");
-            require_exact(extension.items[2], parse_constant("{2,0,{0,0},{0},1}"), "$/3/2",
+            const auto& settings = extension.items[2];
+            require_arity(settings, 5, "$/3/2");
+            auto normalized_settings = settings;
+            normalized_settings.items[3] = list({raw("0")});
+            require_exact(normalized_settings, parse_constant("{2,0,{0,0},{0},1}"), "$/3/2",
                 "DataProcessorFormExtension contains unsupported nondefault settings");
+            extension_named_events = decode_form_events(settings.items[3], "$/3/2/3", descriptor.kind);
             form_extension = descriptor.kind;
         } else if (extension_guid == model::metamodel::catalog_list_form_extension.guid) {
             const auto& descriptor = model::metamodel::catalog_list_form_extension;
@@ -14553,8 +14558,9 @@ Result<list_stream::ListValue> encode_document(
         if (document.form().extension) {
             if (*document.form().extension == model::FormExtensionKind::data_processor) {
                 const auto& descriptor = model::metamodel::data_processor_form_extension;
-                encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
-                    parse_constant("{2,0,{0,0},{0},1}")});
+                auto settings = parse_constant("{2,0,{0,0},{0},1}");
+                settings.items[3] = encode_form_events(document, descriptor.kind);
+                encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"), std::move(settings)});
             } else if (*document.form().extension == model::FormExtensionKind::catalog_list) {
                 const auto& descriptor = model::metamodel::catalog_list_form_extension;
                 encoded_extension = list({raw(std::string(descriptor.guid)), raw("0")});

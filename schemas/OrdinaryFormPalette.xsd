@@ -64,6 +64,8 @@
             <Event name="OnWrite" apiName="OnWrite" russianName="ПриЗаписи" formExtension="CatalogItemFormExtension"/>
             <Event name="AfterWrite" apiName="AfterWrite" russianName="ПослеЗаписи" formExtension="CatalogItemFormExtension"/>
             <Event name="OnDataChange" apiName="OnDataChange" russianName="ПриИзмененииДанных" formExtension="CatalogItemFormExtension"/>
+            <Event name="BeforeSaveValues" apiName="BeforeSaveValues" russianName="ПередСохранениемЗначений" formExtension="DataProcessorFormExtension"/>
+            <Event name="AfterRestoreValues" apiName="AfterRestoreValues" russianName="ПослеВосстановленияЗначений" formExtension="DataProcessorFormExtension"/>
           </Events>
         </Form>
         <SharedProperties surface="formExtension">

@@ -587,18 +587,21 @@ std::vector<EventDescriptor> make_form_event_descriptors() {
         std::string_view name;
         std::u8string_view russian_name;
         std::uint32_t storage_id;
+        FormExtensionKind extension;
     };
-    constexpr std::array<ExtensionEvent, 4> catalog_events{{
-        {"BeforeWrite", u8"ПередЗаписью", 80000U},
-        {"OnWrite", u8"ПриЗаписи", 80001U},
-        {"AfterWrite", u8"ПослеЗаписи", 80002U},
-        {"OnDataChange", u8"ПриИзмененииДанных", 80003U},
+    constexpr std::array<ExtensionEvent, 6> extension_events{{
+        {"BeforeWrite", u8"ПередЗаписью", 80000U, FormExtensionKind::catalog_item},
+        {"OnWrite", u8"ПриЗаписи", 80001U, FormExtensionKind::catalog_item},
+        {"AfterWrite", u8"ПослеЗаписи", 80002U, FormExtensionKind::catalog_item},
+        {"OnDataChange", u8"ПриИзмененииДанных", 80003U, FormExtensionKind::catalog_item},
+        {"BeforeSaveValues", u8"ПередСохранениемЗначений", 80000U, FormExtensionKind::data_processor},
+        {"AfterRestoreValues", u8"ПослеВосстановленияЗначений", 80001U, FormExtensionKind::data_processor},
     }};
-    for (const auto& event : catalog_events) {
+    for (const auto& event : extension_events) {
         descriptors.push_back({DescriptorOwner::form, ControlKind::panel, descriptors.size(),
             event.name, event.name, event.russian_name, VersionMask::platform_8_5,
             PersistenceClass::persisted_editable, StorageCodec::event_record,
-            "e1692cc2-605b-4535-84dd-28440238746c", event.storage_id, FormExtensionKind::catalog_item});
+            "e1692cc2-605b-4535-84dd-28440238746c", event.storage_id, event.extension});
     }
     return descriptors;
 }
@@ -2230,7 +2233,8 @@ struct Metamodel::Impl {
         }
         std::set<std::pair<std::optional<FormExtensionKind>, std::uint32_t>> form_event_storage_ids;
         for (const auto& descriptor : form_events) {
-            if (descriptor.extension_kind && *descriptor.extension_kind != FormExtensionKind::catalog_item)
+            if (descriptor.extension_kind && *descriptor.extension_kind != FormExtensionKind::catalog_item &&
+                *descriptor.extension_kind != FormExtensionKind::data_processor)
                 throw std::logic_error("form event extension has no storage serializer");
             if (descriptor.storage_event_id &&
                 !form_event_storage_ids.emplace(descriptor.extension_kind, *descriptor.storage_event_id).second)

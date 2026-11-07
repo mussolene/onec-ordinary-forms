@@ -1610,9 +1610,16 @@ void append_palette_events(
         append_attribute(output, "apiName", event.api_name);
         append_attribute(output, "russianName", as_utf8(event.russian_name));
         if (event.extension_kind) {
-            if (*event.extension_kind != model::FormExtensionKind::catalog_item)
-                throw std::logic_error("ordinary-form event extension is not registered");
-            append_attribute(output, "formExtension", model::metamodel::catalog_item_form_extension.xml_name);
+            switch (*event.extension_kind) {
+                case model::FormExtensionKind::catalog_item:
+                    append_attribute(output, "formExtension", model::metamodel::catalog_item_form_extension.xml_name);
+                    break;
+                case model::FormExtensionKind::data_processor:
+                    append_attribute(output, "formExtension", model::metamodel::data_processor_form_extension.xml_name);
+                    break;
+                default:
+                    throw std::logic_error("ordinary-form event extension is not registered");
+            }
         }
         if (event.persistence == model::metamodel::PersistenceClass::unsupported_by_platform)
             append_attribute(output, "available", "false");

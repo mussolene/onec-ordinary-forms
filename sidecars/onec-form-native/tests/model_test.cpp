@@ -2932,7 +2932,7 @@ void test_help_metamodel() {
         coverage.panel_placement_property_count == 9,
         "panel-control extension must retain its 9 properties");
     expect(coverage.form_property_count == 39, "Form descriptors must include the two platform-confirmed context properties");
-    expect(coverage.form_event_count == 17, "Form must retain 13 common and four CatalogItem extension events");
+    expect(coverage.form_event_count == 19, "Form must retain 13 common, four CatalogItem and two DataProcessor extension events");
     for (const auto name : {"BeforeWrite", "OnWrite", "AfterWrite", "OnDataChange"}) {
         const auto* descriptor = find_form_event(name);
         expect(descriptor && descriptor->extension_kind == FormExtensionKind::catalog_item &&

@@ -22591,6 +22591,7 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
     expect(parsed.value().form().extension == model::FormExtensionKind::data_processor,
         "Named XML must select the processing form controller");
+    const auto processor_template = parsed.value();
     const auto encoded = form_stream::encode_document(parsed.value());
     expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
     expect(list_stream::dump_compact(encoded.value().items[2].items[0]) == "{2}",
@@ -22653,6 +22654,191 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
     const auto removed = form_stream::encode_document(parsed.value());
     expect(removed.ok() && list_stream::dump_compact(removed.value().items[3]) ==
         "{00000000-0000-0000-0000-000000000000,0}", "Removing the named extension must remove its controller");
+
+    constexpr std::array processor_event_names{
+        std::string_view{"BeforeSaveValues"}, std::string_view{"AfterRestoreValues"}};
+    constexpr std::array<std::uint32_t, processor_event_names.size()> processor_storage_ids{80000U, 80001U};
+    constexpr std::string_view processor_storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+    std::array<const model::metamodel::EventDescriptor*, processor_event_names.size()> processor_events{};
+    for (std::size_t index = 0; index < processor_event_names.size(); ++index) {
+        processor_events[index] = model::metamodel::find_form_event(processor_event_names[index]);
+        expect(processor_events[index] != nullptr &&
+                   processor_events[index]->extension_kind == model::FormExtensionKind::data_processor &&
+                   processor_events[index]->storage_event_id == processor_storage_ids[index] &&
+                   processor_events[index]->storage_tag == processor_storage_tag,
+            "DataProcessorFormExtension event descriptors must provide their scoped native identity");
+    }
+    const model::EventActionMetadata processor_action_metadata{
+        "RunProcessorAction", {{{"ru", "Текст обработки"}, {"en", "Processor event text"}}},
+        {{{"en", "Processor event tooltip"}}}, {{{"ru", "Описание обработки"}}}};
+    const auto make_processor_document = [&](std::uint8_t mask, bool include_ordinary_events = true) {
+        auto document = processor_template;
+        auto form = document.form();
+        if (include_ordinary_events) {
+            form.events.emplace_back(model::ObjectId{9});
+            document.add_event(model::Event{model::ObjectId{9}, "OnOpen", "HandleOpen",
+                model::FormRef{model::ObjectId{1}}});
+            form.events.emplace_back(model::ObjectId{8});
+            document.add_event(model::Event{model::ObjectId{8}, "BeforeOpen", "HandleBeforeOpen",
+                model::FormRef{model::ObjectId{1}}, processor_action_metadata});
+        }
+        for (std::size_t index = 0; index < processor_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            const model::ObjectId id{100U + index};
+            form.events.emplace_back(id);
+            document.add_event(model::Event{id, std::string(processor_event_names[index]),
+                "Handle" + std::string(processor_event_names[index]), model::FormRef{model::ObjectId{1}},
+                index == 0 ? std::optional<model::EventActionMetadata>{processor_action_metadata} : std::nullopt});
+        }
+        document.set_form(std::move(form));
+        return document;
+    };
+    const auto processor_table = [](auto& stream) -> auto& {
+        return stream.items.at(3).items.at(2).items.at(3);
+    };
+    for (std::uint8_t mask = 0; mask < (1U << processor_event_names.size()); ++mask) {
+        const auto document = make_processor_document(mask);
+        const auto encoded_events = form_stream::encode_document(document);
+        expect(encoded_events.ok(), encoded_events ? "DataProcessor events must encode" :
+            encoded_events.diagnostics().front().message);
+        if (!encoded_events) continue;
+        const std::size_t processor_count = static_cast<std::size_t>(std::popcount(mask));
+        const auto& processor_records = processor_table(encoded_events.value());
+        const auto& ordinary_records = encoded_events.value().items.at(4);
+        expect(processor_records.items.size() == processor_count + 1 &&
+                   processor_records.items.front().atom == std::to_string(processor_count),
+            "DataProcessor event count must match its named events in extension settings slot 3");
+        expect(ordinary_records.items.size() == 3 && ordinary_records.items.front().atom == "2",
+            "ordinary BeforeOpen and OnOpen must remain in Form.Events");
+        for (std::size_t index = 0; index < processor_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            expect(std::ranges::any_of(processor_records.items.begin() + 1, processor_records.items.end(),
+                    [&](const auto& record) {
+                        return record.items.at(0).atom ==
+                                   std::to_string(*processor_events[index]->storage_event_id) &&
+                               record.items.at(1).atom == processor_events[index]->storage_tag;
+                    }), "DataProcessor event must use its descriptor's ID and tag");
+        }
+        const auto decoded = form_stream::decode_document(encoded_events.value(), "Processor");
+        expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                   decoded.value().form().events.size() == processor_count + 2,
+            "DataProcessor and ordinary events must decode completely together");
+        if (!decoded) continue;
+        const auto find_named_event = [&](std::string_view name) -> const model::Event* {
+            for (const auto& reference : decoded.value().form().events) {
+                const auto* event = decoded.value().find_event(reference.id());
+                if (event && event->name == name) return event;
+            }
+            return nullptr;
+        };
+        const auto* before_open = find_named_event("BeforeOpen");
+        const auto* on_open = find_named_event("OnOpen");
+        expect(before_open && before_open->handler == "HandleBeforeOpen" &&
+                   before_open->action_metadata == processor_action_metadata &&
+                   on_open && on_open->handler == "HandleOpen" && !on_open->action_metadata,
+            "ordinary event handlers and action metadata must survive beside extension events");
+        for (std::size_t index = 0; index < processor_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            const auto* event = find_named_event(processor_event_names[index]);
+            expect(event && event->handler == "Handle" + std::string(processor_event_names[index]) &&
+                       std::holds_alternative<model::FormRef>(event->owner) &&
+                       std::get<model::FormRef>(event->owner).id() == decoded.value().form().id &&
+                       event->action_metadata == (index == 0
+                           ? std::optional<model::EventActionMetadata>{processor_action_metadata}
+                           : std::nullopt),
+                "DataProcessor event handler, form owner, and action metadata must survive");
+        }
+        const auto xml = oof::source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<DataProcessorFormExtension") != std::string::npos &&
+                   xml.value().find("e1692cc2-605b-4535-84dd-28440238746c") == std::string::npos,
+            "DataProcessor events must serialize through named XML without exposing the native tag");
+        if (!xml) continue;
+        for (std::size_t index = 0; index < processor_events.size(); ++index) {
+            if ((mask & (1U << index)) == 0) continue;
+            expect(xml.value().find("<" + std::string(processor_event_names[index]) +
+                       " id=\"") != std::string::npos,
+                "DataProcessor extension events must appear as named public XML events");
+        }
+        const auto reparsed = oof::source::parse_form_xml(xml.value());
+        expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+        if (!reparsed) continue;
+        const auto original_bin = oof::save_form_bin(document);
+        const auto rebuilt_bin = oof::save_form_bin(reparsed.value());
+        expect(original_bin.ok() && rebuilt_bin.ok() && rebuilt_bin.value() == original_bin.value(),
+            "DataProcessor event decode, named XML, and rebuild must preserve exact Form.bin bytes");
+    }
+
+    auto no_extension = make_processor_document(1U, false);
+    auto no_extension_form = no_extension.form();
+    no_extension_form.extension.reset();
+    no_extension_form.extension_properties = {};
+    no_extension_form.main_attribute = {};
+    no_extension.set_form(std::move(no_extension_form));
+    expect(!form_stream::encode_document(no_extension),
+        "DataProcessor events must reject a form without their declared extension");
+    auto wrong_extension = make_processor_document(1U, false);
+    auto wrong_extension_form = wrong_extension.form();
+    wrong_extension_form.extension = model::FormExtensionKind::catalog_item;
+    wrong_extension_form.extension_properties = {};
+    wrong_extension.set_form(std::move(wrong_extension_form));
+    expect(!form_stream::encode_document(wrong_extension),
+        "DataProcessor events must reject a different form extension kind");
+
+    auto processor_only = form_stream::encode_document(make_processor_document(1U, false));
+    expect(processor_only.ok(), "DataProcessor event corruption fixture must encode");
+    if (processor_only) {
+        auto processor_in_ordinary = processor_only.value();
+        const auto processor_record = processor_table(processor_in_ordinary).items.at(1);
+        processor_in_ordinary.items.at(4) = list_stream::parse("{1}");
+        processor_in_ordinary.items.at(4).items.push_back(processor_record);
+        processor_table(processor_in_ordinary) = list_stream::parse("{0}");
+        expect(!form_stream::decode_document(processor_in_ordinary, "Processor"),
+            "DataProcessor events must not be accepted in the ordinary Form event table");
+    }
+    auto ordinary_only = form_stream::encode_document(make_processor_document(0U));
+    expect(ordinary_only.ok(), "ordinary Form event corruption fixture must encode");
+    if (ordinary_only) {
+        auto ordinary_in_processor = ordinary_only.value();
+        const auto ordinary_record = ordinary_in_processor.items.at(4).items.at(1);
+        ordinary_in_processor.items.at(4) = list_stream::parse("{0}");
+        processor_table(ordinary_in_processor) = list_stream::parse("{1}");
+        processor_table(ordinary_in_processor).items.push_back(ordinary_record);
+        expect(!form_stream::decode_document(ordinary_in_processor, "Processor"),
+            "ordinary Form events must not be accepted in the DataProcessor event table");
+    }
+
+    auto corruption_fixture = form_stream::encode_document(make_processor_document(3U, false));
+    expect(corruption_fixture.ok(), "two-event DataProcessor corruption fixture must encode");
+    if (corruption_fixture) {
+        const auto reject_processor_stream = [&](auto mutate, std::string_view code,
+                                                  std::string_view path, std::string_view message) {
+            auto corrupt = corruption_fixture.value();
+            mutate(processor_table(corrupt));
+            expect_failure(form_stream::decode_document(corrupt, "Processor"), code, path, message);
+        };
+        reject_processor_stream([](auto& table) {
+            table.items[2].items[0] = table.items[1].items[0];
+        }, "OOF1114", "$/3/2/3/2", "duplicate DataProcessor event ID must fail");
+        reject_processor_stream([](auto& table) {
+            table.items[1].items[0] = list_stream::ListValue::raw_atom(
+                std::to_string(std::numeric_limits<std::uint32_t>::max()));
+        }, "OOF1114", "$/3/2/3/1", "unknown DataProcessor event ID must fail");
+        reject_processor_stream([](auto& table) {
+            table.items[1].items[1] = list_stream::ListValue::raw_atom(
+                "00000000-0000-0000-0000-000000000000");
+        }, "OOF1106", "$/3/2/3/1/1", "invalid DataProcessor event tag must fail");
+        reject_processor_stream([](auto& table) {
+            table.items[0] = list_stream::ListValue::raw_atom("3");
+        }, "OOF1102", "$/3/2/3", "DataProcessor event count must match its records");
+    }
+    auto duplicate_processor_event = make_processor_document(1U, false);
+    auto duplicate_processor_form = duplicate_processor_event.form();
+    duplicate_processor_form.events.emplace_back(model::ObjectId{101});
+    duplicate_processor_event.add_event(model::Event{model::ObjectId{101}, "BeforeSaveValues",
+        "OtherHandler", model::FormRef{model::ObjectId{1}}});
+    duplicate_processor_event.set_form(std::move(duplicate_processor_form));
+    expect(!form_stream::encode_document(duplicate_processor_event),
+        "duplicate DataProcessor event names must reject instead of choosing one handler");
 }
 
 void test_catalog_item_form_extension_named_round_trip_and_guards() {

@@ -1765,6 +1765,8 @@
       <xs:element name="OnWrite" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AfterWrite" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="OnDataChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeSaveValues" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AfterRestoreValues" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
   </xs:complexType>
 
