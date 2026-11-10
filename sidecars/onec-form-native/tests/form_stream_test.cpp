@@ -10945,11 +10945,15 @@ void test_legacy_common_control_base10_batch() {
         model::ControlKind::picture_decoration, model::ControlKind::progress_bar,
         model::ControlKind::calendar_field, model::ControlKind::splitter,
         model::ControlKind::track_bar, model::ControlKind::usual_group,
+        model::ControlKind::command_bar, model::ControlKind::panel,
+        model::ControlKind::radio_button, model::ControlKind::table,
     };
     const auto base_for = [](auto& stream, model::ControlKind kind) -> auto& {
         auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(kind).guid);
         expect(record != nullptr, "batch common-base control must exist");
-        if (kind == model::ControlKind::input_field)
+        if (kind == model::ControlKind::table)
+            return record->items[2].items[2].items[0];
+        if (kind == model::ControlKind::input_field || kind == model::ControlKind::radio_button)
             return record->items[2].items[2].items[0].items[0];
         if (kind == model::ControlKind::check_box)
             return record->items[2].items[1].items[0].items[0];
@@ -10965,16 +10969,22 @@ void test_legacy_common_control_base10_batch() {
     for (const auto kind : kinds) {
         const auto name = std::string(model::metamodel::descriptor_for(kind).public_name);
         const bool bound = kind == model::ControlKind::check_box ||
-            kind == model::ControlKind::input_field || kind == model::ControlKind::list_box;
+            kind == model::ControlKind::input_field || kind == model::ControlKind::list_box ||
+            kind == model::ControlKind::table;
         const auto term = kind == model::ControlKind::check_box ? "boolean" :
-            kind == model::ControlKind::list_box ? "valueList" : "string";
+            kind == model::ControlKind::list_box ? "valueList" :
+            kind == model::ControlKind::table ? "valueTable" : "string";
         const std::string attributes = bound ?
             std::string("<Attributes><Attribute id=\"3\" name=\"Data\"><TypeDomain><Entry term=\"") +
                 term + "\"/></TypeDomain></Attribute></Attributes>" : "";
+        const std::string columns = kind == model::ControlKind::table ?
+            R"XML(<Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns>)XML" : "";
+        const std::string children = kind == model::ControlKind::panel ?
+            R"XML(<ChildItems><Page name="Page"><Position><Width>100</Width><Bindings><AnchorBinding coordinate="right" targetCoordinate="right" targetId="2" offset="0"/><AnchorBinding coordinate="bottom" targetCoordinate="bottom" targetId="2" offset="0"/></Bindings></Position></Page></ChildItems>)XML" : "";
         auto document = source::parse_form_xml(
             std::string("<Form id=\"1\" name=\"LegacyCommonBase\" ordinaryFormVersion=\"2.1\">") +
             attributes + "<ChildItems><" + name + " id=\"2\" name=\"Control\">" +
-            (bound ? "<DataPath attributeId=\"3\"/>" : "") + "<Position/></" + name + "></ChildItems></Form>");
+            (bound ? "<DataPath attributeId=\"3\"/>" : "") + "<Position/>" + columns + children + "</" + name + "></ChildItems></Form>");
         expect(document.ok(), name + " common-base fixture XML must parse");
         const auto set = [&](std::string_view property, model::PropertyValue value) {
             expect(document.value().set_prop_val(key, model::PropertyId::from_name(property), value) ==
@@ -10994,16 +11004,20 @@ void test_legacy_common_control_base10_batch() {
         auto& old_base = base_for(legacy, kind);
         old_base.items.resize(13);
         old_base.items[0] = list_stream::ListValue::raw_atom("10");
-        const auto decoded = form_stream::decode_document(legacy, "LegacyCommonBase");
+        if (kind == model::ControlKind::table)
+            expect(!form_stream::decode_document(legacy, "LegacyCommonBase"),
+                "Table must reject the unconfirmed base10 tuple");
+        const auto decoded = form_stream::decode_document(
+            kind == model::ControlKind::table ? current.value() : legacy, "LegacyCommonBase");
         expect(decoded.ok() && decoded.value().reconstruction_complete(),
-            name + " base10 must decode completely using its current constructor defaults");
+            name + " supported common base must decode completely using its current constructor defaults");
         const auto xml = source::serialize_form_xml(decoded.value());
         expect(xml.ok(), name + " base10 must serialize as named XML");
         const auto parsed = source::parse_form_xml(xml.value());
         expect(parsed.ok(), name + " base10 named XML must parse");
         const auto rebuilt = form_stream::encode_document(parsed.value());
         expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
-            name + " base10 named XML must rebuild the complete current stream including its type-specific suffix");
+            name + " supported common base must rebuild the complete current stream including its type-specific suffix");
         expect(base_for(rebuilt.value(), kind).items.size() == 21 &&
                 base_for(rebuilt.value(), kind).items[0].atom == "19",
             name + " base10 must write the current version");
@@ -11021,10 +11035,44 @@ void test_legacy_common_control_base10_batch() {
         }
         auto unknown = current.value();
         base_for(unknown, kind).items[15] = list_stream::ListValue::raw_atom("99");
-        const auto partial = form_stream::decode_document(unknown, "LegacyCommonBase");
-        expect(partial.ok() && !partial.value().reconstruction_complete(),
-            name + " modern unknown suffix must remain PARTIAL");
+        const auto unknown_result = form_stream::decode_document(unknown, "LegacyCommonBase");
+        if (kind == model::ControlKind::command_bar)
+            expect(!unknown_result, name + " modern unknown suffix must reject");
+        else
+            expect(unknown_result.ok() && !unknown_result.value().reconstruction_complete(),
+                name + " modern unknown suffix must remain PARTIAL");
     }
+    const auto root_document = source::parse_form_xml(R"XML(<Form id="1" name="LegacyRootCommonBase" ordinaryFormVersion="2.1">
+      <Panel><AutoTabOrder>false</AutoTabOrder><BorderColor kind="absolute" red="17" green="83" blue="201"/>
+        <TextColor kind="absolute" red="44" green="55" blue="66"/><BackColor kind="absolute" red="77" green="88" blue="99"/></Panel>
+    </Form>)XML");
+    expect(root_document.ok(), "root Panel common-base fixture must parse");
+    const auto root_current = form_stream::encode_document(root_document.value());
+    expect(root_current.ok(), "root Panel named colors must encode");
+    auto root_legacy = root_current.value();
+    auto& root_base = root_legacy.items[1].items[2].items[1].items[1].items[0];
+    root_base.items.resize(13);
+    root_base.items[0] = list_stream::ListValue::raw_atom("10");
+    const auto root_decoded = form_stream::decode_document(root_legacy, "LegacyRootCommonBase");
+    expect(root_decoded.ok() && root_decoded.value().reconstruction_complete(),
+        "root Panel base10 must decode without changing owner layout");
+    const auto root_xml = source::serialize_form_xml(root_decoded.value());
+    expect(root_xml.ok(), "root Panel base10 must serialize as named XML");
+    const auto root_parsed = source::parse_form_xml(root_xml.value());
+    expect(root_parsed.ok(), "root Panel named XML must parse");
+    const auto root_rebuilt = form_stream::encode_document(root_parsed.value());
+    expect(root_rebuilt.ok() && list_stream::dump_compact(root_rebuilt.value()) == list_stream::dump_compact(root_current.value()),
+        "root Panel base10 must preserve named colors and rebuild the complete current stream");
+    for (const auto version : {"15", "16", "21", "99"}) {
+        auto invalid = root_current.value();
+        invalid.items[1].items[2].items[1].items[1].items[0].items[0] = list_stream::ListValue::raw_atom(version);
+        expect(!form_stream::decode_document(invalid, "LegacyRootCommonBase"), "root Panel must reject unproven common-base versions");
+    }
+    auto unknown_owner = root_legacy;
+    unknown_owner.items[1].items[2].items[1].items[1].items[1] = list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(unknown_owner, "LegacyRootCommonBase"),
+        "base10 must not mask an unproven root owner version");
+
 }
 
 void test_common_control_font_and_border_color() {

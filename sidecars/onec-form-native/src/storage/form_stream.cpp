@@ -1519,10 +1519,13 @@ struct CommonControlBaseFields {
     bool transparent = false;
 };
 
+enum class CommonControlBaseVersionPolicy { legacy10_and_current19, current19_only };
+
 // Older common bases omit the suffix supplied by the current control constructor.
 // This internal version decoder retains no source payload in the named model.
 template <typename CurrentBaseFactory>
-void read_common_control_base(LV& base, std::string_view path, CurrentBaseFactory current_base) {
+void read_common_control_base(LV& base, std::string_view path, CurrentBaseFactory current_base,
+    CommonControlBaseVersionPolicy version_policy = CommonControlBaseVersionPolicy::legacy10_and_current19) {
     require_list(base, path);
     if (base.items.empty()) require_arity(base, 21, path);
     const auto version = raw_atom(base.items[0], child_path(path, 0));
@@ -1530,6 +1533,9 @@ void read_common_control_base(LV& base, std::string_view path, CurrentBaseFactor
         require_arity(base, 21, path);
         return;
     }
+    if (version_policy == CommonControlBaseVersionPolicy::current19_only)
+        fail("OOF1114", child_path(path, 0), "confirmed common-base version 19", version,
+            "Common-base version is not supported for this control owner");
     require_raw_constant(base.items[0], "10", child_path(path, 0));
     require_arity(base, 13, path);
     auto current = current_base();
@@ -3026,10 +3032,13 @@ DecodedOwnerPages decode_owner_pages(
         const auto& source_base = normalized.items[0];
         require_arity(source_base, 13, source_base_path);
         require_raw_constant(source_base.items[0], "10", child_path(source_base_path, 0));
-        auto canonical_base = expected.items[1].items[0];
         for (const auto slot : {1U, 5U, 11U, 12U})
-            require_exact(source_base.items[slot], canonical_base.items[slot],
+            require_exact(source_base.items[slot], expected.items[1].items[0].items[slot],
                 child_path(source_base_path, slot), "Legacy root common-base field is unsupported");
+        auto canonical_base = source_base;
+        read_common_control_base(canonical_base, source_base_path, [&] {
+            return expected.items[1].items[0];
+        });
         for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
             const auto color_path = child_path(source_base_path, slot);
             canonical_base.items[slot] = encode_control_color(
@@ -3067,8 +3076,11 @@ DecodedOwnerPages decode_owner_pages(
         default_controls.push_back(id);
         expected.items[1].items.at(focus_start + index) = raw(std::to_string(id));
     }
-    require_arity(normalized.items[0], expected.items[1].items[0].items.size(), child_path(child_path(path, 1), 0));
-    require_raw_constant(normalized.items[0].items[0], "19", child_path(child_path(child_path(path, 1), 0), 0));
+    read_common_control_base(normalized.items[0], child_path(child_path(path, 1), 0), [&] {
+        require_exact(normalized.items[1], expected.items[1].items[1], child_path(child_path(path, 1), 1),
+            "Legacy common base requires the supported current owner version");
+        return expected.items[1].items[0];
+    });
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     model::PanelPayload decoded_panel;
@@ -6551,10 +6563,11 @@ DecodedControl decode_radio_button(
     const auto properties_path = child_path(control_info_path, 0);
     require_arity(properties, 9, properties_path);
     require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
-    const auto& base_properties = properties.items[0];
+    auto base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    require_arity(base_properties, 21, base_path);
-    require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
+    read_common_control_base(base_properties, base_path, [] {
+        return canonical_radio_button_info({}, std::nullopt, true, std::string{}, std::string{}).items[2].items[0].items[0];
+    });
     const auto common = decode_common_control_base(
         base_properties, base_path, CommonControlBaseCapabilities{true, true, model::ControlKind::radio_button,
             model::ControlKind::radio_button, model::ControlKind::radio_button});
@@ -11081,9 +11094,6 @@ DecodedControl decode_table(
     require_raw_constant(info.items[0], "5", child_path(info_path, 0));
     require_arity(info.items[2], 2, child_path(info_path, 2));
     require_arity(info.items[2].items[1], 39, child_path(child_path(info_path, 2), 1));
-    require_arity(info.items[2].items[0], 21, child_path(child_path(info_path, 2), 0));
-    require_raw_constant(info.items[2].items[0].items[0], "19",
-        child_path(child_path(child_path(info_path, 2), 0), 0));
     require_raw_constant(info.items[2].items[1].items[0], "23",
         child_path(child_path(child_path(info_path, 2), 1), 0));
     bool tree_mode = true;
@@ -11139,18 +11149,24 @@ DecodedControl decode_table(
             stored_columns.items[index], child_path(columns_path, index), raw_id,
             warnings, reconstruction_complete, tree_source, index - 1));
     }
-    const auto base_path = child_path(child_path(info_path, 2), 0);
-    const auto common = decode_common_control_base(info.items[2].items[0], base_path,
-        CommonControlBaseCapabilities{true, true, model::ControlKind::table, model::ControlKind::table});
-    apply_common_control_base(control.properties(), common);
-    LV normalized_info = info;
-    normalized_info.items[4] = list({raw("0")});
     const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
         child_path(child_path(child_path(info_path, 2), 1), 1));
     if (tree_source && (flags & 0x220U) != (tree_mode ? 0x220U : 0U))
         fail("OOF1114", child_path(info_path, 3), "Table Tree mode matching its flags", std::to_string(flags),
             "ValueTree Table mode and flags disagree");
     const bool read_only = (flags & 0x400U) == 0;
+    const LV canonical_info = canonical_table_control_info(linked_attribute.required_type(), table.columns, read_only, info_path, tree_mode);
+    const auto base_path = child_path(child_path(info_path, 2), 0);
+    auto base = info.items[2].items[0];
+    read_common_control_base(base, base_path, [&] {
+        return canonical_info.items[2].items[0];
+    }, CommonControlBaseVersionPolicy::current19_only);
+    const auto common = decode_common_control_base(base, base_path,
+        CommonControlBaseCapabilities{true, true, model::ControlKind::table, model::ControlKind::table});
+    apply_common_control_base(control.properties(), common);
+    LV normalized_info = info;
+    normalized_info.items[2].items[0] = std::move(base);
+    normalized_info.items[4] = list({raw("0")});
     if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     auto& normalized_table_properties = normalized_info.items[2].items[1];
     auto normalized_flags = flags;
@@ -11199,7 +11215,6 @@ DecodedControl decode_table(
         if (value != 1) control.properties().set_explicit(model::PropertyId::from_name(name), static_cast<std::int64_t>(value));
         normalized_table_properties.items.at(slot) = raw("1");
     }
-    const LV canonical_info = canonical_table_control_info(linked_attribute.required_type(), table.columns, read_only, info_path, tree_mode);
     for (const auto& spec : table_appearance_properties) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
         const auto& stored = info.items[2].items[1].items.at(spec.slot);
