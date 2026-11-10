@@ -163,8 +163,9 @@ void print_success(
     bool json) {
     if (!json) {
         for (const auto& item : diagnostics) {
-            if (item.severity != oof::DiagnosticSeverity::warning) continue;
-            std::cerr << "warning " << item.code << ": " << item.message;
+            if (item.severity != oof::DiagnosticSeverity::warning &&
+                item.severity != oof::DiagnosticSeverity::info) continue;
+            std::cerr << oof::to_string(item.severity) << ' ' << item.code << ": " << item.message;
             if (!item.path.empty()) std::cerr << " [" << item.path << ']';
             std::cerr << '\n';
         }

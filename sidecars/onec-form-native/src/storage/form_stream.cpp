@@ -4904,13 +4904,18 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto representation = integer_atom<unsigned>(props.items[10], path);
             if (representation > 3) fail("OOF1114", std::string(path), "known representation", std::to_string(representation), "Menu representation is unsupported");
             entry.representation = representation == 0 ? model::ButtonRepresentation::automatic : representation == 1 ? model::ButtonRepresentation::text : representation == 2 ? model::ButtonRepresentation::picture : model::ButtonRepresentation::picture_text;
-            // Separator.Отображение returns Undefined. A nondefault stored representation
-            // remains an unrepresented value and is reported by the profile comparison below.
+            // Separator.Отображение returns Undefined for every known stored variant.
             if (entry.type == model::CommandBarButtonKind::separator)
                 entry.representation = model::ButtonRepresentation::automatic;
             entry.enabled = bool_atom(props.items[11], path);
             entry.checked = bool_atom(props.items[12], path);
             auto normalized = props;
+            if (entry.type == model::CommandBarButtonKind::separator && representation != 0) {
+                warnings.push_back({"OOF1144", DiagnosticSeverity::info, std::to_string(id),
+                    child_path(path, 10), "Representation", "Undefined", std::to_string(representation),
+                    "Inactive Separator Representation is normalized to the named model default."});
+                normalized.items[10] = raw("0");
+            }
             normalized.items[8] = raw("1e2");
             if (!text_present) normalized.items[4] = encoded_localized(std::string_view{});
             if (raw_atom(props.items[8], path) != "1e2" && raw_atom(props.items[8], path) != "100")

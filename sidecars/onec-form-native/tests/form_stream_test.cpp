@@ -17638,6 +17638,18 @@ void test_manual_bindings_are_not_silently_discarded() {
 }
 
 void test_separator_inactive_representation_projection() {
+    const auto find_separator_properties = [&](auto&& self, list_stream::ListValue& value,
+                                               std::vector<list_stream::ListValue*>& found) -> void {
+        if (!value.is_list) return;
+        if (value.items.size() == 16 && !value.items[0].is_list &&
+            value.items[0].atom_kind == list_stream::ListValue::AtomKind::raw && value.items[0].atom == "8" &&
+            !value.items[1].is_list && value.items[1].atom_kind == list_stream::ListValue::AtomKind::string &&
+            value.items[1].atom.starts_with("Sep") && !value.items[9].is_list &&
+            value.items[9].atom_kind == list_stream::ListValue::AtomKind::raw && value.items[9].atom == "2") {
+            found.push_back(&value);
+        }
+        for (auto& child : value.items) self(self, child, found);
+    };
     for (const std::string owner : {"Button", "CommandBar"}) {
         for (const auto& [variant, variant_xml] : {
                  std::pair{model::ClientInterfaceVariant::version8_0, std::string("Version8_0")},
@@ -17673,30 +17685,20 @@ void test_separator_inactive_representation_projection() {
             expect(restored_xml.ok() && restored_xml.value() == canonical_xml.value(),
                 "Separator ClientInterfaceVariant must survive XML, model and storage");
 
-            const auto find_separator_properties = [&](auto&& self, list_stream::ListValue& value,
-                                                       std::vector<list_stream::ListValue*>& found) -> void {
-                if (!value.is_list) return;
-                if (value.items.size() == 16 && !value.items[0].is_list &&
-                    value.items[0].atom_kind == list_stream::ListValue::AtomKind::raw && value.items[0].atom == "8" &&
-                    !value.items[1].is_list && value.items[1].atom_kind == list_stream::ListValue::AtomKind::string &&
-                    value.items[1].atom == "Sep" && !value.items[9].is_list &&
-                    value.items[9].atom_kind == list_stream::ListValue::AtomKind::raw && value.items[9].atom == "2") {
-                    found.push_back(&value);
-                }
-                for (auto& child : value.items) self(self, child, found);
-            };
             for (const auto stored_value : {"1", "2", "3"}) {
                 auto changed = encoded.value();
                 std::vector<list_stream::ListValue*> matches;
                 find_separator_properties(find_separator_properties, changed, matches);
                 expect(matches.size() == 1, "the encoded Separator properties record must be uniquely identifiable");
                 matches.front()->items[10] = list_stream::ListValue::raw_atom(stored_value);
-                const auto partial = form_stream::decode_document(changed, "SeparatorSample");
-                expect(partial.ok() && !partial.value().reconstruction_complete() &&
-                           std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
+                const auto normalized = form_stream::decode_document(changed, "SeparatorSample");
+                expect(normalized.ok() && normalized.value().reconstruction_complete() &&
+                           std::any_of(normalized.diagnostics().begin(), normalized.diagnostics().end(), [](const auto& diagnostic) {
+                               return diagnostic.code == "OOF1144" && diagnostic.severity == oof::DiagnosticSeverity::info;
+                           }) && std::none_of(normalized.diagnostics().begin(), normalized.diagnostics().end(), [](const auto& diagnostic) {
                                return diagnostic.code == "OOF1140";
-                           }), "known nondefault Separator Representation must warn and mark reconstruction incomplete");
-                const auto* owner_control = partial.value().find_control(model::ObjectId{2});
+                           }), "known inactive Separator Representation must report normalization without an incomplete model");
+                const auto* owner_control = normalized.value().find_control(model::ObjectId{2});
                 const auto* decoded_buttons = owner_control == nullptr ? nullptr : owner == "Button"
                     ? &std::get<model::ButtonPayload>(owner_control->payload).buttons
                     : &std::get<model::CommandBarPayload>(owner_control->payload).buttons;
@@ -17704,7 +17706,7 @@ void test_separator_inactive_representation_projection() {
                            decoded_buttons->front().representation == model::ButtonRepresentation::automatic &&
                            decoded_buttons->front().client_interface_variant == variant,
                     "unrepresented Separator Representation must normalize while retaining the named interface variant");
-                const auto rebuilt = form_stream::encode_document(partial.value());
+                const auto rebuilt = form_stream::encode_document(normalized.value());
                 expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
                     "the canonical writer must rebuild Separator storage from named values without retaining the raw enum");
             }
@@ -17720,6 +17722,48 @@ void test_separator_inactive_representation_projection() {
                 "unknown Separator Representation values must remain hard failures");
         }
     }
+    std::string batch_xml = "<Form id=\"1\" name=\"SeparatorBatch\" ordinaryFormVersion=\"2.1\"><ChildItems>";
+    for (std::size_t index = 0; index < 12; ++index) {
+        const std::string owner = index % 2 == 0 ? "Button" : "CommandBar";
+        batch_xml += "<" + owner + " id=\"" + std::to_string(100 + index) + "\" name=\"Tools" +
+            std::to_string(index) + "\"><Position/><Buttons><CommandBarButton name=\"Sep" +
+            std::to_string(index) + "\" type=\"Separator\"><ClientInterfaceVariant>" +
+            (index % 4 < 2 ? "Version8_0" : "Version8_2_OrdinaryApp") +
+            "</ClientInterfaceVariant></CommandBarButton><CommandBarButton name=\"Close\" type=\"Action\">"
+            "<Representation>Picture</Representation><StandardAction command=\"Close\" context=\"Default\" source=\"Form\"/>"
+            "</CommandBarButton></Buttons>" + (owner == "Button" ? "<MenuMode type=\"MenuMode\" member=\"UseExtra\"/>" : "") +
+            "</" + owner + ">";
+    }
+    batch_xml += "</ChildItems></Form>";
+    const auto batch = source::parse_form_xml(batch_xml);
+    expect(batch.ok(), batch ? "" : batch.diagnostics().front().message);
+    const auto batch_stream = form_stream::encode_document(batch.value());
+    const auto batch_source = source::serialize_form_xml(batch.value());
+    expect(batch_stream.ok() && batch_source.ok(), "twelve mixed menu owners must encode");
+    auto changed_batch = batch_stream.value();
+    std::vector<list_stream::ListValue*> batch_separators;
+    find_separator_properties(find_separator_properties, changed_batch, batch_separators);
+    expect(batch_separators.size() == 12, "the batch must exercise twelve distinct control owners");
+    for (std::size_t index = 0; index < batch_separators.size(); ++index)
+        batch_separators[index]->items[10] = list_stream::ListValue::raw_atom(std::to_string(index % 3 + 1));
+    const auto batch_result = form_stream::decode_document(changed_batch, "SeparatorBatch");
+    expect(batch_result.ok() && batch_result.value().reconstruction_complete() &&
+        std::count_if(batch_result.diagnostics().begin(), batch_result.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1144" && diagnostic.severity == oof::DiagnosticSeverity::info;
+        }) == 12, "all twelve inactive representations must normalize with explicit information diagnostics");
+    const auto batch_restored_source = source::serialize_form_xml(batch_result.value());
+    const auto batch_restored_stream = form_stream::encode_document(batch_result.value());
+    expect(batch_restored_source.ok() && batch_restored_source.value() == batch_source.value() &&
+        batch_restored_stream.ok() && list_stream::dump_compact(batch_restored_stream.value()) ==
+            list_stream::dump_compact(batch_stream.value()),
+        "normalization must retain all active action representations and both named interface contexts");
+    batch_separators.front()->items[14] = list_stream::ListValue::raw_atom("1");
+    const auto unsupported_batch = form_stream::decode_document(changed_batch, "SeparatorBatch");
+    expect(unsupported_batch.ok() && !unsupported_batch.value().reconstruction_complete() &&
+        std::any_of(unsupported_batch.diagnostics().begin(), unsupported_batch.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1140";
+        }), "normalizing an inactive representation must not conceal other unsupported stored fields");
+
     for (const std::string field : {"<Representation>Auto</Representation>", "<Representation>Picture</Representation>",
              "<Representation>Text</Representation>", "<Representation>PictureText</Representation>",
              "<ClientInterfaceVariant>UnknownVariant</ClientInterfaceVariant>", "<Text>Unsupported</Text>",
