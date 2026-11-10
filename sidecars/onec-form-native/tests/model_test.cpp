@@ -2267,6 +2267,54 @@ void test_command_bar_action_source_model() {
         "ActionSource must reject a dangling ControlRef");
 }
 
+void test_standard_menu_command_registry_and_runtime_contracts() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    expect(standard_menu_commands.size() == 3 &&
+        find_standard_menu_command(StandardMenuCommand::close) == &standard_menu_commands[0] &&
+        find_standard_menu_command("SaveValues") == &standard_menu_commands[1] &&
+        find_standard_menu_command(144) == &standard_menu_commands[2] &&
+        standard_menu_close.kind == standard_menu_commands[0].kind &&
+        standard_menu_close.public_name == standard_menu_commands[0].public_name &&
+        standard_menu_close.storage_id == standard_menu_commands[0].storage_id,
+        "standard menu commands must share one registry for enum, public name, and storage ID lookup");
+
+    Form form; form.id = ObjectId{1}; form.name = "StandardCommandContracts";
+    form.children = {ControlRef{ObjectId{42}}};
+    OrdinaryFormDocument document(std::move(form));
+    ControlNode bar{ObjectId{42}, "Tools", CommandBarPayload{}};
+    auto& buttons = std::get<CommandBarPayload>(bar.payload).buttons;
+    for (const auto command : {StandardMenuCommand::save_values, StandardMenuCommand::restore_values}) {
+        CommandBarButton item; item.name = std::string(find_standard_menu_command(command)->public_name);
+        item.standard_action = StandardMenuAction{command, {}, StandardMenuActionSource::form,
+            StandardMenuActionContext::default_context, {}};
+        buttons.push_back(std::move(item));
+    }
+    document.add_control(std::move(bar));
+    expect(document.validate().ok(), "SaveValues and RestoreValues use Form source and command-owned Default context");
+
+    auto invalid = document;
+    auto invalid_bar = *invalid.find_control(ObjectId{42});
+    auto& invalid_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons.front().standard_action;
+    invalid_action.command = static_cast<StandardMenuCommand>(255);
+    invalid.add_control(std::move(invalid_bar));
+    expect(invalid.validate().has(InvariantCode::invalid_property), "unknown standard menu command enum must reject");
+
+    invalid = document;
+    invalid_bar = *invalid.find_control(ObjectId{42});
+    auto& save_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons.front().standard_action;
+    save_action.command_bar = ControlRef{ObjectId{42}};
+    invalid.add_control(std::move(invalid_bar));
+    expect(invalid.validate().has(InvariantCode::invalid_property), "runtime standard command must reject commandBarId");
+
+    invalid = document;
+    invalid_bar = *invalid.find_control(ObjectId{42});
+    auto& restore_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons.back().standard_action;
+    restore_action.source = StandardMenuActionSource::all_sources;
+    invalid.add_control(std::move(invalid_bar));
+    expect(invalid.validate().has(InvariantCode::invalid_property), "runtime standard command must reject non-Form sources");
+}
+
 void test_standard_picture_descriptor_catalog() {
     const auto pictures = metamodel::standard_picture_descriptors();
     expect(pictures.size() == 294, "standard picture catalog must expose all canonical runtime descriptors");
@@ -6381,6 +6429,7 @@ int main() {
         test_z_order_reorders_siblings();
         test_command_bar_property_descriptors();
         test_command_bar_action_source_model();
+        test_standard_menu_command_registry_and_runtime_contracts();
         test_default_button_model();
         test_context_menu_reference_model();
         test_standard_picture_descriptor_catalog();

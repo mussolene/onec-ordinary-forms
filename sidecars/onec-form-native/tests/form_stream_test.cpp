@@ -43,6 +43,15 @@ void expect(bool condition, std::string_view message) {
     }
 }
 
+const list_stream::ListValue* find_control_record(const list_stream::ListValue& tree, std::uint64_t id) {
+    const auto& records = tree.items.at(1).items.at(2).items.at(2).items;
+    const auto record = std::ranges::find(records, std::to_string(id), [](const auto& candidate) {
+        return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list
+            ? candidate.items[1].atom : std::string{};
+    });
+    return record == records.end() ? nullptr : &*record;
+}
+
 template <typename T>
 void expect_failure(
     const oof::Result<T>& result,
@@ -5366,15 +5375,6 @@ void test_command_bar_standard_menu_action_round_trip_and_guards() {
         document.add_control(std::move(secondary));
         return document;
     };
-    const auto find_control_record = [](const list_stream::ListValue& tree, std::uint64_t id)
-        -> const list_stream::ListValue* {
-        const auto& records = tree.items.at(1).items.at(2).items.at(2).items;
-        const auto record = std::ranges::find(records, std::to_string(id), [](const auto& candidate) {
-            return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list
-                ? candidate.items[1].atom : std::string{};
-        });
-        return record == records.end() ? nullptr : &*record;
-    };
     for (const auto menu_source : {model::StandardMenuActionSource::form,
                                    model::StandardMenuActionSource::all_sources}) {
         const auto document = make_document(menu_source);
@@ -5574,6 +5574,109 @@ void test_standard_menu_action_default_context_and_control_source() {
     rejects_model([](auto& action) { action.context = model::StandardMenuActionContext::command_bar; });
     rejects_model([](auto& action) { action.context = static_cast<model::StandardMenuActionContext>(255); });
     rejects_model([](auto& action) { action.source = static_cast<model::StandardMenuActionSource>(255); });
+}
+
+void test_save_restore_standard_actions_batch_aliases_and_guards() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "RuntimeStandardActions";
+    for (std::uint64_t index = 0; index < 12; ++index)
+        form.children.push_back(model::ControlRef{model::ObjectId{100 + index}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto id = model::ObjectId{100 + index};
+        const bool command_bar = index % 2 == 0;
+        model::ControlNode control{id, "Owner" + std::to_string(index),
+            command_bar ? model::ControlPayload{model::CommandBarPayload{}} : model::ControlPayload{model::ButtonPayload{}}};
+        if (!command_bar)
+            control.properties().set_explicit(model::PropertyId::from_name("MenuMode"),
+                model::EnumerationValue{"MenuMode", "Use"});
+        model::CommandBarButton entry;
+        entry.name = "Runtime";
+        const auto command = (index / 2) % 2 == 0 ? model::StandardMenuCommand::save_values : model::StandardMenuCommand::restore_values;
+        entry.standard_action = model::StandardMenuAction{command, {}, model::StandardMenuActionSource::form,
+            model::StandardMenuActionContext::default_context, {}};
+        if (command_bar) std::get<model::CommandBarPayload>(control.payload).buttons.push_back(entry);
+        else std::get<model::ButtonPayload>(control.payload).buttons.push_back(entry);
+        document.add_control(std::move(control));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "12 CommandBar and Button owners must encode runtime standard commands");
+    const auto action_payload = [](const list_stream::ListValue& record, bool command_bar) -> const list_stream::ListValue& {
+        const auto& properties = record.items.at(2).items.at(1);
+        const auto& menu = properties.items.at(command_bar ? 7 : 12);
+        return menu.items.at(5).items.at(4);
+    };
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto* record = find_control_record(encoded.value(), 100 + index);
+        expect(record != nullptr, "batch must include each command owner independent of its ID");
+        const auto& payload = action_payload(*record, index % 2 == 0);
+        const bool save_values = (index / 2) % 2 == 0;
+        expect(payload.items.at(1).atom == "4294967295" &&
+            payload.items.at(3).atom == (save_values ? "143" : "144") &&
+            payload.items.at(4).items.at(0).atom == "1" && payload.items.at(4).items.at(1).atom == "99" &&
+            payload.items.at(4).items.at(2).atom == "b78f2e80-ec68-11d4-9dcf-0050bae2bc79" &&
+            payload.items.at(4).items.at(3).atom == "4" && payload.items.at(4).items.at(4).atom == "1" &&
+            record->items.at(2).items.at(1).items.at(index % 2 == 0 ? 7 : 12).items.at(7).items.at(6).items.at(13).atom == "0",
+            "writer must emit the proven canonical runtime tuple and native standard menu property 13 value");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "RuntimeStandardActions");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "canonical SaveValues and RestoreValues actions must decode without losing completeness");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("command=\"SaveValues\" context=\"Default\" source=\"Form\"") != std::string::npos &&
+        xml.value().find("command=\"RestoreValues\" context=\"Default\" source=\"Form\"") != std::string::npos &&
+        xml.value().find("commandBarId=\"4\"") == std::string::npos,
+        "runtime commands must serialize as names and must not expose their storage target ID");
+    const auto reparsed = source::parse_form_xml(xml.value());
+    const auto rebuilt = reparsed ? form_stream::encode_document(reparsed.value()) : oof::Result<list_stream::ListValue>::failure({});
+    expect(reparsed.ok() && rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "batch named XML must rebuild canonical runtime command storage");
+
+    const auto mutate_first_action = [&](auto mutate) {
+        auto changed = encoded.value();
+        auto* record = const_cast<list_stream::ListValue*>(find_control_record(changed, 100));
+        auto& payload = const_cast<list_stream::ListValue&>(action_payload(*record, true));
+        mutate(payload);
+        return changed;
+    };
+    for (const auto [target, flag] : {std::pair{"4", "0"}, std::pair{"55", "1"}}) {
+        const auto alias = mutate_first_action([&](auto& payload) {
+            payload.items.at(4).items.at(3) = list_stream::ListValue::raw_atom(target);
+            payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom(flag);
+        });
+        const auto alias_decoded = form_stream::decode_document(alias, "SaveValuesAlias");
+        expect(alias_decoded.ok() && !alias_decoded.value().reconstruction_complete() &&
+            std::ranges::any_of(alias_decoded.diagnostics(), [](const auto& diagnostic) {
+                return diagnostic.code == "OOF1145" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+            }), "verified SaveValues alias must report an explicit warning and remain partial");
+        const auto alias_rebuilt = alias_decoded ? form_stream::encode_document(alias_decoded.value()) : oof::Result<list_stream::ListValue>::failure({});
+        expect(alias_rebuilt.ok() && action_payload(*find_control_record(alias_rebuilt.value(), 100), true).items.at(4).items.at(3).atom == "4" &&
+            action_payload(*find_control_record(alias_rebuilt.value(), 100), true).items.at(4).items.at(4).atom == "1",
+            "verified SaveValues aliases must write the canonical factory tuple");
+    }
+    const auto rejects = [&](auto mutate, std::string_view message) {
+        const auto invalid = mutate_first_action(mutate);
+        expect(!form_stream::decode_document(invalid, "InvalidRuntimeStandardAction"), message);
+    };
+    rejects([](auto& payload) { payload.items.at(3) = list_stream::ListValue::raw_atom("145"); },
+        "unknown standard command ID must reject");
+    rejects([](auto& payload) { payload.items.at(1) = list_stream::ListValue::raw_atom("0"); },
+        "runtime standard commands must reject non-Form source IDs");
+    rejects([](auto& payload) { payload.items.at(4).items.at(1) = list_stream::ListValue::raw_atom("1"); },
+        "runtime standard commands must reject unknown context kinds");
+    rejects([](auto& payload) { payload.items.at(4).items.at(2) = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); },
+        "runtime standard commands must reject unknown context GUIDs");
+    rejects([](auto& payload) { payload.items.at(4).items.at(3) = list_stream::ListValue::raw_atom("3"); },
+        "runtime standard commands must reject unverified factory targets");
+    auto restore_alias = encoded.value();
+    auto* restore_record = const_cast<list_stream::ListValue*>(find_control_record(restore_alias, 102));
+    auto& restore_payload = const_cast<list_stream::ListValue&>(action_payload(*restore_record, true));
+    restore_payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("0");
+    expect(!form_stream::decode_document(restore_alias, "InvalidRestoreValuesAlias"),
+        "RestoreValues must reject the SaveValues-only 4/0 alias");
+    restore_payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1");
+    restore_payload.items.at(4).items.at(3) = list_stream::ListValue::raw_atom("55");
+    expect(!form_stream::decode_document(restore_alias, "InvalidRestoreValuesAlias"),
+        "RestoreValues must reject the SaveValues-only 55/1 alias");
 }
 
 void test_command_bar_creation_state_and_strict_record_guards() {
@@ -24331,6 +24434,7 @@ int main() {
         test_command_bar_named_action_source_references();
         test_command_bar_standard_menu_action_round_trip_and_guards();
         test_standard_menu_action_default_context_and_control_source();
+        test_save_restore_standard_actions_batch_aliases_and_guards();
         test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();

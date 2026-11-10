@@ -3100,9 +3100,10 @@ private:
                 }
                 model::StandardMenuAction action;
                 const auto command = required_attribute(child, "command", owner);
-                if (command != mm::standard_menu_close.public_name)
-                    fail("OOF2003", child, std::string(owner), "command", "Close", command, "Unknown standard menu command");
-                action.command = mm::standard_menu_close.kind;
+                const auto* descriptor = mm::find_standard_menu_command(command);
+                if (descriptor == nullptr)
+                    fail("OOF2003", child, std::string(owner), "command", "registered standard menu command", command, "Unknown standard menu command");
+                action.command = descriptor->kind;
                 const auto context = required_attribute(child, "context", owner);
                 const auto command_bar_id = optional_attribute(child, "commandBarId");
                 if (context == "CommandBar") {
@@ -4641,7 +4642,8 @@ private:
             }
             if (item.standard_action) {
                 const auto& action = *item.standard_action;
-                const char* command = action.command == mm::standard_menu_close.kind ? mm::standard_menu_close.public_name.data() : nullptr;
+                const auto* descriptor = mm::find_standard_menu_command(action.command);
+                const char* command = descriptor == nullptr ? nullptr : descriptor->public_name.data();
                 const char* source = action.source == model::StandardMenuActionSource::form ? "Form" :
                     action.source == model::StandardMenuActionSource::all_sources ? "AllSources" :
                     action.source == model::StandardMenuActionSource::control ? "Control" : nullptr;

@@ -3318,6 +3318,43 @@ void test_standard_menu_action_xml_contract() {
 
 }
 
+void test_standard_save_restore_action_xml_contract() {
+    for (const auto [command, expected] : {
+             std::pair{"SaveValues", model::StandardMenuCommand::save_values},
+             std::pair{"RestoreValues", model::StandardMenuCommand::restore_values}}) {
+        const std::string xml = std::string("<Form id=\"1\" name=\"RuntimeCommands\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
+            "<CommandBar id=\"42\" name=\"Tools\"><Position/><Buttons><CommandBarButton name=\"Runtime\" type=\"Action\">"
+            "<StandardAction command=\"" + command + "\" context=\"Default\" source=\"Form\"/>"
+            "</CommandBarButton></Buttons></CommandBar></ChildItems></Form>";
+        const auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), parsed ? "SaveValues and RestoreValues named XML must parse" : parsed.diagnostics().front().message);
+        const auto* bar = parsed.value().find_control(model::ObjectId{42});
+        const auto* payload = bar ? std::get_if<model::CommandBarPayload>(&bar->payload) : nullptr;
+        expect(payload && payload->buttons.size() == 1 && payload->buttons.front().standard_action ==
+            model::StandardMenuAction{expected, {}, model::StandardMenuActionSource::form,
+                model::StandardMenuActionContext::default_context, {}},
+            "runtime standard command XML must use named command, Form source, and Default context");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok() && serialized.value().find(std::string("<StandardAction command=\"") + command +
+            "\" context=\"Default\" source=\"Form\"/>") != std::string::npos &&
+            serialized.value().find("commandBarId=") == std::string::npos &&
+            serialized.value().find("sourceControlId=") == std::string::npos,
+            "runtime standard command writer must not expose storage IDs or reference fields");
+        const auto reparsed = source::parse_form_xml(serialized.value());
+        expect(reparsed.ok() && std::get<model::CommandBarPayload>(reparsed.value().find_control(model::ObjectId{42})->payload)
+            .buttons == payload->buttons,
+            "runtime standard command must round-trip through named XML");
+        const auto invalid_context = xml;
+        auto command_bar_context = invalid_context;
+        command_bar_context.replace(command_bar_context.find("context=\"Default\" source"),
+            std::string("context=\"Default\" source").size(), "context=\"CommandBar\" commandBarId=\"42\" source");
+        expect(!source::parse_form_xml(command_bar_context), "runtime standard command must reject CommandBar context");
+        auto invalid_source = invalid_context;
+        invalid_source.replace(invalid_source.find("source=\"Form\""), std::string("source=\"Form\"").size(), "source=\"AllSources\"");
+        expect(!source::parse_form_xml(invalid_source), "runtime standard command must reject non-Form source");
+    }
+}
+
 void test_command_bar_action_source_xml_contract() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="ActionSource" ordinaryFormVersion="2.1">
   <Attributes><Attribute id="10" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
@@ -4441,6 +4478,7 @@ int main() {
         test_progress_bar_xml_only_contract();
         test_command_bar_buttons_xml_only_contract();
         test_standard_menu_action_xml_contract();
+        test_standard_save_restore_action_xml_contract();
         test_command_bar_action_source_xml_contract();
         test_context_menu_named_xml_contract();
         test_form_context_menu_named_xml_contract();

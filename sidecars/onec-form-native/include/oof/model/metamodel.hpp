@@ -262,9 +262,33 @@ struct StandardMenuCommandDescriptor {
     std::uint32_t storage_id;
 };
 
-inline constexpr StandardMenuCommandDescriptor standard_menu_close{
-    StandardMenuCommand::close, "Close", u8"Закрыть", 142,
+inline constexpr std::array standard_menu_commands{
+    StandardMenuCommandDescriptor{StandardMenuCommand::close, "Close", u8"Закрыть", 142},
+    StandardMenuCommandDescriptor{StandardMenuCommand::save_values, "SaveValues", u8"СохранитьЗначения", 143},
+    StandardMenuCommandDescriptor{StandardMenuCommand::restore_values, "RestoreValues", u8"ВосстановитьЗначения", 144},
 };
+inline constexpr StandardMenuCommandDescriptor standard_menu_close = standard_menu_commands[0];
+
+[[nodiscard]] constexpr const StandardMenuCommandDescriptor* find_standard_menu_command(
+    StandardMenuCommand command) noexcept {
+    for (const auto& descriptor : standard_menu_commands)
+        if (descriptor.kind == command) return &descriptor;
+    return nullptr;
+}
+
+[[nodiscard]] constexpr const StandardMenuCommandDescriptor* find_standard_menu_command(
+    std::string_view public_name) noexcept {
+    for (const auto& descriptor : standard_menu_commands)
+        if (descriptor.public_name == public_name) return &descriptor;
+    return nullptr;
+}
+
+[[nodiscard]] constexpr const StandardMenuCommandDescriptor* find_standard_menu_command(
+    std::uint32_t storage_id) noexcept {
+    for (const auto& descriptor : standard_menu_commands)
+        if (descriptor.storage_id == storage_id) return &descriptor;
+    return nullptr;
+}
 
 struct PropertyDescriptor {
     PropertyId id{};

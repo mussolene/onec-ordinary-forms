@@ -4535,8 +4535,19 @@ constexpr std::string_view standard_menu_default_context_marker = "357c6a54-357d
 
 LV encode_standard_menu_action(const model::StandardMenuAction& action,
                               const model::OrdinaryFormDocument& document, std::string_view path) {
-    if (action.command != model::metamodel::standard_menu_close.kind)
+    const auto* descriptor = model::metamodel::find_standard_menu_command(action.command);
+    if (descriptor == nullptr)
         fail("OOF1122", std::string(path), "known standard menu command", "unknown", "Standard command is unsupported");
+    if (action.command != model::StandardMenuCommand::close) {
+        if (action.context != model::StandardMenuActionContext::default_context ||
+            action.command_bar.id().value() != 0 || action.source != model::StandardMenuActionSource::form ||
+            action.source_control.id().value() != 0)
+            fail("OOF1123", std::string(path), "Default context and Form source", "inconsistent", "Standard command contract is invalid");
+        return list({raw("6"), raw(std::to_string(std::numeric_limits<std::uint32_t>::max())),
+            raw(std::string(null_uuid)), raw(std::to_string(descriptor->storage_id)),
+            list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)), raw("4"), raw("1")}),
+            raw("0"), raw("1")});
+    }
     LV context;
     switch (action.context) {
         case model::StandardMenuActionContext::default_context:
@@ -4569,25 +4580,47 @@ LV encode_standard_menu_action(const model::StandardMenuAction& action,
         }
         default: fail("OOF1122", std::string(path), "Form, AllSources, or Control", "unknown", "Standard command source is unsupported");
     }
-    return list({raw("6"), raw(std::to_string(source)), raw(std::string(null_uuid)), raw(std::to_string(model::metamodel::standard_menu_close.storage_id)),
+    return list({raw("6"), raw(std::to_string(source)), raw(std::string(null_uuid)), raw(std::to_string(descriptor->storage_id)),
         std::move(context), raw("0"), raw("1")});
 }
 
-model::StandardMenuAction decode_standard_menu_action(const LV& value, std::string_view path) {
+model::StandardMenuAction decode_standard_menu_action(const LV& value, std::string_view path,
+                                                      bool& save_values_alias) {
+    save_values_alias = false;
     require_arity(value, 7, path);
     require_raw_constant(value.items[0], "6", child_path(path, 0));
     const auto source = integer_atom<std::uint32_t>(value.items[1], child_path(path, 1));
     require_raw_constant(value.items[2], null_uuid, child_path(path, 2));
-    require_raw_constant(value.items[3], std::to_string(model::metamodel::standard_menu_close.storage_id), child_path(path, 3));
+    const auto command_id = integer_atom<std::uint32_t>(value.items[3], child_path(path, 3));
+    const auto* descriptor = model::metamodel::find_standard_menu_command(command_id);
+    if (descriptor == nullptr)
+        fail("OOF1122", child_path(path, 3), "known standard menu command ID", std::to_string(command_id), "Standard command is unsupported");
+    require_raw_constant(value.items[3], std::to_string(descriptor->storage_id), child_path(path, 3));
     const auto context_path = child_path(path, 4);
     const auto& context = value.items[4];
     require_arity(context, 5, context_path);
     require_raw_constant(context.items[0], "1", child_path(context_path, 0));
-    require_raw_constant(context.items[4], "0", child_path(context_path, 4));
     require_raw_constant(value.items[5], "0", child_path(path, 5));
     require_raw_constant(value.items[6], "1", child_path(path, 6));
     model::StandardMenuAction action;
-    action.command = model::metamodel::standard_menu_close.kind;
+    action.command = descriptor->kind;
+    if (descriptor->kind != model::StandardMenuCommand::close) {
+        require_raw_constant(value.items[1], std::to_string(std::numeric_limits<std::uint32_t>::max()), child_path(path, 1));
+        require_raw_constant(context.items[1], "99", child_path(context_path, 1));
+        require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
+        const auto target = raw_atom(context.items[3], child_path(context_path, 3));
+        const auto flag = raw_atom(context.items[4], child_path(context_path, 4));
+        const bool canonical = target == "4" && flag == "1";
+        const bool save_alias = descriptor->kind == model::StandardMenuCommand::save_values &&
+            ((target == "4" && flag == "0") || (target == "55" && flag == "1"));
+        if (!canonical && !save_alias)
+            fail("OOF1123", context_path, "canonical Default factory tuple", describe(context), "Standard command context is unsupported");
+        save_values_alias = save_alias;
+        action.context = model::StandardMenuActionContext::default_context;
+        action.source = model::StandardMenuActionSource::form;
+        return action;
+    }
+    require_raw_constant(context.items[4], "0", child_path(context_path, 4));
     const auto kind = integer_atom<std::uint64_t>(context.items[1], child_path(context_path, 1));
     if (kind == 0) {
         require_raw_constant(context.items[2], standard_menu_default_context_marker, child_path(context_path, 2));
@@ -4631,11 +4664,13 @@ LV menu_entry_properties(const model::CommandBarButton& entry, std::string_view 
     const auto representation = entry.representation == model::ButtonRepresentation::automatic ? 0 :
         entry.representation == model::ButtonRepresentation::text ? 1 :
         entry.representation == model::ButtonRepresentation::picture ? 2 : 3;
+    const bool native_standard_command = entry.standard_action &&
+        entry.standard_action->command != model::StandardMenuCommand::close;
     return list({raw("8"), string_value(entry.name), raw(entry.changes_data ? "1" : "0"), raw("1"),
         encoded_localized(entry.text.value_or(std::string{})), raw(entry.text ? "1" : "0"), raw(std::string(owner)),
         raw(std::to_string(id)), raw("1e2"), raw(std::to_string(type)), raw(std::to_string(representation)),
         raw(entry.enabled ? "1" : "0"), raw(entry.checked ? "1" : "0"),
-        raw(entry.type == model::CommandBarButtonKind::separator ? "0" : "1"), raw("0"), raw("0")});
+        raw(entry.type == model::CommandBarButtonKind::separator || native_standard_command ? "0" : "1"), raw("0"), raw("0")});
 }
 
 LV menu_picture(const model::PictureRef& reference, const model::OrdinaryFormDocument& document) {
@@ -4920,6 +4955,32 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             if (!text_present) normalized.items[4] = encoded_localized(std::string_view{});
             if (raw_atom(props.items[8], path) != "1e2" && raw_atom(props.items[8], path) != "100")
                 fail("OOF1114", std::string(path), "scale 100", describe(props.items[8]), "Menu scale is unsupported");
+            const auto& action_record = actions.at(guid);
+            const auto& action = *action_record.value;
+            const auto& action_path = action_record.path;
+            require_raw_constant(action.items[0], "8", child_path(action_path, 0));
+            require_raw_constant(action.items[2], "1", child_path(action_path, 2));
+            if (type == 0) {
+                if (raw_atom(action.items[3], child_path(action_path, 3)) == standard_menu_action_guid) {
+                    bool save_values_alias = false;
+                    entry.standard_action = decode_standard_menu_action(
+                        action.items[4], child_path(action_path, 4), save_values_alias);
+                    if (save_values_alias) {
+                        reconstruction_complete = false;
+                        warnings.push_back({"OOF1145", DiagnosticSeverity::warning, std::to_string(id),
+                            child_path(action_path, 4), "StandardAction", "canonical SaveValues tuple",
+                            "verified SaveValues tuple alias", "SaveValues tuple alias is named but its general storage equivalence is not established; it is canonicalized on write."});
+                    }
+                } else {
+                    require_raw_constant(action.items[3], menu_action_guid, child_path(action_path, 3));
+                    entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
+                }
+            } else {
+                require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
+                require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
+                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
+                    child_path(action_path, 4), "Menu action target is unsupported");
+            }
             const auto expected_properties = menu_entry_properties(entry, owner, id);
             const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
                 expected_properties.items.begin(), expected_properties.items.end(), [](const auto& left, const auto& right) {
@@ -4929,24 +4990,6 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 const auto index = static_cast<std::size_t>(mismatch.first - normalized.items.begin());
                 warn_incomplete_profile(warnings, reconstruction_complete, id,
                     child_path(path, index), "MenuAction");
-            }
-            const auto& action_record = actions.at(guid);
-            const auto& action = *action_record.value;
-            const auto& action_path = action_record.path;
-            require_raw_constant(action.items[0], "8", child_path(action_path, 0));
-            require_raw_constant(action.items[2], "1", child_path(action_path, 2));
-            if (type == 0) {
-                if (raw_atom(action.items[3], child_path(action_path, 3)) == standard_menu_action_guid)
-                    entry.standard_action = decode_standard_menu_action(action.items[4], child_path(action_path, 4));
-                else {
-                    require_raw_constant(action.items[3], menu_action_guid, child_path(action_path, 3));
-                    entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
-                }
-            } else {
-                require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
-                require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
-                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
-                    child_path(action_path, 4), "Menu action target is unsupported");
             }
             const auto mask = integer_atom<unsigned>(action.items[5], child_path(action_path, 5));
             if (mask > 15) fail("OOF1114", child_path(action_path, 5), "known property flags", std::to_string(mask), "Menu action flags are unsupported");

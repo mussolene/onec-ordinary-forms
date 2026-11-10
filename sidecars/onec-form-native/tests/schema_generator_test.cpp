@@ -1527,6 +1527,18 @@ void test_runtime_form_properties_are_not_xml(
         "runtime form codec descriptors remain available to Palette metadata");
 }
 
+void test_standard_menu_command_schema(xmlNodePtr schema) {
+    std::vector<std::string> expected;
+    for (const auto& command : oof::model::metamodel::standard_menu_commands)
+        expected.emplace_back(command.public_name);
+    expect(enumeration_values(schema, "StandardMenuCommandType") == expected,
+        "StandardMenuCommandType must be generated from the shared command descriptor registry");
+    for (const auto& command : oof::model::metamodel::standard_menu_commands) {
+        expect(oof::model::metamodel::find_standard_menu_command(command.kind) == &command,
+            "registered standard menu commands must resolve to their shared descriptors");
+    }
+}
+
 void test_forbidden_vocabulary(const GeneratedSchemas& schemas) {
     std::string generated = lowercase(schemas.ordinary_form_xsd + schemas.ordinary_form_palette_xsd);
     const std::string official = "spreadsheetdocumentdrawinglinetype";
@@ -2001,6 +2013,7 @@ int main() {
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
         test_runtime_form_properties_are_not_xml(metamodel, form_schema, compiled_form.get());
+        test_standard_menu_command_schema(form_schema);
         test_saved_values_schema(compiled_form.get(), palette_schema);
         test_value_list_schema(schemas, compiled_form.get());
         test_recursive_typed_value_schema(compiled_form.get());

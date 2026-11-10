@@ -1316,6 +1316,10 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     append_document_types(output);
     append_position_type(output, metamodel.panel_placement_properties());
 
+    output += "  <xs:simpleType name=\"StandardMenuCommandType\"><xs:restriction base=\"xs:string\">";
+    for (const auto& command : model::metamodel::standard_menu_commands)
+        output += "<xs:enumeration value=\"" + std::string(command.public_name) + "\"/>";
+    output += "</xs:restriction></xs:simpleType>\n";
     output += R"XSD(  <xs:simpleType name="CommandBarButtonKindType"><xs:restriction base="xs:string"><xs:enumeration value="Action"/><xs:enumeration value="Submenu"/><xs:enumeration value="Separator"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ButtonRepresentationType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Picture"/><xs:enumeration value="Text"/><xs:enumeration value="PictureText"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ClientInterfaceVariantType"><xs:restriction base="xs:string"><xs:enumeration value="Version8_0"/><xs:enumeration value="Version8_2_OrdinaryApp"/></xs:restriction></xs:simpleType>
@@ -1325,7 +1329,6 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
   <xs:complexType name="CommandBarActionType"><xs:sequence>
     <xs:element name="Text" type="LocalizedStringValueType"/><xs:element name="ToolTip" type="LocalizedStringValueType"/><xs:element name="Description" type="LocalizedStringValueType"/>
   </xs:sequence><xs:attribute name="handler" type="CommandBarActionHandlerType" use="required"/><xs:attribute name="name" type="xs:string" use="required"/></xs:complexType>
-  <xs:simpleType name="StandardMenuCommandType"><xs:restriction base="xs:string"><xs:enumeration value="Close"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuActionSourceType"><xs:restriction base="xs:string"><xs:enumeration value="Form"/><xs:enumeration value="AllSources"/><xs:enumeration value="Control"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuActionContextType"><xs:restriction base="xs:string"><xs:enumeration value="Default"/><xs:enumeration value="CommandBar"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuSourceControlIdType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
