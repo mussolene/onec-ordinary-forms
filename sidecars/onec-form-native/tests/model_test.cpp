@@ -1289,6 +1289,13 @@ void test_form_runtime_variant_values() {
         ColorValue{}, FontValue{}, BorderValue{}, TypeDomainPatternValue{}};
     for (const auto name : {"UniqueKey", "ChoiceInitialValue"}) {
         const auto property = PropertyId::from_name(name);
+        const auto* descriptor = metamodel::find_form_property(property);
+        expect(descriptor && descriptor->value_codec == metamodel::ValueCodec::runtime_value &&
+            descriptor->persistence == metamodel::PersistenceClass::runtime_only &&
+            descriptor->storage_codec == metamodel::StorageCodec::none,
+            "runtime form variants use the named runtime-value codec without storage");
+        expect(metamodel::value_codec_name(metamodel::ValueCodec::runtime_value) == "runtime-value",
+            "runtime-value codec has a stable public descriptor name");
         expect(document.get_prop_val(owner, property).value == PropertyValue{UndefinedValue{}}, "runtime variant must initially be undefined");
         for (const auto& value : values)
             expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::applied_runtime_only &&
@@ -1302,6 +1309,17 @@ void test_form_runtime_variant_values() {
             PropertyMutationStatus::invalid_value,
             "runtime scalar validation must reject malformed UTF-8 without replacing the prior value");
     }
+    const auto live = RuntimeCollectionRef::create(RuntimeCollectionKind::structure);
+    expect(live && live->set_field("key", std::string{"before"}),
+        "runtime value validator accepts an initialized live collection");
+    for (const auto name : {"UniqueKey", "ChoiceInitialValue"})
+        expect(document.set_prop_val(owner, PropertyId::from_name(name), *live) == PropertyMutationStatus::applied_runtime_only,
+            "both runtime form properties accept the same live collection handle");
+    auto unique_key = std::get<RuntimeCollectionRef>(*document.get_prop_val(owner, PropertyId::from_name("UniqueKey")).value);
+    auto choice_initial = std::get<RuntimeCollectionRef>(*document.get_prop_val(owner, PropertyId::from_name("ChoiceInitialValue")).value);
+    expect(unique_key == choice_initial && unique_key.set_field("key", std::string{"after"}) &&
+        std::get<std::string>(*choice_initial.field("key")) == "after",
+        "runtime form values preserve shared mutable identity");
     const auto xml = oof::source::serialize_form_xml(document);
     const auto bin = oof::save_form_bin(document);
     expect(xml.ok() && xml.value() == original_xml.value() && bin.ok() && bin.value() == original_bin.value(),
@@ -2944,8 +2962,8 @@ void test_help_metamodel() {
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
     expect(coverage.unclassified_properties == 0 && coverage.missing_storage_codecs == 0 &&
-            coverage.unclassified_value_codecs == 16,
-        "release coverage is blocked by 16 unclassified live value codecs");
+            coverage.unclassified_value_codecs == 14,
+        "release coverage is blocked by 14 unclassified live value codecs");
 
     expect(
         property_descriptors(ControlKind::input_field).size() == 45,

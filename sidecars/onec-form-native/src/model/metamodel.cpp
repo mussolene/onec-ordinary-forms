@@ -1686,6 +1686,8 @@ void apply_proven_storage_overrides(
             (name == std::string_view{"WindowOptionsName"} || name == std::string_view{"WindowOptionsKey"})
                 ? DefaultValue{DefaultKind::string, ""} : DefaultValue{DefaultKind::none, {}};
         if (name == std::string_view{"CurrentControl"}) property->value_kind = ValueKind::object;
+        if (name == std::string_view{"UniqueKey"} || name == std::string_view{"ChoiceInitialValue"})
+            property->value_codec = ValueCodec::runtime_value;
     }
     auto form_owner = std::ranges::find(form_properties, "FormOwner", &PropertyDescriptor::api_name);
     if (form_owner == form_properties.end()) throw std::logic_error("missing runtime FormOwner property");
@@ -3029,6 +3031,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "decimal";
         case ValueCodec::typed_value:
             return "typed-value";
+        case ValueCodec::runtime_value:
+            return "runtime-value";
         case ValueCodec::string:
             return "string";
         case ValueCodec::localized_text:

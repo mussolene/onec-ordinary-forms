@@ -729,7 +729,7 @@ void test_document_package_types(
         if (is_element(node, "element") || is_element(node, "choice")) form_elements.push_back(node);
     std::size_t cursor = expect_property_sequence(
         metamodel.form_properties(),
-        form_elements);
+        form_elements, 0, true);
     expect_element_shape(form_elements[cursor++], "MainAttribute", "", "0", "1");
     expect(is_element(form_elements[cursor], "choice") && attribute(form_elements[cursor], "minOccurs") == "0" &&
                attribute(form_elements[cursor], "maxOccurs") == "1",
@@ -1503,6 +1503,30 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     }
 }
 
+void test_runtime_form_properties_are_not_xml(
+    const Metamodel& metamodel,
+    xmlNodePtr schema,
+    xmlSchemaPtr compiled_schema
+) {
+    const auto elements = direct_children(sequence_for_type(schema, "FormType"), "element");
+    for (const auto& property : metamodel.form_properties()) {
+        if (property.persistence != PersistenceClass::runtime_only) continue;
+        expect(std::ranges::none_of(elements, [&property](xmlNodePtr element) {
+            return attribute(element, "name") == property.xml_name;
+        }), "runtime-only Form property must not have a public XSD element");
+        const std::string xml = "<Form id=\"1\" name=\"Runtime\" ordinaryFormVersion=\"2.1\"><" +
+            std::string(property.xml_name) + "/></Form>";
+        expect(validate_document(compiled_schema, xml) != 0,
+            "runtime-only Form property must fail public XSD validation");
+    }
+    const auto* unique_key = metamodel.form_property("UniqueKey");
+    const auto* choice_initial = metamodel.form_property("ChoiceInitialValue");
+    expect(unique_key && choice_initial &&
+        unique_key->value_codec == ValueCodec::runtime_value &&
+        choice_initial->value_codec == ValueCodec::runtime_value,
+        "runtime form codec descriptors remain available to Palette metadata");
+}
+
 void test_forbidden_vocabulary(const GeneratedSchemas& schemas) {
     std::string generated = lowercase(schemas.ordinary_form_xsd + schemas.ordinary_form_palette_xsd);
     const std::string official = "spreadsheetdocumentdrawinglinetype";
@@ -1976,6 +2000,7 @@ int main() {
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
+        test_runtime_form_properties_are_not_xml(metamodel, form_schema, compiled_form.get());
         test_saved_values_schema(compiled_form.get(), palette_schema);
         test_value_list_schema(schemas, compiled_form.get());
         test_recursive_typed_value_schema(compiled_form.get());

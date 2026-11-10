@@ -254,6 +254,8 @@ bool property_value_matches(
         TypedValueBudget budget;
         return validate_typed_value(value, budget);
     }
+    if (descriptor.value_codec == metamodel::ValueCodec::runtime_value)
+        return validate_runtime_value(value) == RuntimeValueValidation::valid;
     return std::visit(
         [&descriptor](const auto& typed_value) {
             const auto expected = descriptor.value_codec;

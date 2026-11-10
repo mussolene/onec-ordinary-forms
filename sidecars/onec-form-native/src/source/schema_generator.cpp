@@ -75,6 +75,8 @@ std::string_view xsd_type(ValueCodec codec) {
         case ValueCodec::calendar_selected_dates:
         case ValueCodec::value_list_item_reference:
             throw std::logic_error("runtime object references have no public XML type");
+        case ValueCodec::runtime_value:
+            throw std::logic_error("runtime values have no public XML type");
         case ValueCodec::command_bar_buttons:
             return "CommandBarButtonsType";
         case ValueCodec::owned_panel:
@@ -1404,7 +1406,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     append_property_elements(output, main_panel_properties);
     output += "  </xs:sequence></xs:complexType>\n";
     output += "  <xs:complexType name=\"FormType\">\n    <xs:sequence>\n";
-    append_property_elements(output, metamodel.form_properties());
+    append_property_elements(output, metamodel.form_properties(), "      ", false);
     output += "      <xs:element name=\"MainAttribute\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"AttributeIdType\" use=\"required\"/></xs:complexType></xs:element>\n";
     output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n";
     for (const auto& extension : model::metamodel::form_extensions) {
@@ -1418,7 +1420,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             continue;
         }
         output += "><xs:complexType><xs:sequence>\n";
-        append_property_elements(output, properties, "          ");
+        append_property_elements(output, properties, "          ", false);
         if (supports_saved_values) {
             output += "          <xs:element name=\"SavedValues\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:sequence>\n";
             output += "            <xs:element name=\"SavedValue\" minOccurs=\"0\" maxOccurs=\"";

@@ -1995,41 +1995,22 @@
   <xs:complexType name="FormType">
     <xs:sequence>
       <xs:element name="AutoTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="FormOwner" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Caption" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CloseOnChoice" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CloseOnOwnerClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SizeChange" type="WindowSizeChangeValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChangeWindowAppearanceMode" type="WindowAppearanceModeChangeValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="WindowOptionsName" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CaptionPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="WindowOptionsKey" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="UniqueKey" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MultipleChoice" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ModalMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Modified" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceInitialValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Panel" type="FormPanelType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnterKeyBehavior" type="EnterKeyBehaviorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowLocation" type="WindowLocationVariantValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowDockLocation" type="WindowDockVariantValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AllowClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AllowJoinWindow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AllowNormalState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AllowDockedState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AllowAutohideState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AllowFloatState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DesktopMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ConnectableWindow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowState" type="WindowStateVariantValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowAppearanceMode" type="WindowAppearanceModeVariantValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Style" type="StyleValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="CurrentControl" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ThisForm" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MainAttribute" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="AttributeIdType" use="required"/></xs:complexType></xs:element>

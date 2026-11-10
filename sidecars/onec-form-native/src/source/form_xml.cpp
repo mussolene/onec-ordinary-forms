@@ -1336,6 +1336,9 @@ model::PropertyValue parse_property_value(
         case mm::ValueCodec::calendar_selected_dates:
             fail("OOF2003", node, std::string(object_id), property, "runtime-only calendar selection", "XML",
                 "Runtime calendar selections cannot be parsed from XML");
+        case mm::ValueCodec::runtime_value:
+            fail("OOF2003", node, std::string(object_id), property, "runtime-only value", "XML",
+                "Runtime values cannot be parsed from XML");
         case mm::ValueCodec::table_columns:
             fail("OOF2003", node, std::string(object_id), property, "named Table Columns", "scalar collection",
                 "Table columns must use their owned named object model");
@@ -1901,6 +1904,10 @@ public:
                 const mm::PropertyDescriptor* descriptor = metamodel_.form_property(name);
                 if (descriptor == nullptr || descriptor->surface != mm::PropertySurface::form) {
                     fail("OOF2003", child, form_id, name, "declared Form property", name, "Form property is not declared by the executable metamodel");
+                }
+                if (descriptor->persistence == mm::PersistenceClass::runtime_only) {
+                    fail("OOF2003", child, form_id, name, "persisted Form property", name,
+                        "Runtime-only Form properties cannot appear in public Form.xml");
                 }
                 model::PropertyValue value =
                     parse_property_value(child, descriptor->value_codec, form_id, typed_budget_);
@@ -4038,6 +4045,9 @@ private:
             case mm::ValueCodec::calendar_selected_dates:
                 serialization_fail(std::string(object_id), std::string(name), "runtime-only calendar selection", "XML",
                     "Runtime calendar selections cannot be serialized");
+            case mm::ValueCodec::runtime_value:
+                serialization_fail(std::string(object_id), std::string(name), "runtime-only value", "XML",
+                    "Runtime values cannot be serialized");
             case mm::ValueCodec::table_columns:
                 serialization_fail(std::string(object_id), std::string(name), "named Table Columns", "scalar collection",
                     "Table columns must use their owned named object model");
