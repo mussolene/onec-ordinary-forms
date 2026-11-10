@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Form id="1" name="Minimal" ordinaryFormVersion="2.1">
+  <Caption>Пример обычной формы</Caption>
+  <ChildItems>
+    <LabelDecoration id="2" name="Greeting">
+      <Position><Top>6</Top><Height>14</Height><Left>8</Left><Width>120</Width></Position>
+      <Caption>Форма собрана из XML</Caption>
+    </LabelDecoration>
+    <Button id="3" name="ExampleButton">
+      <Position><Top>26</Top><Height>20</Height><Left>8</Left><Width>80</Width></Position>
+      <Caption>Пример кнопки</Caption>
+    </Button>
+  </ChildItems>
+</Form>

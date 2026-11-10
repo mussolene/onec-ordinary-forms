@@ -52,6 +52,7 @@ set_target_properties(
     CXX_STANDARD_REQUIRED ON
 )
 target_link_libraries(oof PRIVATE oof::liboof)
+target_compile_definitions(oof PRIVATE OOF_VERSION="${OOF_VERSION}")
 oof_enable_project_warnings(oof)
 
 if(BUILD_TESTING)
@@ -191,11 +192,12 @@ if(BUILD_TESTING)
   set_tests_properties(product.form-xml PROPERTIES LABELS unit)
 
   add_test(NAME product.cli.version COMMAND oof --version)
+  string(REPLACE "." "[.]" OOF_VERSION_PATTERN "${OOF_VERSION}")
   set_tests_properties(
     product.cli.version
     PROPERTIES
       LABELS smoke
-      PASS_REGULAR_EXPRESSION "oof 1.0.0-dev"
+      PASS_REGULAR_EXPRESSION "oof ${OOF_VERSION_PATTERN}"
   )
 
   add_test(

@@ -1,57 +1,63 @@
 # onec-ordinary-forms
 
-Утилита на C++ для чтения и сборки обычных форм 1С через именованную объектную модель. `Form.xml` версии 2.1 и соседний `Form/Module.bsl` пригодны для просмотра и сравнения изменений в Git. XML не совместим с форматом выгрузки управляемых форм.
+[![CI](https://github.com/mussolene/onec-ordinary-forms/actions/workflows/ci.yml/badge.svg)](https://github.com/mussolene/onec-ordinary-forms/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/mussolene/onec-ordinary-forms?include_prereleases)](https://github.com/mussolene/onec-ordinary-forms/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Первая полезная цель проекта - информационное сравнение доступных свойств формы. XML содержит только поддержанные моделью данные. Отсутствие различий в XML не доказывает, что исходные бинарные формы не отличаются: неизвестные и неподдержанные свойства отмечаются диагностикой, а неполная проекция получает `reconstructionComplete="false"`.
+Утилита `oof` и библиотека C++ для чтения, редактирования и сборки обычных форм 1С через именованный `Form.xml`, модуль BSL и ресурсы, удобные для Git.
 
-## Сборка
+## Быстрый старт
 
-Нужны CMake 3.20+, компилятор с поддержкой C++20, libxml2 2.14.6 или новее,
-zlib и ICU 60 или новее (компонент uc). Динамически связанные библиотеки
-также требуются для запуска программы. ICU используется для имен полей
-живой структуры и сравнения их регистра.
-При отдельном префиксе установки ICU задайте его через параметр CMake
-`-DICU_ROOT=/path/to/icu`.
+Скачайте [архив v1.0.0-rc.1 для Linux x86_64](https://github.com/mussolene/onec-ordinary-forms/releases/download/v1.0.0-rc.1/onec-ordinary-forms-v1.0.0-rc.1-linux-x86_64.tar.gz) и сверьте его с [SHA256SUMS](https://github.com/mussolene/onec-ordinary-forms/releases/download/v1.0.0-rc.1/SHA256SUMS). Двоичный пакет рассчитан на Ubuntu 26.04 x86_64 и системные libxml2, zlib и ICU этого выпуска.
+
+```sh
+tar -xzf onec-ordinary-forms-v1.0.0-rc.1-linux-x86_64.tar.gz
+cd onec-ordinary-forms-v1.0.0-rc.1-linux-x86_64
+./oof build examples/fixtures/minimal/Form.xml work/Form.bin
+./oof dump work/Form.bin work/roundtrip/Form.xml
+```
+
+Первый результат получается без установленной 1С и собственных входных файлов: пример содержит надпись и кнопку, его модуль пустой. Сравните исходный и полученный XML, измените подпись и повторите сборку. Кандидат выпуска не означает 100% покрытия платформы.
+
+Для сборки из исходников нужны CMake 3.20+, компилятор C++20, libxml2 2.14.6+, zlib и ICU 60+ (компонент `uc`):
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
-ctest --test-dir build --build-config Release --output-on-failure
-build/sidecars/onec-form-native/oof --help
+build/sidecars/onec-form-native/oof build examples/fixtures/minimal/Form.xml work/Form.bin
+build/sidecars/onec-form-native/oof dump work/Form.bin work/roundtrip/Form.xml
 ```
 
-Проверенный минимальный набор из 25 типов проходит нативный цикл XML/BIN, а все 38 контролов эталонной формы читаются в именованную проекцию. Собранная проекция прошла строгую проверку Designer; XML, модуль и повторный BIN совпали в цикле собственного writer. Исходное чтение эталона выдало 63 предупреждения OOF1140 и `reconstructionComplete=false`, поэтому результат не означает полного восстановления произвольной формы. macOS и Linux прошли по 12 из 12 тестовых наборов. Свидетельства: [проверка эталонной проекции](docs/ordinary-form-target-contract.md#чтение-и-сборка-с-предупреждениями), [общие кодеки](docs/research-map.md#общий-кодек-свойств-и-проверенные-исключения-2026-10-05).
+Для своей формы выполните `oof dump input/Form.bin work/Form.xml`, отредактируйте пакет и вызовите `oof build work/Form.xml output/Form.bin`. Исходный BIN для сборки не нужен. Рядом с XML обязателен `<имя XML без расширения>/Module.bsl`, даже если модуль пустой.
 
-## Работа с формой
+## Пакет исходников
 
-CLI обрабатывает одну форму за раз и не требует библиотек платформы 1С для команд `dump` и `build`.
-
-```sh
-build/sidecars/onec-form-native/oof dump input/Form.bin work/Form.xml
-# Правьте work/Form.xml и work/Form/Module.bsl
-build/sidecars/onec-form-native/oof build work/Form.xml output/Form.bin
+```text
+Forms/<FormName>/Ext/Form.xml
+Forms/<FormName>/Ext/Form/Module.bsl
+Forms/<FormName>/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
-Для `build` рядом с XML должен существовать файл `<имя XML без расширения>/Module.bsl`, даже если модуль пустой. Ресурсы хранятся рядом, например в `Form/Items/<ElementName>/Picture.gif`. Успешная сборка означает, что проверенные модель и кодек приняли доступные данные. Для проверки платформенного результата используйте лицензированный Designer и `tools/platform_validate_epf.sh`.
+Публичный XML объявляет `ordinaryFormVersion="2.1"`. Он содержит именованные свойства, реквизиты, команды, события и дерево `ChildItems`, но не совместим с XML управляемых форм. Модуль и картинки хранятся отдельными файлами. Схемы и правила модели описаны в [контракте OrdinaryForm](docs/ordinary-form-target-contract.md).
 
-## Учет покрытия
+CLI обрабатывает одну форму за вызов. Обе команды принимают `--json` для диагностики, `--type-schema <types.xsd>` для имен типов конфигурации и `--metadata <configuration-root>` для разрешения ссылок по выгрузке метаданных. Это необязательное обогащение имен и ссылок: UUID и `typeName` типов берутся из XML, сборка не требует полной конфигурации или базы.
 
-Текущая цель полного покрытия: 1С 8.5.1.1343, без ActiveXControl.
-`oof --coverage --json` показывает целевую область и оставшиеся классификации.
-Завершенность дескрипторов сама по себе не доказывает сохранение семантики;
-[критерии приемки](docs/repository-target-state.md#текущая-цель-полное-покрытие-8511343)
-включают независимые платформенные проверки. Полное покрытие пока не достигнуто.
+## Ручной цикл с Git и Designer
 
-## Границы поддержки
+1. Выгрузите свою обработку или отчет в файлы через Designer и найдите `Form.bin` нужной обычной формы.
+2. Выполните `oof dump`, просмотрите диагностику и сохраните XML, модуль и ресурсы в Git.
+3. Измените пакет, проверьте `git diff` и выполните `oof build`.
+4. Поместите собранный `Form.bin` в штатную выгрузку, соберите EPF/ERF через Designer и проверьте его строгой повторной выгрузкой.
+5. Повторите `oof dump` для результата Designer и сравните XML, модуль и ресурсы перед фиксацией изменений.
 
-Покрытие зависит от сочетания типа и свойства. Список поддержанных значений, значений по умолчанию и ограничений ведется в [контракте OrdinaryForm](docs/ordinary-form-target-contract.md). Неподдержанные свойства не попадают в XML как сырые данные; диагностические предупреждения и `reconstructionComplete=false` показывают неполноту чтения. Пересборка создает поток из именованной модели и не гарантирует сохранение неизвестных исходных полей.
+Для последнего платформенного шага в репозитории есть [tools/platform_validate_epf.sh](tools/platform_validate_epf.sh). Ему нужны лицензированная среда 1С и Docker; подробности находятся в [руководстве разработчика](docs/development.md#проверка-результата).
 
-Публичная модель не раскрывает бинарные, индексные или эталонные потоки. Текущая цель не требует полного покрытия всех свойств. `release_ready=false`; release-gate пока остается незавершенной заглушкой, выпуск и теги не запланированы. Состояние и ограниченный план работ описаны в [целевом состоянии](docs/repository-target-state.md).
+## Состояние и ограничения
 
-## Обращение с данными
+Целевая платформа: 1С 8.5.1.1343, Linux. Открытые задачи: [старые варианты колонок Table, #48](https://github.com/mussolene/onec-ordinary-forms/issues/48), [14 кодеков состояния выполнения, #49](https://github.com/mussolene/onec-ordinary-forms/issues/49) и [ActiveXControl вне целевой области, #50](https://github.com/mussolene/onec-ordinary-forms/issues/50). Точные границы приведены в [контракте модели](docs/ordinary-form-target-contract.md) и [плане полного покрытия](docs/repository-target-state.md).
 
-CLI ограничивает каждый входной файл 64 MiB и сумму картинок пакета 64 MiB; вложенность list-stream ограничена 256 уровнями. Файлы `Module.bsl` и картинок остаются внутри каталога пакета. CLI отвергает выходные символические ссылки и файлы с несколькими жесткими ссылками, BSL не исполняется. Это не изоляция процесса: запускайте CLI только в доверенном локальном каталоге, так как гонки при параллельном изменении файловой системы не защищены. Подробнее о границах см. [контракт OrdinaryForm](docs/ordinary-form-target-contract.md#актуальное-состояние-и-границы-cli-2026-10-05).
+`oof --coverage --json` показывает классификацию дескрипторов. Нулевые остатки и `descriptorCoverageComplete=true` сами по себе не доказывают полную сохранность формы. Предупреждения и `reconstructionComplete="false"` означают неполное чтение; пересборка сохраняет только представленные моделью данные. Успешный цикл собственного reader/writer также требует независимой проверки Designer.
 
-Проверяйте собственные EPF и выгрузки в разрешенной локальной среде. Не добавляйте в Git частные формы, дампы клиентов, лицензии, учетные данные, содержимое `.env` или отчеты из `scan-output/` и `work/`. Исследовательские результаты и обезличенные доказательства собраны в [карте исследований](docs/research-map.md).
+CLI не исполняет BSL и предназначен для доверенного локального каталога. Не добавляйте частные EPF/ERF, дампы, лицензии, секреты и отчеты из `work/` или `scan-output/` в Git. Пределы ввода и правила путей описаны в [контракте](docs/ordinary-form-target-contract.md#актуальное-состояние-и-границы-cli-2026-10-05).
 
-Подробнее: [архитектура](docs/architecture.md), [разработка](docs/development.md), [контракт модели](docs/ordinary-form-target-contract.md).
+Для интеграции и изменений кода: [разработка](docs/development.md), [архитектура](docs/architecture.md). Лицензия: [MIT](LICENSE).

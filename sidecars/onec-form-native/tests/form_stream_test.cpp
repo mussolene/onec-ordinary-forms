@@ -417,6 +417,168 @@ void test_captured_table_column_record() {
         "independent captured Table/Column record must re-encode exactly apart from recompressed editor bytes");
 }
 
+void test_legacy_table_property_layouts() {
+    struct Layout { std::string_view version; std::size_t arity; bool legacy; };
+    constexpr std::array layouts{
+        Layout{"10", 24, true}, Layout{"11", 24, true}, Layout{"12", 25, true},
+        Layout{"14", 28, true}, Layout{"15", 28, true}, Layout{"19", 34, true},
+        Layout{"23", 39, false},
+    };
+    const auto table_record = [](list_stream::ListValue& payload) {
+        return find_record_with_guid(payload,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    };
+    const auto properties_of = [](list_stream::ListValue& record) -> list_stream::ListValue& {
+        return record.items.at(2).items.at(2).items.at(1);
+    };
+
+    auto seed = form_stream::decode_document(captured_table_payload(), "LegacyTableProperties");
+    expect(seed.ok(), "captured Table must decode before legacy property fixtures are made");
+    const auto table = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table != seed.value().collections().controls.end(), "captured fixture must contain Table");
+    if (table == seed.value().collections().controls.end()) return;
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, table->id};
+
+    auto varied = seed.value();
+    model::ColorValue header_color;
+    header_color.kind = model::ColorKind::absolute;
+    header_color.red = 31;
+    header_color.green = 61;
+    header_color.blue = 101;
+    const auto set = [&](std::string_view name, model::PropertyValue value) {
+        expect(varied.set_prop_val(key, model::PropertyId::from_name(name), value) ==
+                model::PropertyMutationStatus::applied,
+            std::string("varied Table property must accept ") + std::string(name));
+    };
+    set("Header", false);
+    set("Footer", true);
+    set("FixedLeft", std::int64_t{1});
+    set("HeaderHeight", std::int64_t{4});
+    set("HorizontalScrollBar", model::EnumerationValue{"ScrollBarUse", "UseAlways"});
+    set("HeaderBackColor", header_color);
+
+    auto default_native = form_stream::encode_document(seed.value());
+    auto varied_native = form_stream::encode_document(varied);
+    expect(default_native.ok() && varied_native.ok(), "default and varied Table sources must encode");
+    if (!default_native || !varied_native) return;
+
+    const auto* default_record_ptr = table_record(default_native.value());
+    const auto* varied_record_ptr = table_record(varied_native.value());
+    expect(default_record_ptr != nullptr && varied_record_ptr != nullptr,
+        "canonical sources must each contain a Table record");
+    if (default_record_ptr == nullptr || varied_record_ptr == nullptr) return;
+    const auto default_record = *default_record_ptr;
+    const auto varied_record = *varied_record_ptr;
+
+    for (const bool use_varied : {false, true}) {
+        const auto& source_record = use_varied ? varied_record : default_record;
+        for (const auto& layout : layouts) {
+            for (const bool legacy_common : {false, true}) {
+                if (legacy_common && !layout.legacy) continue;
+                auto legacy_payload = use_varied ? varied_native.value() : default_native.value();
+                auto* legacy_record = table_record(legacy_payload);
+                expect(legacy_record != nullptr, "legacy fixture source must contain Table");
+                if (legacy_record == nullptr) continue;
+                auto& stored_properties = properties_of(*legacy_record);
+                stored_properties.items.at(0) = list_stream::ListValue::raw_atom(std::string(layout.version));
+                stored_properties.items.resize(layout.arity);
+                if (legacy_common) {
+                    auto& base = legacy_record->items.at(2).items.at(2).items.at(0);
+                    base.items.at(0) = list_stream::ListValue::raw_atom(layout.version == "19" ? "16" : "10");
+                    base.items.resize(layout.version == "19" ? 18 : 13);
+                }
+
+                auto decoded = form_stream::decode_document(legacy_payload, "LegacyTableProperties");
+                expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                    std::string("Table property layout ") + std::string(layout.version) +
+                        " must decode completely");
+                if (!decoded || !decoded.value().reconstruction_complete()) continue;
+
+                const auto expect_property = [&](std::string_view name, const model::PropertyValue& expected) {
+                    const auto actual = decoded.value().get_prop_val(key, model::PropertyId::from_name(name));
+                    expect(actual.value && *actual.value == expected,
+                        std::string("legacy Table must preserve named property ") + std::string(name));
+                };
+                if (use_varied) {
+                    expect_property("Header", false);
+                    expect_property("Footer", true);
+                    expect_property("FixedLeft", std::int64_t{1});
+                    expect_property("HeaderHeight", std::int64_t{4});
+                    expect_property("HorizontalScrollBar", model::EnumerationValue{"ScrollBarUse", "UseAlways"});
+                    expect_property("HeaderBackColor", header_color);
+                }
+                expect_property("HorizontalLines", layout.legacy ? model::PropertyValue{false} : model::PropertyValue{true});
+                expect_property("VerticalLines", layout.legacy ? model::PropertyValue{false} : model::PropertyValue{true});
+
+                auto rebuilt = form_stream::encode_document(decoded.value());
+                expect(rebuilt.ok(), "decoded legacy Table must encode with the current layout");
+                if (!rebuilt) continue;
+                auto* rebuilt_record = table_record(rebuilt.value());
+                expect(rebuilt_record != nullptr, "rebuilt legacy Table record must exist");
+                if (rebuilt_record == nullptr) continue;
+                const auto& rebuilt_properties = properties_of(*rebuilt_record);
+                expect(rebuilt_properties.items.size() == 39 && rebuilt_properties.items[0].atom == "23",
+                    "legacy Table writer must emit the current 23/39 property layout");
+                expect(rebuilt_properties.items.at(34).atom == (layout.legacy ? "2" : "1") &&
+                        rebuilt_properties.items.at(35).atom == (layout.legacy ? "2" : "1"),
+                    "legacy Table defaults must emit false HorizontalLines and VerticalLines");
+
+                auto expected_record = source_record;
+                auto& expected_properties = properties_of(expected_record);
+                expected_properties.items.at(0) = list_stream::ListValue::raw_atom("23");
+                expected_properties.items.resize(39);
+                expected_properties.items.at(34) = list_stream::ListValue::raw_atom(layout.legacy ? "2" : "1");
+                expected_properties.items.at(35) = list_stream::ListValue::raw_atom(layout.legacy ? "2" : "1");
+                auto& expected_packet = expected_record.items[2].items[2].items[1].items[23]
+                    .items[1].items[1].items[1].items[1].items[39];
+                const auto& rebuilt_packet = rebuilt_record->items[2].items[2].items[1].items[23]
+                    .items[1].items[1].items[1].items[1].items[39];
+                expected_packet = rebuilt_packet;
+                expect(list_stream::dump_compact(expected_record) == list_stream::dump_compact(*rebuilt_record),
+                    "legacy Table values must canonicalize exactly apart from editor recompression");
+            }
+        }
+    }
+
+    for (const auto& layout : layouts) {
+        for (const bool longer : {false, true}) {
+            auto malformed = default_native.value();
+            auto* record = table_record(malformed);
+            expect(record != nullptr, "arity rejection fixture must contain Table");
+            if (record == nullptr) continue;
+            auto& properties = properties_of(*record);
+            properties.items.at(0) = list_stream::ListValue::raw_atom(std::string(layout.version));
+            properties.items.resize(longer ? layout.arity + 1 : layout.arity - 1);
+            if (longer) properties.items.back() = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(malformed, "MalformedLegacyTableProperties"),
+                std::string("Table layout ") + std::string(layout.version) +
+                    (longer ? " must reject an extra field" : " must reject a missing field"));
+        }
+    }
+
+    auto unknown = default_native.value();
+    auto* unknown_record = table_record(unknown);
+    expect(unknown_record != nullptr, "unknown-version fixture must contain Table");
+    if (unknown_record != nullptr) {
+        properties_of(*unknown_record).items.at(0) = list_stream::ListValue::raw_atom("20");
+        expect(!form_stream::decode_document(unknown, "UnknownLegacyTableProperties"),
+            "unknown Table property generation must fail closed");
+    }
+
+    auto malformed_columns = default_native.value();
+    auto* columns_record = table_record(malformed_columns);
+    expect(columns_record != nullptr, "malformed-column fixture must contain Table");
+    if (columns_record != nullptr) {
+        auto& properties = properties_of(*columns_record);
+        properties.items.at(0) = list_stream::ListValue::raw_atom("10");
+        properties.items.resize(24);
+        properties.items.at(23).items.at(0) = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(malformed_columns, "MalformedLegacyTableColumns"),
+            "legacy Table layout must still reject a malformed Columns count");
+    }
+}
+
 void test_table_column_layout_codec() {
     auto seed = form_stream::decode_document(captured_table_payload(), "TableColumnLayout");
     expect(seed.ok(), "captured Table fixture must decode for layout codec cases");
@@ -11004,11 +11166,7 @@ void test_legacy_common_control_base10_batch() {
         auto& old_base = base_for(legacy, kind);
         old_base.items.resize(13);
         old_base.items[0] = list_stream::ListValue::raw_atom("10");
-        if (kind == model::ControlKind::table)
-            expect(!form_stream::decode_document(legacy, "LegacyCommonBase"),
-                "Table must reject the unconfirmed base10 tuple");
-        const auto decoded = form_stream::decode_document(
-            kind == model::ControlKind::table ? current.value() : legacy, "LegacyCommonBase");
+        const auto decoded = form_stream::decode_document(legacy, "LegacyCommonBase");
         expect(decoded.ok() && decoded.value().reconstruction_complete(),
             name + " supported common base must decode completely using its current constructor defaults");
         const auto xml = source::serialize_form_xml(decoded.value());
@@ -11033,7 +11191,7 @@ void test_legacy_common_control_base10_batch() {
             expect(!form_stream::decode_document(invalid, "LegacyCommonBase").ok(),
                 name + " common base must reject unsupported version/arity combinations");
         }
-        const bool supports_base16 = kind != model::ControlKind::panel && kind != model::ControlKind::table;
+        const bool supports_base16 = kind != model::ControlKind::panel;
         for (const bool old_base16 : {false, true}) {
             auto intermediate = current.value();
             auto& base = base_for(intermediate, kind);
@@ -11082,7 +11240,7 @@ void test_legacy_common_control_base10_batch() {
         auto zero_state = current.value();
         for (const auto slot : {16U, 17U, 18U, 19U})
             base_for(zero_state, kind).items[slot] = list_stream::ListValue::raw_atom("0");
-        const bool supports_zero_state = kind != model::ControlKind::panel && kind != model::ControlKind::table;
+        const bool supports_zero_state = kind != model::ControlKind::panel;
         if (supports_zero_state) {
             const auto check_normalized_state = [&](const list_stream::ListValue& state, std::string_view label) {
                 const auto decoded_state = form_stream::decode_document(state, "LegacyCommonBase");
@@ -24895,6 +25053,7 @@ int main() {
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
+        test_legacy_table_property_layouts();
         test_table_column_layout_codec();
         test_table_column_compact_decimal_codec();
         test_table_column_visible_codec();

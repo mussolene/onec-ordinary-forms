@@ -5,6 +5,9 @@ BUILD_DIR ?= build
 CMAKE_CONFIGURE_ARGS ?=
 CMAKE_BUILD_ARGS ?=
 CTEST_ARGS ?=
+PYTHON ?= python3
+RELEASE_TAG ?=
+RELEASE_EVIDENCE ?= docs/release-evidence.json
 
 .PHONY: all configure build test smoke release-gate clean
 
@@ -22,9 +25,8 @@ test: build
 smoke: build
 	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L smoke $(CTEST_ARGS)
 
-release-gate:
-	@echo "release-gate is not implemented: product tests do not replace strict Designer and corpus validation." >&2
-	@exit 1
+release-gate: build
+	$(PYTHON) tools/release_gate.py --tag "$(RELEASE_TAG)" --manifest "$(RELEASE_EVIDENCE)" --binary "$(BUILD_DIR)/sidecars/onec-form-native/oof" --build-dir "$(BUILD_DIR)" --config "$(CMAKE_BUILD_TYPE)" --ctest "$(CTEST)"
 
 clean:
 	rm -rf $(BUILD_DIR) dist

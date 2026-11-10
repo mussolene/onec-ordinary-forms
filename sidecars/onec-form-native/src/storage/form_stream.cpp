@@ -1539,21 +1539,20 @@ void normalize_common_base_value_encodings(LV& base, std::string_view path) {
     }
 }
 
-struct CommonBaseLayout {
+struct RecordLayout {
     std::string_view version;
     std::size_t arity;
 };
 
 constexpr std::array common_base_layouts{
-    CommonBaseLayout{"10", 13},
-    CommonBaseLayout{"16", 18},
-    CommonBaseLayout{"19", 21},
+    RecordLayout{"10", 13},
+    RecordLayout{"16", 18},
+    RecordLayout{"19", 21},
 };
 
 enum class CommonControlBaseVersionPolicy {
     legacy10_and_current19,
     legacy10_16_and_current19,
-    current19_only,
 };
 enum class CommonControlBaseStatePolicy {
     preserve,
@@ -1588,10 +1587,7 @@ void read_common_control_base(LV& base, std::string_view path, CurrentBaseFactor
     if (base.items.empty()) require_arity(base, 21, path);
     const auto version = raw_atom(base.items[0], child_path(path, 0));
     const bool current_version = version == "19";
-    if (!current_version && version_policy == CommonControlBaseVersionPolicy::current19_only)
-        fail("OOF1114", child_path(path, 0), "confirmed common-base version 19", version,
-            "Common-base version is not supported for this control owner");
-    const auto layout = std::ranges::find(common_base_layouts, version, &CommonBaseLayout::version);
+    const auto layout = std::ranges::find(common_base_layouts, version, &RecordLayout::version);
     if (layout == common_base_layouts.end())
         fail("OOF1106", child_path(path, 0), "supported common-base version 10, 16, or 19", version,
             "Common-base version is unsupported");
@@ -4328,6 +4324,41 @@ constexpr std::array table_fixed_column_slots{
     std::pair<std::string_view, std::size_t>{"FixedRight", 12},
 };
 
+LV canonical_table_properties() {
+    auto properties = parse_constant(R"OOF(
+{23,117643809,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,0,{12741203},0},
+{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,0,0,1,1,{8,2,0,{-20},1,100},{8,2,0,{-20},1,100},0,0,
+1,{0},0,0,0,0,0,0,0,100,1,2,1,1,0,0,2}
+)OOF");
+    if (properties.items.size() != 39)
+        throw std::logic_error("canonical Table property record has the wrong arity");
+    return properties;
+}
+
+constexpr std::array table_properties_layouts{
+    RecordLayout{"10", 24}, RecordLayout{"11", 24}, RecordLayout{"12", 25},
+    RecordLayout{"14", 28}, RecordLayout{"15", 28}, RecordLayout{"19", 34},
+    RecordLayout{"23", 39},
+};
+
+std::optional<LV> upgrade_table_properties(const LV& properties, std::string_view path) {
+    require_list(properties, path);
+    if (properties.items.empty()) require_arity(properties, 39, path);
+    const auto version = raw_atom(properties.items[0], child_path(path, 0));
+    const auto layout = std::ranges::find(table_properties_layouts, version, &RecordLayout::version);
+    if (layout == table_properties_layouts.end())
+        fail("OOF1106", child_path(path, 0), "supported Table properties generation", version,
+            "Table properties version is unsupported");
+    require_arity(properties, layout->arity, path);
+    if (version == "23") return std::nullopt;
+    auto current = canonical_table_properties();
+    // Before the line-visibility fields were stored, both lines defaulted to false.
+    current.items[34] = raw("2");
+    current.items[35] = raw("2");
+    std::copy(properties.items.begin() + 1, properties.items.end(), current.items.begin() + 1);
+    return current;
+}
+
 LV canonical_table_control_info(
     const model::TypeDomainPatternValue& source_type,
     const std::vector<model::TableColumn>& columns,
@@ -4343,14 +4374,9 @@ LV canonical_table_control_info(
 {19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},
 {4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}
 )OOF");
-    auto properties = parse_constant(R"OOF(
-{23,117643809,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,0,{12741203},0},
-{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,0,0,1,1,{8,2,0,{-20},1,100},{8,2,0,{-20},1,100},0,0,
-1,{0},0,0,0,0,0,0,0,100,1,2,1,1,0,0,2}
-)OOF");
-    if (base.items.size() != 21 || properties.items.size() != 39) {
-        throw std::logic_error("canonical Table control property record has the wrong arity");
-    }
+    auto properties = canonical_table_properties();
+    if (base.items.size() != 21)
+        throw std::logic_error("canonical Table common base has the wrong arity");
     std::uint32_t flags = 117643809U | (!read_only ? 0x400U : 0U);
     if (tree_source && !tree_mode) flags &= ~0x220U;
     properties.items[1] = raw(std::to_string(flags));
@@ -11159,9 +11185,9 @@ DecodedControl decode_table(
     require_arity(info, 5, info_path);
     require_raw_constant(info.items[0], "5", child_path(info_path, 0));
     require_arity(info.items[2], 2, child_path(info_path, 2));
-    require_arity(info.items[2].items[1], 39, child_path(child_path(info_path, 2), 1));
-    require_raw_constant(info.items[2].items[1].items[0], "23",
-        child_path(child_path(child_path(info_path, 2), 1), 0));
+    const auto table_properties_path = child_path(child_path(info_path, 2), 1);
+    const auto upgraded_properties = upgrade_table_properties(info.items[2].items[1], table_properties_path);
+    const auto& properties = upgraded_properties ? *upgraded_properties : info.items[2].items[1];
     bool tree_mode = true;
     if (tree_source) {
         const auto mode_path = child_path(info_path, 3);
@@ -11189,7 +11215,7 @@ DecodedControl decode_table(
             describe(info.items[1]), "Table DataPath and ValueType disagree");
     }
     const auto columns_path = child_path(child_path(child_path(info_path, 2), 1), 23);
-    const auto& stored_columns = info.items[2].items[1].items[23];
+    const auto& stored_columns = properties.items[23];
     require_list(stored_columns, columns_path);
     if (stored_columns.items.empty() || (!tree_source && stored_columns.items.size() < 2) || stored_columns.items.size() > 257 ||
         integer_atom<std::size_t>(stored_columns.items[0], columns_path) != stored_columns.items.size() - 1) {
@@ -11215,7 +11241,7 @@ DecodedControl decode_table(
             stored_columns.items[index], child_path(columns_path, index), raw_id,
             warnings, reconstruction_complete, tree_source, index - 1));
     }
-    const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
+    const auto flags = integer_atom<std::uint32_t>(properties.items[1],
         child_path(child_path(child_path(info_path, 2), 1), 1));
     if (tree_source && (flags & 0x220U) != (tree_mode ? 0x220U : 0U))
         fail("OOF1114", child_path(info_path, 3), "Table Tree mode matching its flags", std::to_string(flags),
@@ -11226,11 +11252,13 @@ DecodedControl decode_table(
     auto base = info.items[2].items[0];
     read_common_control_base(base, base_path, [&] {
         return canonical_info.items[2].items[0];
-    }, {warnings, raw_id, "Table"}, CommonControlBaseVersionPolicy::current19_only);
+    }, {warnings, raw_id, "Table", CommonControlBaseStatePolicy::strict_default_layouts},
+        CommonControlBaseVersionPolicy::legacy10_16_and_current19);
     const auto common = decode_common_control_base(base, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::table, model::ControlKind::table});
     apply_common_control_base(control.properties(), common);
     LV normalized_info = info;
+    if (upgraded_properties) normalized_info.items[2].items[1] = *upgraded_properties;
     normalized_info.items[2].items[0] = std::move(base);
     normalized_info.items[4] = list({raw("0")});
     if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
@@ -11243,10 +11271,9 @@ DecodedControl decode_table(
         normalized_flags = (normalized_flags & ~spec.mask) | (default_flags & spec.mask);
     }
     normalized_table_properties.items.at(1) = raw(std::to_string(normalized_flags));
-    const auto table_properties_path = child_path(child_path(info_path, 2), 1);
     for (const auto& spec : table_boolean_slots) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
-        const auto code = integer_atom<int>(info.items[2].items[1].items.at(spec.slot), slot_path);
+        const auto code = integer_atom<int>(properties.items.at(spec.slot), slot_path);
         if (code != spec.false_code && code != spec.true_code)
             fail("OOF1114", slot_path, "supported Table Boolean code", std::to_string(code),
                 "Table Boolean storage value is unsupported");
@@ -11256,7 +11283,7 @@ DecodedControl decode_table(
     }
     for (const auto& spec : model::detail::table_enum_specs) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
-        const auto code = integer_atom<int>(info.items[2].items[1].items.at(spec.slot), slot_path);
+        const auto code = integer_atom<int>(properties.items.at(spec.slot), slot_path);
         if (code < 0 || static_cast<std::size_t>(code) >= spec.members.size())
             fail("OOF1115", slot_path, "known Table enumeration ordinal", std::to_string(code),
                 "Table enumeration ordinal is unsupported");
@@ -11267,7 +11294,7 @@ DecodedControl decode_table(
     }
     for (const auto& [name, slot] : table_fixed_column_slots) {
         const auto slot_path = child_path(table_properties_path, slot);
-        const auto value = integer_atom<std::int32_t>(info.items[2].items[1].items.at(slot), slot_path);
+        const auto value = integer_atom<std::int32_t>(properties.items.at(slot), slot_path);
         if (value < 0 || value > 256)
             fail("OOF1114", slot_path, "fixed-column count from 0 to 256", std::to_string(value),
                 "Table fixed-column count is outside the supported range");
@@ -11277,13 +11304,13 @@ DecodedControl decode_table(
     }
     for (const auto& [name, slot] : std::array{std::pair<std::string_view, std::size_t>{"HeaderHeight", 16},
                                               std::pair<std::string_view, std::size_t>{"FooterHeight", 17}}) {
-        const auto value = integer_atom<std::int16_t>(info.items[2].items[1].items.at(slot), child_path(table_properties_path, slot));
+        const auto value = integer_atom<std::int16_t>(properties.items.at(slot), child_path(table_properties_path, slot));
         if (value != 1) control.properties().set_explicit(model::PropertyId::from_name(name), static_cast<std::int64_t>(value));
         normalized_table_properties.items.at(slot) = raw("1");
     }
     for (const auto& spec : table_appearance_properties) {
         const auto slot_path = child_path(table_properties_path, spec.slot);
-        const auto& stored = info.items[2].items[1].items.at(spec.slot);
+        const auto& stored = properties.items.at(spec.slot);
         const auto& default_stored = canonical_info.items[2].items[1].items.at(spec.slot);
         if (spec.font) {
             const auto value = decode_control_font(stored, slot_path);

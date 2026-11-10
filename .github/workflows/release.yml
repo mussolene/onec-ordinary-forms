@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to publish, for example v0.5.0
+        description: Tag to publish, for example v1.0.0-rc.1
         required: true
         type: string
 
@@ -36,6 +36,12 @@ jobs:
             exit 1
           fi
           printf 'tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
+          release_version="${release_tag#v}"
+          if [[ "${release_version%%+*}" == *-* ]]; then
+            printf 'prerelease=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'prerelease=false\n' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -46,23 +52,37 @@ jobs:
       - name: Install product dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential cmake libxml2-dev zlib1g-dev libicu-dev
 
-      - name: Build and test product
-        run: make test
-
-      - name: Run release gate
-        run: make release-gate
+      - name: Build and verify release
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: make release-gate RELEASE_TAG="$RELEASE_TAG"
 
       - name: Package product binary and schemas
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          mkdir -p dist
-          cp build/sidecars/onec-form-native/oof dist/oof-linux-x86_64
-          tar -czf dist/onec-ordinary-forms-linux-x86_64.tar.gz -C dist oof-linux-x86_64 -C .. schemas README.md LICENSE
+          package_name="onec-ordinary-forms-${RELEASE_TAG}-linux-x86_64"
+          mkdir -p "dist/stage/$package_name"
+          cp build/sidecars/onec-form-native/oof "dist/stage/$package_name/oof"
+          cp -R schemas "dist/stage/$package_name/schemas"
+          cp README.md LICENSE "dist/stage/$package_name/"
+          cp -R docs examples "dist/stage/$package_name/"
+          mkdir -p "dist/stage/$package_name/tools"
+          cp tools/platform_validate_epf.sh "dist/stage/$package_name/tools/"
+          cp docs/release-evidence.json "dist/${package_name}-evidence.json"
+          tar -czf "dist/${package_name}.tar.gz" -C dist/stage "$package_name"
+          cd dist
+          sha256sum "${package_name}.tar.gz" "${package_name}-evidence.json" > SHA256SUMS
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: ${{ steps.release.outputs.tag }}
-          files: dist/*
+          prerelease: ${{ steps.release.outputs.prerelease == 'true' }}
+          files: |
+            dist/*.tar.gz
+            dist/*-evidence.json
+            dist/SHA256SUMS
           fail_on_unmatched_files: true
           generate_release_notes: true

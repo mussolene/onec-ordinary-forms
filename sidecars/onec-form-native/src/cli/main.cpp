@@ -33,7 +33,7 @@
 
 namespace {
 
-constexpr std::string_view version = "1.0.0-dev";
+constexpr std::string_view version = OOF_VERSION;
 constexpr std::uintmax_t max_input_bytes = 64U * 1024U * 1024U;
 
 void print_usage(std::ostream& output) {

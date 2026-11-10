@@ -12,6 +12,12 @@ dist/
 # Local/private 1C artifacts
 examples/fixtures/*
 !examples/fixtures/.gitkeep
+!examples/fixtures/minimal/
+examples/fixtures/minimal/*
+!examples/fixtures/minimal/Form.xml
+!examples/fixtures/minimal/Form/
+examples/fixtures/minimal/Form/*
+!examples/fixtures/minimal/Form/Module.bsl
 scan-output/
 work/
 *.epf

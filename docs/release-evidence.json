@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0-rc.1",
+  "sourceDigest": "sha256:08f8bdfda354ad94bfad22250307bc11cbdda8cdea878966bf6f25be7044397a",
+  "verification": {
+    "descriptorCoverageComplete": false,
+    "realCorpusComplete": false,
+    "native": {
+      "strictDesigner": "PASS",
+      "xmlBinRoundTrip": "PASS",
+      "nativeGetters": "PASS",
+      "strictReload": "PASS",
+      "platform": "8.5.1.1343",
+      "scope": "Table properties generations10/24,11/24,12/25,14/28,15/28,19/34,23/39 and common bases10/13,16/18,19/21; current column editors retained",
+      "formsPerBatch": 14,
+      "gettersPerBatch": 490,
+      "finalCliRoundTrips": 42,
+      "wholeRuntimeComparisons": 14,
+      "allowedSnapshotNormalization": "Documented platform serialization counter only",
+      "evidenceRefs": [
+        "ev_52d015d7bd604b4d8d5a31d4155aa1b9",
+        "ev_c81d23db4e544050af26b45d9f88897d",
+        "ev_8f54c48b117c4f5a8e811296479fe322"
+      ]
+    }
+  },
+  "limitations": [
+    {
+      "id": "legacy-table-columns",
+      "issue": "https://github.com/mussolene/onec-ordinary-forms/issues/48",
+      "open": true
+    },
+    {
+      "id": "activex",
+      "issue": "https://github.com/mussolene/onec-ordinary-forms/issues/50",
+      "open": true,
+      "targetExcluded": true
+    },
+    {
+      "id": "live-property-values",
+      "issue": "https://github.com/mussolene/onec-ordinary-forms/issues/49",
+      "open": true,
+      "remaining": 14
+    }
+  ]
+}
