@@ -11033,6 +11033,69 @@ void test_legacy_common_control_base10_batch() {
             expect(!form_stream::decode_document(invalid, "LegacyCommonBase").ok(),
                 name + " common base must reject unproven versions");
         }
+        auto zero_state = current.value();
+        for (const auto slot : {16U, 17U, 18U, 19U})
+            base_for(zero_state, kind).items[slot] = list_stream::ListValue::raw_atom("0");
+        const bool supports_zero_state = kind != model::ControlKind::panel && kind != model::ControlKind::table;
+        if (supports_zero_state) {
+            const auto check_normalized_state = [&](const list_stream::ListValue& state, std::string_view label) {
+                const auto decoded_state = form_stream::decode_document(state, "LegacyCommonBase");
+                const auto context = name + " " + std::string(label);
+                expect(decoded_state.ok() && decoded_state.value().reconstruction_complete(),
+                    context + " must decode completely");
+                expect(std::ranges::count_if(decoded_state.diagnostics(), [](const auto& diagnostic) {
+                    return diagnostic.code == "OOF1146" && diagnostic.severity == oof::DiagnosticSeverity::info;
+                }) == 1, context + " must report exactly one normalization");
+                const auto state_xml = source::serialize_form_xml(decoded_state.value());
+                expect(state_xml.ok(), context + " must serialize as the named model");
+                const auto state_parsed = source::parse_form_xml(state_xml.value());
+                expect(state_parsed.ok(), context + " named XML must parse");
+                const auto state_rebuilt = form_stream::encode_document(state_parsed.value());
+                expect(state_rebuilt.ok() && list_stream::dump_compact(state_rebuilt.value()) == list_stream::dump_compact(current.value()),
+                    context + " must rebuild the native-confirmed constructor serialization");
+            };
+            check_normalized_state(zero_state, "native zero state");
+            if (kind == model::ControlKind::list_box) {
+                auto strict_list_box = zero_state;
+                base_for(strict_list_box, kind).items[16] = base_for(current.value(), kind).items[16];
+                check_normalized_state(strict_list_box, "native strict state with constructor first field");
+                for (const auto& replacement : {list_stream::ListValue::raw_atom("1"),
+                         list_stream::ListValue::raw_atom("3"), list_stream::ListValue::string_atom("2"),
+                         list_stream::parse("{2}")}) {
+                    auto invalid = strict_list_box;
+                    base_for(invalid, kind).items[16] = replacement;
+                    const auto invalid_result = form_stream::decode_document(invalid, "LegacyCommonBase");
+                    expect(!invalid_result.ok() || !invalid_result.value().reconstruction_complete(),
+                        "ListBox must not normalize an unconfirmed first state field");
+                    expect(std::ranges::none_of(invalid_result.diagnostics(), [](const auto& diagnostic) {
+                        return diagnostic.code == "OOF1146";
+                    }), "ListBox unconfirmed first state field must not report normalization");
+                }
+            }
+            for (const auto& replacement : {list_stream::ListValue::raw_atom("00"),
+                     list_stream::ListValue::string_atom("0"), list_stream::parse("{0}")}) {
+                auto invalid = zero_state;
+                base_for(invalid, kind).items[16] = replacement;
+                const auto invalid_result = form_stream::decode_document(invalid, "LegacyCommonBase");
+                expect(!invalid_result.ok() || !invalid_result.value().reconstruction_complete(),
+                    name + " noncanonical zero must not normalize as a complete model");
+                expect(std::ranges::none_of(invalid_result.diagnostics(), [](const auto& diagnostic) {
+                    return diagnostic.code == "OOF1146";
+                }), name + " noncanonical zero must not report normalization");
+            }
+            auto neighboring_unknown = zero_state;
+            base_for(neighboring_unknown, kind).items[15] = list_stream::ListValue::raw_atom("99");
+            const auto neighboring_result = form_stream::decode_document(neighboring_unknown, "LegacyCommonBase");
+            expect(!neighboring_result.ok() || !neighboring_result.value().reconstruction_complete(),
+                name + " normalized state must not mask unknown neighboring data");
+        } else {
+            const auto zero_decoded = form_stream::decode_document(zero_state, "LegacyCommonBase");
+            expect(!zero_decoded.ok() || !zero_decoded.value().reconstruction_complete(),
+                name + " unconfirmed zero state must not decode as complete");
+            expect(std::ranges::none_of(zero_decoded.diagnostics(), [](const auto& diagnostic) {
+                return diagnostic.code == "OOF1146";
+            }), name + " unconfirmed owner must not report state normalization");
+        }
         auto unknown = current.value();
         base_for(unknown, kind).items[15] = list_stream::ListValue::raw_atom("99");
         const auto unknown_result = form_stream::decode_document(unknown, "LegacyCommonBase");
@@ -11068,6 +11131,15 @@ void test_legacy_common_control_base10_batch() {
         invalid.items[1].items[2].items[1].items[1].items[0].items[0] = list_stream::ListValue::raw_atom(version);
         expect(!form_stream::decode_document(invalid, "LegacyRootCommonBase"), "root Panel must reject unproven common-base versions");
     }
+    auto root_zero = root_current.value();
+    for (const auto slot : {16U, 17U, 18U, 19U})
+        root_zero.items[1].items[2].items[1].items[1].items[0].items[slot] = list_stream::ListValue::raw_atom("0");
+    const auto root_zero_decoded = form_stream::decode_document(root_zero, "LegacyRootCommonBase");
+    expect(!root_zero_decoded.ok() || !root_zero_decoded.value().reconstruction_complete(),
+        "unconfirmed root zero state must not decode as complete");
+    expect(std::ranges::none_of(root_zero_decoded.diagnostics(), [](const auto& diagnostic) {
+        return diagnostic.code == "OOF1146";
+    }), "unconfirmed root zero state must not report normalization");
     auto unknown_owner = root_legacy;
     unknown_owner.items[1].items[2].items[1].items[1].items[1] = list_stream::ListValue::raw_atom("99");
     expect(!form_stream::decode_document(unknown_owner, "LegacyRootCommonBase"),

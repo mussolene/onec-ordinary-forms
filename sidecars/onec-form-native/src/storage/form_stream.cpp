@@ -1520,27 +1520,63 @@ struct CommonControlBaseFields {
 };
 
 enum class CommonControlBaseVersionPolicy { legacy10_and_current19, current19_only };
+enum class CommonControlBaseStatePolicy {
+    preserve,
+    normalize_strict_zero,
+    normalize_strict_zero_with_constructor_first,
+};
+
+struct CommonControlBaseReadContext {
+    Diagnostics& diagnostics;
+    std::uint64_t owner_id;
+    std::string_view owner_name;
+    CommonControlBaseStatePolicy state_policy = CommonControlBaseStatePolicy::preserve;
+};
 
 // Older common bases omit the suffix supplied by the current control constructor.
 // This internal version decoder retains no source payload in the named model.
 template <typename CurrentBaseFactory>
 void read_common_control_base(LV& base, std::string_view path, CurrentBaseFactory current_base,
+    CommonControlBaseReadContext read_context,
     CommonControlBaseVersionPolicy version_policy = CommonControlBaseVersionPolicy::legacy10_and_current19) {
     require_list(base, path);
     if (base.items.empty()) require_arity(base, 21, path);
     const auto version = raw_atom(base.items[0], child_path(path, 0));
-    if (version == "19") {
+    const bool current_version = version == "19";
+    constexpr std::array state_slots{16U, 17U, 18U, 19U};
+    if (current_version) {
         require_arity(base, 21, path);
-        return;
+        if (read_context.state_policy == CommonControlBaseStatePolicy::preserve ||
+            !std::all_of(state_slots.begin() + 1, state_slots.end(), [&](const auto slot) {
+                const auto& value = base.items[slot];
+                return !value.is_list && value.atom_kind == LV::AtomKind::raw && value.atom == "0";
+            })) return;
+        const auto& first = base.items[state_slots.front()];
+        if (first.is_list || first.atom_kind != LV::AtomKind::raw ||
+            (first.atom != "0" && read_context.state_policy !=
+                CommonControlBaseStatePolicy::normalize_strict_zero_with_constructor_first)) return;
+    } else {
+        if (version_policy == CommonControlBaseVersionPolicy::current19_only)
+            fail("OOF1114", child_path(path, 0), "confirmed common-base version 19", version,
+                "Common-base version is not supported for this control owner");
+        require_raw_constant(base.items[0], "10", child_path(path, 0));
+        require_arity(base, 13, path);
     }
-    if (version_policy == CommonControlBaseVersionPolicy::current19_only)
-        fail("OOF1114", child_path(path, 0), "confirmed common-base version 19", version,
-            "Common-base version is not supported for this control owner");
-    require_raw_constant(base.items[0], "10", child_path(path, 0));
-    require_arity(base, 13, path);
     auto current = current_base();
     require_arity(current, 21, path);
     require_raw_constant(current.items[0], "19", child_path(path, 0));
+    if (current_version) {
+        const auto& first = base.items[state_slots.front()];
+        const auto& constructor_first = current.items[state_slots.front()];
+        if (first.atom != "0" && (constructor_first.is_list || constructor_first.atom_kind != LV::AtomKind::raw ||
+            first.atom != constructor_first.atom)) return;
+        for (const auto slot : state_slots) base.items[slot] = current.items[slot];
+        read_context.diagnostics.push_back({"OOF1146", DiagnosticSeverity::info,
+            std::to_string(read_context.owner_id), std::string(path), std::string(read_context.owner_name),
+            "native-confirmed runtime serialization", "strict-export state",
+            std::string(read_context.owner_name) + " state from strict export is normalized as confirmed by native reload."});
+        return;
+    }
     std::copy(base.items.begin() + 1, base.items.end(), current.items.begin() + 1);
     base = std::move(current);
 }
@@ -3038,7 +3074,7 @@ DecodedOwnerPages decode_owner_pages(
         auto canonical_base = source_base;
         read_common_control_base(canonical_base, source_base_path, [&] {
             return expected.items[1].items[0];
-        });
+        }, {warnings, owner_id, panel ? "Panel" : "Form"});
         for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
             const auto color_path = child_path(source_base_path, slot);
             canonical_base.items[slot] = encode_control_color(
@@ -3080,7 +3116,7 @@ DecodedOwnerPages decode_owner_pages(
         require_exact(normalized.items[1], expected.items[1].items[1], child_path(child_path(path, 1), 1),
             "Legacy common base requires the supported current owner version");
         return expected.items[1].items[0];
-    });
+    }, {warnings, owner_id, panel ? "Panel" : "Form"});
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     model::PanelPayload decoded_panel;
@@ -5923,7 +5959,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base, base_path, [] {
         return canonical_command_bar_base(true, std::string{});
-    });
+    }, {warnings, raw_id, "CommandBar", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
@@ -5941,13 +5977,8 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (buttons_alignment < 0 || buttons_alignment > 2)
         fail("OOF1114", child_path(properties_path, 4), "ButtonsAlignment code 0..2", std::to_string(buttons_alignment), "Unsupported ButtonsAlignment");
     const auto border = decode_control_border(base.items[11], child_path(base_path, 11));
-    constexpr std::array state_slots{16U, 17U, 18U, 19U};
-    const bool strict_export_state = std::ranges::all_of(state_slots, [&](const auto slot) {
-        const auto& value = base.items[slot];
-        return !value.is_list && value.atom_kind == LV::AtomKind::raw && value.atom == "0";
-    });
     const auto runtime_state = raw_atom(base.items[17], child_path(base_path, 17));
-    if (!strict_export_state && runtime_state != "1" && runtime_state != "2")
+    if (runtime_state != "1" && runtime_state != "2")
         fail("OOF1114", child_path(base_path, 17), "observed CommandBar state 1 or 2, or native-confirmed strict-export state", runtime_state,
             "CommandBar base record contains an unsupported state");
     auto normalized_base = base;
@@ -5985,8 +6016,6 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation,
         buttons_alignment, &button_back_color, &font);
     const auto& expected_base = expected.items[0];
-    if (strict_export_state)
-        for (const auto slot : state_slots) normalized.items[0].items[slot] = expected_base.items[slot];
     const auto base_mismatch = std::mismatch(normalized.items[0].items.begin(), normalized.items[0].items.end(),
         expected_base.items.begin(), expected_base.items.end(), [](const auto& left, const auto& right) {
             return list_stream::dump_compact(left) == list_stream::dump_compact(right);
@@ -6005,11 +6034,6 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         fail("OOF1114", child_path(properties_path, index), "observed canonical CommandBar default profile",
             "changed default slot", "CommandBar differs from the observed canonical default profile");
     }
-
-    if (strict_export_state)
-        warnings.push_back({"OOF1146", DiagnosticSeverity::info, std::to_string(raw_id), base_path,
-            "CommandBar", "native-confirmed runtime serialization", "strict-export state",
-            "CommandBar state from strict export is normalized as confirmed by native reload."});
 
     const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto action_source = integer_atom<std::uint32_t>(metadata.items[2], child_path(metadata_path, 2));
@@ -6073,7 +6097,7 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base, base_path, [&] {
         return canonical_usual_group_properties(true, std::string{}, std::string{}).items[1].items[0];
-    });
+    }, {warnings, raw_id, "UsualGroup", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(base, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::usual_group, std::nullopt,
             model::ControlKind::usual_group});
@@ -6147,7 +6171,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const std::string base_path = child_path(properties_path, 0);
     read_common_control_base(base, base_path, [&] {
         return canonical_button_base(true);
-    });
+    }, {warnings, raw_id, "Button", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
@@ -6351,7 +6375,7 @@ DecodedControl decode_picture_decoration(
     const std::string base_path = child_path(properties_path, 0);
     read_common_control_base(base_properties, base_path, [&] {
         return canonical_picture_properties(true).items[0];
-    });
+    }, {warnings, raw_id, "PictureDecoration", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(base_properties, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::picture_decoration,
             model::ControlKind::picture_decoration, model::ControlKind::picture_decoration});
@@ -6486,7 +6510,7 @@ DecodedControl decode_splitter(
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base, base_path, [&] {
         return canonical_splitter_properties(true, 2, std::string{}, {}, {}).items[0];
-    });
+    }, {warnings, raw_id, "Splitter", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true, {}, model::ControlKind::splitter});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
@@ -6567,7 +6591,7 @@ DecodedControl decode_radio_button(
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base_properties, base_path, [] {
         return canonical_radio_button_info({}, std::nullopt, true, std::string{}, std::string{}).items[2].items[0].items[0];
-    });
+    }, {warnings, raw_id, "RadioButton", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(
         base_properties, base_path, CommonControlBaseCapabilities{true, true, model::ControlKind::radio_button,
             model::ControlKind::radio_button, model::ControlKind::radio_button});
@@ -6876,7 +6900,7 @@ DecodedControl decode_label(
     const std::string base_properties_path = child_path(properties_path, 0);
     read_common_control_base(base_properties, base_properties_path, [&] {
         return canonical_label_properties(std::string{}, 0, {}).items[0];
-    });
+    }, {warnings, raw_id, "LabelDecoration", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(
         base_properties, base_properties_path, CommonControlBaseCapabilities{true, true,
             model::ControlKind::label_decoration, model::ControlKind::label_decoration,
@@ -9027,7 +9051,7 @@ DecodedControl decode_progress_bar(
     const auto properties_path = child_path(info_list_path, 0);
     read_common_control_base(properties, properties_path, [&] {
         return canonical_progress_bar_info(true, std::string{}).items[0];
-    });
+    }, {warnings, raw_id, "ProgressBar", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(properties, properties_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::progress_bar,
             model::ControlKind::progress_bar});
@@ -9129,7 +9153,7 @@ DecodedControl decode_track_bar(
     const auto properties_path = child_path(payload_path, 0);
     read_common_control_base(properties, properties_path, [&] {
         return canonical_track_bar_properties(true, std::string{});
-    });
+    }, {warnings, raw_id, "TrackBar", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(properties, properties_path,
         CommonControlBaseCapabilities{false, true, model::ControlKind::track_bar, model::ControlKind::track_bar,
             model::ControlKind::track_bar});
@@ -9274,7 +9298,7 @@ DecodedControl decode_list_box(
     auto base = properties.items[0];
     read_common_control_base(base, base_path, [&] {
         return canonical_list_box_properties(true, std::string{}, {});
-    });
+    }, {warnings, raw_id, "ListBox", CommonControlBaseStatePolicy::normalize_strict_zero_with_constructor_first});
     const auto common = decode_common_control_base(
         base, base_path, CommonControlBaseCapabilities{false, true, model::ControlKind::list_box,
             model::ControlKind::list_box});
@@ -9361,7 +9385,7 @@ DecodedControl decode_check_box(
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base_properties, base_path, [&] {
         return canonical_check_box_info(true, std::string{}, std::string{}).items[1].items[0].items[0];
-    });
+    }, {warnings, raw_id, "CheckBox", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(base_properties, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::check_box, model::ControlKind::check_box,
             model::ControlKind::check_box});
@@ -9473,7 +9497,7 @@ DecodedControl decode_choice_field(
     const auto base_path = child_path(info_properties_path, 0);
     read_common_control_base(base_properties, base_path, [&] {
         return canonical_choice_field_info(true, std::string{}, {}).items[1].items[0];
-    });
+    }, {warnings, raw_id, "ChoiceField", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto common = decode_common_control_base(base_properties, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::choice_field, model::ControlKind::choice_field,
             model::ControlKind::choice_field});
@@ -9628,7 +9652,7 @@ DecodedControl decode_calendar_field(
     auto base_properties = properties.items[0];
     read_common_control_base(base_properties, child_path(properties_path, 0), [&] {
         return canonical_calendar_field_info(true).items[1].items[0];
-    });
+    }, {warnings, raw_id, "CalendarField", CommonControlBaseStatePolicy::normalize_strict_zero});
     auto common = decode_common_control_base(base_properties, child_path(properties_path, 0),
         CommonControlBaseCapabilities{true, true, model::ControlKind::calendar_field,
             model::ControlKind::calendar_field});
@@ -10602,7 +10626,7 @@ DecodedControl decode_input_field(
     const auto base_info_path = child_path(payload_path, 0);
     read_common_control_base(base_info, base_info_path, [&] {
         return canonical_input_field_info({}, true, false, {}, {}, {}).items[2].items[0].items[0];
-    });
+    }, {warnings, raw_id, "InputField", CommonControlBaseStatePolicy::normalize_strict_zero});
     const auto mask = string_atom(payload.items[21], child_path(payload_path, 21));
     if (!mask.empty() && (!is_single_string_type_domain(control_type) || list_choice_mode))
         fail("OOF1122", child_path(payload_path, 21), "Mask on a single-string InputField without ListChoiceMode", {},
@@ -11160,7 +11184,7 @@ DecodedControl decode_table(
     auto base = info.items[2].items[0];
     read_common_control_base(base, base_path, [&] {
         return canonical_info.items[2].items[0];
-    }, CommonControlBaseVersionPolicy::current19_only);
+    }, {warnings, raw_id, "Table"}, CommonControlBaseVersionPolicy::current19_only);
     const auto common = decode_common_control_base(base, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::table, model::ControlKind::table});
     apply_common_control_base(control.properties(), common);
