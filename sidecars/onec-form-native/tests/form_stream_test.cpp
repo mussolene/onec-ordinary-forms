@@ -10795,6 +10795,96 @@ void test_check_box_radio_button_track_bar_named_on_change_events() {
     }
 }
 
+void test_legacy_common_control_base10_batch() {
+    const std::array kinds{
+        model::ControlKind::button, model::ControlKind::check_box,
+        model::ControlKind::choice_field, model::ControlKind::input_field,
+        model::ControlKind::label_decoration, model::ControlKind::list_box,
+        model::ControlKind::picture_decoration, model::ControlKind::progress_bar,
+        model::ControlKind::calendar_field, model::ControlKind::splitter,
+        model::ControlKind::track_bar, model::ControlKind::usual_group,
+    };
+    const auto base_for = [](auto& stream, model::ControlKind kind) -> auto& {
+        auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(kind).guid);
+        expect(record != nullptr, "batch common-base control must exist");
+        if (kind == model::ControlKind::input_field)
+            return record->items[2].items[2].items[0].items[0];
+        if (kind == model::ControlKind::check_box)
+            return record->items[2].items[1].items[0].items[0];
+        return record->items[2].items[1].items[0];
+    };
+    const model::OrdinaryFormDocument::ObjectKey key{model::ObjectCategory::control, model::ObjectId{2}};
+    const model::ColorValue color{model::ColorKind::absolute, 17, 83, 201, 255, std::monostate{}};
+    model::FontValue font;
+    font.kind = model::FontKind::absolute;
+    font.face_name = "Arial";
+    font.height = 13;
+    font.bold = true;
+    for (const auto kind : kinds) {
+        const auto name = std::string(model::metamodel::descriptor_for(kind).public_name);
+        const bool bound = kind == model::ControlKind::check_box ||
+            kind == model::ControlKind::input_field || kind == model::ControlKind::list_box;
+        const auto term = kind == model::ControlKind::check_box ? "boolean" :
+            kind == model::ControlKind::list_box ? "valueList" : "string";
+        const std::string attributes = bound ?
+            std::string("<Attributes><Attribute id=\"3\" name=\"Data\"><TypeDomain><Entry term=\"") +
+                term + "\"/></TypeDomain></Attribute></Attributes>" : "";
+        auto document = source::parse_form_xml(
+            std::string("<Form id=\"1\" name=\"LegacyCommonBase\" ordinaryFormVersion=\"2.1\">") +
+            attributes + "<ChildItems><" + name + " id=\"2\" name=\"Control\">" +
+            (bound ? "<DataPath attributeId=\"3\"/>" : "") + "<Position/></" + name + "></ChildItems></Form>");
+        expect(document.ok(), name + " common-base fixture XML must parse");
+        const auto set = [&](std::string_view property, model::PropertyValue value) {
+            expect(document.value().set_prop_val(key, model::PropertyId::from_name(property), value) ==
+                    model::PropertyMutationStatus::applied, name + " named common property must apply");
+        };
+        set("Enabled", false);
+        set("ToolTip", std::string("legacy common base"));
+        set("BorderColor", color);
+        const bool supports_font = model::metamodel::find_property(kind, "Font") != nullptr;
+        if (supports_font) set("Font", font);
+        for (const auto property : {"TextColor", "BackColor", "ButtonTextColor", "ButtonBackColor",
+                                     "FieldTextColor", "FieldBackColor"})
+            if (model::metamodel::find_property(kind, property)) set(property, color);
+        const auto current = form_stream::encode_document(document.value());
+        expect(current.ok(), name + " named common properties must encode");
+        auto legacy = current.value();
+        auto& old_base = base_for(legacy, kind);
+        old_base.items.resize(13);
+        old_base.items[0] = list_stream::ListValue::raw_atom("10");
+        const auto decoded = form_stream::decode_document(legacy, "LegacyCommonBase");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            name + " base10 must decode completely using its current constructor defaults");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), name + " base10 must serialize as named XML");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), name + " base10 named XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+            name + " base10 named XML must rebuild the complete current stream including its type-specific suffix");
+        expect(base_for(rebuilt.value(), kind).items.size() == 21 &&
+                base_for(rebuilt.value(), kind).items[0].atom == "19",
+            name + " base10 must write the current version");
+        for (const auto length : {12U, 14U, 21U}) {
+            auto invalid = legacy;
+            base_for(invalid, kind).items.resize(length);
+            expect(!form_stream::decode_document(invalid, "LegacyCommonBase").ok(),
+                name + " base10 must reject an unproven arity");
+        }
+        for (const auto version : {"15", "16", "21", "99"}) {
+            auto invalid = current.value();
+            base_for(invalid, kind).items[0] = list_stream::ListValue::raw_atom(version);
+            expect(!form_stream::decode_document(invalid, "LegacyCommonBase").ok(),
+                name + " common base must reject unproven versions");
+        }
+        auto unknown = current.value();
+        base_for(unknown, kind).items[15] = list_stream::ListValue::raw_atom("99");
+        const auto partial = form_stream::decode_document(unknown, "LegacyCommonBase");
+        expect(partial.ok() && !partial.value().reconstruction_complete(),
+            name + " modern unknown suffix must remain PARTIAL");
+    }
+}
+
 void test_common_control_font_and_border_color() {
     const auto make_document = [](model::ControlKind kind,
                                   std::optional<model::FontValue> font = std::nullopt,
@@ -23590,6 +23680,19 @@ void test_input_field_reference_extensions_round_trip_and_guards() {
                 const auto runtime_xml = source::serialize_form_xml(runtime_decoded.value());
                 expect(runtime_xml.ok() && runtime_xml.value() == named.value(),
                     "Runtime and persistent InputField states must have the same active named model");
+                auto legacy_runtime = runtime;
+                auto& legacy_base = legacy_runtime.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[0];
+                legacy_base.items.resize(13);
+                legacy_base.items[0] = list_stream::ListValue::raw_atom("10");
+                const auto legacy_read = form_stream::decode_document(legacy_runtime, "Reference");
+                expect(legacy_read.ok() && legacy_read.value().reconstruction_complete(),
+                    "Legacy common base must preserve active and inactive reference runtime modes");
+                const auto legacy_xml = source::serialize_form_xml(legacy_read.value());
+                expect(legacy_xml.ok() && legacy_xml.value() == named.value(),
+                    "Legacy common base must expose the same active reference model");
+                const auto legacy_saved = form_stream::encode_document(legacy_read.value());
+                expect(legacy_saved.ok() && list_stream::dump_compact(legacy_saved.value()) == list_stream::dump_compact(encoded.value()),
+                    "Legacy reference runtime modes must rebuild the current canonical stream");
                 if (variant == 2) {
                     runtime_info.items[2].items[0].items[12] = list_stream::ListValue::raw_atom("99");
                     expect(!form_stream::decode_document(runtime, "Reference"),
@@ -24545,6 +24648,7 @@ int main() {
         test_value_tree_tables_and_parent_change();
         test_table_named_events();
         test_check_box_radio_button_track_bar_named_on_change_events();
+        test_legacy_common_control_base10_batch();
         test_common_control_font_and_border_color();
         test_all_named_base_color_pairs_public_xml_round_trip();
         test_text_document_field_persisted_profile_and_rejections();
