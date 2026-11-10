@@ -22556,6 +22556,96 @@ void test_supported_legacy_root_layout_decoding() {
         "outer marker 23 with root arity 20 must be rejected");
 }
 
+void test_legacy_root_named_navigation_properties() {
+    for (const bool auto_tab : {false, true}) {
+        for (const bool default_control : {false, true}) {
+            const auto xml = std::string(R"XML(<Form id="1" name="RootFlags" ordinaryFormVersion="2.1"><Height>120</Height><Panel><AutoTabOrder>)XML") +
+                (auto_tab ? "true" : "false") +
+                R"XML(</AutoTabOrder></Panel><Width>240</Width><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="10" name="Probe"><DataPath attributeId="2"/><Position><DefaultControl>)XML" +
+                (default_control ? "true" : "false") +
+                R"XML(</DefaultControl><Top>20</Top><Height>50</Height><Left>20</Left><Width>100</Width></Position><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns></Table></ChildItems></Form>)XML";
+            const auto document = source::parse_form_xml(xml);
+            expect(document.ok(), "named root navigation fixture must parse");
+            if (!document) continue;
+            const auto modern = form_stream::encode_document(document.value());
+            const auto expected_xml = source::serialize_form_xml(document.value());
+            expect(modern.ok() && expected_xml.ok(), "named root navigation fixture must encode");
+            if (!modern || !expected_xml) continue;
+            for (const int version : {20, 21}) {
+                auto legacy = modern.value();
+                legacy.items[1].items[0] = list_stream::ListValue::raw_atom("16");
+                legacy.items[1].items.resize(11);
+                legacy.items[13] = list_stream::parse(R"({3,0,{3,0,{0},"",-1,-1,1,0}})");
+                auto& envelope = legacy.items[1].items[2].items[1];
+                auto owner = envelope.items[1];
+                owner.items.erase(owner.items.begin() + 2, owner.items.begin() + 8);
+                auto& base = owner.items[0];
+                base.items[0] = list_stream::ListValue::raw_atom("10");
+                for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
+                    auto& color = base.items[slot];
+                    if (color.items[1].atom == "4") color = list_stream::parse("{3,4,{0}}");
+                    else { color.items[0] = list_stream::ListValue::raw_atom("3"); color.items.pop_back(); }
+                }
+                base.items[4] = list_stream::parse("{6,3,0,1}");
+                base.items.resize(13);
+                owner.items[1] = list_stream::ListValue::raw_atom(std::to_string(version));
+                owner.items[2] = list_stream::parse(R"({3,1,{3,0,{0},"",-1,-1,1,0}})");
+                for (std::size_t i = 2; i < owner.items[5].items.size(); ++i) {
+                    auto& page = owner.items[5].items[i];
+                    page.items[0] = list_stream::ListValue::raw_atom("3");
+                    page.items[2] = list_stream::parse(R"({3,0,{3,0,{0},"",-1,-1,1,0}})");
+                    page.items.resize(8);
+                }
+                owner.items.resize(version == 20 ? 18 : 19);
+                owner.items.insert(owner.items.begin() + 2, 6, list_stream::ListValue::raw_atom("0"));
+                envelope.items[1] = std::move(owner);
+                const auto decoded = form_stream::decode_document(legacy, "RootFlags");
+                expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                    "native-proven owner20/21 must decode named navigation properties completely");
+                if (!decoded || !decoded.value().reconstruction_complete()) continue;
+                const auto* auto_property = decoded.value().form().panel.properties.find(model::PropertyId::from_name("AutoTabOrder"));
+                expect((auto_property ? std::get<bool>(auto_property->value) : true) == auto_tab,
+                    "legacy root must retain the named AutoTabOrder value");
+                const auto* table = decoded.value().find_control(model::ObjectId{10});
+                expect(table && table->position.default_control.value().value_or(false) == default_control,
+                    "legacy owner selection must resolve to Position.DefaultControl on the existing control");
+                const auto named = source::serialize_form_xml(decoded.value());
+                expect(named.ok() && named.value() == expected_xml.value(),
+                    "legacy root navigation must retain canonical named XML");
+                const auto rebuilt = form_stream::encode_document(decoded.value());
+                expect(rebuilt.ok(), "legacy root navigation must rebuild without a baseline");
+                if (rebuilt) {
+                    const auto again = form_stream::decode_document(rebuilt.value(), "RootFlags");
+                    expect(again.ok() && again.value().reconstruction_complete(), "canonical root rebuild must decode completely");
+                    if (again) {
+                        const auto again_xml = source::serialize_form_xml(again.value());
+                        expect(again_xml.ok() && again_xml.value() == expected_xml.value(),
+                            "canonical root rebuild must retain both named navigation values");
+                    }
+                }
+                auto bad_bool = legacy;
+                bad_bool.items[1].items[2].items[1].items[1].items[13] = list_stream::ListValue::raw_atom("2");
+                expect(!form_stream::decode_document(bad_bool, "InvalidAutoTabOrder"), "legacy AutoTabOrder must reject a non-Boolean");
+                for (const auto invalid_id : {"0", "9999"}) {
+                    auto bad_target = legacy;
+                    bad_target.items[1].items[2].items[1].items[1].items[21] = list_stream::ListValue::raw_atom(invalid_id);
+                    expect(!form_stream::decode_document(bad_target, "InvalidDefaultControl"),
+                        "legacy DefaultControl must reject zero and missing control references");
+                }
+                for (const auto unknown_slot : {12U, 20U}) {
+                    auto unknown = legacy;
+                    unknown.items[1].items[2].items[1].items[1].items[unknown_slot] = list_stream::ListValue::raw_atom("99");
+                    expect(!form_stream::decode_document(unknown, "UnknownLegacyRootField"),
+                        "known navigation properties must not relax other legacy fields");
+                }
+                auto trailing = legacy;
+                trailing.items[1].items[2].items[1].items[1].items.push_back(list_stream::ListValue::raw_atom("0"));
+                expect(!form_stream::decode_document(trailing, "TrailingLegacyRootField"), "owner version must retain exact arity");
+            }
+        }
+    }
+}
+
 void test_legacy_root_owner20_decoding() {
     auto modern_payload = platform_empty_document_payload();
     auto legacy_payload = modern_payload;
@@ -22760,7 +22850,7 @@ void test_legacy_root_owner21_decoding() {
     bad_version.items[1].items[2].items[1].items[1].items[1] =
         list_stream::ListValue::raw_atom("20");
     expect(!form_stream::decode_document(bad_version, "BadLegacyRootOwner21Version"),
-        "outer27 legacy root owner must reject owner version20");
+        "owner20 must reject the owner21 record arity");
     auto wrong_26_arity = legacy_payload;
     wrong_26_arity.items[1].items[2].items[1].items[1].items[1] =
         list_stream::ListValue::raw_atom("26");
@@ -25328,6 +25418,7 @@ int main() {
         test_chart_gauge_bands_roundtrip_and_native_caches();
         test_chart_empty_render_cache_normalization_and_guards();
         test_supported_legacy_root_layout_decoding();
+        test_legacy_root_named_navigation_properties();
         test_legacy_root_owner20_decoding();
         test_legacy_root_owner21_decoding();
         test_platform_empty_document_fixture();

@@ -3076,28 +3076,31 @@ DecodedOwnerPages decode_owner_pages(
         canonical_root_panel_payload(8, 8, pages, owner);
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
-    const bool proven_root_owner_layout =
-        (layout.outer_format == OuterFormat::v25 && layout.root_arity == 18) ||
-        (layout.outer_format == OuterFormat::v26 && layout.root_arity == 19);
-    const bool legacy_root_owner20 = !panel && proven_root_owner_layout &&
-        layout.kind == LayoutKind::form_section_16 && layout.page_style_section_version == 3 &&
-        normalized.items.size() == 18 && !normalized.items[1].is_list &&
-        normalized.items[1].atom_kind == LV::AtomKind::raw && normalized.items[1].atom == "20";
-    const bool owner21_outer_tuple = !panel && layout.outer_format == OuterFormat::v27 &&
+    // Page rows have already passed their complete typed decoder, including legacy style guards.
+    normalized.items[5] = expected.items[1].items[5];
+    const bool outer27_legacy_tuple = !panel && layout.outer_format == OuterFormat::v27 &&
         layout.root_arity == 20 && layout.kind == LayoutKind::form_section_16 &&
         layout.page_style_section_version == 3;
     const bool owner_version_is_raw = normalized.items.size() > 1 && !normalized.items[1].is_list &&
         normalized.items[1].atom_kind == LV::AtomKind::raw;
+    const bool owner_version20 = owner_version_is_raw && normalized.items[1].atom == "20";
     const bool owner_version21 = owner_version_is_raw && normalized.items[1].atom == "21";
     const bool owner_version26 = owner_version_is_raw && normalized.items[1].atom == "26";
-    if (owner21_outer_tuple && !owner_version21 && !owner_version26)
-        fail("OOF1114", child_path(child_path(path, 1), 1), "root owner version 21 or 26 for the proven outer27 tuple",
+    if (outer27_legacy_tuple && !owner_version20 && !owner_version21 && !owner_version26)
+        fail("OOF1114", child_path(child_path(path, 1), 1), "root owner version 20, 21, or 26 for the proven outer27 tuple",
             owner_version_is_raw ? normalized.items[1].atom : "non-raw owner version",
             "Root owner version is unsupported for the outer27 legacy layout");
-    if (owner21_outer_tuple && owner_version21 && normalized.items.size() != 19)
-        fail("OOF1114", child_path(path, 1), "owner21/19 for the proven outer27 tuple",
+    if (outer27_legacy_tuple && ((owner_version20 && normalized.items.size() != 18) ||
+            (owner_version21 && normalized.items.size() != 19)))
+        fail("OOF1114", child_path(path, 1), "owner20/18 or owner21/19 for the proven outer27 tuple",
             std::to_string(normalized.items.size()), "Root owner version and arity do not match a proven layout");
-    const bool legacy_root_owner21 = owner21_outer_tuple && owner_version21 && normalized.items.size() == 19;
+    const bool proven_root_owner20_layout =
+        (layout.outer_format == OuterFormat::v25 && layout.root_arity == 18) ||
+        (layout.outer_format == OuterFormat::v26 && layout.root_arity == 19) || outer27_legacy_tuple;
+    const bool legacy_root_owner20 = !panel && proven_root_owner20_layout &&
+        layout.kind == LayoutKind::form_section_16 && layout.page_style_section_version == 3 &&
+        normalized.items.size() == 18 && owner_version20;
+    const bool legacy_root_owner21 = outer27_legacy_tuple && owner_version21 && normalized.items.size() == 19;
     if (legacy_root_owner20 || legacy_root_owner21) {
         if (pages.size() != 1)
             fail("OOF1114", child_path(path, 5), "one Page for the proven legacy root-owner layout",
@@ -3133,7 +3136,8 @@ DecodedOwnerPages decode_owner_pages(
             expected.items[1].items.begin() + static_cast<std::ptrdiff_t>(first_omitted_slot),
             expected.items[1].items.end());
         normalized.items[19] = normalized.items[0].items[2];
-        for (const auto slot : {3U, 4U, 6U, 7U, 8U, 9U, 10U, 11U, 12U, 13U, 14U, 15U, 16U, 17U})
+        // AutoTabOrder and DefaultControl use the typed validation and named mappings below.
+        for (const auto slot : {3U, 4U, 6U, 8U, 9U, 10U, 11U, 12U, 13U, 14U, 16U, 17U})
             require_exact(normalized.items[slot], expected.items[1].items[slot],
                 child_path(child_path(path, 1), slot), "Legacy root owner field is unsupported");
         if (legacy_root_owner21)
