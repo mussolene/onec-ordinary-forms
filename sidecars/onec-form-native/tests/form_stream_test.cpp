@@ -2181,13 +2181,18 @@ void test_attribute_allocator_is_separate_from_control_ids() {
     const auto decoded = form_stream::decode_document(encoded.value(), "Main");
     expect(decoded.ok(), "attribute ID 1 and control ID 4 must decode with slot count 3");
 
+    auto reserved_attribute_slots = encoded.value();
+    reserved_attribute_slots.items[2].items[1] = list_stream::ListValue::raw_atom("5");
+    const auto reserved = form_stream::decode_document(reserved_attribute_slots, "Main");
+    expect(reserved.ok() && form_stream::encode_document(reserved.value()).value().items[2].items[1].atom == "3",
+        "a native allocation boundary above declared Attributes must normalize from named objects");
     auto wrong_attribute_slots = encoded.value();
-    wrong_attribute_slots.items[2].items[1] = list_stream::ListValue::raw_atom("5");
+    wrong_attribute_slots.items[2].items[1] = list_stream::ListValue::raw_atom("1");
     expect_failure(
         form_stream::decode_document(wrong_attribute_slots, "Main"),
         "OOF1114",
         "$/2/1",
-        "nonempty attribute slot count must be checked in its own ID space");
+        "nonempty attribute allocation boundary must cover its declared IDs");
 }
 
 void test_usual_group_named_record_round_trip_and_rejections() {
@@ -22611,12 +22616,6 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
     const auto rebuilt = form_stream::encode_document(oof::source::parse_form_xml(xml.value()).value());
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
         "Named XML must rebuild the extension without any input binary");
-    for (const auto slot : {1u, 4u}) {
-        auto corrupt = encoded.value();
-        corrupt.items[3].items[2].items[slot] = list_stream::ListValue::raw_atom(slot == 1 ? "1" : "0");
-        expect_failure(form_stream::decode_document(corrupt, "Processor"), "OOF1114", "$/3/2",
-            "Unmapped controller settings must not be dropped");
-    }
     auto unsupported = encoded.value();
     unsupported.items[2].items[0] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("-1")});
     expect_failure(form_stream::decode_document(unsupported, "Processor"), "OOF1122", "$/2/0",
@@ -22663,7 +22662,12 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
     for (std::size_t index = 0; index < processor_event_names.size(); ++index) {
         processor_events[index] = model::metamodel::find_form_event(processor_event_names[index]);
         expect(processor_events[index] != nullptr &&
-                   processor_events[index]->extension_kind == model::FormExtensionKind::data_processor &&
+                   processor_events[index]->extension_kinds.size() == 2 &&
+                   model::metamodel::form_event_uses_table(*processor_events[index], model::FormExtensionKind::data_processor) &&
+                   model::metamodel::form_event_uses_table(*processor_events[index], model::FormExtensionKind::report) &&
+                   !model::metamodel::form_event_uses_table(*processor_events[index], std::nullopt) &&
+                   !model::metamodel::form_event_uses_table(*processor_events[index], model::FormExtensionKind::catalog_item) &&
+                   !model::metamodel::form_event_uses_table(*processor_events[index], model::FormExtensionKind::catalog_list) &&
                    processor_events[index]->storage_event_id == processor_storage_ids[index] &&
                    processor_events[index]->storage_tag == processor_storage_tag,
             "DataProcessorFormExtension event descriptors must provide their scoped native identity");
@@ -22841,6 +22845,255 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
         "duplicate DataProcessor event names must reject instead of choosing one handler");
 }
 
+void test_saved_values_and_report_form_extension_round_trip_and_guards() {
+    using LV = list_stream::ListValue;
+    const auto save_id = model::PropertyId::from_name("SaveValues");
+    const auto restore_id = model::PropertyId::from_name("RestoreValuesOnOpen");
+    const auto result_id = model::PropertyId::from_name("ReportResult");
+    const model::OrdinaryFormDocument::ObjectKey form_owner{model::ObjectCategory::form, model::ObjectId{1}};
+    const auto make_document = [&](model::FormExtensionKind kind, bool save, bool restore, bool events = true) {
+        const std::string extension = kind == model::FormExtensionKind::report
+            ? "ReportFormExtension" : "DataProcessorFormExtension";
+        const auto parsed = source::parse_form_xml(
+            std::string(R"XML(<Form id="1" name="SavedSettings" ordinaryFormVersion="2.1"><Height>120</Height><Width>240</Width><MainAttribute attributeId="2"/><)XML") +
+            extension + R"XML(/><Attributes><Attribute id="0" name="Zero"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute><Attribute id="2" name="Object"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute><Attribute id="3" name="Filter"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes><ChildItems><SpreadsheetDocumentField id="5" name="Result"><Position/></SpreadsheetDocumentField><LabelDecoration id="6" name="Caption"><Position/></LabelDecoration></ChildItems></Form>)XML");
+        expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+        auto document = parsed.value();
+        auto form = document.form();
+        form.extension_properties.set_explicit(save_id, save);
+        form.extension_properties.set_explicit(restore_id, restore);
+        form.saved_values = {
+            {model::UuidValue{"33333333-3333-3333-3333-333333333333"}, "External & named", {}},
+            {model::UuidValue{"44444444-4444-4444-4444-444444444444"}, "Zero", model::AttributeRef{model::ObjectId{0}}},
+            {model::UuidValue{"55555555-5555-5555-5555-555555555555"}, "Filter", model::AttributeRef{model::ObjectId{3}}}};
+        if (events) {
+            const std::array names{"BeforeOpen", "OnOpen", "BeforeSaveValues", "AfterRestoreValues"};
+            for (std::size_t index = 0; index < names.size(); ++index) {
+                const model::ObjectId id{100U + index};
+                form.events.emplace_back(id);
+                document.add_event(model::Event{id, names[index], "Handle" + std::string(names[index]),
+                    model::FormRef{model::ObjectId{1}}});
+            }
+        }
+        document.set_form(std::move(form));
+        return document;
+    };
+    const auto* ordinary_event = model::metamodel::find_form_event("BeforeOpen");
+    expect(ordinary_event && ordinary_event->extension_kinds.empty() &&
+               model::metamodel::form_event_uses_table(*ordinary_event, std::nullopt) &&
+               !model::metamodel::form_event_uses_table(*ordinary_event, model::FormExtensionKind::data_processor) &&
+               !model::metamodel::form_event_uses_table(*ordinary_event, model::FormExtensionKind::report),
+        "an empty event scope must select only the common Form event table");
+    for (const auto kind : {model::FormExtensionKind::data_processor, model::FormExtensionKind::report}) {
+        const auto* save_descriptor = model::metamodel::find_form_extension_property(kind, "SaveValues");
+        const auto* restore_descriptor = model::metamodel::find_form_extension_property(kind, "RestoreValuesOnOpen");
+        expect(save_descriptor && save_descriptor->designer_only &&
+                   save_descriptor->default_value.kind == model::metamodel::DefaultKind::boolean &&
+                   save_descriptor->default_value.canonical == "false" && restore_descriptor &&
+                   restore_descriptor->default_value.kind == model::metamodel::DefaultKind::boolean &&
+                   restore_descriptor->default_value.canonical == "true",
+            "Report and DataProcessor must declare the proven boolean settings and defaults");
+        for (const bool save : {false, true}) for (const bool restore : {false, true}) {
+            const auto document = make_document(kind, save, restore);
+            const auto encoded = form_stream::encode_document(document);
+            expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+            const auto& settings = encoded.value().items.at(3).items.at(2);
+            expect(settings.items.size() == (kind == model::FormExtensionKind::report ? 6U : 5U) &&
+                       settings.items[0].atom == "2" && settings.items[1].atom == (save ? "1" : "0") &&
+                       settings.items[4].atom == (restore ? "1" : "0"),
+                "both extensions must encode every boolean combination in its native setting slot");
+            if (kind == model::FormExtensionKind::report)
+                expect(settings.items[5].atom == "4294967295", "an omitted ReportResult must encode Undefined");
+            expect(settings.items[2].items.size() == 5 && settings.items[2].items[0].atom == "0" &&
+                       settings.items[2].items[1].atom == "3" &&
+                       list_stream::dump_compact(settings.items[2].items[2]) ==
+                           R"ROW({"#",91f722a0-4cc1-11d6-a3c9-0050bae0a776,{3,33333333-3333-3333-3333-333333333333,"External & named",0}})ROW" &&
+                       list_stream::dump_compact(settings.items[2].items[3]) ==
+                           R"ROW({"#",91f722a0-4cc1-11d6-a3c9-0050bae0a776,{3,44444444-4444-4444-4444-444444444444,"Zero",1,{0}}})ROW",
+                "SavedValues must preserve independent UUID/name entries and optional Attribute zero references");
+            const auto& extension_events = settings.items[3];
+            expect(extension_events.items.size() == 3 && extension_events.items[0].atom == "2" &&
+                       extension_events.items[1].items[0].atom == "80000" &&
+                       extension_events.items[2].items[0].atom == "80001" &&
+                       encoded.value().items[4].items.size() == 3,
+                "both shared extension events must coexist with ordinary Form events in their separate tables");
+            const auto decoded = form_stream::decode_document(encoded.value(), "SavedSettings");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                "named extension settings and mixed events must decode completely without metadata context");
+            expect(decoded.value().form().extension == kind &&
+                       decoded.value().form().saved_values == document.form().saved_values &&
+                       decoded.value().collections().attributes.size() == 3 &&
+                       decoded.value().form().events.size() == 4 &&
+                       decoded.value().get_prop_val(form_owner, restore_id).value == model::PropertyValue{restore},
+                "decoding must preserve settings, all events and existing attributes without inventing attributes");
+            const auto* saved = decoded.value().form().extension_properties.find(save_id);
+            expect((saved ? std::get<bool>(saved->value) : false) == save,
+                "designer-only SaveValues must survive decoding through the extension property set");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok() && xml.value().find("<SavedValues>") != std::string::npos &&
+                       xml.value().find("sourceId=\"33333333-3333-3333-3333-333333333333\"") != std::string::npos &&
+                       xml.value().find("name=\"Zero\" attributeId=\"0\"") != std::string::npos &&
+                       xml.value().find("91f722a0") == std::string::npos &&
+                       xml.value().find("e1692cc2") == std::string::npos,
+                "public XML must contain named saved values and references without native row or event tags");
+            const auto reparsed = source::parse_form_xml(xml.value());
+            expect(reparsed.ok() && reparsed.value().form().saved_values == document.form().saved_values,
+                "named SavedValues XML must parse with absent and zero Attribute references distinct");
+            const auto original_bin = oof::save_form_bin(document);
+            const auto rebuilt_bin = oof::save_form_bin(reparsed.value());
+            expect(original_bin.ok() && rebuilt_bin.ok() && original_bin.value() == rebuilt_bin.value(),
+                "all settings and shared events must rebuild identical Form.bin bytes from named XML");
+        }
+
+        const auto baseline = form_stream::encode_document(make_document(kind, true, false));
+        expect(baseline.ok(), "saved settings corruption fixture must encode");
+        const auto reject = [&](auto mutate, std::string_view message) {
+            auto bad = baseline.value();
+            mutate(bad.items[3].items[2]);
+            expect(!form_stream::decode_document(bad, "SavedSettings"), message);
+        };
+        for (const auto version : {"0", "3"})
+            reject([&](auto& s) { s.items[0] = LV::raw_atom(version); }, "unknown extension settings versions must reject");
+        reject([](auto& s) { s.items.pop_back(); }, "incomplete extension settings must reject");
+        reject([](auto& s) { s.items.push_back(LV::raw_atom("0")); }, "extra extension settings must reject");
+        for (const auto slot : {1U, 4U}) for (const auto boolean : {"2", "-1"})
+            reject([&](auto& s) { s.items[slot] = LV::raw_atom(boolean); }, "extension boolean settings must reject nonboolean numbers");
+        reject([](auto& s) { s.items[1] = LV::string_atom("true"); }, "extension boolean settings must reject strings");
+        const std::vector<std::pair<std::string_view, std::function<void(LV&)>>> corrupt_saved{
+            {"saved value table header must reject", [](auto& t) { t.items[0] = LV::raw_atom("1"); }},
+            {"saved value count mismatch must reject", [](auto& t) { t.items[1] = LV::raw_atom("2"); }},
+            {"oversized saved value counts must reject before allocation", [](auto& t) { t.items[1] = LV::raw_atom("100001"); }},
+            {"negative saved value counts must reject", [](auto& t) { t.items[1] = LV::raw_atom("-1"); }},
+            {"saved value row arity must reject", [](auto& t) { t.items[2].items.pop_back(); }},
+            {"saved value marker must reject", [](auto& t) { t.items[2].items[0] = LV::string_atom("?"); }},
+            {"saved value native type tag must reject", [](auto& t) { t.items[2].items[1] = LV::raw_atom("00000000-0000-0000-0000-000000000000"); }},
+            {"saved value body header must reject", [](auto& t) { t.items[2].items[2].items[0] = LV::raw_atom("4"); }},
+            {"saved value source UUID must reject malformed text", [](auto& t) { t.items[2].items[2].items[1] = LV::raw_atom("invalid"); }},
+            {"saved value name must be a string", [](auto& t) { t.items[2].items[2].items[2] = LV::raw_atom("0"); }},
+            {"saved value name must be nonempty", [](auto& t) { t.items[2].items[2].items[2] = LV::string_atom(""); }},
+            {"saved value name must contain a non-whitespace token", [](auto& t) { t.items[2].items[2].items[2] = LV::string_atom(" \t\r\n"); }},
+            {"saved value names must remain representable in XML", [](auto& t) { t.items[2].items[2].items[2] = LV::string_atom(std::string(1, '\x01')); }},
+            {"unbound saved values must reject a bound selector", [](auto& t) { t.items[2].items[2].items[3] = LV::raw_atom("1"); }},
+            {"bound saved values must reject an unbound selector", [](auto& t) { t.items[3].items[2].items[3] = LV::raw_atom("0"); }},
+            {"unknown saved value selectors must reject", [](auto& t) { t.items[2].items[2].items[3] = LV::raw_atom("2"); }},
+            {"saved value bodies must reject extra fields", [](auto& t) { t.items[3].items[2].items.push_back(LV::raw_atom("0")); }},
+            {"saved Attribute references must reject empty arity", [](auto& t) { t.items[3].items[2].items[4] = LV::list({}); }},
+            {"saved Attribute references must reject extra fields", [](auto& t) { t.items[3].items[2].items[4].items.push_back(LV::raw_atom("3")); }},
+            {"saved Attribute references must reject negative IDs", [](auto& t) { t.items[3].items[2].items[4].items[0] = LV::raw_atom("-1"); }},
+            {"saved Attribute references must resolve", [](auto& t) { t.items[3].items[2].items[4].items[0] = LV::raw_atom("999"); }},
+        };
+        for (const auto& [message, mutate] : corrupt_saved)
+            reject([&](auto& s) { mutate(s.items[2]); }, message);
+        auto invalid_model = make_document(kind, true, false, false);
+        auto form = invalid_model.form();
+        form.saved_values.resize(model::max_saved_value_bindings + 1, form.saved_values.front());
+        invalid_model.set_form(std::move(form));
+        expect(!form_stream::encode_document(invalid_model), "the writer must enforce the SavedValues count budget");
+        for (const auto property : {save_id, restore_id})
+        for (const auto& invalid : {model::PropertyValue{std::string{"true"}}, model::PropertyValue{std::int64_t{1}}}) {
+            auto bad = make_document(kind, true, false, false);
+            auto bad_form = bad.form();
+            bad_form.extension_properties.set_explicit(property, invalid);
+            bad.set_form(std::move(bad_form));
+            expect(!form_stream::encode_document(bad), "the writer must enforce the boolean setting type");
+        }
+    }
+
+    auto report = make_document(model::FormExtensionKind::report, true, true);
+    expect(report.get_prop_val(form_owner, result_id).value == model::PropertyValue{model::UndefinedValue{}},
+        "ReportResult must default to Undefined");
+    expect(report.set_prop_val(form_owner, result_id, model::ControlRef{model::ObjectId{5}}) == model::PropertyMutationStatus::applied,
+        "ReportResult must accept a SpreadsheetDocumentField reference");
+    const auto result_encoded = form_stream::encode_document(report);
+    expect(result_encoded.ok() && result_encoded.value().items[3].items[2].items[5].atom == "5",
+        "ReportResult must use the current settings field after RestoreValuesOnOpen");
+    const auto result_decoded = form_stream::decode_document(result_encoded.value(), "SavedSettings");
+    expect(result_decoded.ok() && result_decoded.value().get_prop_val(form_owner, result_id).value ==
+               model::PropertyValue{model::ControlRef{model::ObjectId{5}}}, "ReportResult must decode to its named control reference");
+    const auto result_xml = source::serialize_form_xml(result_decoded.value());
+    expect(result_xml.ok() && result_xml.value().find("<ReportResult>5</ReportResult>") != std::string::npos,
+        "ReportResult must serialize as a named XML control reference");
+    const auto result_reparsed = source::parse_form_xml(result_xml.value());
+    expect(result_reparsed.ok(), "named ReportResult XML must parse");
+    const auto result_rebuilt = oof::save_form_bin(result_reparsed.value());
+    const auto result_bin = oof::save_form_bin(report);
+    expect(result_rebuilt.ok() && result_bin.ok() && result_rebuilt.value() == result_bin.value(),
+        "ReportResult XML must rebuild the complete form without a binary baseline");
+    for (const auto target : {6U, 999U}) {
+        expect(report.set_prop_val(form_owner, result_id, model::ControlRef{model::ObjectId{target}}) ==
+                   model::PropertyMutationStatus::invalid_reference, "ReportResult must reject wrong control kinds and dangling references");
+        auto bad = result_encoded.value();
+        bad.items[3].items[2].items[5] = LV::raw_atom(std::to_string(target));
+        expect(!form_stream::decode_document(bad, "SavedSettings"), "invalid native ReportResult references must reject");
+    }
+    expect(report.set_prop_val(form_owner, result_id, true) == model::PropertyMutationStatus::invalid_value,
+        "ReportResult must reject values of a different type");
+    for (const auto& invalid : {model::PropertyValue{model::ControlRef{model::ObjectId{6}}},
+             model::PropertyValue{model::ControlRef{model::ObjectId{999}}}, model::PropertyValue{true}}) {
+        auto bad = report;
+        auto form = bad.form();
+        form.extension_properties.set_explicit(result_id, invalid);
+        bad.set_form(std::move(form));
+        expect(!form_stream::encode_document(bad), "the writer must reject invalid ReportResult types and references");
+    }
+    for (const auto& invalid : {LV::raw_atom("-1"), LV::string_atom("5")}) {
+        auto bad = result_encoded.value();
+        bad.items[3].items[2].items[5] = invalid;
+        expect(!form_stream::decode_document(bad, "SavedSettings"), "native ReportResult must be an unsigned control ID or Undefined sentinel");
+    }
+    expect(report.set_prop_val(form_owner, result_id, model::UndefinedValue{}) == model::PropertyMutationStatus::applied,
+        "ReportResult must accept explicit Undefined");
+    const auto undefined_xml = source::serialize_form_xml(report);
+    const auto undefined_encoded = form_stream::encode_document(report);
+    expect(undefined_xml.ok() && undefined_xml.value().find("<ReportResult") == std::string::npos &&
+               undefined_encoded.ok() && undefined_encoded.value().items[3].items[2].items[5].atom == "4294967295",
+        "explicit Undefined ReportResult must be omitted from XML and preserve the native sentinel");
+    expect(report.set_prop_val(form_owner, result_id, model::ControlRef{model::ObjectId{5}}) == model::PropertyMutationStatus::applied &&
+               report.reset_prop_val(form_owner, result_id) == model::PropertyMutationStatus::reset,
+        "ReportResult must reset an explicit control reference to its default");
+    const auto reset_xml = source::serialize_form_xml(report);
+    const auto reset_encoded = form_stream::encode_document(report);
+    expect(reset_xml.ok() && reset_xml.value().find("<ReportResult") == std::string::npos &&
+               reset_encoded.ok() && reset_encoded.value().items[3].items[2].items[5].atom == "4294967295",
+        "reset ReportResult must be omitted from XML and encoded as native Undefined");
+    for (const bool restore : {false, true}) for (const bool bound : {false, true}) {
+        auto current = form_stream::encode_document(make_document(model::FormExtensionKind::report, true, restore));
+        expect(current.ok(), "legacy Report fixture must encode");
+        auto& table = current.value().items[3].items[2].items[2];
+        table = LV::list({LV::raw_atom("0"), LV::raw_atom("1"), table.items[bound ? 3U : 2U]});
+        auto legacy = current.value();
+        auto& settings = legacy.items[3].items[2];
+        settings.items[0] = LV::raw_atom("1");
+        settings.items.pop_back();
+        const auto decoded = form_stream::decode_document(legacy, "SavedSettings");
+        expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                   decoded.value().get_prop_val(form_owner, restore_id).value == model::PropertyValue{restore} &&
+                   decoded.value().get_prop_val(form_owner, result_id).value == model::PropertyValue{model::UndefinedValue{}} &&
+                   decoded.value().form().saved_values.size() == 1 &&
+                   decoded.value().form().saved_values[0].attribute.has_value() == bound &&
+                   (!bound || decoded.value().form().saved_values[0].attribute.id() == model::ObjectId{0}),
+            "legacy Report version 1 lacks only ReportResult and must preserve Restore and both saved row shapes");
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+            "legacy Report settings must canonicalize to version 2 with Undefined ReportResult");
+    }
+    for (const auto owner : {std::optional{model::FormExtensionKind::catalog_item},
+             std::optional{model::FormExtensionKind::catalog_list}, std::optional<model::FormExtensionKind>{}}) {
+        auto wrong_owner = make_document(model::FormExtensionKind::data_processor, true, true, false);
+        auto form = wrong_owner.form();
+        form.extension = owner;
+        form.extension_properties = {};
+        if (owner != model::FormExtensionKind::catalog_item) form.main_attribute = {};
+        wrong_owner.set_form(std::move(form));
+        expect(!form_stream::encode_document(wrong_owner), "SavedValues must reject Catalog and absent extension owners");
+    }
+    auto processor_v1 = form_stream::encode_document(make_document(model::FormExtensionKind::data_processor, false, true));
+    expect(processor_v1.ok(), "DataProcessor version guard fixture must encode");
+    processor_v1.value().items[3].items[2].items[0] = LV::raw_atom("1");
+    expect(!form_stream::decode_document(processor_v1.value(), "SavedSettings"),
+        "Report legacy version support must not admit an unproven DataProcessor settings version");
+}
+
 void test_catalog_item_form_extension_named_round_trip_and_guards() {
     constexpr std::array catalog_event_names{
         std::string_view{"BeforeWrite"}, std::string_view{"OnWrite"},
@@ -22849,7 +23102,10 @@ void test_catalog_item_form_extension_named_round_trip_and_guards() {
     for (std::size_t index = 0; index < catalog_event_names.size(); ++index) {
         catalog_events[index] = model::metamodel::find_form_event(catalog_event_names[index]);
         expect(catalog_events[index] != nullptr &&
-                   catalog_events[index]->extension_kind == model::FormExtensionKind::catalog_item &&
+                   catalog_events[index]->extension_kinds.size() == 1 &&
+                   model::metamodel::form_event_uses_table(*catalog_events[index], model::FormExtensionKind::catalog_item) &&
+                   !model::metamodel::form_event_uses_table(*catalog_events[index], model::FormExtensionKind::report) &&
+                   !model::metamodel::form_event_uses_table(*catalog_events[index], std::nullopt) &&
                    catalog_events[index]->storage_event_id.has_value() &&
                    !catalog_events[index]->storage_tag.empty(),
             "CatalogItemFormExtension event descriptors must provide their scoped native identity");
@@ -24015,6 +24271,7 @@ void test_metadata_member_binding_shared_round_trip() {
 int main() {
     try {
         test_data_processor_form_extension_named_round_trip_and_guards();
+        test_saved_values_and_report_form_extension_round_trip_and_guards();
         test_catalog_item_form_extension_named_round_trip_and_guards();
         test_catalog_list_form_extension_named_round_trip_and_guards();
         test_input_field_reference_extensions_round_trip_and_guards();

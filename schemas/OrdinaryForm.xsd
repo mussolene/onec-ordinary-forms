@@ -2034,12 +2034,34 @@
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MainAttribute" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="AttributeIdType" use="required"/></xs:complexType></xs:element>
       <xs:choice minOccurs="0" maxOccurs="1">
-        <xs:element name="DataProcessorFormExtension"><xs:complexType/></xs:element>
+        <xs:element name="DataProcessorFormExtension"><xs:complexType><xs:sequence>
+          <xs:element name="SaveValues" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="RestoreValuesOnOpen" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="SavedValues" minOccurs="0" maxOccurs="1"><xs:complexType><xs:sequence>
+            <xs:element name="SavedValue" minOccurs="0" maxOccurs="100000"><xs:complexType>
+              <xs:attribute name="sourceId" type="UuidValueType" use="required"/>
+              <xs:attribute name="name" type="NonEmptyTokenType" use="required"/>
+              <xs:attribute name="attributeId" type="AttributeIdType" use="optional"/>
+            </xs:complexType></xs:element>
+          </xs:sequence></xs:complexType></xs:element>
+        </xs:sequence></xs:complexType></xs:element>
         <xs:element name="CatalogItemFormExtension"><xs:complexType><xs:sequence>
           <xs:element name="Autonumeration" type="AutonumerationInFormValueType" minOccurs="0" maxOccurs="1"/>
           <xs:element name="UseForFoldersAndItems" type="FoldersAndItemsUseValueType" minOccurs="0" maxOccurs="1"/>
         </xs:sequence></xs:complexType></xs:element>
         <xs:element name="CatalogListFormExtension"><xs:complexType/></xs:element>
+        <xs:element name="ReportFormExtension"><xs:complexType><xs:sequence>
+          <xs:element name="SaveValues" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="RestoreValuesOnOpen" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="ReportResult" type="ControlReferenceValueType" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="SavedValues" minOccurs="0" maxOccurs="1"><xs:complexType><xs:sequence>
+            <xs:element name="SavedValue" minOccurs="0" maxOccurs="100000"><xs:complexType>
+              <xs:attribute name="sourceId" type="UuidValueType" use="required"/>
+              <xs:attribute name="name" type="NonEmptyTokenType" use="required"/>
+              <xs:attribute name="attributeId" type="AttributeIdType" use="optional"/>
+            </xs:complexType></xs:element>
+          </xs:sequence></xs:complexType></xs:element>
+        </xs:sequence></xs:complexType></xs:element>
       </xs:choice>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>

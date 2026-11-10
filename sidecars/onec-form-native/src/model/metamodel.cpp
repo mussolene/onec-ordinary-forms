@@ -555,13 +555,39 @@ std::vector<PropertyDescriptor> make_form_extension_property_descriptors() {
         descriptor.extension_kind = FormExtensionKind::catalog_item;
         return descriptor;
     };
-    return {
+    std::vector<PropertyDescriptor> descriptors{
         make_descriptor(0, "Autonumeration", "Autonumeration", u8"Автонумерация",
             u8"АвтонумерацияВФорме", "AutonumerationInForm", autonumeration_members, "AutonumerationInForm.Auto"),
         make_descriptor(1, "UseForFoldersAndItems", "UseForFoldersAndItems",
             u8"ИспользованиеДляГруппИЭлементов", u8"ИспользованиеГруппИЭлементов",
             "FoldersAndItemsUse", folders_and_items_members, "FoldersAndItemsUse.Items"),
     };
+    for (const auto kind : {FormExtensionKind::data_processor, FormExtensionKind::report}) {
+        PropertyDescriptor save{PropertyId::from_name("SaveValues"), DescriptorOwner::form,
+            PropertySurface::form_extension, ControlKind::panel, 0, "SaveValues", "SaveValues",
+            u8"Сохранять значения", u8"Булево", ValueKind::boolean, ValueCodec::boolean,
+            ApiAccess::unknown, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::root_record, {DefaultKind::boolean, "false"}};
+        save.extension_kind = kind;
+        save.designer_only = true;
+        descriptors.push_back(save);
+        PropertyDescriptor restore{PropertyId::from_name("RestoreValuesOnOpen"), DescriptorOwner::form,
+            PropertySurface::form_extension, ControlKind::panel, 1, "RestoreValuesOnOpen", "RestoreValuesOnOpen",
+            u8"ВосстанавливатьЗначенияПриОткрытии", u8"Булево", ValueKind::boolean, ValueCodec::boolean,
+            ApiAccess::read_write, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::root_record, {DefaultKind::boolean, "true"}};
+        restore.extension_kind = kind;
+        descriptors.push_back(restore);
+    }
+    PropertyDescriptor result{PropertyId::from_name("ReportResult"), DescriptorOwner::form,
+        PropertySurface::form_extension, ControlKind::panel, 2, "ReportResult", "ReportResult",
+        u8"РезультатОтчета", u8"ПолеТабличногоДокумента ; Неопределено", ValueKind::variant,
+        ValueCodec::control_reference, ApiAccess::read_write, VersionMask::platform_8_5,
+        PersistenceClass::persisted_editable, StorageCodec::root_record,
+        {DefaultKind::undefined, "undefined"}};
+    result.extension_kind = FormExtensionKind::report;
+    descriptors.push_back(result);
+    return descriptors;
 }
 
 std::vector<EventDescriptor> make_form_event_descriptors() {
@@ -597,11 +623,16 @@ std::vector<EventDescriptor> make_form_event_descriptors() {
         {"BeforeSaveValues", u8"ПередСохранениемЗначений", 80000U, FormExtensionKind::data_processor},
         {"AfterRestoreValues", u8"ПослеВосстановленияЗначений", 80001U, FormExtensionKind::data_processor},
     }};
+    static constexpr std::array catalog_scope{FormExtensionKind::catalog_item};
+    static constexpr std::array settings_scope{FormExtensionKind::data_processor, FormExtensionKind::report};
     for (const auto& event : extension_events) {
         descriptors.push_back({DescriptorOwner::form, ControlKind::panel, descriptors.size(),
             event.name, event.name, event.russian_name, VersionMask::platform_8_5,
             PersistenceClass::persisted_editable, StorageCodec::event_record,
-            "e1692cc2-605b-4535-84dd-28440238746c", event.storage_id, event.extension});
+            "e1692cc2-605b-4535-84dd-28440238746c", event.storage_id,
+            event.extension == FormExtensionKind::catalog_item
+                ? std::span<const FormExtensionKind>{catalog_scope}
+                : std::span<const FormExtensionKind>{settings_scope}});
     }
     return descriptors;
 }
@@ -2225,20 +2256,27 @@ struct Metamodel::Impl {
             account_property(descriptor);
         }
         for (const auto& descriptor : form_extension_properties) {
-            if (!descriptor.extension_kind || *descriptor.extension_kind != FormExtensionKind::catalog_item ||
-                descriptor.enumeration_type.empty() || descriptor.enumeration_members.empty())
-                throw std::logic_error("incomplete CatalogItemFormExtension property descriptor");
+            if (!descriptor.extension_kind || std::ranges::find(form_extensions, *descriptor.extension_kind,
+                    &FormExtensionDescriptor::kind) == form_extensions.end() ||
+                (descriptor.value_codec == ValueCodec::enumeration &&
+                    (descriptor.enumeration_type.empty() || descriptor.enumeration_members.empty())))
+                throw std::logic_error("incomplete form extension property descriptor");
             form_extension_properties_by_kind[*descriptor.extension_kind].push_back(descriptor);
             account_property(descriptor);
         }
         std::set<std::pair<std::optional<FormExtensionKind>, std::uint32_t>> form_event_storage_ids;
         for (const auto& descriptor : form_events) {
-            if (descriptor.extension_kind && *descriptor.extension_kind != FormExtensionKind::catalog_item &&
-                *descriptor.extension_kind != FormExtensionKind::data_processor)
-                throw std::logic_error("form event extension has no storage serializer");
-            if (descriptor.storage_event_id &&
-                !form_event_storage_ids.emplace(descriptor.extension_kind, *descriptor.storage_event_id).second)
-                throw std::logic_error("duplicate form event ID in the same storage table");
+            std::set<FormExtensionKind> scopes;
+            for (const auto kind : descriptor.extension_kinds) {
+                if ((kind != FormExtensionKind::catalog_item && kind != FormExtensionKind::data_processor &&
+                        kind != FormExtensionKind::report) || !scopes.insert(kind).second)
+                    throw std::logic_error("form event extension scope is invalid or duplicated");
+                if (descriptor.storage_event_id && !form_event_storage_ids.emplace(kind, *descriptor.storage_event_id).second)
+                    throw std::logic_error("duplicate form event ID in the same extension table");
+            }
+            if (descriptor.extension_kinds.empty() && descriptor.storage_event_id &&
+                !form_event_storage_ids.emplace(std::nullopt, *descriptor.storage_event_id).second)
+                throw std::logic_error("duplicate form event ID in the common table");
             index_event(form_events_by_name, descriptor);
             account_event(descriptor);
         }
@@ -2253,6 +2291,12 @@ struct Metamodel::Impl {
                                  coverage.missing_storage_codecs == 0;
     }
 };
+
+bool form_event_uses_table(const EventDescriptor& event,
+    std::optional<FormExtensionKind> extension) noexcept {
+    if (!extension) return event.extension_kinds.empty();
+    return std::ranges::find(event.extension_kinds, *extension) != event.extension_kinds.end();
+}
 
 Metamodel::Metamodel() : impl_(std::make_unique<Impl>()) {}
 

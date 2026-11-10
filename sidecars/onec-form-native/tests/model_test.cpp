@@ -2935,7 +2935,8 @@ void test_help_metamodel() {
     expect(coverage.form_event_count == 19, "Form must retain 13 common, four CatalogItem and two DataProcessor extension events");
     for (const auto name : {"BeforeWrite", "OnWrite", "AfterWrite", "OnDataChange"}) {
         const auto* descriptor = find_form_event(name);
-        expect(descriptor && descriptor->extension_kind == FormExtensionKind::catalog_item &&
+        expect(descriptor && descriptor->extension_kinds.size() == 1 &&
+            form_event_uses_table(*descriptor, FormExtensionKind::catalog_item) &&
             descriptor->persistence == PersistenceClass::persisted_editable &&
             descriptor->storage_codec == StorageCodec::event_record && descriptor->storage_event_id &&
             !descriptor->storage_tag.empty(), "CatalogItem events require scoped storage descriptors");
@@ -4315,6 +4316,91 @@ void test_catalog_list_form_extension_model() {
         EnumerationValue{"AutonumerationInForm", "DontUse"});
     document.set_form(form);
     expect(!document.validate().ok(), "CatalogList must reject CatalogItem settings");
+}
+
+void test_saved_form_settings_model() {
+    using namespace oof::model::metamodel;
+    expect(form_extension_property_descriptors().size() == 7,
+        "four form extension owners expose seven scoped property descriptors");
+    const auto save = PropertyId::from_name("SaveValues");
+    const auto restore = PropertyId::from_name("RestoreValuesOnOpen");
+    const auto result = PropertyId::from_name("ReportResult");
+    for (const auto kind : {FormExtensionKind::data_processor, FormExtensionKind::report}) {
+        Form form; form.id = ObjectId{1}; form.name = "SavedSettings"; form.extension = kind;
+        form.main_attribute = AttributeRef{ObjectId{20}};
+        form.saved_values = {
+            {UuidValue{"22222222-2222-2222-2222-222222222222"}, "ModuleVariable", {}},
+            {UuidValue{"22222222-2222-2222-2222-222222222222"}, "SelectedValue", AttributeRef{ObjectId{0}}}};
+        for (std::uint64_t id = 100; id < 112; ++id) form.children.emplace_back(ControlRef{ObjectId{id}});
+        form.children.emplace_back(ControlRef{ObjectId{200}});
+        OrdinaryFormDocument document(std::move(form));
+        Attribute object; object.id = ObjectId{20}; object.name = "Object";
+        TypeDomainEntry object_type; object_type.term = TypeDomainTerm::object;
+        object_type.type_uuid = UuidValue{"11111111-1111-1111-1111-111111111111"};
+        object.type.entries.push_back(std::move(object_type)); document.add_attribute(std::move(object));
+        Attribute attribute; attribute.id = ObjectId{0}; attribute.name = "SelectedValue";
+        TypeDomainEntry string_type; string_type.term = TypeDomainTerm::string;
+        attribute.type.entries.push_back(std::move(string_type)); document.add_attribute(std::move(attribute));
+        for (std::uint64_t id = 100; id < 112; ++id)
+            document.add_control(ControlNode{ObjectId{id}, "Result" + std::to_string(id), SpreadsheetDocumentFieldPayload{}});
+        document.add_control(ControlNode{ObjectId{200}, "WrongResult", LabelDecorationPayload{}});
+        const auto* save_descriptor = find_form_extension_property(kind, save);
+        expect(save_descriptor && save_descriptor->designer_only && save_descriptor->api_access == ApiAccess::unknown,
+            "SaveValues must identify its proven Designer surface without inventing a native script property");
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+        expect(document.get_prop_val(owner, save).value == PropertyValue{false} &&
+            document.get_prop_val(owner, restore).value == PropertyValue{true} && document.validate().ok(),
+            "saved bindings preserve external names and Attribute zero independently of default flags");
+        for (const auto property : {save, restore}) {
+            expect(document.set_prop_val(owner, property, property == save) == PropertyMutationStatus::applied &&
+                document.get_prop_val(owner, property).value == PropertyValue{property == save},
+                "named settings are editable through the source object model");
+            expect(document.set_prop_val(owner, property, std::string{"invalid"}) == PropertyMutationStatus::invalid_value,
+                "boolean settings reject untyped strings");
+            expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset,
+                "named settings reset to descriptor defaults");
+        }
+        for (const auto name : {"BeforeSaveValues", "AfterRestoreValues"}) {
+            const auto* event = find_form_event(name);
+            expect(event && event->extension_kinds.size() == 2 && form_event_uses_table(*event, kind) &&
+                !form_event_uses_table(*event, std::nullopt) &&
+                !form_event_uses_table(*event, FormExtensionKind::catalog_item),
+                "settings events share two owners while retaining a separate storage table");
+        }
+        if (kind == FormExtensionKind::report) {
+            expect(document.get_prop_val(owner, result).value == PropertyValue{UndefinedValue{}},
+                "ReportResult defaults to Undefined");
+            for (std::uint64_t id = 100; id < 112; ++id)
+                expect(document.set_prop_val(owner, result, ControlRef{ObjectId{id}}) == PropertyMutationStatus::applied &&
+                    document.get_prop_val(owner, result).value == PropertyValue{ControlRef{ObjectId{id}}},
+                    "all twelve SpreadsheetDocumentField targets are accepted as named result references");
+            expect(document.set_prop_val(owner, result, ControlRef{ObjectId{200}}) == PropertyMutationStatus::invalid_reference &&
+                document.set_prop_val(owner, result, ControlRef{ObjectId{999}}) == PropertyMutationStatus::invalid_reference &&
+                document.set_prop_val(owner, result, std::int64_t{100}) == PropertyMutationStatus::invalid_value,
+                "ReportResult rejects wrong control kinds, dangling identities and scalar substitutes");
+            expect(document.set_prop_val(owner, result, UndefinedValue{}) == PropertyMutationStatus::applied &&
+                document.reset_prop_val(owner, result) == PropertyMutationStatus::reset,
+                "ReportResult supports explicit Undefined and descriptor reset");
+        } else {
+            expect(document.get_prop_val(owner, result).status == PropertyReadStatus::unsupported_surface,
+                "DataProcessor does not acquire the ReportResult property");
+        }
+        auto original = document.form();
+        for (int variant = 0; variant < 7; ++variant) {
+            auto invalid = original;
+            if (variant == 0) invalid.saved_values[0].source_id.canonical = "invalid";
+            else if (variant == 1) invalid.saved_values[0].name.clear();
+            else if (variant == 2) invalid.saved_values[1].attribute = AttributeRef{ObjectId{999}};
+            else if (variant == 3) invalid.saved_values[0].name = " \t\r\n";
+            else if (variant == 4) invalid.saved_values[0].name = std::string(1, '\x01');
+            else if (variant == 5) invalid.saved_values[0].name = "\xef\xbf\xbf";
+            else invalid.extension = FormExtensionKind::catalog_list;
+            document.set_form(std::move(invalid));
+            expect(!document.validate().ok(), "malformed, dangling and wrongly owned saved bindings fail model validation");
+        }
+        document.set_form(original);
+        expect(document.validate().ok(), "binding validation errors leave the retained valid source form recoverable");
+    }
 }
 
 void test_catalog_item_form_extension_property_api() {
@@ -6301,6 +6387,7 @@ int main() {
         test_value_list_named_values();
         test_typed_value_document_budget();
         test_document_property_api();
+        test_saved_form_settings_model();
         test_catalog_item_form_extension_property_api();
         test_catalog_list_form_extension_model();
         test_control_position_property_api();

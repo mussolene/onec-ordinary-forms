@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -226,6 +227,18 @@ inline constexpr FormExtensionDescriptor catalog_list_form_extension{
     u8"Расширение формы списка справочника",
 };
 
+inline constexpr FormExtensionDescriptor report_form_extension{
+    FormExtensionKind::report,
+    "343b4e00-29f0-11d6-a3c7-0050bae0a776",
+    "ReportFormExtension",
+    u8"Расширение формы отчета",
+};
+
+inline constexpr std::array form_extensions{
+    data_processor_form_extension, catalog_item_form_extension,
+    catalog_list_form_extension, report_form_extension,
+};
+
 struct InputFieldExtensionDescriptor {
     InputFieldExtensionKind kind;
     std::string_view guid;
@@ -272,6 +285,7 @@ struct PropertyDescriptor {
     std::string_view enumeration_type{};
     std::span<const std::string_view> enumeration_members{};
     std::optional<FormExtensionKind> extension_kind{};
+    bool designer_only = false;
 };
 
 enum class ChartSeriesStorage : std::uint8_t { row, style, companion, computed };
@@ -437,8 +451,12 @@ struct EventDescriptor {
     StorageCodec storage_codec = StorageCodec::unclassified;
     std::string_view storage_tag;
     std::optional<std::uint32_t> storage_event_id{};
-    std::optional<FormExtensionKind> extension_kind{};
+    std::span<const FormExtensionKind> extension_kinds{};
 };
+
+// Empty scope denotes the common Form table, not an arbitrary extension table.
+[[nodiscard]] bool form_event_uses_table(const EventDescriptor& event,
+    std::optional<FormExtensionKind> extension) noexcept;
 
 struct PlatformValueTypeDescriptor {
     std::string_view name;

@@ -735,9 +735,10 @@ void test_document_package_types(
                attribute(form_elements[cursor], "maxOccurs") == "1",
         "Form extensions must be a mutually exclusive optional choice");
     const auto extension_elements = direct_children(form_elements[cursor++], "element");
-    expect(extension_elements.size() == 3 && attribute(extension_elements[0], "name") == "DataProcessorFormExtension" &&
+    expect(extension_elements.size() == 4 && attribute(extension_elements[0], "name") == "DataProcessorFormExtension" &&
                attribute(extension_elements[1], "name") == "CatalogItemFormExtension" &&
-               attribute(extension_elements[2], "name") == "CatalogListFormExtension",
+               attribute(extension_elements[2], "name") == "CatalogListFormExtension" &&
+               attribute(extension_elements[3], "name") == "ReportFormExtension",
         "Form extension choice must expose all named extension concepts");
     expect(direct_children(extension_elements[0], "complexType").size() == 1 &&
                direct_children(extension_elements[1], "complexType").size() == 1,
@@ -1338,6 +1339,8 @@ void expect_palette_properties(
         expect(attribute(nodes[index], "surface") ==
                    (descriptor.surface == oof::model::metamodel::PropertySurface::panel_placement ? "panelPlacement" : ""),
                "palette must identify properties represented by Position");
+        expect(attribute(nodes[index], "designerOnly") == (descriptor.designer_only ? "true" : ""),
+               "palette must retain the descriptor designer-only facet");
         expect(attribute(nodes[index], "available") ==
                    (descriptor.persistence == oof::model::metamodel::PersistenceClass::unsupported_by_platform ? "false" : ""),
                "palette must identify properties unavailable on ordinary-form owners");
@@ -1362,10 +1365,17 @@ void expect_palette_events(
         expect(attribute(nodes[index], "available") ==
                    (descriptor.persistence == PersistenceClass::unsupported_by_platform ? "false" : ""),
             "palette must identify events unavailable on target ordinary-form owners");
-        expect(attribute(nodes[index], "formExtension") ==
-                (!descriptor.extension_kind ? "" : *descriptor.extension_kind == oof::model::FormExtensionKind::catalog_item
-                    ? "CatalogItemFormExtension" : "DataProcessorFormExtension"),
-            "palette must distinguish extension events from common Form events");
+        std::string extension_names;
+        for (const auto kind : descriptor.extension_kinds) {
+            const auto extension = std::ranges::find(oof::model::metamodel::form_extensions, kind,
+                &oof::model::metamodel::FormExtensionDescriptor::kind);
+            expect(extension != oof::model::metamodel::form_extensions.end(), "event extension must be registered");
+            if (!extension_names.empty()) extension_names += ' ';
+            extension_names += extension->xml_name;
+        }
+        expect(attribute(nodes[index], "formExtensions") == extension_names &&
+                attribute(nodes[index], "formExtension").empty(),
+            "palette must list every registered extension scope for form events");
     }
 }
 
@@ -1836,6 +1846,54 @@ void test_self_contained_field_schema(xmlSchemaPtr schema, xmlNodePtr schema_roo
     expect(validate_document(schema, unknown) != 0, "field schema must not accept indexed storage placeholders");
 }
 
+void test_saved_values_schema(xmlSchemaPtr schema, xmlNodePtr palette_schema) {
+    const auto palette = direct_child(direct_child(direct_child(palette_schema, "annotation"), "appinfo"), "Palette");
+    for (const auto extension : {"DataProcessorFormExtension", "ReportFormExtension"}) {
+        const std::string prefix = "<Form id=\"1\" name=\"Saved\" ordinaryFormVersion=\"2.1\"><" + std::string(extension) + ">";
+        const std::string suffix = "</" + std::string(extension) + "></Form>";
+        expect(validate_document(schema, prefix + "<SaveValues>true</SaveValues><RestoreValuesOnOpen>false</RestoreValuesOnOpen>"
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Настройка\" attributeId=\"0\"/>"
+            "<SavedValue sourceId=\"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\" name=\"Параметр\"/></SavedValues>" + suffix) == 0,
+            "both extensions must accept named saved source identities and optional attribute zero");
+        for (const auto body : {
+            "<SavedValues/><SavedValues/>", "<SaveValues>true</SaveValues><SaveValues>false</SaveValues>",
+            "<SavedValues raw=\"x\"/>", "<SavedValues><Field/></SavedValues>",
+            "<SavedValues><SavedValue name=\"Setting\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"bad\" name=\"Setting\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Setting\" attributeId=\"-1\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Setting\" raw=\"x\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Setting\"><Raw/></SavedValue></SavedValues>",
+            "<SavedValues/><SaveValues>true</SaveValues>"})
+            expect(validate_document(schema, prefix + body + suffix) != 0,
+                "SavedValues schema must reject duplicate, malformed, unknown and out-of-order source");
+        for (const auto concept_name : {"SavedValues", "SavedValue"}) {
+            bool found = false;
+            for (const auto node : direct_children(palette, "NamedConcept"))
+                if (attribute(node, "name") == concept_name && attribute(node, "formExtension") == extension &&
+                    !attribute(node, "russianName").empty()) found = true;
+            expect(found, "palette must annotate saved concepts in each registered owning extension");
+        }
+    }
+    expect(validate_document(schema, R"XML(<Form id="1" name="Report" ordinaryFormVersion="2.1"><ReportFormExtension><ReportResult>2</ReportResult></ReportFormExtension><ChildItems><SpreadsheetDocumentField id="2" name="Result"><Position/></SpreadsheetDocumentField></ChildItems></Form>)XML") == 0,
+        "ReportResult must be a typed named control reference");
+    for (const auto value : {"", "0", "Undefined"})
+        expect(validate_document(schema, "<Form id=\"1\" name=\"Report\" ordinaryFormVersion=\"2.1\"><ReportFormExtension><ReportResult>" +
+            std::string(value) + "</ReportResult></ReportFormExtension></Form>") != 0,
+            "ReportResult schema must reject empty, zero and untyped Undefined references");
+    for (const auto extension : {"CatalogItemFormExtension", "CatalogListFormExtension"})
+        expect(validate_document(schema, "<Form id=\"1\" name=\"Catalog\" ordinaryFormVersion=\"2.1\"><" + std::string(extension) +
+            "><SavedValues/></" + extension + "></Form>") != 0,
+            "SavedValues must reject unrelated owning extensions");
+    const auto shared = direct_child_with_attribute(palette, "SharedProperties", "surface", "formExtension");
+    std::size_t designer_only_count = 0;
+    for (const auto property : direct_children(shared, "Property"))
+        if (attribute(property, "name") == "SaveValues" && attribute(property, "designerOnly") == "true" &&
+            (attribute(property, "formExtension") == "DataProcessorFormExtension" ||
+             attribute(property, "formExtension") == "ReportFormExtension")) ++designer_only_count;
+    expect(designer_only_count == 2, "both registered SaveValues descriptors must retain designerOnly=true");
+}
+
 void test_tracked_schema_drift(const GeneratedSchemas& schemas) {
     const std::filesystem::path root = find_repository_root();
     expect(
@@ -1918,6 +1976,7 @@ int main() {
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
+        test_saved_values_schema(compiled_form.get(), palette_schema);
         test_value_list_schema(schemas, compiled_form.get());
         test_recursive_typed_value_schema(compiled_form.get());
         test_document_instances(compiled_form.get());

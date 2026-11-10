@@ -263,6 +263,9 @@ bool property_value_matches(
                        expected == metamodel::ValueCodec::value_list_item_reference ||
                        expected == metamodel::ValueCodec::action_source_reference ||
                        expected == metamodel::ValueCodec::context_menu_reference ||
+                       (descriptor.surface == metamodel::PropertySurface::form_extension &&
+                        descriptor.extension_kind == FormExtensionKind::report && descriptor.api_name == "ReportResult" &&
+                        expected == metamodel::ValueCodec::control_reference) ||
                        (descriptor.control_kind == ControlKind::chart && descriptor.api_name == "ActivePoint" &&
                         expected == metamodel::ValueCodec::chart_point_reference) ||
                        (descriptor.control_kind == ControlKind::radio_button &&
@@ -2824,7 +2827,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     if (descriptor->api_access == metamodel::ApiAccess::read_only) {
         return PropertyMutationStatus::read_only;
     }
-    if (descriptor->api_access == metamodel::ApiAccess::unknown) {
+    if (descriptor->api_access == metamodel::ApiAccess::unknown && !descriptor->designer_only) {
         return PropertyMutationStatus::unknown_access;
     }
     if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
@@ -2871,6 +2874,14 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     }
     if (!property_value_references_resolve(*this, value)) {
         return PropertyMutationStatus::invalid_reference;
+    }
+    if (descriptor->surface == metamodel::PropertySurface::form_extension &&
+        descriptor->extension_kind == FormExtensionKind::report && descriptor->api_name == "ReportResult") {
+        if (const auto* target = std::get_if<ControlRef>(&value)) {
+            const auto* control = find_control(target->id());
+            if (control == nullptr || control->kind() != ControlKind::spreadsheet_document_field)
+                return PropertyMutationStatus::invalid_reference;
+        }
     }
     if (descriptor->value_codec == metamodel::ValueCodec::context_menu_reference) {
         if (const auto* target = std::get_if<ControlRef>(&value)) {
@@ -3234,7 +3245,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
     if (descriptor->api_access == metamodel::ApiAccess::read_only) {
         return PropertyMutationStatus::read_only;
     }
-    if (descriptor->api_access == metamodel::ApiAccess::unknown) {
+    if (descriptor->api_access == metamodel::ApiAccess::unknown && !descriptor->designer_only) {
         return PropertyMutationStatus::unknown_access;
     }
     if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
@@ -3412,11 +3423,38 @@ ValidationReport OrdinaryFormDocument::validate() const {
         add_violation(report, InvariantCode::dangling_reference, form_.id, form_.main_attribute.id(),
             "main form attribute must reference an existing Attribute");
     }
-    if (form_.extension && *form_.extension != metamodel::data_processor_form_extension.kind &&
-        *form_.extension != metamodel::catalog_item_form_extension.kind &&
-        *form_.extension != metamodel::catalog_list_form_extension.kind) {
+    if (form_.extension && std::ranges::find(metamodel::form_extensions, *form_.extension,
+            &metamodel::FormExtensionDescriptor::kind) == metamodel::form_extensions.end()) {
         add_violation(report, InvariantCode::invalid_property, form_.id, form_.id,
             "form extension is not declared by the executable metamodel");
+    }
+    if (!form_.saved_values.empty() && form_.extension != FormExtensionKind::data_processor &&
+        form_.extension != FormExtensionKind::report)
+        add_violation(report, InvariantCode::invalid_property, form_.id, {},
+            "saved values require a Report or DataProcessor extension");
+    if (form_.saved_values.size() > max_saved_value_bindings)
+        add_violation(report, InvariantCode::invalid_property, form_.id, {}, "too many saved value bindings");
+    for (const auto& saved : form_.saved_values) {
+        const bool invalid_xml_character = std::ranges::any_of(saved.name, [](unsigned char ch) {
+            return ch < 0x20 && ch != '\t' && ch != '\r' && ch != '\n';
+        }) || saved.name.find("\xef\xbf\xbe") != std::string::npos ||
+            saved.name.find("\xef\xbf\xbf") != std::string::npos;
+        if (!valid_typed_uuid(saved.source_id.canonical) || saved.name.find_first_not_of(" \t\r\n") == std::string::npos ||
+            invalid_xml_character || !valid_typed_utf8(saved.name))
+            add_violation(report, InvariantCode::invalid_property, form_.id, {}, "invalid named saved value binding");
+        if (saved.attribute.has_value() && !find_attribute(saved.attribute.id()))
+            add_violation(report, InvariantCode::dangling_reference, form_.id, saved.attribute.id(),
+                "saved value binding must reference an existing Attribute");
+    }
+    if (form_.extension == FormExtensionKind::report) {
+        if (const auto* entry = form_.extension_properties.find(PropertyId::from_name("ReportResult"))) {
+            if (const auto* target = std::get_if<ControlRef>(&entry->value)) {
+                const auto* control = find_control(target->id());
+                if (!control || control->kind() != ControlKind::spreadsheet_document_field)
+                    add_violation(report, InvariantCode::invalid_property, form_.id, target->id(),
+                        "ReportResult must reference a SpreadsheetDocumentField");
+            }
+        }
     }
     for (const auto& control : collections_.controls) {
         record_id(control.id, ObjectCategory::control);
@@ -3514,7 +3552,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
         const auto* descriptor = descriptor_lookup(event->name);
         if constexpr (std::is_same_v<OwnerRef, FormRef>) {
-            if (descriptor && descriptor->extension_kind && descriptor->extension_kind != form_.extension) {
+            if (descriptor && !descriptor->extension_kinds.empty() &&
+                !metamodel::form_event_uses_table(*descriptor, form_.extension)) {
                 add_violation(report, InvariantCode::invalid_property, source, event->id,
                     "event requires its declared form extension");
             }

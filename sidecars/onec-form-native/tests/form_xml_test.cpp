@@ -2982,6 +2982,76 @@ void test_data_processor_form_extension_xml_contract() {
     expect(!source::serialize_form_xml(document).ok(), "Unknown extension kinds must fail explicit serialization");
 }
 
+void test_saved_values_form_extension_xml_contract() {
+    for (const auto& extension : {model::metamodel::data_processor_form_extension, model::metamodel::report_form_extension}) {
+        const auto prefix = "<Form id=\"1\" name=\"Saved\" ordinaryFormVersion=\"2.1\"><" + std::string(extension.xml_name) + ">";
+        const auto suffix = "</" + std::string(extension.xml_name) + ">"
+            "<Attributes><Attribute id=\"0\" name=\"Настройка\"><TypeDomain><Entry term=\"string\"/></TypeDomain></Attribute></Attributes></Form>";
+        const auto parsed = source::parse_form_xml(prefix +
+            "<SaveValues>true</SaveValues><RestoreValuesOnOpen>false</RestoreValuesOnOpen>"
+            "<SavedValues><SavedValue sourceId=\"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\" name=\"Настройка\" attributeId=\"0\"/>"
+            "<SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"ПараметрБезРеквизита\"/></SavedValues>" + suffix);
+        expect(parsed.ok(), "both extension XML contracts must accept named booleans and saved-value bindings");
+        const auto& form = parsed.value().form();
+        expect(form.extension == extension.kind && form.saved_values.size() == 2 &&
+            form.saved_values[0].source_id.canonical == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" &&
+            form.saved_values[0].name == "Настройка" && form.saved_values[0].attribute.has_value() &&
+            form.saved_values[0].attribute.id() == model::ObjectId{0} && !form.saved_values[1].attribute.has_value(),
+            "saved bindings must preserve source UUID, UTF-8 name and attribute zero without resolving source metadata");
+        expect(std::get<bool>(form.extension_properties.find(model::PropertyId::from_name("SaveValues"))->value) &&
+            !std::get<bool>(form.extension_properties.find(model::PropertyId::from_name("RestoreValuesOnOpen"))->value),
+            "extension booleans must use their descriptor types and defaults");
+        const auto xml = source::serialize_form_xml(parsed.value());
+        expect(xml.ok() && xml.value().find("<SavedValues>") != std::string::npos &&
+            xml.value().find("attributeId=\"0\"") != std::string::npos,
+            "saved-value XML must retain named collection and optional zero identity");
+        const auto reparsed = source::parse_form_xml(xml.value());
+        expect(reparsed.ok() && reparsed.value().form().saved_values == form.saved_values,
+            "saved source UUIDs and independent names must survive XML roundtrip");
+        const auto canonical = source::serialize_form_xml(reparsed.value());
+        expect(canonical.ok() && canonical.value() == xml.value(),
+            "saved values and extension booleans must have stable canonical serialization");
+        const auto empty = source::parse_form_xml(prefix + "<SavedValues/>" + suffix);
+        expect(empty.ok() && empty.value().form().saved_values.empty() && empty.value().form().extension_properties.empty(),
+            "empty saved values and omitted booleans must use descriptor defaults");
+        const auto empty_xml = source::serialize_form_xml(empty.value());
+        expect(empty_xml.ok() && empty_xml.value().find("<" + std::string(extension.xml_name) + "/>") != std::string::npos &&
+            empty_xml.value().find("SavedValues") == std::string::npos &&
+            empty_xml.value().find("<SaveValues>") == std::string::npos && empty_xml.value().find("<RestoreValuesOnOpen>") == std::string::npos,
+            "empty collection and default extension values must be omitted canonically");
+        const auto independent = source::parse_form_xml(prefix +
+            "<SaveValues>false</SaveValues><SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Stored\"/></SavedValues>" + suffix);
+        expect(independent.ok() && independent.value().form().saved_values.size() == 1 && independent.value().form().extension_properties.empty(),
+            "SaveValues false must retain independently stored saved bindings");
+        for (const auto body : {"<SavedValues/><SavedValues/>", "<RestoreValuesOnOpen>false</RestoreValuesOnOpen><RestoreValuesOnOpen>true</RestoreValuesOnOpen>",
+            "<SavedValues version=\"1\"/>", "<SavedValues><Unknown/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"bad\" name=\"Setting\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\" \"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Setting\" attributeId=\"99\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Setting\" raw=\"x\"/></SavedValues>",
+            "<SavedValues><SavedValue sourceId=\"11111111-2222-3333-4444-555555555555\" name=\"Setting\"><Raw/></SavedValue></SavedValues>"})
+            expect(!source::parse_form_xml(prefix + body + suffix),
+                "saved-value XML must reject duplicate, unknown, malformed and dangling values");
+    }
+    const auto report = source::parse_form_xml(R"XML(<Form id="1" name="Report" ordinaryFormVersion="2.1"><ReportFormExtension><SaveValues>true</SaveValues><RestoreValuesOnOpen>false</RestoreValuesOnOpen><ReportResult>2</ReportResult></ReportFormExtension><ChildItems><SpreadsheetDocumentField id="2" name="Result"><Position/></SpreadsheetDocumentField></ChildItems></Form>)XML");
+    expect(report.ok(), "ReportFormExtension must parse ReportResult through the typed control-reference codec");
+    const auto* result = report.value().form().extension_properties.find(model::PropertyId::from_name("ReportResult"));
+    expect(result && std::get<model::ControlRef>(result->value).id() == model::ObjectId{2}, "ReportResult must retain its concrete control identity");
+    const auto report_xml = source::serialize_form_xml(report.value());
+    expect(report_xml.ok() && report_xml.value().find("<ReportResult>2</ReportResult>") != std::string::npos && source::parse_form_xml(report_xml.value()).ok(),
+        "ReportResult and named booleans must survive canonical XML serialization");
+    for (const auto extension : {"CatalogItemFormExtension", "CatalogListFormExtension"})
+        expect(!source::parse_form_xml("<Form id=\"1\" name=\"Catalog\" ordinaryFormVersion=\"2.1\"><" + std::string(extension) +
+            "><SavedValues/></" + extension + "></Form>"), "unrelated extensions cannot own SavedValues");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Processor" ordinaryFormVersion="2.1"><DataProcessorFormExtension><ReportResult>2</ReportResult></DataProcessorFormExtension></Form>)XML"),
+        "ReportResult must remain specific to report forms");
+    for (const auto value : {"", "0", "Undefined"})
+        expect(!source::parse_form_xml("<Form id=\"1\" name=\"Report\" ordinaryFormVersion=\"2.1\"><ReportFormExtension><ReportResult>" +
+            std::string(value) + "</ReportResult></ReportFormExtension></Form>"),
+            "ReportResult Undefined default is omitted and cannot create an empty ControlRef");
+}
+
 void test_input_field_reference_extension_xml_contract() {
     const std::string begin = R"XML(<Form id="1" name="Ref" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Ref">)XML";
     const std::string end = R"XML(<ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><Position/></InputField></ChildItems></Form>)XML";
@@ -4310,6 +4380,7 @@ int main() {
         test_unavailable_ordinary_geometry_properties_are_not_public_xml();
         test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
+        test_saved_values_form_extension_xml_contract();
         test_catalog_item_form_extension_xml_contract();
         test_catalog_list_form_extension_xml_contract();
         test_input_field_reference_extension_xml_contract();

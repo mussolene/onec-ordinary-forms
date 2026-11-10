@@ -60,17 +60,22 @@
             <Event name="OnClose" apiName="OnClose" russianName="ПриЗакрытии"/>
             <Event name="OnOpen" apiName="OnOpen" russianName="ПриОткрытии"/>
             <Event name="OnReopen" apiName="OnReopen" russianName="ПриПовторномОткрытии"/>
-            <Event name="BeforeWrite" apiName="BeforeWrite" russianName="ПередЗаписью" formExtension="CatalogItemFormExtension"/>
-            <Event name="OnWrite" apiName="OnWrite" russianName="ПриЗаписи" formExtension="CatalogItemFormExtension"/>
-            <Event name="AfterWrite" apiName="AfterWrite" russianName="ПослеЗаписи" formExtension="CatalogItemFormExtension"/>
-            <Event name="OnDataChange" apiName="OnDataChange" russianName="ПриИзмененииДанных" formExtension="CatalogItemFormExtension"/>
-            <Event name="BeforeSaveValues" apiName="BeforeSaveValues" russianName="ПередСохранениемЗначений" formExtension="DataProcessorFormExtension"/>
-            <Event name="AfterRestoreValues" apiName="AfterRestoreValues" russianName="ПослеВосстановленияЗначений" formExtension="DataProcessorFormExtension"/>
+            <Event name="BeforeWrite" apiName="BeforeWrite" russianName="ПередЗаписью" formExtensions="CatalogItemFormExtension"/>
+            <Event name="OnWrite" apiName="OnWrite" russianName="ПриЗаписи" formExtensions="CatalogItemFormExtension"/>
+            <Event name="AfterWrite" apiName="AfterWrite" russianName="ПослеЗаписи" formExtensions="CatalogItemFormExtension"/>
+            <Event name="OnDataChange" apiName="OnDataChange" russianName="ПриИзмененииДанных" formExtensions="CatalogItemFormExtension"/>
+            <Event name="BeforeSaveValues" apiName="BeforeSaveValues" russianName="ПередСохранениемЗначений" formExtensions="DataProcessorFormExtension ReportFormExtension"/>
+            <Event name="AfterRestoreValues" apiName="AfterRestoreValues" russianName="ПослеВосстановленияЗначений" formExtensions="DataProcessorFormExtension ReportFormExtension"/>
           </Events>
         </Form>
         <SharedProperties surface="formExtension">
-          <Property name="Autonumeration" apiName="Autonumeration" russianName="Автонумерация" russianType="АвтонумерацияВФорме" valueCodec="enumeration"/>
-          <Property name="UseForFoldersAndItems" apiName="UseForFoldersAndItems" russianName="ИспользованиеДляГруппИЭлементов" russianType="ИспользованиеГруппИЭлементов" valueCodec="enumeration"/>
+          <Property name="SaveValues" apiName="SaveValues" russianName="Сохранять значения" russianType="Булево" designerOnly="true" formExtension="DataProcessorFormExtension" valueCodec="boolean"/>
+          <Property name="RestoreValuesOnOpen" apiName="RestoreValuesOnOpen" russianName="ВосстанавливатьЗначенияПриОткрытии" russianType="Булево" formExtension="DataProcessorFormExtension" valueCodec="boolean"/>
+          <Property name="Autonumeration" apiName="Autonumeration" russianName="Автонумерация" russianType="АвтонумерацияВФорме" formExtension="CatalogItemFormExtension" valueCodec="enumeration"/>
+          <Property name="UseForFoldersAndItems" apiName="UseForFoldersAndItems" russianName="ИспользованиеДляГруппИЭлементов" russianType="ИспользованиеГруппИЭлементов" formExtension="CatalogItemFormExtension" valueCodec="enumeration"/>
+          <Property name="SaveValues" apiName="SaveValues" russianName="Сохранять значения" russianType="Булево" designerOnly="true" formExtension="ReportFormExtension" valueCodec="boolean"/>
+          <Property name="RestoreValuesOnOpen" apiName="RestoreValuesOnOpen" russianName="ВосстанавливатьЗначенияПриОткрытии" russianType="Булево" formExtension="ReportFormExtension" valueCodec="boolean"/>
+          <Property name="ReportResult" apiName="ReportResult" russianName="РезультатОтчета" russianType="ПолеТабличногоДокумента ; Неопределено" formExtension="ReportFormExtension" valueCodec="control-reference"/>
         </SharedProperties>
         <SharedProperties surface="controlExtension">
           <Property name="AutoContextMenu" apiName="AutoContextMenu" russianName="АвтоКонтекстноеМеню" russianType="Булево" valueCodec="boolean"/>
@@ -99,8 +104,13 @@
         <NamedConcept name="MainAttribute" russianName="Основной реквизит"/>
         <NamedConcept name="TypeLink" russianName="СвязьПоТипу"/>
         <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
+        <NamedConcept name="SavedValues" russianName="Сохраняемые значения" formExtension="DataProcessorFormExtension"/>
+        <NamedConcept name="SavedValue" russianName="Сохраняемое значение" formExtension="DataProcessorFormExtension"/>
         <NamedConcept name="CatalogItemFormExtension" russianName="Расширение формы элемента справочника"/>
         <NamedConcept name="CatalogListFormExtension" russianName="Расширение формы списка справочника"/>
+        <NamedConcept name="ReportFormExtension" russianName="Расширение формы отчета"/>
+        <NamedConcept name="SavedValues" russianName="Сохраняемые значения" formExtension="ReportFormExtension"/>
+        <NamedConcept name="SavedValue" russianName="Сохраняемое значение" formExtension="ReportFormExtension"/>
         <NamedConcept name="CatalogInputFieldExtension" russianName="Расширение поля ввода справочника"/>
         <NamedConcept name="ChartOfAccountsInputFieldExtension" russianName="Расширение поля ввода плана счетов"/>
         <NamedConcept name="ChartOfCharacteristicTypesInputFieldExtension" russianName="Расширение поля ввода вида характеристик"/>

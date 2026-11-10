@@ -3606,10 +3606,11 @@ LV encode_form_events(const model::OrdinaryFormDocument& document,
             descriptor->storage_codec != model::metamodel::StorageCodec::event_record ||
             descriptor->storage_tag.empty() || !descriptor->storage_event_id)
             fail("OOF1122", "$/Form/Events", "known persisted Form event", event->name, "Form event has no proven storage descriptor");
-        if (descriptor->extension_kind && descriptor->extension_kind != document.form().extension)
+        if (!descriptor->extension_kinds.empty() &&
+            !model::metamodel::form_event_uses_table(*descriptor, document.form().extension))
             fail("OOF1122", "$/Form/Events", "matching Form extension", event->name,
                 "Form event requires its declared extension");
-        if (descriptor->extension_kind != extension_kind) continue;
+        if (!model::metamodel::form_event_uses_table(*descriptor, extension_kind)) continue;
         if (!names.insert(event->name).second || !storage_ids.insert(*descriptor->storage_event_id).second)
             fail("OOF1122", "$/Form/Events", "unique event name and storage ID", event->name, "Form event is duplicated");
         encoded.push_back({*descriptor->storage_event_id, descriptor->storage_tag, event});
@@ -3633,8 +3634,9 @@ std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string
     const auto count = integer_atom<std::uint32_t>(value.items[0], child_path(path, 0));
     require_arity(value, static_cast<std::size_t>(count) + 1, path);
     const auto descriptors = model::metamodel::form_event_descriptors();
-    const auto supported_count = std::ranges::count(descriptors, extension_kind,
-        &model::metamodel::EventDescriptor::extension_kind);
+    const auto supported_count = std::ranges::count_if(descriptors, [extension_kind](const auto& event) {
+        return model::metamodel::form_event_uses_table(event, extension_kind);
+    });
     if (count > static_cast<std::size_t>(supported_count)) fail("OOF1114", std::string(path), "supported Form event count", std::to_string(count), "Form event count is unsupported");
     std::vector<std::pair<const model::metamodel::EventDescriptor*, DecodedControlEvent>> decoded;
     std::unordered_set<std::uint32_t> storage_ids;
@@ -3648,7 +3650,7 @@ std::vector<DecodedControlEvent> decode_form_events(const LV& value, std::string
             fail("OOF1114", event_path, "unique Form event ID", std::to_string(id), "Form event ID is duplicated");
         const auto found = std::ranges::find_if(descriptors, [id, extension_kind](const auto& d) {
             return d.storage_event_id && *d.storage_event_id == id &&
-                d.extension_kind == extension_kind &&
+                model::metamodel::form_event_uses_table(d, extension_kind) &&
                 d.persistence == model::metamodel::PersistenceClass::persisted_editable &&
                 d.storage_codec == model::metamodel::StorageCodec::event_record && !d.storage_tag.empty();
         });
@@ -12465,6 +12467,66 @@ LV encode_table(
         list({raw("0")})});
 }
 
+constexpr std::string_view saved_value_binding_type = "91f722a0-4cc1-11d6-a3c9-0050bae0a776";
+
+std::vector<model::SavedValueBinding> decode_saved_value_bindings(const LV& table, std::string_view path) {
+    require_list(table, path);
+    if (table.items.size() < 2)
+        fail("OOF1102", std::string(path), "saved value table header", describe(table), "SavedValues table is incomplete");
+    require_raw_constant(table.items[0], "0", child_path(path, 0));
+    const auto count = integer_atom<std::uint32_t>(table.items[1], child_path(path, 1));
+    if (count > model::max_saved_value_bindings)
+        fail("OOF1120", std::string(path), "bounded SavedValues count", std::to_string(count), "SavedValues resource limit exceeded");
+    require_arity(table, static_cast<std::size_t>(count) + 2, path);
+    std::vector<model::SavedValueBinding> values;
+    values.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto row_path = child_path(path, i + 2);
+        const auto& row = table.items[i + 2];
+        require_arity(row, 3, row_path);
+        if (string_atom(row.items[0], child_path(row_path, 0)) != "#")
+            fail("OOF1114", child_path(row_path, 0), "typed saved value binding", "different marker", "SavedValues entry has an invalid marker");
+        if (uuid_atom(row.items[1], child_path(row_path, 1)).canonical != saved_value_binding_type)
+            fail("OOF1106", child_path(row_path, 1), std::string(saved_value_binding_type), describe(row.items[1]),
+                "SavedValues entry type is unsupported");
+        const auto body_path = child_path(row_path, 2);
+        const auto& body = row.items[2];
+        require_list(body, body_path);
+        if (body.items.size() != 4 && body.items.size() != 5)
+            fail("OOF1102", body_path, "named saved binding with optional Attribute reference", describe(body), "SavedValues entry has an unsupported shape");
+        require_raw_constant(body.items[0], "3", child_path(body_path, 0));
+        model::SavedValueBinding value;
+        value.source_id = uuid_atom(body.items[1], child_path(body_path, 1));
+        value.name = string_atom(body.items[2], child_path(body_path, 2));
+        if (value.name.empty())
+            fail("OOF1114", child_path(body_path, 2), "nonempty saved value name", "empty", "SavedValues name is empty");
+        require_raw_constant(body.items[3], body.items.size() == 5 ? "1" : "0", child_path(body_path, 3));
+        if (body.items.size() == 5) {
+            require_arity(body.items[4], 1, child_path(body_path, 4));
+            const auto id = integer_atom<std::int64_t>(body.items[4].items[0], child_path(child_path(body_path, 4), 0));
+            if (id < 0)
+                fail("OOF1123", child_path(body_path, 4), "nonnegative Attribute reference", std::to_string(id), "SavedValues Attribute reference is invalid");
+            value.attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(id)}};
+        }
+        values.push_back(std::move(value));
+    }
+    return values;
+}
+
+LV encode_saved_value_bindings(const std::vector<model::SavedValueBinding>& values) {
+    if (values.size() > model::max_saved_value_bindings)
+        fail("OOF1120", "$/SavedValues", "bounded SavedValues count", std::to_string(values.size()), "SavedValues resource limit exceeded");
+    std::vector<LV> table{raw("0"), raw(std::to_string(values.size()))};
+    table.reserve(values.size() + 2);
+    for (const auto& value : values) {
+        std::vector<LV> body{raw("3"), raw(value.source_id.canonical), string_value(value.name),
+            raw(value.attribute.has_value() ? "1" : "0")};
+        if (value.attribute.has_value()) body.push_back(list({raw(std::to_string(value.attribute.id().value()))}));
+        table.push_back(list({string_value("#"), raw(std::string(saved_value_binding_type)), list(std::move(body))}));
+    }
+    return list(std::move(table));
+}
+
 std::size_t form_extension_ordinal(const model::PropertySet& properties, std::string_view name,
     std::string_view path) {
     const auto* descriptor = model::metamodel::find_form_extension_property(
@@ -12498,19 +12560,20 @@ void validate_form_extension_context(const model::OrdinaryFormDocument& document
         fail("OOF1122", std::string(path), "declared extension for the main object context",
             "absent extension", "MainAttribute context has no supported form extension");
     if (!document.form().extension) return;
-    if (*document.form().extension == model::FormExtensionKind::data_processor) {
+    if (*document.form().extension == model::FormExtensionKind::data_processor ||
+        *document.form().extension == model::FormExtensionKind::report) {
         if (!document.form().main_attribute.has_value())
             fail("OOF1122", std::string(path), "selected MainAttribute reference", "absent",
-                "DataProcessorFormExtension requires an explicit object context");
+                "Report/DataProcessor extension requires an explicit object context");
         const auto* main = document.find_attribute(document.form().main_attribute.id());
         if (!main || main->type.entries.size() != 1 ||
             main->type.entries.front().term != model::TypeDomainTerm::object ||
             !main->type.entries.front().type_uuid)
             fail("OOF1122", std::string(path), "one concrete object Attribute selected by MainAttribute",
-                "missing or incompatible object type", "DataProcessorFormExtension requires its object context");
+                "missing or incompatible object type", "Report/DataProcessor extension requires its object context");
         if (main->main.value() || main->stored_data.value())
             fail("OOF1122", std::string(path), "default flags for the main object Attribute",
-                "nondefault flags", "DataProcessorFormExtension main Attribute flags are not supported");
+                "nondefault flags", "Report/DataProcessor main Attribute flags are not supported");
         return;
     }
     if (*document.form().extension != model::FormExtensionKind::catalog_item &&
@@ -13123,6 +13186,7 @@ Result<model::OrdinaryFormDocument> decode_document(
 
         std::optional<model::FormExtensionKind> form_extension;
         model::PropertySet form_extension_properties;
+        std::vector<model::SavedValueBinding> saved_values;
         std::vector<DecodedControlEvent> extension_named_events;
         const auto& extension = payload.items[3];
         require_list(extension, "$/3");
@@ -13133,18 +13197,32 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (extension_guid == null_uuid) {
             require_exact(extension, parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
                 "$/3", "Absent Form extension must not contain settings");
-        } else if (extension_guid == model::metamodel::data_processor_form_extension.guid) {
-            const auto& descriptor = model::metamodel::data_processor_form_extension;
+        } else if (extension_guid == model::metamodel::data_processor_form_extension.guid ||
+            extension_guid == model::metamodel::report_form_extension.guid) {
+            const bool report = extension_guid == model::metamodel::report_form_extension.guid;
+            const auto& descriptor = report ? model::metamodel::report_form_extension
+                : model::metamodel::data_processor_form_extension;
             require_arity(extension, 3, "$/3");
-            require_raw_constant(extension.items[0], descriptor.guid, "$/3/0");
             require_raw_constant(extension.items[1], "1", "$/3/1");
             const auto& settings = extension.items[2];
-            require_arity(settings, 5, "$/3/2");
-            auto normalized_settings = settings;
-            normalized_settings.items[3] = list({raw("0")});
-            require_exact(normalized_settings, parse_constant("{2,0,{0,0},{0},1}"), "$/3/2",
-                "DataProcessorFormExtension contains unsupported nondefault settings");
+            require_list(settings, "$/3/2");
+            if (settings.items.empty()) fail("OOF1102", "$/3/2", "form settings", "empty", "Form settings are missing");
+            const auto version = integer_atom<std::uint32_t>(settings.items[0], "$/3/2/0");
+            if (version != 2 && !(report && version == 1))
+                fail("OOF1114", "$/3/2/0", "supported Report/DataProcessor settings", std::to_string(version), "Form settings version is unsupported");
+            require_arity(settings, report && version == 2 ? 6 : 5, "$/3/2");
+            const bool save = bool_atom(settings.items[1], "$/3/2/1");
+            saved_values = decode_saved_value_bindings(settings.items[2], "$/3/2/2");
             extension_named_events = decode_form_events(settings.items[3], "$/3/2/3", descriptor.kind);
+            const bool restore = bool_atom(settings.items[4], "$/3/2/4");
+            if (save) form_extension_properties.set_explicit(model::PropertyId::from_name("SaveValues"), true);
+            if (!restore) form_extension_properties.set_explicit(model::PropertyId::from_name("RestoreValuesOnOpen"), false);
+            if (report && version == 2) {
+                const auto result = integer_atom<std::uint32_t>(settings.items[5], "$/3/2/5");
+                if (result != std::numeric_limits<std::uint32_t>::max())
+                    form_extension_properties.set_explicit(model::PropertyId::from_name("ReportResult"),
+                        model::ControlRef{model::ObjectId{result}});
+            }
             form_extension = descriptor.kind;
         } else if (extension_guid == model::metamodel::catalog_list_form_extension.guid) {
             const auto& descriptor = model::metamodel::catalog_list_form_extension;
@@ -13202,7 +13280,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         std::string(use_for_folders->enumeration_members[use_ordinal])});
             form_extension = descriptor.kind;
         } else {
-            fail("OOF1106", "$/3/0", "null, DataProcessor, CatalogItem, or CatalogList form extension GUID",
+            fail("OOF1106", "$/3/0", "registered ordinary-form extension GUID",
                 extension_guid, "Ordinary-form extension GUID is unsupported");
         }
         auto form_named_events = decode_form_events(payload.items[4], "$/4");
@@ -13348,6 +13426,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         form.id = model::ObjectId{1};
         form.extension = form_extension;
         form.extension_properties = std::move(form_extension_properties);
+        form.saved_values = std::move(saved_values);
         if (attributes.main_attribute)
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
@@ -13828,14 +13907,15 @@ Result<model::OrdinaryFormDocument> decode_document(
         const std::uint64_t expected_slots = std::max<std::uint64_t>(
             3,
             (empty_attributes ? actual_max_id : attribute_max_id) + 1);
-        // Пустой заголовок выделения реквизитов не связан с ID контролов;
-        // допускаются подтвержденные минимальные значения Designer (1, 3) и текущий размер.
+        // Граница выделения ID может превышать последний объявленный реквизит.
+        // Ее история не является свойством публичной формы; writer вычисляет свою границу.
         const std::string expected_slot_count = empty_attributes
             ? "1, 3, or " + std::to_string(expected_slots)
-            : std::to_string(expected_slots);
-        if (expected_slots > std::numeric_limits<std::uint32_t>::max() ||
-            (attributes.slot_count != expected_slots &&
-             !(empty_attributes && (attributes.slot_count == 1 || attributes.slot_count == 3)))) {
+            : "at least " + std::to_string(expected_slots);
+        const bool allocation_covers_attributes = empty_attributes
+            ? attributes.slot_count == expected_slots || attributes.slot_count == 1 || attributes.slot_count == 3
+            : attributes.slot_count >= expected_slots;
+        if (expected_slots > std::numeric_limits<std::uint32_t>::max() || !allocation_covers_attributes) {
             fail(
                 "OOF1114",
                 "$/2/1",
@@ -14556,10 +14636,25 @@ Result<list_stream::ListValue> encode_document(
         });
         LV encoded_extension = parse_constant("{00000000-0000-0000-0000-000000000000,0}");
         if (document.form().extension) {
-            if (*document.form().extension == model::FormExtensionKind::data_processor) {
-                const auto& descriptor = model::metamodel::data_processor_form_extension;
-                auto settings = parse_constant("{2,0,{0,0},{0},1}");
-                settings.items[3] = encode_form_events(document, descriptor.kind);
+            if (*document.form().extension == model::FormExtensionKind::data_processor ||
+                *document.form().extension == model::FormExtensionKind::report) {
+                const bool report = *document.form().extension == model::FormExtensionKind::report;
+                const auto& descriptor = report ? model::metamodel::report_form_extension
+                    : model::metamodel::data_processor_form_extension;
+                auto settings = list({raw("2"),
+                    raw(explicit_bool(document.form().extension_properties, "SaveValues", false) ? "1" : "0"),
+                    encode_saved_value_bindings(document.form().saved_values),
+                    encode_form_events(document, descriptor.kind),
+                    raw(explicit_bool(document.form().extension_properties, "RestoreValuesOnOpen", true) ? "1" : "0")});
+                if (report) {
+                    std::uint64_t result = std::numeric_limits<std::uint32_t>::max();
+                    if (const auto* entry = document.form().extension_properties.find(model::PropertyId::from_name("ReportResult"))) {
+                        if (const auto* target = std::get_if<model::ControlRef>(&entry->value)) result = target->id().value();
+                        else if (!std::holds_alternative<model::UndefinedValue>(entry->value))
+                            fail("OOF1122", "$/ReportResult", "SpreadsheetDocumentField reference or Undefined", "different value", "ReportResult cannot be encoded");
+                    }
+                    settings.items.push_back(raw(std::to_string(result)));
+                }
                 encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"), std::move(settings)});
             } else if (*document.form().extension == model::FormExtensionKind::catalog_list) {
                 const auto& descriptor = model::metamodel::catalog_list_form_extension;

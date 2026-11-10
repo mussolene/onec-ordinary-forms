@@ -1833,37 +1833,45 @@ public:
             const std::string name = node_name(child);
             if (name == "MainAttribute") {
                 form.main_attribute = model::AttributeRef{parse_attribute_id(required_attribute(child, "attributeId"), child)};
-            } else if (name == mm::data_processor_form_extension.xml_name ||
-                name == mm::catalog_list_form_extension.xml_name) {
-                const auto& descriptor = name == mm::data_processor_form_extension.xml_name
-                    ? mm::data_processor_form_extension : mm::catalog_list_form_extension;
+            } else if (const auto extension = std::ranges::find(mm::form_extensions, name,
+                &mm::FormExtensionDescriptor::xml_name); extension != mm::form_extensions.end()) {
                 if (form_extension_seen)
                     fail("OOF2003", child, form_id, name, "one form extension", "duplicate extension",
                         "Form extension tags are mutually exclusive");
                 form_extension_seen = true;
-                if (child->properties != nullptr || !element_children(child).empty() ||
-                    trim_ascii(node_text(child)).size() != 0)
-                    fail("OOF2003", child, form_id, name, "empty " + std::string(descriptor.xml_name), "settings",
-                        std::string(descriptor.xml_name) + " does not have public properties");
-                form.extension = descriptor.kind;
-            } else if (name == mm::catalog_item_form_extension.xml_name) {
-                if (form_extension_seen)
-                    fail("OOF2003", child, form_id, name, "one form extension", "duplicate extension",
-                        "Form extension tags are mutually exclusive");
-                form_extension_seen = true;
-                form.extension = mm::catalog_item_form_extension.kind;
+                form.extension = extension->kind;
                 std::set<model::PropertyId> seen_extension_properties;
+                bool saved_values_seen = false;
                 for (xmlNodePtr property_node : element_children(child)) {
                     const auto property_name = node_name(property_node);
+                    if (property_name == "SavedValues" &&
+                        (extension->kind == model::FormExtensionKind::data_processor ||
+                         extension->kind == model::FormExtensionKind::report)) {
+                        if (saved_values_seen)
+                            fail("OOF2003", property_node, form_id, property_name, "one SavedValues collection",
+                                "duplicate", "Duplicate SavedValues collection");
+                        saved_values_seen = true;
+                        for (auto* binding_node : element_children(property_node)) {
+                            if (form.saved_values.size() >= model::max_saved_value_bindings)
+                                fail("OOF2003", binding_node, form_id, property_name, "bounded SavedValues collection",
+                                    {}, "SavedValues exceeds the document resource budget");
+                            model::SavedValueBinding binding;
+                            binding.source_id = model::UuidValue{canonical_uuid(required_attribute(binding_node, "sourceId"))};
+                            binding.name = required_attribute(binding_node, "name");
+                            if (const auto attribute = optional_attribute(binding_node, "attributeId"))
+                                binding.attribute = model::AttributeRef{parse_attribute_id(*attribute, binding_node)};
+                            form.saved_values.push_back(std::move(binding));
+                        }
+                        continue;
+                    }
                     const auto* descriptor = metamodel_.form_extension_property(*form.extension, property_name);
                     if (descriptor == nullptr || descriptor->extension_kind != form.extension)
                         fail("OOF2003", property_node, form_id, property_name,
-                            "declared CatalogItemFormExtension property", property_name,
-                            "CatalogItemFormExtension property is not declared by the executable metamodel");
+                            "declared form extension property", property_name,
+                            "Form extension property is not declared by the executable metamodel");
                     if (!seen_extension_properties.insert(descriptor->id).second)
                         fail("OOF2003", property_node, form_id, property_name,
-                            "one CatalogItemFormExtension property", property_name,
-                            "Duplicate CatalogItemFormExtension property");
+                            "one form extension property", property_name, "Duplicate form extension property");
                     auto value = parse_property_value(property_node, descriptor->value_codec, form_id, typed_budget_);
                     if (!equals_descriptor_default(*descriptor, value))
                         form.extension_properties.set_explicit(descriptor->id, std::move(value));
@@ -3535,15 +3543,35 @@ public:
         write_property_set(form.properties, metamodel_.form_properties(), form_id);
         if (form.main_attribute.has_value())
             writer_.empty("MainAttribute", {{"attributeId", object_id_text(form.main_attribute.id())}});
-        if (form.extension == mm::data_processor_form_extension.kind) {
-            writer_.empty(mm::data_processor_form_extension.xml_name);
-        } else if (form.extension == mm::catalog_list_form_extension.kind) {
-            writer_.empty(mm::catalog_list_form_extension.xml_name);
-        } else if (form.extension == mm::catalog_item_form_extension.kind) {
-            writer_.open(mm::catalog_item_form_extension.xml_name);
-            write_property_set(form.extension_properties,
-                metamodel_.form_extension_properties(*form.extension), form_id);
-            writer_.close(mm::catalog_item_form_extension.xml_name);
+        if (form.extension) {
+            const auto extension = std::ranges::find(mm::form_extensions, *form.extension,
+                &mm::FormExtensionDescriptor::kind);
+            if (extension == mm::form_extensions.end())
+                serialization_fail(form_id, "FormExtension", "registered form extension", {},
+                    "Form extension is not registered in the executable metamodel");
+            const auto properties = metamodel_.form_extension_properties(*form.extension);
+            const bool has_properties = std::ranges::any_of(properties, [&](const auto& property) {
+                const auto* entry = form.extension_properties.find(property.id);
+                return entry != nullptr && !equals_descriptor_default(property, entry->value);
+            });
+            if (!has_properties && form.saved_values.empty() && *form.extension != model::FormExtensionKind::catalog_item) {
+                writer_.empty(extension->xml_name);
+            } else {
+                writer_.open(extension->xml_name);
+                write_property_set(form.extension_properties, properties, form_id);
+                if (!form.saved_values.empty()) {
+                    writer_.open("SavedValues");
+                    for (const auto& binding : form.saved_values) {
+                        std::vector<std::pair<std::string, std::string>> binding_attributes{
+                            {"sourceId", binding.source_id.canonical}, {"name", binding.name}};
+                        if (binding.attribute.has_value())
+                            binding_attributes.emplace_back("attributeId", object_id_text(binding.attribute.id()));
+                        writer_.empty("SavedValue", binding_attributes);
+                    }
+                    writer_.close("SavedValues");
+                }
+                writer_.close(extension->xml_name);
+            }
         }
         write_events("Events", form.events, metamodel_.form_events(), form_id);
         write_attributes();

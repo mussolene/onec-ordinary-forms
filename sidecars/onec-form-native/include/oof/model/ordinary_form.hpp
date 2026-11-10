@@ -1340,6 +1340,17 @@ enum class FormExtensionKind : std::uint8_t {
     data_processor,
     catalog_item,
     catalog_list,
+    report,
+};
+
+inline constexpr std::size_t max_saved_value_bindings = 100000;
+
+struct SavedValueBinding {
+    UuidValue source_id;
+    std::string name;
+    AttributeRef attribute;
+
+    friend bool operator==(const SavedValueBinding&, const SavedValueBinding&) = default;
 };
 
 struct Form {
@@ -1350,6 +1361,7 @@ struct Form {
     std::vector<ChildItemRef> children;
     std::optional<FormExtensionKind> extension;
     PropertySet extension_properties;
+    std::vector<SavedValueBinding> saved_values;
     AttributeRef main_attribute;
     PanelPayload panel;
 };

@@ -1406,15 +1406,33 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     output += "  <xs:complexType name=\"FormType\">\n    <xs:sequence>\n";
     append_property_elements(output, metamodel.form_properties());
     output += "      <xs:element name=\"MainAttribute\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"AttributeIdType\" use=\"required\"/></xs:complexType></xs:element>\n";
-    output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n        <xs:element name=\"";
-    append_xml_escaped(output, model::metamodel::data_processor_form_extension.xml_name);
-    output += "\"><xs:complexType/></xs:element>\n        <xs:element name=\"";
-    append_xml_escaped(output, model::metamodel::catalog_item_form_extension.xml_name);
-    output += "\"><xs:complexType><xs:sequence>\n";
-    append_property_elements(output, metamodel.form_extension_properties(), "          ");
-    output += "        </xs:sequence></xs:complexType></xs:element>\n        <xs:element name=\"";
-    append_xml_escaped(output, model::metamodel::catalog_list_form_extension.xml_name);
-    output += "\"><xs:complexType/></xs:element>\n      </xs:choice>\n";
+    output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n";
+    for (const auto& extension : model::metamodel::form_extensions) {
+        output += "        <xs:element";
+        append_attribute(output, "name", extension.xml_name);
+        const auto properties = metamodel.form_extension_properties(extension.kind);
+        const bool supports_saved_values = extension.kind == model::FormExtensionKind::data_processor ||
+            extension.kind == model::FormExtensionKind::report;
+        if (properties.empty() && !supports_saved_values) {
+            output += "><xs:complexType/></xs:element>\n";
+            continue;
+        }
+        output += "><xs:complexType><xs:sequence>\n";
+        append_property_elements(output, properties, "          ");
+        if (supports_saved_values) {
+            output += "          <xs:element name=\"SavedValues\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:sequence>\n";
+            output += "            <xs:element name=\"SavedValue\" minOccurs=\"0\" maxOccurs=\"";
+            output += std::to_string(model::max_saved_value_bindings);
+            output += "\"><xs:complexType>\n"
+                "              <xs:attribute name=\"sourceId\" type=\"UuidValueType\" use=\"required\"/>\n"
+                "              <xs:attribute name=\"name\" type=\"NonEmptyTokenType\" use=\"required\"/>\n"
+                "              <xs:attribute name=\"attributeId\" type=\"AttributeIdType\" use=\"optional\"/>\n"
+                "            </xs:complexType></xs:element>\n"
+                "          </xs:sequence></xs:complexType></xs:element>\n";
+        }
+        output += "        </xs:sequence></xs:complexType></xs:element>\n";
+    }
+    output += "      </xs:choice>\n";
     output +=
         "      <xs:element name=\"Events\" type=\"FormEventsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Attributes\" type=\"AttributesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
@@ -1588,6 +1606,15 @@ void append_palette_properties(
             append_attribute(output, "aliasOf", "ChoiceButtonPicture");
         if (property.surface == PropertySurface::panel_placement)
             append_attribute(output, "surface", "panelPlacement");
+        if (property.designer_only)
+            append_attribute(output, "designerOnly", "true");
+        if (property.extension_kind) {
+            const auto extension = std::ranges::find(model::metamodel::form_extensions, *property.extension_kind,
+                &model::metamodel::FormExtensionDescriptor::kind);
+            if (extension == model::metamodel::form_extensions.end())
+                throw std::logic_error("ordinary-form property extension is not registered");
+            append_attribute(output, "formExtension", extension->xml_name);
+        }
         if (property.persistence == model::metamodel::PersistenceClass::unsupported_by_platform)
             append_attribute(output, "available", "false");
         append_attribute(
@@ -1609,17 +1636,17 @@ void append_palette_events(
         append_attribute(output, "name", event.xml_name);
         append_attribute(output, "apiName", event.api_name);
         append_attribute(output, "russianName", as_utf8(event.russian_name));
-        if (event.extension_kind) {
-            switch (*event.extension_kind) {
-                case model::FormExtensionKind::catalog_item:
-                    append_attribute(output, "formExtension", model::metamodel::catalog_item_form_extension.xml_name);
-                    break;
-                case model::FormExtensionKind::data_processor:
-                    append_attribute(output, "formExtension", model::metamodel::data_processor_form_extension.xml_name);
-                    break;
-                default:
+        if (!event.extension_kinds.empty()) {
+            std::string names;
+            for (const auto kind : event.extension_kinds) {
+                const auto extension = std::ranges::find(model::metamodel::form_extensions, kind,
+                    &model::metamodel::FormExtensionDescriptor::kind);
+                if (extension == model::metamodel::form_extensions.end())
                     throw std::logic_error("ordinary-form event extension is not registered");
+                if (!names.empty()) names += ' ';
+                names += extension->xml_name;
             }
+            append_attribute(output, "formExtensions", names);
         }
         if (event.persistence == model::metamodel::PersistenceClass::unsupported_by_platform)
             append_attribute(output, "available", "false");
@@ -1667,16 +1694,20 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         output,
         metamodel.panel_placement_properties(),
         "          ");
-    output += "        </SharedProperties>\n        <NamedConcept name=\"MainAttribute\" russianName=\"Основной реквизит\"/>\n        <NamedConcept name=\"TypeLink\" russianName=\"СвязьПоТипу\"/>\n        <NamedConcept";
-    append_attribute(output, "name", model::metamodel::data_processor_form_extension.xml_name);
-    append_attribute(output, "russianName", as_utf8(model::metamodel::data_processor_form_extension.russian_name));
-    output += "/>\n        <NamedConcept";
-    append_attribute(output, "name", model::metamodel::catalog_item_form_extension.xml_name);
-    append_attribute(output, "russianName", as_utf8(model::metamodel::catalog_item_form_extension.russian_name));
-    output += "/>\n        <NamedConcept";
-    append_attribute(output, "name", model::metamodel::catalog_list_form_extension.xml_name);
-    append_attribute(output, "russianName", as_utf8(model::metamodel::catalog_list_form_extension.russian_name));
-    output += "/>\n";
+    output += "        </SharedProperties>\n        <NamedConcept name=\"MainAttribute\" russianName=\"Основной реквизит\"/>\n        <NamedConcept name=\"TypeLink\" russianName=\"СвязьПоТипу\"/>\n";
+    for (const auto& extension : model::metamodel::form_extensions) {
+        output += "        <NamedConcept";
+        append_attribute(output, "name", extension.xml_name);
+        append_attribute(output, "russianName", as_utf8(extension.russian_name));
+        output += "/>\n";
+        if (extension.kind == model::FormExtensionKind::data_processor || extension.kind == model::FormExtensionKind::report) {
+            output += "        <NamedConcept name=\"SavedValues\" russianName=\"Сохраняемые значения\"";
+            append_attribute(output, "formExtension", extension.xml_name);
+            output += "/>\n        <NamedConcept name=\"SavedValue\" russianName=\"Сохраняемое значение\"";
+            append_attribute(output, "formExtension", extension.xml_name);
+            output += "/>\n";
+        }
+    }
     for (const auto& extension : model::metamodel::input_field_extensions) {
         output += "        <NamedConcept";
         append_attribute(output, "name", extension.xml_name);
