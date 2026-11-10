@@ -398,7 +398,7 @@ void test_captured_table_column_record() {
     expect(reference.value && decoded.value().table_columns(std::get<model::TableColumnsRef>(*reference.value)) == &payload.columns,
         "native captured Table.Columns must resolve the decoded collection without copying");
     expect(payload.columns.size() == 1 && payload.columns[0].name == "Code" &&
-            payload.columns[0].data_path == "Code" && payload.columns[0].control.kind == model::ControlKind::input_field,
+            payload.columns[0].data_path == "Code" && payload.columns[0].control->kind == model::ControlKind::input_field,
         "captured Column must expose its name, DataPath, and typed InputField");
 
     const auto encoded = form_stream::encode_document(decoded.value());
@@ -576,6 +576,102 @@ void test_legacy_table_property_layouts() {
         properties.items.at(23).items.at(0) = list_stream::ListValue::raw_atom("2");
         expect(!form_stream::decode_document(malformed_columns, "MalformedLegacyTableColumns"),
             "legacy Table layout must still reject a malformed Columns count");
+    }
+}
+
+void test_table_column_generation_prototypes() {
+    struct Layout { std::string_view version; std::size_t arity; };
+    constexpr std::array layouts{Layout{"16", 40}, Layout{"17", 43}, Layout{"19", 46}, Layout{"23", 52}};
+    const auto properties = [](auto& stream) -> auto& {
+        auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        return record->items.at(2).items.at(2).items.at(1).items.at(23).items.at(1).items.at(1).items.at(1).items.at(1);
+    };
+    auto seed = form_stream::decode_document(captured_table_payload(), "ColumnGenerations");
+    expect(seed.ok(), "independent captured Table must decode");
+    if (!seed) return;
+    const auto found = std::ranges::find_if(seed.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(found != seed.value().collections().controls.end(), "captured Table must exist");
+    if (found == seed.value().collections().controls.end()) return;
+    const auto table_id = found->id;
+    for (const bool has_editor : {false, true}) {
+        for (const auto term : {model::TypeDomainTerm::unknown, model::TypeDomainTerm::string, model::TypeDomainTerm::boolean}) {
+            auto document = seed.value();
+            auto* table = const_cast<model::ControlNode*>(document.find_control(table_id));
+            auto& column = std::get<model::TablePayload>(table->payload).columns.front();
+            column.layout_width = model::DecimalValue{"100"};
+            column.visible = false;
+            model::TypeDomainPatternValue type;
+            if (term != model::TypeDomainTerm::unknown) {
+                model::TypeDomainEntry entry;
+                entry.term = term;
+                if (term == model::TypeDomainTerm::string) entry.string.length = 20;
+                type.entries.push_back(entry);
+            }
+            if (has_editor) column.control->value_type = type;
+            else { column.control.reset(); column.value_type = type; }
+            auto current = form_stream::encode_document(document);
+            expect(current.ok(), "typed/default column with or without editor must encode");
+            if (!current) continue;
+            expect(properties(current.value()).items.size() == (has_editor ? 52 : 51),
+                "current column arity must reflect editor packet presence");
+            for (const auto& layout : layouts) {
+                auto legacy = current.value();
+                auto& stored = properties(legacy);
+                stored.items[0] = list_stream::ListValue::raw_atom(std::string(layout.version));
+                stored.items.resize(layout.arity - (has_editor ? 0 : 1));
+                if (layout.version != "23") {
+                    for (const auto slot : {22U, 23U, 24U}) {
+                        auto& font = stored.items[slot];
+                        if (font.items[1].atom == "3") {
+                            font.items[0] = list_stream::ListValue::raw_atom(layout.version == "19" ? "7" : "6");
+                            if (layout.version != "19") font.items.pop_back();
+                        }
+                    }
+                    for (const auto slot : {16U, 17U, 18U, 19U, 20U, 21U}) {
+                        auto& color = stored.items[slot];
+                        color.items[0] = list_stream::ListValue::raw_atom("3");
+                        color.items.pop_back();
+                    }
+                }
+                auto decoded = form_stream::decode_document(legacy, "ColumnGenerations");
+                expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                    "known column generation must decode without partial projection");
+                if (!decoded || !decoded.value().reconstruction_complete()) continue;
+                const auto* restored_table = decoded.value().find_control(table_id);
+                const auto& restored = std::get<model::TablePayload>(restored_table->payload).columns.front();
+                expect(restored.control.has_value() == has_editor, "absent editor must never become InputField");
+                expect(restored.layout_width == column.layout_width && restored.visible == column.visible,
+                    "legacy width and visibility must retain their named values");
+                const auto restored_type = has_editor ? restored.control->value_type : restored.value_type;
+                expect(restored_type.value_or(model::TypeDomainPatternValue{}) == type,
+                    "declared type must survive without an editor");
+                auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "all column generations must serialize through named XML");
+                if (!xml) continue;
+                auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "optional editor/type XML must parse");
+                if (!parsed) continue;
+                auto rebuilt = form_stream::encode_document(parsed.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+                    "legacy/default/typed columns must rebuild the complete current stream");
+                for (const auto delta : {-1, 1}) {
+                    auto malformed = legacy;
+                    properties(malformed).items.resize(static_cast<std::size_t>(static_cast<int>(stored.items.size()) + delta));
+                    expect(!form_stream::decode_document(malformed, "ColumnArity"),
+                        "known column layout must reject missing or extra fields");
+                }
+            }
+            auto unknown = current.value();
+            properties(unknown).items[0] = list_stream::ListValue::raw_atom("18");
+            expect(!form_stream::decode_document(unknown, "UnknownColumnGeneration"), "unknown generation must reject");
+            auto unknown_profile = current.value();
+            properties(unknown_profile).items[has_editor ? 40 : 39] = list_stream::ListValue::raw_atom("99");
+            auto partial = form_stream::decode_document(unknown_profile, "UnknownColumnProperty");
+            expect(partial.ok() && !partial.value().reconstruction_complete() &&
+                    std::ranges::any_of(partial.diagnostics(), [](const auto& d) { return d.code == "OOF1140"; }),
+                "Table profile normalization must not hide unknown column properties");
+        }
     }
 }
 
@@ -809,7 +905,7 @@ void test_table_row_selection_mode() {
             auto& columns = std::get<model::TablePayload>(table.payload).columns;
             for (unsigned c = 0; c < 1 + (scenario >= 3); ++c) {
                 model::TableColumn col; col.name = "Column" + std::to_string(c); col.data_path = col.name;
-                col.header.items.push_back({"en", col.name}); col.control.kind = model::ControlKind::input_field;
+                col.header.items.push_back({"en", col.name}); col.control->kind = model::ControlKind::input_field;
                 columns.push_back(std::move(col));
             }
             doc.add_control(std::move(table));
@@ -867,7 +963,7 @@ void test_table_fixed_column_positions() {
         auto& columns = std::get<model::TablePayload>(table.payload).columns;
         for (unsigned i = 0; i < 3; ++i) {
             model::TableColumn col; col.name = "Column" + std::to_string(i); col.data_path = col.name;
-            col.header.items.push_back({"en", col.name}); col.control.kind = model::ControlKind::input_field;
+            col.header.items.push_back({"en", col.name}); col.control->kind = model::ControlKind::input_field;
             col.layout_width = model::DecimalValue{"100"};
             if ((scenario == 3 || scenario == 5) && i == 2) col.visible = false;
             if ((scenario == 4 || scenario == 5) && i == 0) col.layout_width = model::DecimalValue{"0"};
@@ -1502,7 +1598,7 @@ void test_table_first_in_group_fresh_model_xml_bin() {
             column.name = std::string(model::metamodel::descriptor_for(kind).public_name);
             column.data_path = "Code";
             column.header.items.push_back({"en", column.name});
-            column.control.kind = kind;
+            column.control->kind = kind;
             columns.push_back(std::move(column));
         }
         document.add_control(std::move(table));
@@ -1540,9 +1636,9 @@ void test_table_first_in_group_fresh_model_xml_bin() {
             std::get<std::string>(table->properties().find(model::PropertyId::from_name("ToolTip"))->value) == "Table hint",
             "common properties must coexist with FirstInGroup and editor profiles");
         const auto& columns = std::get<model::TablePayload>(table->payload).columns;
-        expect(columns.size() == 3 && columns[0].control.kind == model::ControlKind::input_field &&
-                   columns[1].control.kind == model::ControlKind::choice_field &&
-                   columns[2].control.kind == model::ControlKind::check_box,
+        expect(columns.size() == 3 && columns[0].control->kind == model::ControlKind::input_field &&
+                   columns[1].control->kind == model::ControlKind::choice_field &&
+                   columns[2].control->kind == model::ControlKind::check_box,
             "FirstInGroup must preserve all three supported editor profiles");
         auto encoded = form_stream::encode_document(loaded.value());
         expect(encoded.ok(), "fresh loaded Table must encode");
@@ -1628,16 +1724,16 @@ void test_table_column_choice_and_check_box_profiles() {
             column.name = std::move(name);
             column.data_path = "Code";
             column.header.items.push_back({"en", column.name});
-            column.control.kind = kind;
+            column.control->kind = kind;
             columns.push_back(std::move(column));
         };
         add_column("InputCode", model::ControlKind::input_field);
         add_column("ChoiceCode", model::ControlKind::choice_field);
         add_column("CheckCode", model::ControlKind::check_box);
         if (mismatched_property) {
-            columns[1].control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+            columns[1].control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), false);
         }
-        if (invalid_kind != model::ControlKind::input_field) columns[0].control.kind = invalid_kind;
+        if (invalid_kind != model::ControlKind::input_field) columns[0].control->kind = invalid_kind;
         document.add_control(std::move(table));
         return document;
     };
@@ -1645,7 +1741,7 @@ void test_table_column_choice_and_check_box_profiles() {
     for (const auto column_index : {std::size_t{0}, std::size_t{1}}) {
         auto with_width = make_document();
         auto* owner = const_cast<model::ControlNode*>(with_width.find_control(model::ObjectId{3}));
-        std::get<model::TablePayload>(owner->payload).columns[column_index].control.properties.set_explicit(
+        std::get<model::TablePayload>(owner->payload).columns[column_index].control->properties.set_explicit(
             model::PropertyId::from_name("ChoiceListWidth"), std::int64_t{17});
         expect(!form_stream::encode_document(with_width),
             "standalone ChoiceListWidth support must not silently expand TableColumnEditor contracts");
@@ -1653,7 +1749,7 @@ void test_table_column_choice_and_check_box_profiles() {
     auto localized_editor_tooltip = make_document();
     auto* localized_editor_table = const_cast<model::ControlNode*>(
         localized_editor_tooltip.find_control(model::ObjectId{3}));
-    std::get<model::TablePayload>(localized_editor_table->payload).columns[1].control.properties.set_explicit(
+    std::get<model::TablePayload>(localized_editor_table->payload).columns[1].control->properties.set_explicit(
         model::PropertyId::from_name("ToolTip"),
         model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}});
     expect(!form_stream::encode_document(localized_editor_tooltip).ok(),
@@ -1663,7 +1759,7 @@ void test_table_column_choice_and_check_box_profiles() {
         three_state_editor.find_control(model::ObjectId{3}));
     expect(three_state_table != nullptr, "ThreeState TableColumnEditor fixture must contain its Table");
     if (three_state_table != nullptr) {
-        std::get<model::TablePayload>(three_state_table->payload).columns[2].control.properties.set_explicit(
+        std::get<model::TablePayload>(three_state_table->payload).columns[2].control->properties.set_explicit(
             model::PropertyId::from_name("ThreeState"), true);
         expect(!form_stream::encode_document(three_state_editor).ok(),
             "standalone CheckBox ThreeState support must not expand TableColumnEditor profiles");
@@ -1681,9 +1777,9 @@ void test_table_column_choice_and_check_box_profiles() {
         });
     expect(table_after != roundtrip.value().collections().controls.end(), "roundtrip must retain Table");
     const auto& columns_after = std::get<model::TablePayload>(table_after->payload).columns;
-    expect(columns_after.size() == 3 && columns_after[0].control.kind == model::ControlKind::input_field &&
-               columns_after[1].control.kind == model::ControlKind::choice_field &&
-               columns_after[2].control.kind == model::ControlKind::check_box,
+    expect(columns_after.size() == 3 && columns_after[0].control->kind == model::ControlKind::input_field &&
+               columns_after[1].control->kind == model::ControlKind::choice_field &&
+               columns_after[2].control->kind == model::ControlKind::check_box,
         "Table Column editor GUID and typed payload must roundtrip for all supported kinds");
 
     for (const auto column_index : {std::size_t{0}, std::size_t{1}}) {
@@ -1771,12 +1867,12 @@ void test_table_input_field_value_type_round_trip() {
         column.name = "Column" + std::to_string(index);
         column.data_path = column.name;
         column.header.items.push_back({"en", column.name});
-        column.control.kind = model::ControlKind::input_field;
-        column.control.value_type = model::TypeDomainPatternValue{{entry}};
-        expected_types[index] = *column.control.value_type;
+        column.control->kind = model::ControlKind::input_field;
+        column.control->value_type = model::TypeDomainPatternValue{{entry}};
+        expected_types[index] = *column.control->value_type;
         if (index == 0) {
-            column.control.properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
-            column.control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+            column.control->properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+            column.control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
         }
         columns.push_back(std::move(column));
     }
@@ -1801,11 +1897,11 @@ void test_table_input_field_value_type_round_trip() {
     const auto& decoded_columns = std::get<model::TablePayload>(decoded_table->payload).columns;
     expect(decoded_columns.size() == terms.size(), "all five typed columns must be retained");
     for (std::size_t index = 0; index < terms.size(); ++index) {
-        expect(decoded_columns[index].control.value_type == expected_types[index],
+        expect(decoded_columns[index].control->value_type == expected_types[index],
             "each outer and embedded InputField ValueType must survive native round-trip");
     }
-    const auto* enabled = decoded_columns[0].control.properties.find(model::PropertyId::from_name("Enabled"));
-    const auto* read_only = decoded_columns[0].control.properties.find(model::PropertyId::from_name("ReadOnly"));
+    const auto* enabled = decoded_columns[0].control->properties.find(model::PropertyId::from_name("Enabled"));
+    const auto* read_only = decoded_columns[0].control->properties.find(model::PropertyId::from_name("ReadOnly"));
     expect(enabled != nullptr && !std::get<bool>(enabled->value) && read_only != nullptr &&
             std::get<bool>(read_only->value),
         "known InputField Enabled and ReadOnly values must survive native round-trip");
@@ -10584,7 +10680,7 @@ void test_value_tree_tables_and_parent_change() {
                 column.name = name;
                 column.data_path = name;
                 column.header.items.push_back({"en", name});
-                column.control.kind = model::ControlKind::input_field;
+                column.control->kind = model::ControlKind::input_field;
                 columns.push_back(std::move(column));
             }
             if (attach_event) {
@@ -10679,7 +10775,7 @@ void test_table_named_events() {
         for (const auto kind : {model::ControlKind::input_field, model::ControlKind::choice_field, model::ControlKind::check_box}) {
             model::TableColumn column;
             column.name = std::string(model::metamodel::descriptor_for(kind).public_name);
-            column.data_path = column.name; column.control.kind = kind;
+            column.data_path = column.name; column.control->kind = kind;
             column.header.items.push_back({"en", column.name});
             std::get<model::TablePayload>(table.payload).columns.push_back(std::move(column));
         }
@@ -25054,6 +25150,7 @@ int main() {
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
         test_legacy_table_property_layouts();
+        test_table_column_generation_prototypes();
         test_table_column_layout_codec();
         test_table_column_compact_decimal_codec();
         test_table_column_visible_codec();

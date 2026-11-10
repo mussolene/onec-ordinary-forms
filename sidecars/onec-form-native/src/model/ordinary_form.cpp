@@ -3391,8 +3391,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     [&](PropertyId id) { return metamodel::find_property(cell.control->kind, id); });
             }
         } else if (const auto* table = std::get_if<TablePayload>(&control.payload)) {
-            for (const auto& column : table->columns) check_property_values(column.control.properties,
-                [&](PropertyId id) { return metamodel::find_property(column.control.kind, id); });
+            for (const auto& column : table->columns) {
+                if (column.control) check_property_values(column.control->properties,
+                    [&](PropertyId id) { return metamodel::find_property(column.control->kind, id); });
+            }
         }
     }
     if (!typed_values_valid) {
@@ -4306,30 +4308,42 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         invalid_table("Table Column Header languages must be non-empty and unique");
                     }
                 }
-                if (column.control.value_type.has_value()) {
-                    if (column.control.kind != ControlKind::input_field) {
+                if (column.value_type) {
+                    if (column.control) {
+                        invalid_table("Table Column ValueType requires an absent Control; editor ValueType belongs to Control");
+                    } else {
+                        try {
+                            (void)storage::value_codec::encode_type_domain(*column.value_type);
+                        } catch (const std::exception&) {
+                            invalid_table("Table Column ValueType is not supported by the typed codec");
+                        }
+                    }
+                }
+                if (!column.control) continue;
+                if (column.control->value_type.has_value()) {
+                    if (column.control->kind != ControlKind::input_field) {
                         invalid_table("Table Column ValueType is supported only for an InputField editor");
                     } else {
                         try {
-                            (void)storage::value_codec::encode_type_domain(*column.control.value_type);
+                            (void)storage::value_codec::encode_type_domain(*column.control->value_type);
                         } catch (const std::exception&) {
                             invalid_table("Table Column InputField ValueType is not supported by the typed codec");
                         }
                     }
                 }
-                column.control.properties.for_each_explicit([&](const PropertyEntry& entry) {
-                    const auto* property = metamodel::find_property(column.control.kind, entry.id);
-                    if (!table_column_editor_property_allowed(column.control.kind,
+                column.control->properties.for_each_explicit([&](const PropertyEntry& entry) {
+                    const auto* property = metamodel::find_property(column.control->kind, entry.id);
+                    if (!table_column_editor_property_allowed(column.control->kind,
                             property == nullptr ? std::string_view{} : property->api_name) ||
                         !property_value_matches(*property, entry.value) ||
-                        !table_column_editor_property_value_supported(column.control.kind, property->api_name, entry.value)) {
+                        !table_column_editor_property_value_supported(column.control->kind, property->api_name, entry.value)) {
                         invalid_table("Table Column editor has an incompatible, unsupported, or nondefault property");
                         return;
                     }
                 });
-                if (column.control.kind != ControlKind::input_field &&
-                    column.control.kind != ControlKind::choice_field &&
-                    column.control.kind != ControlKind::check_box) {
+                if (column.control->kind != ControlKind::input_field &&
+                    column.control->kind != ControlKind::choice_field &&
+                    column.control->kind != ControlKind::check_box) {
                     invalid_table("Table Column Control kind is unsupported");
                 }
             }

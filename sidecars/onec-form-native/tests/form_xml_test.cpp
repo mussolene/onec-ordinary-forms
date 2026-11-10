@@ -2067,16 +2067,18 @@ void test_table_columns_named_profile() {
     expect(table != nullptr && std::get<model::TablePayload>(table->payload).columns.size() == 4,
         "Table must own its ordered typed Columns");
     const auto& columns = std::get<model::TablePayload>(table->payload).columns;
-    expect(columns[0].control.value_type.has_value() && columns[0].control.value_type->entries.size() == 1 &&
-               columns[0].control.value_type->entries[0].term == model::TypeDomainTerm::date &&
-               columns[0].control.value_type->entries[0].date == model::DateQualifiers{true, false} &&
-               std::get<bool>(columns[0].control.properties.find(model::PropertyId::from_name("Enabled"))->value) == false &&
-               std::get<bool>(columns[0].control.properties.find(model::PropertyId::from_name("ReadOnly"))->value) == true &&
+    expect(std::ranges::all_of(columns, [](const auto& column) { return column.control.has_value(); }),
+        "explicit Column Control nodes must materialize editors");
+    expect(columns[0].control->value_type.has_value() && columns[0].control->value_type->entries.size() == 1 &&
+               columns[0].control->value_type->entries[0].term == model::TypeDomainTerm::date &&
+               columns[0].control->value_type->entries[0].date == model::DateQualifiers{true, false} &&
+               std::get<bool>(columns[0].control->properties.find(model::PropertyId::from_name("Enabled"))->value) == false &&
+               std::get<bool>(columns[0].control->properties.find(model::PropertyId::from_name("ReadOnly"))->value) == true &&
                columns[0].data_path == columns[1].data_path && columns[0].data_path == columns[2].data_path &&
-               columns[2].control.kind == model::ControlKind::choice_field &&
-               columns[3].control.kind == model::ControlKind::check_box &&
-               columns[2].control.properties.empty() &&
-               columns[3].control.properties.empty(),
+               columns[2].control->kind == model::ControlKind::choice_field &&
+               columns[3].control->kind == model::ControlKind::check_box &&
+               columns[2].control->properties.empty() &&
+               columns[3].control->properties.empty(),
         "duplicate DataPath is allowed and typed editor defaults normalize away");
     auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok() && serialized.value().find("<Columns>") != std::string::npos &&
@@ -2086,13 +2088,13 @@ void test_table_columns_named_profile() {
     auto reparsed = source::parse_form_xml(serialized.value());
     expect(reparsed.ok() && reparsed.value().collections().controls.size() == 1 &&
                std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
-                       .columns[2].control.kind == model::ControlKind::choice_field &&
+                       .columns[2].control->kind == model::ControlKind::choice_field &&
                std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
-                       .columns[3].control.kind == model::ControlKind::check_box,
+                       .columns[3].control->kind == model::ControlKind::check_box,
         "Table Column XML must survive a source roundtrip");
     expect(serialized.value().find("<ValueType>") != std::string::npos &&
                std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
-                   .columns[0].control.value_type == columns[0].control.value_type &&
+                   .columns[0].control->value_type == columns[0].control->value_type &&
                serialized.value().find("<Enabled>false</Enabled>") != std::string::npos &&
                serialized.value().find("<ReadOnly>true</ReadOnly>") != std::string::npos,
         "Table InputField TypeDomain, Enabled, and ReadOnly must remain named in XML");
@@ -2144,6 +2146,74 @@ void test_table_columns_named_profile() {
     const auto attribute_pos = dangling_source.find("attributeId=\"2\"");
     dangling_source.replace(attribute_pos, std::string("attributeId=\"2\"").size(), "attributeId=\"99\"");
     expect(!source::parse_form_xml(dangling_source).ok(), "Table source must reject a dangling attribute link");
+}
+
+void test_table_columns_without_editors_xml() {
+    const auto xml = [](std::string_view type) {
+        return std::string(R"XML(<Form id="1" name="NoEditors" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Width unit="form">140</Width><TextFont kind="absolute" faceName="Arial" height="10"/><Visible>false</Visible>)XML") +
+            std::string(type) + "</Column></Columns></Table></ChildItems></Form>";
+    };
+    for (const auto value_type : {std::string_view{},
+             std::string_view{R"XML(<ValueType><Entry term="string" length="20" variable="true"/></ValueType>)XML"},
+             std::string_view{R"XML(<ValueType><Entry term="boolean"/></ValueType>)XML"}}) {
+        auto parsed = source::parse_form_xml(xml(value_type));
+        expect(parsed.ok(), "Column without Control must parse with an independent stored type");
+        const auto& column = std::get<model::TablePayload>(parsed.value()
+            .find_control(model::ObjectId{3})->payload).columns.front();
+        expect(!column.control && column.value_type.has_value() == !value_type.empty(),
+            "omitting Control must preserve an absent editor and the optional stored type owner");
+        expect(column.data_path == "Code" && column.header.items.front().text == "Code" &&
+            column.layout_width == model::DecimalValue{"140"} && !column.visible &&
+            column.text_font.kind == model::FontKind::absolute && column.text_font.face_name == "Arial",
+            "Column data, header, layout, font, and visibility must be independent of an editor");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok() && serialized.value().find("<Control") == std::string::npos &&
+            serialized.value().find("InputField") == std::string::npos &&
+            (serialized.value().find("<ValueType>") != std::string::npos) == !value_type.empty(),
+            "Column XML must retain its stored type without inventing an editor");
+        const auto again = source::parse_form_xml(serialized.value());
+        expect(again.ok(), "Column without Control must parse again");
+        const auto& repeated = std::get<model::TablePayload>(again.value()
+            .find_control(model::ObjectId{3})->payload).columns.front();
+        expect(!repeated.control && repeated.value_type == column.value_type &&
+            repeated.name == column.name && repeated.data_path == column.data_path &&
+            repeated.header == column.header && repeated.layout_width == column.layout_width &&
+            repeated.text_font == column.text_font && repeated.visible == column.visible,
+            "editor absence, stored type, and independent properties must survive XML roundtrip");
+
+        const auto native = oof::storage::form_stream::encode_document(parsed.value());
+        expect(native.ok(), "Column without Control must encode without a baseline");
+        const auto decoded = oof::storage::form_stream::decode_document(native.value(), "NoEditors");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "Column without Control must decode as a complete named model");
+        const auto& native_column = std::get<model::TablePayload>(decoded.value()
+            .find_control(model::ObjectId{3})->payload).columns.front();
+        expect(!native_column.control && native_column.value_type == column.value_type,
+            "native roundtrip must retain the absent editor and its independently stored type");
+        const auto native_xml = source::serialize_form_xml(decoded.value());
+        expect(native_xml.ok() && native_xml.value().find("<Control") == std::string::npos,
+            "native Column without an editor must not acquire a phantom XML Control");
+    }
+    for (const auto type : {std::string_view{"<ValueType/>"},
+             std::string_view{R"XML(<ValueType><Entry term="boolean"/></ValueType>)XML"}}) {
+        expect(!source::parse_form_xml(xml(std::string(type) + "<Control type=\"InputField\"/>")).ok() &&
+            !source::parse_form_xml(xml(std::string("<Control type=\"InputField\"/>") + std::string(type))).ok(),
+            "Column ValueType must reject any Control owner, including an empty stored type and either order");
+    }
+    auto ambiguous = source::parse_form_xml(xml("<ValueType/>"));
+    expect(ambiguous.ok(), "an explicit empty Column stored type must normalize to the default");
+    const auto empty_xml = source::serialize_form_xml(ambiguous.value());
+    expect(empty_xml.ok() && empty_xml.value().find("<ValueType") == std::string::npos,
+        "empty Column ValueType must be omitted consistently with native default decoding");
+    auto& column = std::get<model::TablePayload>(const_cast<model::ControlNode*>(ambiguous.value()
+        .find_control(model::ObjectId{3}))->payload).columns.front();
+    expect(!column.value_type, "empty Column ValueType must parse as an absent default");
+    column.value_type.emplace();
+    column.control.emplace();
+    expect(!source::serialize_form_xml(ambiguous.value()).ok(),
+        "writer must reject a Column with both Control and even an empty ValueType");
+    expect(!source::parse_form_xml(xml("<Control/>")).ok(),
+        "a present Column Control must retain its required type attribute");
 }
 
 void test_table_column_layout_xml() {
@@ -4459,6 +4529,7 @@ int main() {
         test_table_column_visible_and_empty_tree_xml();
         test_table_fixed_column_xml();
         test_table_columns_named_profile();
+        test_table_columns_without_editors_xml();
         test_table_column_layout_xml();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();

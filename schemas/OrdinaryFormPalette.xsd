@@ -1348,6 +1348,7 @@
           <Property name="Width" russianName="Ширина" russianType="Число" unit="form"/><Property name="TextFont" russianName="ШрифтТекста" russianType="Шрифт"/>
           <Property name="Visible" russianName="Видимость" russianType="Булево"/>
           <Property name="Control" russianName="ЭлементУправления"/>
+          <Property name="ValueType" russianName="ОписаниеТипа" russianType="ОписаниеТипов" source="storedTypeDescriptor"/>
         </Properties></NamedConcept>
         <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/>

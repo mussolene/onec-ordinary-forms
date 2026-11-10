@@ -4226,7 +4226,13 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
         "Table Column editor kind is unsupported");
 }
 
-LV canonical_table_column_record(const model::TableColumn& column, std::string_view path, bool tree_source = false, std::size_t ordinal = 0) {
+std::size_t table_column_property_slot(std::size_t logical_slot, bool has_editor) {
+    if (logical_slot == 39 && !has_editor)
+        throw std::logic_error("Table Column without an editor has no editor packet");
+    return logical_slot - (!has_editor && logical_slot > 39 ? 1 : 0);
+}
+
+LV canonical_table_column_properties(bool has_editor) {
     auto properties = parse_constant(R"OOF(
 {23,{0},{1,0},{1,0},2.1e2,0,0,-1,-1,12590592,
 {4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},
@@ -4238,6 +4244,55 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
     if (properties.items.size() != 52) {
         throw std::logic_error("canonical Table Column property record has the wrong arity");
     }
+    if (!has_editor) {
+        properties.items[38] = raw(std::string(null_uuid));
+        properties.items.erase(properties.items.begin() + 39);
+    }
+    return properties;
+}
+
+struct TableColumnLayout {
+    RecordLayout record;
+    bool has_layout_width;
+};
+constexpr std::array table_column_layouts{
+    TableColumnLayout{{"16", 40}, false}, TableColumnLayout{{"17", 43}, false},
+    TableColumnLayout{{"19", 46}, true}, TableColumnLayout{{"23", 52}, true},
+};
+
+std::optional<LV> upgrade_table_column_properties(const LV& source, std::string_view path) {
+    require_list(source, path);
+    if (source.items.empty()) require_arity(source, 52, path);
+    const auto version = raw_atom(source.items[0], child_path(path, 0));
+    const auto layout = std::ranges::find_if(table_column_layouts,
+        [&](const auto& item) { return item.record.version == version; });
+    if (layout == table_column_layouts.end())
+        fail("OOF1106", child_path(path, 0), "supported Table Column generation", version,
+            "Table Column properties version is unsupported");
+    const bool has_editor = raw_atom(at(source, 38, path), child_path(path, 38)) != null_uuid;
+    require_arity(source, layout->record.arity - (has_editor ? 0 : 1), path);
+    if (version == "23") return std::nullopt;
+    auto current = canonical_table_column_properties(has_editor);
+    std::copy(source.items.begin() + 1, source.items.end(), current.items.begin() + 1);
+    if (!layout->has_layout_width)
+        current.items[table_column_property_slot(45, has_editor)] = source.items[4];
+    for (const auto slot : {22U, 23U, 24U}) {
+        const auto& font = current.items[slot];
+        if (font.is_list && !font.items.empty() && !font.items[0].is_list &&
+            (font.items[0].atom == "6" || font.items[0].atom == "7"))
+            current.items[slot] = encode_control_font(decode_control_font(font, child_path(path, slot)), child_path(path, slot));
+    }
+    for (const auto slot : {16U, 17U, 18U, 19U, 20U, 21U}) {
+        const auto& color = current.items[slot];
+        if (color.is_list && !color.items.empty() && !color.items[0].is_list && color.items[0].atom == "3")
+            current.items[slot] = encode_control_color(decode_control_color(color, child_path(path, slot)), child_path(path, slot));
+    }
+    return current;
+}
+
+LV canonical_table_column_record(const model::TableColumn& column, std::string_view path, bool tree_source = false, std::size_t ordinal = 0) {
+    const bool has_editor = column.control.has_value();
+    auto properties = canonical_table_column_properties(has_editor);
     properties.items[1] = encoded_localized(column.header);
     constexpr std::uint32_t visible_mask = 0x400U;
     if (!column.visible) {
@@ -4262,16 +4317,18 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         } catch (const std::exception& error) {
             fail("OOF1122", std::string(path) + "/Width", "representable platform decimal", width, error.what());
         }
-        properties.items[45] = properties.items[4];
+        properties.items[table_column_property_slot(45, has_editor)] = properties.items[4];
     }
     properties.items[22] = encode_control_font(column.text_font, std::string(path) + "/TextFont");
     properties.items[30] = string_value(column.name);
-    properties.items[35] = encoded_type_domain(
-        column.control.value_type.value_or(model::TypeDomainPatternValue{}),
-        std::string(path) + "/Control/ValueType");
-    properties.items[38] = raw(std::string(model::metamodel::descriptor_for(column.control.kind).guid));
-    properties.items[39] = encode_table_column_editor_packet(
-        canonical_table_column_editor_info(column.control), std::string(path) + "/Control");
+    const auto& value_type = has_editor ? column.control->value_type : column.value_type;
+    properties.items[35] = encoded_type_domain(value_type.value_or(model::TypeDomainPatternValue{}),
+        std::string(path) + (has_editor ? "/Control/ValueType" : "/ValueType"));
+    if (has_editor) {
+        properties.items[38] = raw(std::string(model::metamodel::descriptor_for(column.control->kind).guid));
+        properties.items[39] = encode_table_column_editor_packet(
+            canonical_table_column_editor_info(*column.control), std::string(path) + "/Control");
+    }
     return list({
         raw("737535a4-21e6-4971-8513-3e3173a9fedd"),
         list({raw("8"), list({raw("8"), std::move(properties), list({raw("-1")}), list({raw("-1")}), list({raw("-1")})}),
@@ -10976,9 +11033,9 @@ model::TableColumn decode_table_column(
     require_arity(info, 5, info_path);
     require_raw_constant(info.items[0], "8", child_path(info_path, 0));
     const auto properties_path = child_path(info_path, 1);
-    const auto& properties = info.items[1];
-    require_arity(properties, 52, properties_path);
-    require_raw_constant(properties.items[0], "23", child_path(properties_path, 0));
+    const auto upgraded_properties = upgrade_table_column_properties(info.items[1], properties_path);
+    const auto& properties = upgraded_properties ? *upgraded_properties : info.items[1];
+    const bool has_editor = raw_atom(properties.items[38], child_path(properties_path, 38)) != null_uuid;
 
     model::TableColumn column;
     constexpr std::uint32_t visible_mask = 0x400U;
@@ -10986,7 +11043,7 @@ model::TableColumn decode_table_column(
     column.visible = (flags & visible_mask) != 0;
     for (const auto slot : {4U, 32U, 45U}) {
         const auto width_path = child_path(properties_path, slot);
-        const auto stored = raw_atom(properties.items[slot], width_path);
+        const auto stored = raw_atom(properties.items[table_column_property_slot(slot, has_editor)], width_path);
         std::string width;
         try { width = value_codec::canonical_platform_decimal(stored); }
         catch (const std::exception& error) {
@@ -11007,152 +11064,162 @@ model::TableColumn decode_table_column(
     } catch (const std::exception& error) {
         fail("OOF1108", child_path(properties_path, 1), "LocalizedString Header", describe(properties.items[1]), error.what());
     }
-    model::ControlKind editor_kind;
-    const auto& editor_guid = properties.items[38];
-    if (!editor_guid.is_list && editor_guid.atom ==
-        model::metamodel::descriptor_for(model::ControlKind::input_field).guid) {
-        editor_kind = model::ControlKind::input_field;
-    } else if (!editor_guid.is_list && editor_guid.atom ==
-        model::metamodel::descriptor_for(model::ControlKind::choice_field).guid) {
-        editor_kind = model::ControlKind::choice_field;
-    } else if (!editor_guid.is_list && editor_guid.atom ==
-        model::metamodel::descriptor_for(model::ControlKind::check_box).guid) {
-        editor_kind = model::ControlKind::check_box;
-    } else {
-        fail("OOF1122", child_path(properties_path, 38), "InputField, ChoiceField, or CheckBox GUID",
-            describe(editor_guid), "Table Column editor kind is unsupported");
-    }
     const auto column_type = type_domain(properties.items[35], child_path(properties_path, 35));
-    const auto inflated = decode_table_column_editor_packet(
-        properties.items[39], child_path(properties_path, 39));
-    constexpr std::size_t envelope_prefix_size = sizeof(std::uint64_t) + 3;
-    const std::string_view editor_text(
-        reinterpret_cast<const char*>(inflated.data() + envelope_prefix_size),
-        inflated.size() - envelope_prefix_size);
-    LV editor_info;
-    try {
-        editor_info = list_stream::parse(editor_text);
-    } catch (const std::exception& error) {
-        fail("OOF1114", child_path(properties_path, 39), "valid embedded Table Column editor ListStream", {}, error.what());
-    }
-    column.control.kind = editor_kind;
-    const auto editor_path = child_path(properties_path, 39);
-    bool input_field_pair_absent = false;
-    bool input_field_scalar_pair = false;
-    if (editor_kind == model::ControlKind::input_field) {
-        require_arity(editor_info, 10, editor_path);
-        require_raw_constant(editor_info.items[0], "9", child_path(editor_path, 0));
-        require_arity(editor_info.items[2], 1, child_path(editor_path, 2));
-        const auto payload_path = editor_path + "/payload";
-        const auto base_path = editor_path + "/base";
-        require_arity(editor_info.items[2].items[0], 46, payload_path);
-        require_raw_constant(editor_info.items[2].items[0].items[1], "31", child_path(payload_path, 1));
-        require_arity(editor_info.items[2].items[0].items[0], 21, base_path);
-        require_raw_constant(editor_info.items[2].items[0].items[0].items[0], "19", child_path(base_path, 0));
-        auto embedded_type = type_domain(editor_info.items[1], child_path(editor_path, 1));
-        if (embedded_type != column_type) {
-            fail("OOF1122", child_path(editor_path, 1), "ValueType matching Table Column ValueType",
-                describe(editor_info.items[1]), "Embedded editor and Table Column ValueType disagree");
-        }
-        const auto paired_path = child_path(editor_path, 3);
-        require_list(editor_info.items[3], paired_path);
-        if (editor_info.items[3].items.size() == 1) {
-            require_exact(editor_info.items[3], list({raw("0")}), paired_path,
-                "Table Column InputField has an unsupported empty paired record");
-            input_field_pair_absent = true;
+    if (!has_editor) {
+        column.control.reset();
+        if (!column_type.entries.empty()) column.value_type = column_type;
+    } else {
+        model::ControlKind editor_kind;
+        const auto& editor_guid = properties.items[38];
+        if (!editor_guid.is_list && editor_guid.atom ==
+            model::metamodel::descriptor_for(model::ControlKind::input_field).guid) {
+            editor_kind = model::ControlKind::input_field;
+        } else if (!editor_guid.is_list && editor_guid.atom ==
+            model::metamodel::descriptor_for(model::ControlKind::choice_field).guid) {
+            editor_kind = model::ControlKind::choice_field;
+        } else if (!editor_guid.is_list && editor_guid.atom ==
+            model::metamodel::descriptor_for(model::ControlKind::check_box).guid) {
+            editor_kind = model::ControlKind::check_box;
         } else {
-            require_arity(editor_info.items[3], 2, paired_path);
-            require_raw_constant(editor_info.items[3].items[0], "1", child_path(paired_path, 0));
-            if (embedded_type.entries.size() == 1 &&
-                embedded_type.entries.front().term == model::TypeDomainTerm::value_list) {
-                require_exact(editor_info.items[3], canonical_table_value_list_type_pair(
-                    child_path(editor_path, 1)), paired_path,
-                    "Table Column ValueList editor type restriction is unsupported");
-            } else if (embedded_type.entries.size() == 1 &&
-                (embedded_type.entries.front().term == model::TypeDomainTerm::string ||
-                 embedded_type.entries.front().term == model::TypeDomainTerm::numeric ||
-                 embedded_type.entries.front().term == model::TypeDomainTerm::boolean ||
-                 is_single_date_only_type_domain(embedded_type))) {
-                InputFieldFlagValues defaults{};
-                for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
-                    defaults[index] = input_field_flag_mappings[index].default_value;
-                }
-                const model::TypeDomainPatternValue empty_type;
-                const LV standard_info = canonical_input_field_info(
-                    empty_type, true, false, defaults, InputFieldTextValues{}, InputFieldLayoutValues{});
-                const auto& standard_pair = standard_info.items[3];
-                require_arity(standard_pair, 2, paired_path);
-                require_arity(standard_pair.items[1], 2, child_path(paired_path, 1));
-                require_arity(editor_info.items[3].items[1], 2, child_path(paired_path, 1));
-                require_exact(editor_info.items[3].items[1].items[0], standard_pair.items[1].items[0],
-                    child_path(child_path(paired_path, 1), 0),
-                    "Table Column InputField paired type descriptor is unsupported");
-                input_field_scalar_pair = true;
+            fail("OOF1122", child_path(properties_path, 38), "InputField, ChoiceField, or CheckBox GUID",
+                describe(editor_guid), "Table Column editor kind is unsupported");
+        }
+        const auto inflated = decode_table_column_editor_packet(
+            properties.items[39], child_path(properties_path, 39));
+        constexpr std::size_t envelope_prefix_size = sizeof(std::uint64_t) + 3;
+        const std::string_view editor_text(
+            reinterpret_cast<const char*>(inflated.data() + envelope_prefix_size),
+            inflated.size() - envelope_prefix_size);
+        LV editor_info;
+        try {
+            editor_info = list_stream::parse(editor_text);
+        } catch (const std::exception& error) {
+            fail("OOF1114", child_path(properties_path, 39), "valid embedded Table Column editor ListStream", {}, error.what());
+        }
+        column.control->kind = editor_kind;
+        const auto editor_path = child_path(properties_path, 39);
+        bool input_field_pair_absent = false;
+        bool input_field_scalar_pair = false;
+        if (editor_kind == model::ControlKind::input_field) {
+            require_arity(editor_info, 10, editor_path);
+            require_raw_constant(editor_info.items[0], "9", child_path(editor_path, 0));
+            require_arity(editor_info.items[2], 1, child_path(editor_path, 2));
+            const auto payload_path = editor_path + "/payload";
+            const auto base_path = editor_path + "/base";
+            require_arity(editor_info.items[2].items[0], 46, payload_path);
+            require_raw_constant(editor_info.items[2].items[0].items[1], "31", child_path(payload_path, 1));
+            require_arity(editor_info.items[2].items[0].items[0], 21, base_path);
+            require_raw_constant(editor_info.items[2].items[0].items[0].items[0], "19", child_path(base_path, 0));
+            auto embedded_type = type_domain(editor_info.items[1], child_path(editor_path, 1));
+            if (embedded_type != column_type) {
+                fail("OOF1122", child_path(editor_path, 1), "ValueType matching Table Column ValueType",
+                    describe(editor_info.items[1]), "Embedded editor and Table Column ValueType disagree");
+            }
+            const auto paired_path = child_path(editor_path, 3);
+            require_list(editor_info.items[3], paired_path);
+            if (editor_info.items[3].items.size() == 1) {
+                require_exact(editor_info.items[3], list({raw("0")}), paired_path,
+                    "Table Column InputField has an unsupported empty paired record");
+                input_field_pair_absent = true;
             } else {
-                fail("OOF1122", paired_path,
-                    "absent pair or proven scalar/ValueList InputField pair",
-                    describe(editor_info.items[3]),
-                    "Table Column InputField paired metadata does not match its named ValueType");
+                require_arity(editor_info.items[3], 2, paired_path);
+                require_raw_constant(editor_info.items[3].items[0], "1", child_path(paired_path, 0));
+                if (embedded_type.entries.size() == 1 &&
+                    embedded_type.entries.front().term == model::TypeDomainTerm::value_list) {
+                    require_exact(editor_info.items[3], canonical_table_value_list_type_pair(
+                        child_path(editor_path, 1)), paired_path,
+                        "Table Column ValueList editor type restriction is unsupported");
+                } else if (embedded_type.entries.size() == 1 &&
+                    (embedded_type.entries.front().term == model::TypeDomainTerm::string ||
+                     embedded_type.entries.front().term == model::TypeDomainTerm::numeric ||
+                     embedded_type.entries.front().term == model::TypeDomainTerm::boolean ||
+                     is_single_date_only_type_domain(embedded_type))) {
+                    InputFieldFlagValues defaults{};
+                    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+                        defaults[index] = input_field_flag_mappings[index].default_value;
+                    }
+                    const model::TypeDomainPatternValue empty_type;
+                    const LV standard_info = canonical_input_field_info(
+                        empty_type, true, false, defaults, InputFieldTextValues{}, InputFieldLayoutValues{});
+                    const auto& standard_pair = standard_info.items[3];
+                    require_arity(standard_pair, 2, paired_path);
+                    require_arity(standard_pair.items[1], 2, child_path(paired_path, 1));
+                    require_arity(editor_info.items[3].items[1], 2, child_path(paired_path, 1));
+                    require_exact(editor_info.items[3].items[1].items[0], standard_pair.items[1].items[0],
+                        child_path(child_path(paired_path, 1), 0),
+                        "Table Column InputField paired type descriptor is unsupported");
+                    input_field_scalar_pair = true;
+                } else {
+                    fail("OOF1122", paired_path,
+                        "absent pair or proven scalar/ValueList InputField pair",
+                        describe(editor_info.items[3]),
+                        "Table Column InputField paired metadata does not match its named ValueType");
+                }
+            }
+            static_cast<void>(decode_input_field_flags(editor_info, editor_path,
+                input_field_scalar_pair ? InputFieldPairMode::require_matching_pair : InputFieldPairMode::payload_only));
+            if (!embedded_type.entries.empty()) column.control->value_type = std::move(embedded_type);
+            const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], editor_path);
+            const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], editor_path);
+            if (!enabled) column.control->properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+            if (read_only) column.control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+        } else {
+            if (!column_type.entries.empty()) {
+                fail("OOF1122", child_path(properties_path, 35), "empty ValueType for non-InputField editor",
+                    describe(properties.items[35]), "Table Column ValueType is supported only for an InputField editor");
+            }
+            const auto embedded_payload_path = child_path(editor_path, 1);
+            const LV* enabled_atom = nullptr;
+            if (editor_kind == model::ControlKind::choice_field) {
+                require_arity(editor_info, 3, editor_path);
+                require_raw_constant(editor_info.items[0], "2", child_path(editor_path, 0));
+                require_arity(editor_info.items[1], 46, embedded_payload_path);
+                require_raw_constant(editor_info.items[1].items[1], "31", child_path(embedded_payload_path, 1));
+                require_arity(editor_info.items[1].items[0], 21, child_path(embedded_payload_path, 0));
+                require_raw_constant(editor_info.items[1].items[0].items[0], "19",
+                    child_path(child_path(embedded_payload_path, 0), 0));
+                require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
+                    "Table Column ChoiceField cannot contain storage children");
+                enabled_atom = &editor_info.items[1].items[0].items[1];
+            } else {
+                require_arity(editor_info, 3, editor_path);
+                require_raw_constant(editor_info.items[0], "1", child_path(editor_path, 0));
+                require_arity(editor_info.items[1], 7, embedded_payload_path);
+                require_arity(editor_info.items[1].items[0], 9, child_path(embedded_payload_path, 0));
+                require_raw_constant(editor_info.items[1].items[0].items[1], "7",
+                    child_path(child_path(embedded_payload_path, 0), 1));
+                require_arity(editor_info.items[1].items[0].items[0], 21,
+                    child_path(child_path(embedded_payload_path, 0), 0));
+                require_raw_constant(editor_info.items[1].items[0].items[0].items[0], "19",
+                    child_path(child_path(child_path(embedded_payload_path, 0), 0), 0));
+                require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
+                    "Table Column CheckBox cannot contain storage children");
+                enabled_atom = &editor_info.items[1].items[0].items[0].items[1];
+            }
+            const bool enabled = bool_atom(*enabled_atom, editor_path);
+            if (!enabled) {
+                fail("OOF1122", editor_path, "Enabled=true for non-InputField editor", "Enabled=false",
+                    "Table Column ChoiceField and CheckBox Enabled=false is outside the proven profile");
             }
         }
-        static_cast<void>(decode_input_field_flags(editor_info, editor_path,
-            input_field_scalar_pair ? InputFieldPairMode::require_matching_pair : InputFieldPairMode::payload_only));
-        if (!embedded_type.entries.empty()) column.control.value_type = std::move(embedded_type);
-        const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], editor_path);
-        const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], editor_path);
-        if (!enabled) column.control.properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
-        if (read_only) column.control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
-    } else {
-        if (!column_type.entries.empty()) {
-            fail("OOF1122", child_path(properties_path, 35), "empty ValueType for non-InputField editor",
-                describe(properties.items[35]), "Table Column ValueType is supported only for an InputField editor");
+        const LV canonical_editor = canonical_table_column_editor_info(*column.control);
+        LV shape_editor = editor_info;
+        if (input_field_pair_absent) shape_editor.items[3] = canonical_editor.items[3];
+        require_list_stream_shape(shape_editor, canonical_editor, editor_path,
+            "typed Table Column editor with valid record arity and atom types");
+        if (list_stream::dump_compact(editor_info) != list_stream::dump_compact(canonical_editor)) {
+            warn_incomplete_profile(warnings, reconstruction_complete, table_id, editor_path, "TableColumn");
         }
-        const auto embedded_payload_path = child_path(editor_path, 1);
-        const LV* enabled_atom = nullptr;
-        if (editor_kind == model::ControlKind::choice_field) {
-            require_arity(editor_info, 3, editor_path);
-            require_raw_constant(editor_info.items[0], "2", child_path(editor_path, 0));
-            require_arity(editor_info.items[1], 46, embedded_payload_path);
-            require_raw_constant(editor_info.items[1].items[1], "31", child_path(embedded_payload_path, 1));
-            require_arity(editor_info.items[1].items[0], 21, child_path(embedded_payload_path, 0));
-            require_raw_constant(editor_info.items[1].items[0].items[0], "19",
-                child_path(child_path(embedded_payload_path, 0), 0));
-            require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
-                "Table Column ChoiceField cannot contain storage children");
-            enabled_atom = &editor_info.items[1].items[0].items[1];
-        } else {
-            require_arity(editor_info, 3, editor_path);
-            require_raw_constant(editor_info.items[0], "1", child_path(editor_path, 0));
-            require_arity(editor_info.items[1], 7, embedded_payload_path);
-            require_arity(editor_info.items[1].items[0], 9, child_path(embedded_payload_path, 0));
-            require_raw_constant(editor_info.items[1].items[0].items[1], "7",
-                child_path(child_path(embedded_payload_path, 0), 1));
-            require_arity(editor_info.items[1].items[0].items[0], 21,
-                child_path(child_path(embedded_payload_path, 0), 0));
-            require_raw_constant(editor_info.items[1].items[0].items[0].items[0], "19",
-                child_path(child_path(child_path(embedded_payload_path, 0), 0), 0));
-            require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
-                "Table Column CheckBox cannot contain storage children");
-            enabled_atom = &editor_info.items[1].items[0].items[0].items[1];
-        }
-        const bool enabled = bool_atom(*enabled_atom, editor_path);
-        if (!enabled) {
-            fail("OOF1122", editor_path, "Enabled=true for non-InputField editor", "Enabled=false",
-                "Table Column ChoiceField and CheckBox Enabled=false is outside the proven profile");
-        }
-    }
-    const LV canonical_editor = canonical_table_column_editor_info(column.control);
-    LV shape_editor = editor_info;
-    if (input_field_pair_absent) shape_editor.items[3] = canonical_editor.items[3];
-    require_list_stream_shape(shape_editor, canonical_editor, editor_path,
-        "typed Table Column editor with valid record arity and atom types");
-    if (list_stream::dump_compact(editor_info) != list_stream::dump_compact(canonical_editor)) {
-        warn_incomplete_profile(warnings, reconstruction_complete, table_id, editor_path, "TableColumn");
     }
     LV normalized = value;
+    normalized.items[1].items[1].items[1] = properties;
     const LV canonical = canonical_table_column_record(column, path, tree_source, ordinal);
-    for (const auto slot : {4U, 22U, 32U, 39U, 45U})
-        normalized.items[1].items[1].items[1].items[slot] = canonical.items[1].items[1].items[1].items[slot];
+    for (const auto slot : {4U, 22U, 32U, 45U}) {
+        const auto physical_slot = table_column_property_slot(slot, has_editor);
+        normalized.items[1].items[1].items[1].items[physical_slot] = canonical.items[1].items[1].items[1].items[physical_slot];
+    }
+    if (has_editor)
+        normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
     require_list_stream_shape(normalized, canonical, path,
         "Table Column with valid record arity and atom types");
     if (list_stream::dump_compact(normalized) != list_stream::dump_compact(canonical)) {
@@ -11326,13 +11393,8 @@ DecodedControl decode_table(
     auto& normalized_base = normalized_info.items[2].items[0];
     const auto& canonical_base = canonical_info.items[2].items[0];
     for (const auto slot : {1U, 4U, 6U, 7U, 11U, 12U}) normalized_base.items.at(slot) = canonical_base.items.at(slot);
-    auto& normalized_columns = normalized_info.items[2].items[1].items[23];
-    const auto& canonical_columns = canonical_info.items[2].items[1].items[23];
-    for (std::size_t index = 1; index < normalized_columns.items.size(); ++index) {
-        for (const auto slot : {4U, 22U, 32U, 39U, 45U})
-            normalized_columns.items[index].items[1].items[1].items[1].items[slot] =
-                canonical_columns.items[index].items[1].items[1].items[1].items[slot];
-    }
+    // Each column has already checked its complete normalized profile above.
+    normalized_info.items[2].items[1].items[23] = canonical_info.items[2].items[1].items[23];
     require_list_stream_shape(normalized_info, canonical_info, info_path,
         "Table with valid property and column record arity and atom types");
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {

@@ -1165,7 +1165,7 @@ void test_table_read_only_schema_contract(xmlSchemaPtr schema) {
     expect(validate_document(schema, invalid) != 0, "Table ReadOnly must reject nonboolean XML values");
 }
 
-void test_table_column_editor_schema(xmlNodePtr schema) {
+void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     expect(enumeration_values(schema, "TableColumnEditorKindType") ==
             std::vector<std::string>{"InputField", "ChoiceField", "CheckBox"},
         "Table Column Control must expose only the three named editor kinds");
@@ -1182,6 +1182,44 @@ void test_table_column_editor_schema(xmlNodePtr schema) {
         expect_element_shape(elements[index], expected[index].first, expected[index].second, "0", "1");
     }
     expect_type_attribute(schema, "TableColumnControlType", "type", "TableColumnEditorKindType", "required");
+
+    xmlNodePtr column_sequence = sequence_for_type(schema, "TableColumnType");
+    const auto column_fields = direct_children(column_sequence, "element");
+    expect(column_fields.size() == 5, "Table Column layout properties must stay independent of the editor");
+    expect_element_shape(column_fields[0], "DataPath", "xs:string", "1", "1");
+    expect_element_shape(column_fields[1], "Header", "LocalizedStringValueType", "1", "1");
+    expect_element_shape(column_fields[2], "Width", "TableColumnWidthType", "0", "1");
+    expect_element_shape(column_fields[3], "TextFont", "FontValueType", "0", "1");
+    expect_element_shape(column_fields[4], "Visible", "xs:boolean", "0", "1");
+    xmlNodePtr owners = direct_child(column_sequence, "choice");
+    expect(owners != nullptr && attribute(owners, "minOccurs") == "0" && attribute(owners, "maxOccurs") == "1",
+        "Table Column stored type and Control must have a single optional owner");
+    const auto owner_fields = direct_children(owners, "element");
+    expect(owner_fields.size() == 2, "Table Column must offer only Control or its own stored type");
+    expect_element_shape(owner_fields[0], "Control", "TableColumnControlType", "0", "1");
+    expect_element_shape(owner_fields[1], "ValueType", "TypeDomainValueType", "1", "1");
+    const auto xml = [](std::string_view owner) {
+        return std::string(R"XML(<Form id="1" name="Column" ordinaryFormVersion="2.1"><ChildItems><Table id="2" name="Rows"><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Width unit="form">140</Width><TextFont kind="automatic"/><Visible>false</Visible>)XML") +
+            std::string(owner) + "</Column></Columns></Table></ChildItems></Form>";
+    };
+    for (const auto owner : {std::string_view{},
+             std::string_view{R"XML(<Control type="InputField"/>)XML"},
+             std::string_view{R"XML(<Control type="ChoiceField"/>)XML"},
+             std::string_view{R"XML(<Control type="CheckBox"/>)XML"},
+             std::string_view{R"XML(<Control type="InputField"><ValueType><Entry term="boolean"/></ValueType></Control>)XML"},
+             std::string_view{R"XML(<ValueType><Entry term="string" length="20" variable="true"/></ValueType>)XML"},
+             std::string_view{R"XML(<ValueType><Entry term="boolean"/></ValueType>)XML"}}) {
+        expect(validate_document(compiled, xml(owner)) == 0,
+            "XSD must accept an absent editor, either named type owner, and the three supported editors");
+    }
+    for (const auto owner : {std::string_view{"<Control/>"},
+             std::string_view{R"XML(<Control type="Button"/>)XML"},
+             std::string_view{R"XML(<Control type="InputField"/><ValueType/>)XML"},
+             std::string_view{R"XML(<ValueType/><Control type="InputField"/>)XML"},
+             std::string_view{R"XML(<ValueType><TypeDomain><Entry term="boolean"/></TypeDomain></ValueType>)XML"}}) {
+        expect(validate_document(compiled, xml(owner)) != 0,
+            "XSD must reject a missing or unsupported editor kind, two type owners, and a nested TypeDomain wrapper");
+    }
 }
 
 void test_spreadsheet_document_schema(xmlNodePtr schema) {
@@ -1415,6 +1453,10 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     xmlNodePtr column_properties = direct_child(table_column, "Properties");
     xmlNodePtr column_width = direct_child_with_attribute(column_properties, "Property", "name", "Width");
     xmlNodePtr column_font = direct_child_with_attribute(column_properties, "Property", "name", "TextFont");
+    xmlNodePtr column_type = direct_child_with_attribute(column_properties, "Property", "name", "ValueType");
+    expect(column_type != nullptr && attribute(column_type, "source") == "storedTypeDescriptor" &&
+        attribute(column_type, "apiName").empty(),
+        "Column ValueType palette must identify a stored type descriptor without inventing an API property");
     expect(column_width != nullptr && attribute(column_width, "russianName") == "Ширина" &&
         attribute(column_width, "russianType") == "Число" && attribute(column_width, "unit") == "form",
         "column width palette must declare layout units and its Russian platform name");
@@ -2007,7 +2049,7 @@ int main() {
         test_control_surfaces_and_property_order(metamodel, form_schema);
         test_spreadsheet_document_schema(form_schema);
         test_choice_field_schema_contract(compiled_form.get());
-        test_table_column_editor_schema(form_schema);
+        test_table_column_editor_schema(form_schema, compiled_form.get());
         test_table_read_only_schema_contract(compiled_form.get());
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);

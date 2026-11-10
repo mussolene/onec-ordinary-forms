@@ -1255,7 +1255,9 @@ struct TableColumn {
     std::string name;
     std::string data_path;
     LocalizedStringValue header;
-    TableColumnControl control;
+    std::optional<TableColumnControl> control = TableColumnControl{};
+    // Собственный тип колонки хранится здесь только при отсутствии редактора.
+    std::optional<TypeDomainPatternValue> value_type;
     // Ширина сохраняемого макета в единицах формы; API Width использует символы.
     std::optional<DecimalValue> layout_width;
     FontValue text_font;

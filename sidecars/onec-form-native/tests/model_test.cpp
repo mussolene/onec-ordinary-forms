@@ -3666,6 +3666,80 @@ void test_table_columns_reference() {
         !document.table_columns({}), "Table.Columns resolution rejects missing or wrong owners");
 }
 
+void test_table_column_optional_control() {
+    const auto make_document = [](TableColumn column) {
+        Form form; form.id = ObjectId{1}; form.name = "ColumnControl";
+        form.children.emplace_back(ControlRef{ObjectId{3}});
+        OrdinaryFormDocument document(std::move(form));
+        document.add_attribute(Attribute{ObjectId{2}, "Rows",
+            TypeDomainPatternValue{{TypeDomainEntry{.term = TypeDomainTerm::value_table}}}});
+        ControlNode table{ObjectId{3}, "Rows", TablePayload{}};
+        table.data_path = DataPath{AttributeRef{ObjectId{2}}, {}};
+        std::get<TablePayload>(table.payload).columns.push_back(std::move(column));
+        document.add_control(std::move(table));
+        return document;
+    };
+    TableColumn column;
+    column.name = "Code"; column.data_path = "Code";
+    column.header.items.push_back({"en", "Code"});
+    expect(column.control && column.control->kind == ControlKind::input_field && !column.value_type,
+        "default TableColumn construction retains an owned InputField editor");
+    expect(make_document(column).validate().ok(), "default TableColumn editor remains valid");
+    auto default_copy = column;
+    default_copy.control->properties.set_explicit(PropertyId::from_name("Enabled"), false);
+    expect(column.control->properties.empty() && !default_copy.control->properties.empty(),
+        "copied default column editor owns its properties independently");
+
+    column.control.reset();
+    expect(make_document(column).validate().ok(), "TableColumn may explicitly have no editor or ValueType");
+    TypeDomainEntry text; text.term = TypeDomainTerm::string; text.string = {20, false};
+    const TypeDomainEntry boolean{.term = TypeDomainTerm::boolean};
+    for (const auto& type : {TypeDomainPatternValue{}, TypeDomainPatternValue{{text}},
+            TypeDomainPatternValue{{boolean}}, TypeDomainPatternValue{{text, boolean}}}) {
+        column.value_type = type;
+        const auto document = make_document(column);
+        expect(document.validate().ok(),
+            "absent editor retains a valid column ValueType without InputField restrictions");
+        const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{3}};
+        const auto reference = document.get_prop_val(owner, PropertyId::from_name("Columns"));
+        const auto* columns = reference.value
+            ? document.table_columns(std::get<TableColumnsRef>(*reference.value)) : nullptr;
+        expect(columns && columns->size() == 1 && !columns->front().control &&
+                columns->front().value_type == type,
+            "Table.Columns exposes the same owned column and its absent editor state");
+    }
+    auto absent_copy = column;
+    absent_copy.value_type->entries.front().string.length = 30;
+    expect(!absent_copy.control && !column.control && column.value_type->entries.front().string.length == 20,
+        "copied absent editor and column ValueType retain independent values");
+    auto copied_document = make_document(column);
+    const auto copied_document_again = copied_document;
+    const auto* copied_table = copied_document_again.find_control(ObjectId{3});
+    expect(copied_table && !std::get<TablePayload>(copied_table->payload).columns.front().control &&
+            std::get<TablePayload>(copied_table->payload).columns.front().value_type == column.value_type &&
+            copied_document_again.validate().ok(),
+        "document copy preserves the absent editor and column-owned ValueType");
+
+    TypeDomainEntry invalid_number; invalid_number.term = TypeDomainTerm::numeric;
+    invalid_number.numeric = {0, 2, false};
+    column.value_type = TypeDomainPatternValue{{invalid_number}};
+    expect(make_document(column).validate().has(InvariantCode::invalid_property),
+        "absent editor column ValueType is validated by the typed codec");
+
+    column.value_type = TypeDomainPatternValue{{text}};
+    column.control.emplace();
+    expect(make_document(column).validate().has(InvariantCode::invalid_property),
+        "present editor rejects a separate column-owned ValueType even when editor ValueType is omitted");
+    column.control->value_type = column.value_type;
+    expect(make_document(column).validate().has(InvariantCode::invalid_property),
+        "matching editor and column ValueType owners remain ambiguous and are rejected");
+    column.value_type.reset();
+    expect(make_document(column).validate().ok(), "present editor keeps its own authoritative ValueType");
+    column.control->kind = ControlKind::check_box;
+    expect(make_document(column).validate().has(InvariantCode::invalid_property),
+        "optional editor preserves existing type-specific ValueType restrictions");
+}
+
 void test_choice_list_live_references() {
     Form form;
     form.id = ObjectId{1};
@@ -6451,6 +6525,7 @@ int main() {
         test_recursive_typed_values();
         test_choice_list_live_references();
         test_table_columns_reference();
+        test_table_column_optional_control();
         test_value_list_named_values();
         test_typed_value_document_budget();
         test_document_property_api();

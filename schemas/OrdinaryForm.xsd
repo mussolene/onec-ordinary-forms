@@ -2090,7 +2090,10 @@
       <xs:element name="Width" type="TableColumnWidthType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Visible" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Control" type="TableColumnControlType" minOccurs="1" maxOccurs="1"/>
+      <xs:choice minOccurs="0" maxOccurs="1">
+        <xs:element name="Control" type="TableColumnControlType" minOccurs="0" maxOccurs="1"/>
+        <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="1" maxOccurs="1"/>
+      </xs:choice>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
   </xs:complexType>
