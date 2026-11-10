@@ -4530,7 +4530,7 @@ constexpr std::string_view menu_action_guid = "e1692cc2-605b-4535-84dd-284402387
 constexpr std::string_view menu_reference_guid = "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6";
 constexpr std::string_view standard_menu_action_guid = "fbe38877-b914-4fd5-8540-07dde06ba2e1";
 
-// ControlCommandHandler constructor in frame.so: ELF 0x2034b04, kind 0, INT32_MAX, flag 0.
+// frame.so stores this default-context GUID followed by INT32_MAX in .rodata.
 constexpr std::string_view standard_menu_default_context_marker = "357c6a54-357d-425d-a2bd-22f4f6e86c87";
 
 LV encode_standard_menu_action(const model::StandardMenuAction& action,
