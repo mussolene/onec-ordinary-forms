@@ -494,6 +494,20 @@ void test_font() {
         expect_rejected([legacy] { static_cast<void>(codec::decode_font(legacy)); },
             "unproven legacy Font6 settings must remain rejected");
     }
+    for (const auto& value : {font, automatic}) {
+        const auto modern = codec::encode_font(value);
+        auto intermediate = modern;
+        intermediate[1] = '7';
+        const auto decoded = codec::decode_font(intermediate);
+        expect(decoded == value && codec::encode_font(decoded) == modern,
+            "native-confirmed Font7 payload must preserve typed properties and write Font8");
+    }
+    for (const auto intermediate : {"{7,3,512,1,100}", "{7,3,64,1,100}",
+             "{7,3,0,1}", "{7,3,0,1,100,0}", "{7,3,0,0,100}",
+             "{7,3,0,1,2147483648}"}) {
+        expect_rejected([intermediate] { static_cast<void>(codec::decode_font(intermediate)); },
+            "Font7 must reject unsupported flags, missing scale, trailers, and invalid ranges");
+    }
     model::FontValue automatic_bold_false = automatic;
     automatic_bold_false.bold = false;
     expect(codec::encode_font(automatic_bold_false) == "{8,3,4,400,1,100}" &&

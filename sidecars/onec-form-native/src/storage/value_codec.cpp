@@ -121,6 +121,18 @@ std::string compact_platform_decimal(std::string_view text) {
 
 namespace {
 
+struct FontLayout {
+    std::uint32_t version;
+    bool has_scale;
+    bool scale_override_allowed;
+};
+
+constexpr std::array font_layouts{
+    FontLayout{6, false, false},
+    FontLayout{7, true, false},
+    FontLayout{8, true, true},
+};
+
 constexpr std::uint32_t localized_string_version = 1;
 constexpr std::uint32_t formatted_string_version = 1;
 constexpr std::uint32_t color_field_count = 3;
@@ -777,13 +789,14 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
 model::FontValue read_font(list_stream::ListInStream& in) {
     in.begin_list();
     const auto version = in.read_uint32();
-    if (version != 6 && version != 8) throw std::runtime_error("Font version marker is unsupported");
+    const auto layout = std::ranges::find(font_layouts, version, &FontLayout::version);
+    if (layout == font_layouts.end()) throw std::runtime_error("Font version marker is unsupported");
     model::FontValue value;
     value.kind = parse_font_kind(in.read_uint32());
     if (value.kind != model::FontKind::absolute) {
         const auto flags = in.read_uint32();
         const std::uint32_t basic_flags = 1U | 2U | 4U | 8U | 16U | 32U;
-        const std::uint32_t allowed_flags = version == 6 ? basic_flags : basic_flags | 512U;
+        const std::uint32_t allowed_flags = layout->scale_override_allowed ? basic_flags | 512U : basic_flags;
         if (flags & ~allowed_flags) throw std::runtime_error("Font contains unknown presence flags");
         if (value.kind == model::FontKind::windows_font) {
             in.begin_list(); const auto selector = in.read_uint32();
@@ -812,7 +825,7 @@ model::FontValue read_font(list_stream::ListInStream& in) {
         if (flags & 32U) value.strikeout = in.read_bool();
         if (flags & 1U) value.face_name = in.read_string();
         if (in.read_uint32() != 1) throw std::runtime_error("Font reserved marker is unsupported");
-        const auto scale = version == 6 ? 100U : in.read_uint32();
+        const auto scale = layout->has_scale ? in.read_uint32() : 100U;
         if (scale > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()) || in.has_next())
             throw std::runtime_error("Font scale or trailer is unsupported");
         value.scale = scale;
@@ -822,7 +835,7 @@ model::FontValue read_font(list_stream::ListInStream& in) {
     }
     const std::uint32_t flags = in.read_uint32();
     const std::uint32_t basic_flags = 1U | 2U | 4U | 8U | 16U | 32U;
-    const std::uint32_t allowed_flags = version == 6 ? basic_flags : basic_flags | 512U;
+    const std::uint32_t allowed_flags = layout->scale_override_allowed ? basic_flags | 512U : basic_flags;
     if ((flags & ~allowed_flags) != 0) throw std::runtime_error("Font contains unknown presence flags");
     const auto height = in.read_uint32();
     if (height > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
@@ -836,7 +849,7 @@ model::FontValue read_font(list_stream::ListInStream& in) {
     for (int i = 0; i < 5; ++i) if (in.read_uint32() != 0) throw std::runtime_error("Font reserved field is nonzero");
     const auto face_name = in.read_string();
     if (in.read_uint32() != 1) throw std::runtime_error("Font reserved marker is unsupported");
-    const auto scale = version == 6 ? 100U : in.read_uint32();
+    const auto scale = layout->has_scale ? in.read_uint32() : 100U;
     if (scale > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
         throw std::runtime_error("Font scale exceeds the supported signed 32-bit storage range");
     }

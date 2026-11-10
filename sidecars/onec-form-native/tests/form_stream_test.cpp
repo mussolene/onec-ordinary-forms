@@ -5764,7 +5764,7 @@ void test_command_bar_legacy8_and_base10_batch() {
             }
             for (const auto version : {"15", "16", "21", "99"}) {
                 auto invalid = legacy; properties_at(invalid).items[0].items[0] = list_stream::ListValue::raw_atom(version);
-                expect(!form_stream::decode_document(invalid, "LegacyCommandBar"), "Unproven common base versions must reject");
+                expect(!form_stream::decode_document(invalid, "LegacyCommandBar"), "Unsupported common-base version/arity combinations must reject");
             }
             auto unknown_property = legacy; properties_at(unknown_property).items[6] = list_stream::ListValue::raw_atom("2");
             expect(!form_stream::decode_document(unknown_property, "LegacyCommandBar"), "Legacy version must not mask unknown property data");
@@ -11031,7 +11031,53 @@ void test_legacy_common_control_base10_batch() {
             auto invalid = current.value();
             base_for(invalid, kind).items[0] = list_stream::ListValue::raw_atom(version);
             expect(!form_stream::decode_document(invalid, "LegacyCommonBase").ok(),
-                name + " common base must reject unproven versions");
+                name + " common base must reject unsupported version/arity combinations");
+        }
+        const bool supports_base16 = kind != model::ControlKind::panel && kind != model::ControlKind::table;
+        for (const bool old_base16 : {false, true}) {
+            auto intermediate = current.value();
+            auto& base = base_for(intermediate, kind);
+            expect(base.items[4].items[0].atom == "8", "intermediate fixture must start from Font8");
+            base.items[4].items[0] = list_stream::ListValue::raw_atom("7");
+            if (old_base16) {
+                for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
+                    auto& color_record = base.items[slot];
+                    if (color_record.items[1].atom == "3" || color_record.items[1].atom == "4") {
+                        color_record.items.resize(3);
+                        color_record.items[0] = list_stream::ListValue::raw_atom("3");
+                    }
+                }
+                base.items.resize(18);
+                base.items[0] = list_stream::ListValue::raw_atom("16");
+            }
+            if (!supports_base16 && old_base16) {
+                expect(!form_stream::decode_document(intermediate, "LegacyCommonBase"),
+                    name + " unconfirmed owner/base16 combination must reject");
+                continue;
+            }
+            const auto intermediate_decoded = form_stream::decode_document(intermediate, "LegacyCommonBase");
+            expect(intermediate_decoded.ok() && intermediate_decoded.value().reconstruction_complete(),
+                name + " intermediate Font/base layout must decode completely");
+            const auto intermediate_xml = source::serialize_form_xml(intermediate_decoded.value());
+            expect(intermediate_xml.ok(), name + " intermediate layout must serialize as named XML");
+            const auto intermediate_parsed = source::parse_form_xml(intermediate_xml.value());
+            expect(intermediate_parsed.ok(), name + " intermediate named XML must parse");
+            const auto intermediate_rebuilt = form_stream::encode_document(intermediate_parsed.value());
+            expect(intermediate_rebuilt.ok() && list_stream::dump_compact(intermediate_rebuilt.value()) == list_stream::dump_compact(current.value()),
+                name + " intermediate layout must rebuild the complete current stream");
+            if (old_base16) {
+                for (const auto length : {13U, 17U, 19U, 21U}) {
+                    auto invalid = intermediate;
+                    base_for(invalid, kind).items.resize(length);
+                    expect(!form_stream::decode_document(invalid, "LegacyCommonBase"),
+                        name + " base16 arity must match its declared layout");
+                }
+                auto unknown_prefix = intermediate;
+                base_for(unknown_prefix, kind).items[15] = list_stream::ListValue::raw_atom("99");
+                const auto unknown_decoded = form_stream::decode_document(unknown_prefix, "LegacyCommonBase");
+                expect(!unknown_decoded.ok() || !unknown_decoded.value().reconstruction_complete(),
+                    name + " base16 must not mask unknown provided fields");
+            }
         }
         auto zero_state = current.value();
         for (const auto slot : {16U, 17U, 18U, 19U})
@@ -11055,6 +11101,29 @@ void test_legacy_common_control_base10_batch() {
                     context + " must rebuild the native-confirmed constructor serialization");
             };
             check_normalized_state(zero_state, "native zero state");
+            auto strict_base16 = zero_state;
+            for (const auto slot : {16U, 17U})
+                base_for(strict_base16, kind).items[slot] = base_for(current.value(), kind).items[slot];
+            check_normalized_state(strict_base16, "native strict state from layout16");
+            for (const auto slot : {16U, 17U}) {
+                auto invalid = strict_base16;
+                base_for(invalid, kind).items[slot] = list_stream::ListValue::string_atom("2");
+                const auto invalid_result = form_stream::decode_document(invalid, "LegacyCommonBase");
+                expect(!invalid_result.ok() || !invalid_result.value().reconstruction_complete(),
+                    name + " constructor prefix must require exact raw atoms");
+                expect(std::ranges::none_of(invalid_result.diagnostics(), [](const auto& diagnostic) {
+                    return diagnostic.code == "OOF1146";
+                }), name + " quoted constructor prefix must not report normalization");
+            }
+            auto unproven_suffix = strict_base16;
+            base_for(unproven_suffix, kind).items[18] = base_for(current.value(), kind).items[18];
+            const auto unproven_result = form_stream::decode_document(unproven_suffix, "LegacyCommonBase");
+            expect(!unproven_result.ok() || !unproven_result.value().reconstruction_complete(),
+                name + " unproven three-field prefix must not normalize as complete");
+            expect(std::ranges::none_of(unproven_result.diagnostics(), [](const auto& diagnostic) {
+                return diagnostic.code == "OOF1146";
+            }), name + " unproven suffix must not report normalization");
+
             if (kind == model::ControlKind::list_box) {
                 auto strict_list_box = zero_state;
                 base_for(strict_list_box, kind).items[16] = base_for(current.value(), kind).items[16];
