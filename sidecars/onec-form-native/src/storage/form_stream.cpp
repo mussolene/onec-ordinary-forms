@@ -5881,16 +5881,37 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     require_arity(info, 2, info_path);
     require_raw_constant(info.items[0], "2", child_path(info_path, 0));
     const auto properties_path = child_path(info_path, 1);
-    const auto& properties = info.items[1];
-    require_arity(properties, 14, properties_path);
+    const auto& source_properties = info.items[1];
+    require_list(source_properties, properties_path);
+    if (source_properties.items.size() < 2) require_arity(source_properties, 14, properties_path);
+    const auto properties_version = raw_atom(source_properties.items[1], child_path(properties_path, 1));
+    if (properties_version == "8") require_arity(source_properties, 12, properties_path);
+    else {
+        require_arity(source_properties, 14, properties_path);
+        require_raw_constant(source_properties.items[1], "9", child_path(properties_path, 1));
+    }
+    model::Form empty_form;
+    empty_form.id = model::ObjectId{1};
+    empty_form.name = "CommandBarDefault";
+    model::OrdinaryFormDocument empty_document(std::move(empty_form));
+    std::optional<LV> legacy_properties;
+    if (properties_version == "8") {
+        legacy_properties = canonical_command_bar_properties(true, std::string{}, {}, empty_document, raw_id);
+        std::copy(source_properties.items.begin(), source_properties.items.end(), legacy_properties->items.begin());
+        legacy_properties->items[1] = raw("9");
+    }
+    const auto& properties = legacy_properties ? *legacy_properties : source_properties;
     const auto& metadata = record.items[4];
     const auto metadata_path = child_path(path, 4);
     require_arity(metadata, 6, metadata_path);
     require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
     const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
-    const auto& base = properties.items[0];
+    auto base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
+    read_common_control_base(base, base_path, [] {
+        return canonical_command_bar_base(true, std::string{});
+    });
     const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
@@ -5908,9 +5929,14 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (buttons_alignment < 0 || buttons_alignment > 2)
         fail("OOF1114", child_path(properties_path, 4), "ButtonsAlignment code 0..2", std::to_string(buttons_alignment), "Unsupported ButtonsAlignment");
     const auto border = decode_control_border(base.items[11], child_path(base_path, 11));
+    constexpr std::array state_slots{16U, 17U, 18U, 19U};
+    const bool strict_export_state = std::ranges::all_of(state_slots, [&](const auto slot) {
+        const auto& value = base.items[slot];
+        return !value.is_list && value.atom_kind == LV::AtomKind::raw && value.atom == "0";
+    });
     const auto runtime_state = raw_atom(base.items[17], child_path(base_path, 17));
-    if (runtime_state != "1" && runtime_state != "2")
-        fail("OOF1114", child_path(base_path, 17), "observed CommandBar state 1 or 2", runtime_state,
+    if (!strict_export_state && runtime_state != "1" && runtime_state != "2")
+        fail("OOF1114", child_path(base_path, 17), "observed CommandBar state 1 or 2, or native-confirmed strict-export state", runtime_state,
             "CommandBar base record contains an unsupported state");
     auto normalized_base = base;
     // Платформа при загрузке переводит наблюденное состояние создания 1 в 2.
@@ -5933,10 +5959,6 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         for (auto& item : menu.entries) item.default_button = false;
     }
 
-    model::Form empty_form;
-    empty_form.id = model::ObjectId{1};
-    empty_form.name = "CommandBarDefault";
-    model::OrdinaryFormDocument empty_document(std::move(empty_form));
     auto normalized = properties;
     normalized.items[0] = std::move(normalized_base);
     // Native forms keep a separate root collection identity. After resolving
@@ -5951,6 +5973,8 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation,
         buttons_alignment, &button_back_color, &font);
     const auto& expected_base = expected.items[0];
+    if (strict_export_state)
+        for (const auto slot : state_slots) normalized.items[0].items[slot] = expected_base.items[slot];
     const auto base_mismatch = std::mismatch(normalized.items[0].items.begin(), normalized.items[0].items.end(),
         expected_base.items.begin(), expected_base.items.end(), [](const auto& left, const auto& right) {
             return list_stream::dump_compact(left) == list_stream::dump_compact(right);
@@ -5969,6 +5993,11 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         fail("OOF1114", child_path(properties_path, index), "observed canonical CommandBar default profile",
             "changed default slot", "CommandBar differs from the observed canonical default profile");
     }
+
+    if (strict_export_state)
+        warnings.push_back({"OOF1146", DiagnosticSeverity::info, std::to_string(raw_id), base_path,
+            "CommandBar", "native-confirmed runtime serialization", "strict-export state",
+            "CommandBar state from strict export is normalized as confirmed by native reload."});
 
     const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto action_source = integer_atom<std::uint32_t>(metadata.items[2], child_path(metadata_path, 2));

@@ -5679,6 +5679,148 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
         "RestoreValues must reject the SaveValues-only 55/1 alias");
 }
 
+void test_command_bar_legacy8_and_base10_batch() {
+    const auto properties_at = [](auto& tree) -> auto& {
+        return find_record_with_guid(tree, model::metamodel::descriptor_for(model::ControlKind::command_bar).guid)
+            ->items[2].items[1];
+    };
+    const model::ColorValue color{model::ColorKind::absolute, 40, 60, 80, 255, std::monostate{}};
+    model::FontValue font;
+    font.kind = model::FontKind::absolute; font.face_name = "Arial"; font.height = 12; font.bold = true;
+    constexpr std::array orientations{"Auto", "Horizontal", "Vertical"};
+    constexpr std::array alignments{"Left", "Center", "Right"};
+    constexpr std::string_view relocated_action = "3ffd4fb3-770c-4579-9cbe-44187ca9b300";
+    for (unsigned variant = 0; variant < 12; ++variant) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "LegacyCommandBar";
+        form.children = {model::ControlRef{model::ObjectId{4}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode bar{model::ObjectId{4}, "Tools", model::CommandBarPayload{}};
+        const bool secondary = variant % 2 != 0;
+        auto& properties = bar.properties();
+        properties.set_explicit(model::PropertyId::from_name("Orientation"),
+            model::EnumerationValue{"Orientation", orientations[variant % 3]});
+        properties.set_explicit(model::PropertyId::from_name("ButtonsAlignment"),
+            model::EnumerationValue{"CommandBarButtonAlignment", alignments[(variant / 3) % 3]});
+        properties.set_explicit(model::PropertyId::from_name("AutoFill"), (variant / 2) % 2 != 0);
+        properties.set_explicit(model::PropertyId::from_name("Secondary"), secondary);
+        properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+        properties.set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Legacy bar ") + std::to_string(variant));
+        properties.set_explicit(model::PropertyId::from_name("Font"), font);
+        for (const auto name : {"BorderColor", "ButtonTextColor", "BackColor", "ButtonBackColor"})
+            properties.set_explicit(model::PropertyId::from_name(name), color);
+        if (variant % 2 == 0)
+            bar.extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"), model::FormRef{model::ObjectId{1}});
+        if (variant % 3 != 1) {
+            model::CommandBarButton action;
+            if (variant % 3 == 0) {
+                action.name = "Run";
+                action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}};
+                action.default_button = !secondary;
+            } else {
+                action.name = "Close";
+                const bool default_context = variant / 3 % 2 != 0;
+                action.standard_action = model::StandardMenuAction{model::StandardMenuCommand::close,
+                    default_context ? model::ControlRef{} : model::ControlRef{model::ObjectId{4}},
+                    model::StandardMenuActionSource::form,
+                    default_context ? model::StandardMenuActionContext::default_context : model::StandardMenuActionContext::command_bar, {}};
+            }
+            std::get<model::CommandBarPayload>(bar.payload).buttons = {action};
+        }
+        document.add_control(std::move(bar));
+        const auto current = form_stream::encode_document(document);
+        expect(current.ok(), "CommandBar batch named variant must encode");
+        for (const bool old_base : {false, true}) {
+            auto legacy = current.value();
+            auto& old = properties_at(legacy);
+            old.items.resize(12);
+            old.items[1] = list_stream::ListValue::raw_atom("8");
+            if (old_base) {
+                old.items[0].items.resize(13);
+                old.items[0].items[0] = list_stream::ListValue::raw_atom("10");
+            }
+            if (variant % 3 != 1) {
+                auto& menu = old.items[7];
+                menu.items[5].items[1] = list_stream::ListValue::raw_atom(std::string(relocated_action));
+                menu.items[7].items[5] = list_stream::ListValue::raw_atom(std::string(relocated_action));
+            }
+            const auto decoded = form_stream::decode_document(legacy, "LegacyCommandBar");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                "All twelve CommandBar variants must decode properties8 with either common base version");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok() && xml.value().find(relocated_action) == std::string::npos,
+                "Legacy action collection identity must not become public XML state");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "Legacy CommandBar named XML must parse");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+                "Legacy CommandBar XML must rebuild the complete current stream without retaining source action identities");
+            for (const auto length : {11U, 13U, 14U}) {
+                auto invalid = legacy; properties_at(invalid).items.resize(length);
+                expect(!form_stream::decode_document(invalid, "LegacyCommandBar"), "CommandBar version8 arity must be exact");
+            }
+            for (const auto version : {"7", "10", "99"}) {
+                auto invalid = legacy; properties_at(invalid).items[1] = list_stream::ListValue::raw_atom(version);
+                expect(!form_stream::decode_document(invalid, "LegacyCommandBar"), "Unproven CommandBar versions must reject");
+            }
+            for (const auto version : {"15", "16", "21", "99"}) {
+                auto invalid = legacy; properties_at(invalid).items[0].items[0] = list_stream::ListValue::raw_atom(version);
+                expect(!form_stream::decode_document(invalid, "LegacyCommandBar"), "Unproven common base versions must reject");
+            }
+            auto unknown_property = legacy; properties_at(unknown_property).items[6] = list_stream::ListValue::raw_atom("2");
+            expect(!form_stream::decode_document(unknown_property, "LegacyCommandBar"), "Legacy version must not mask unknown property data");
+            auto unknown_base = legacy; properties_at(unknown_base).items[0].items[7] = list_stream::ListValue::raw_atom("1");
+            expect(!form_stream::decode_document(unknown_base, "LegacyCommandBar"), "Legacy version must not mask unknown common prefix data");
+            for (const auto length : old_base ? std::array{12U, 14U, 21U} : std::array{13U, 20U, 22U}) {
+                auto invalid = legacy; properties_at(invalid).items[0].items.resize(length);
+                expect(!form_stream::decode_document(invalid, "LegacyCommandBar"), "Common base arity must remain exact for both versions");
+            }
+            auto extra_base = legacy; properties_at(extra_base).items[0].items.push_back(list_stream::ListValue::raw_atom("0"));
+            expect(!form_stream::decode_document(extra_base, "LegacyCommandBar"), "Legacy version must not mask extra common fields");
+            auto malformed_base = legacy; properties_at(malformed_base).items[0] = list_stream::ListValue::raw_atom("0");
+            expect(!form_stream::decode_document(malformed_base, "LegacyCommandBar"), "Legacy version must not mask a malformed common base");
+            if (variant % 3 != 1) {
+                auto broken_action = legacy;
+                properties_at(broken_action).items[7].items[7].items[5] =
+                    list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+                expect(!form_stream::decode_document(broken_action, "LegacyCommandBar"), "Legacy version must preserve action reference validation");
+            }
+        }
+        auto strict_export = current.value();
+        for (const auto slot : {16U, 17U, 18U, 19U})
+            properties_at(strict_export).items[0].items[slot] = list_stream::ListValue::raw_atom("0");
+        const auto strict_read = form_stream::decode_document(strict_export, "LegacyCommandBar");
+        expect(strict_read.ok() && strict_read.value().reconstruction_complete() &&
+                std::ranges::any_of(strict_read.diagnostics(), [](const auto& diagnostic) {
+                    return diagnostic.code == "OOF1146" && diagnostic.severity == oof::DiagnosticSeverity::info;
+                }), "Native-confirmed strict-export state must normalize with information and complete reconstruction");
+        const auto strict_xml = source::serialize_form_xml(strict_read.value());
+        expect(strict_xml.ok(), "Strict-export state must serialize as the named model");
+        const auto strict_parsed = source::parse_form_xml(strict_xml.value());
+        expect(strict_parsed.ok(), "Strict-export named XML must parse");
+        const auto strict_rebuilt = form_stream::encode_document(strict_parsed.value());
+        expect(strict_rebuilt.ok() && list_stream::dump_compact(strict_rebuilt.value()) == list_stream::dump_compact(current.value()),
+            "Strict-export state must rebuild the native-confirmed current serialization");
+        for (const auto slot : {16U, 17U, 18U, 19U}) {
+            for (const auto atom : {"1", "2", "-1", "00"}) {
+                auto invalid = strict_export; properties_at(invalid).items[0].items[slot] = list_stream::ListValue::raw_atom(atom);
+                expect(!form_stream::decode_document(invalid, "LegacyCommandBar"), "Mixed state vectors must remain unsupported");
+            }
+            auto quoted = strict_export; properties_at(quoted).items[0].items[slot] = list_stream::ListValue::string_atom("0");
+            expect(!form_stream::decode_document(quoted, "LegacyCommandBar"), "Quoted zero cannot match the exact state predicate");
+            auto nested = strict_export; properties_at(nested).items[0].items[slot] = list_stream::parse("{0}");
+            expect(!form_stream::decode_document(nested, "LegacyCommandBar"), "Nested zero cannot match the exact state predicate");
+        }
+        auto strict_unknown = strict_export; properties_at(strict_unknown).items[0].items[15] = list_stream::ListValue::raw_atom("99");
+        expect(!form_stream::decode_document(strict_unknown, "LegacyCommandBar"), "Known strict-export state must not mask unknown neighboring data");
+        auto malformed_properties = current.value(); properties_at(malformed_properties) = list_stream::ListValue::raw_atom("0");
+        expect(!form_stream::decode_document(malformed_properties, "LegacyCommandBar"), "Malformed CommandBar properties must reject");
+        auto extra_current = current.value(); properties_at(extra_current).items.push_back(list_stream::ListValue::raw_atom("0"));
+        expect(!form_stream::decode_document(extra_current, "LegacyCommandBar"), "Modern CommandBar arity must remain strict");
+        auto unknown_current = current.value(); properties_at(unknown_current).items[12] = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(unknown_current, "LegacyCommandBar"), "Modern CommandBar suffix must remain strict");
+    }
+}
+
 void test_command_bar_creation_state_and_strict_record_guards() {
     for (const auto nonempty : {false, true}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarCreationState";
@@ -24538,6 +24680,7 @@ int main() {
         test_command_bar_standard_menu_action_round_trip_and_guards();
         test_standard_menu_action_default_context_and_control_source();
         test_save_restore_standard_actions_batch_aliases_and_guards();
+        test_command_bar_legacy8_and_base10_batch();
         test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();
