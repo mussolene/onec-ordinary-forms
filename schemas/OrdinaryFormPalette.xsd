@@ -111,6 +111,8 @@
         <NamedConcept name="ReportFormExtension" russianName="Расширение формы отчета"/>
         <NamedConcept name="SavedValues" russianName="Сохраняемые значения" formExtension="ReportFormExtension"/>
         <NamedConcept name="SavedValue" russianName="Сохраняемое значение" formExtension="ReportFormExtension"/>
+        <NamedConcept name="DocumentListFormExtension" russianName="Расширение формы списка документов"/>
+        <NamedConcept name="InformationRegisterRecordListFormExtension" russianName="Расширение формы списка записей регистра сведений"/>
         <NamedConcept name="CatalogInputFieldExtension" russianName="Расширение поля ввода справочника"/>
         <NamedConcept name="ChartOfAccountsInputFieldExtension" russianName="Расширение поля ввода плана счетов"/>
         <NamedConcept name="ChartOfCharacteristicTypesInputFieldExtension" russianName="Расширение поля ввода вида характеристик"/>

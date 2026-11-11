@@ -200,11 +200,14 @@ struct ControlDescriptor {
     ChildPolicy child_policy = ChildPolicy::forbidden;
 };
 
+enum class FormExtensionStorageKind : std::uint8_t { custom_settings, empty };
+
 struct FormExtensionDescriptor {
     FormExtensionKind kind;
     std::string_view guid;
     std::string_view xml_name;
     std::u8string_view russian_name;
+    FormExtensionStorageKind storage = FormExtensionStorageKind::custom_settings;
 };
 
 inline constexpr FormExtensionDescriptor data_processor_form_extension{
@@ -226,6 +229,7 @@ inline constexpr FormExtensionDescriptor catalog_list_form_extension{
     "53fb5449-841a-459c-9a83-576f05941e1f",
     "CatalogListFormExtension",
     u8"Расширение формы списка справочника",
+    FormExtensionStorageKind::empty,
 };
 
 inline constexpr FormExtensionDescriptor report_form_extension{
@@ -235,9 +239,26 @@ inline constexpr FormExtensionDescriptor report_form_extension{
     u8"Расширение формы отчета",
 };
 
+inline constexpr FormExtensionDescriptor document_list_form_extension{
+    FormExtensionKind::document_list,
+    "8d9c2110-ed81-11d5-b9b6-0050bae0a95d",
+    "DocumentListFormExtension",
+    u8"Расширение формы списка документов",
+    FormExtensionStorageKind::empty,
+};
+
+inline constexpr FormExtensionDescriptor information_register_record_list_form_extension{
+    FormExtensionKind::information_register_record_list,
+    "cb575e8c-871e-4a9e-9767-e7c783bdf1e6",
+    "InformationRegisterRecordListFormExtension",
+    u8"Расширение формы списка записей регистра сведений",
+    FormExtensionStorageKind::empty,
+};
+
 inline constexpr std::array form_extensions{
     data_processor_form_extension, catalog_item_form_extension,
     catalog_list_form_extension, report_form_extension,
+    document_list_form_extension, information_register_record_list_form_extension,
 };
 
 struct InputFieldExtensionDescriptor {

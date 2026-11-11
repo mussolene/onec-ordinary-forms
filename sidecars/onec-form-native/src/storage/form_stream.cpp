@@ -12950,13 +12950,16 @@ void validate_form_extension_context(const model::OrdinaryFormDocument& document
                 "nondefault flags", "Report/DataProcessor main Attribute flags are not supported");
         return;
     }
-    if (*document.form().extension != model::FormExtensionKind::catalog_item &&
-        *document.form().extension != model::FormExtensionKind::catalog_list)
+    const auto extension_descriptor = std::ranges::find(model::metamodel::form_extensions,
+        *document.form().extension, &model::metamodel::FormExtensionDescriptor::kind);
+    if (extension_descriptor == model::metamodel::form_extensions.end() ||
+        (*document.form().extension != model::FormExtensionKind::catalog_item &&
+         extension_descriptor->storage != model::metamodel::FormExtensionStorageKind::empty))
         fail("OOF1122", std::string(path), "declared ordinary-form extension", "unknown extension kind",
             "Form extension kind is unsupported by the storage codec");
     if (!document.form().main_attribute.has_value())
         fail("OOF1122", std::string(path), "selected MainAttribute reference", "absent",
-            "Catalog form extension requires an explicit object context");
+            "Metadata form extension requires an explicit object context");
     const auto* main = document.find_attribute(document.form().main_attribute.id());
     if (!main || main->type.entries.size() != 1 ||
         main->type.entries.front().term != model::TypeDomainTerm::object ||
@@ -13568,9 +13571,16 @@ Result<model::OrdinaryFormDocument> decode_document(
             fail("OOF1114", "$/3", "declared Form extension or absent extension", "empty",
                 "Form extension record is incomplete");
         const auto extension_guid = uuid_atom(extension.items[0], "$/3/0").canonical;
+        const auto extension_descriptor = std::ranges::find(model::metamodel::form_extensions,
+            extension_guid, &model::metamodel::FormExtensionDescriptor::guid);
         if (extension_guid == null_uuid) {
             require_exact(extension, parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
                 "$/3", "Absent Form extension must not contain settings");
+        } else if (extension_descriptor != model::metamodel::form_extensions.end() &&
+                   extension_descriptor->storage == model::metamodel::FormExtensionStorageKind::empty) {
+            require_exact(extension, list({raw(std::string(extension_descriptor->guid)), raw("0")}), "$/3",
+                "Form extension without settings must contain only its declared identity");
+            form_extension = extension_descriptor->kind;
         } else if (extension_guid == model::metamodel::data_processor_form_extension.guid ||
             extension_guid == model::metamodel::report_form_extension.guid) {
             const bool report = extension_guid == model::metamodel::report_form_extension.guid;
@@ -13597,11 +13607,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                     form_extension_properties.set_explicit(model::PropertyId::from_name("ReportResult"),
                         model::ControlRef{model::ObjectId{result}});
             }
-            form_extension = descriptor.kind;
-        } else if (extension_guid == model::metamodel::catalog_list_form_extension.guid) {
-            const auto& descriptor = model::metamodel::catalog_list_form_extension;
-            require_exact(extension, list({raw(std::string(descriptor.guid)), raw("0")}), "$/3",
-                "CatalogListFormExtension contains unsupported settings");
             form_extension = descriptor.kind;
         } else if (extension_guid == model::metamodel::catalog_item_form_extension.guid) {
             const auto& descriptor = model::metamodel::catalog_item_form_extension;
@@ -15010,7 +15015,12 @@ Result<list_stream::ListValue> encode_document(
         });
         LV encoded_extension = parse_constant("{00000000-0000-0000-0000-000000000000,0}");
         if (document.form().extension) {
-            if (*document.form().extension == model::FormExtensionKind::data_processor ||
+            const auto extension_descriptor = std::ranges::find(model::metamodel::form_extensions,
+                *document.form().extension, &model::metamodel::FormExtensionDescriptor::kind);
+            if (extension_descriptor != model::metamodel::form_extensions.end() &&
+                extension_descriptor->storage == model::metamodel::FormExtensionStorageKind::empty) {
+                encoded_extension = list({raw(std::string(extension_descriptor->guid)), raw("0")});
+            } else if (*document.form().extension == model::FormExtensionKind::data_processor ||
                 *document.form().extension == model::FormExtensionKind::report) {
                 const bool report = *document.form().extension == model::FormExtensionKind::report;
                 const auto& descriptor = report ? model::metamodel::report_form_extension
@@ -15030,9 +15040,6 @@ Result<list_stream::ListValue> encode_document(
                     settings.items.push_back(raw(std::to_string(result)));
                 }
                 encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"), std::move(settings)});
-            } else if (*document.form().extension == model::FormExtensionKind::catalog_list) {
-                const auto& descriptor = model::metamodel::catalog_list_form_extension;
-                encoded_extension = list({raw(std::string(descriptor.guid)), raw("0")});
             } else if (*document.form().extension == model::FormExtensionKind::catalog_item) {
                 const auto use_for_folders = form_extension_ordinal(document.form().extension_properties,
                     "UseForFoldersAndItems", "$/CatalogItemFormExtension/UseForFoldersAndItems");

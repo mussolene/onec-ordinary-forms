@@ -2043,6 +2043,8 @@
             </xs:complexType></xs:element>
           </xs:sequence></xs:complexType></xs:element>
         </xs:sequence></xs:complexType></xs:element>
+        <xs:element name="DocumentListFormExtension"><xs:complexType/></xs:element>
+        <xs:element name="InformationRegisterRecordListFormExtension"><xs:complexType/></xs:element>
       </xs:choice>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>

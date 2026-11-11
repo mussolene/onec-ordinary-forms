@@ -3144,23 +3144,42 @@ void test_input_field_reference_extension_xml_contract() {
 }
 
 void test_catalog_list_form_extension_xml_contract() {
-    const auto parsed = source::parse_form_xml(
-        R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><CatalogListFormExtension/></Form>)XML");
-    expect(parsed.ok() && parsed.value().form().extension == model::FormExtensionKind::catalog_list,
-        "CatalogList extension must have an explicit named identity");
-    const auto xml = source::serialize_form_xml(parsed.value());
-    expect(xml.ok() && xml.value().find("<CatalogListFormExtension/>") != std::string::npos &&
-        xml.value().find("53fb5449") == std::string::npos,
-        "CatalogList XML must preserve only the named empty extension");
-    for (const auto invalid : {"<CatalogListFormExtension/><CatalogListFormExtension/>",
-        "<CatalogListFormExtension/><CatalogItemFormExtension/>",
-        "<DataProcessorFormExtension/><CatalogListFormExtension/>",
-        "<CatalogListFormExtension settings=\"0\"/>",
-        "<CatalogListFormExtension><Settings>0</Settings></CatalogListFormExtension>",
-        "<CatalogListFormExtension>0</CatalogListFormExtension>"})
-        expect(!source::parse_form_xml(std::string(
-            R"XML(<Form id="1" name="List" ordinaryFormVersion="2.1">)XML") + invalid + "</Form>"),
-            "CatalogList XML must reject settings and mutually exclusive extensions");
+    const std::array empty_extensions{
+        model::metamodel::catalog_list_form_extension,
+        model::metamodel::document_list_form_extension,
+        model::metamodel::information_register_record_list_form_extension,
+    };
+    for (const auto& extension : empty_extensions) {
+        const auto open = "<" + std::string(extension.xml_name);
+        const auto empty = open + "/>";
+        const auto parsed = source::parse_form_xml(
+            "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\">" + empty + "</Form>");
+        expect(parsed.ok() && parsed.value().form().extension == extension.kind,
+            "Each empty list extension must have an explicit named identity");
+        const auto xml = source::serialize_form_xml(parsed.value());
+        expect(xml.ok() && xml.value().find(empty) != std::string::npos &&
+            xml.value().find(extension.guid.substr(0, 8)) == std::string::npos,
+            "Empty list extension XML must serialize only its named identity");
+        if (xml.ok()) {
+            const auto reparsed = source::parse_form_xml(xml.value());
+            expect(reparsed.ok() && reparsed.value().form().extension == extension.kind,
+                "Empty list extension XML must preserve its identity on round-trip");
+        }
+
+        const std::array invalid{
+            empty + empty,
+            empty + "<CatalogItemFormExtension/>",
+            empty + "<DataProcessorFormExtension/>",
+            open + " settings=\"0\"/>",
+            open + "><Settings>0</Settings></" + std::string(extension.xml_name) + ">",
+            open + ">0</" + std::string(extension.xml_name) + ">",
+            open + "><Unexpected/></" + std::string(extension.xml_name) + ">",
+        };
+        for (const auto& body : invalid)
+            expect(!source::parse_form_xml(
+                "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\">" + body + "</Form>"),
+                "Empty list extensions must reject duplicate, foreign, and unnamed settings");
+    }
 }
 
 void test_catalog_item_form_extension_xml_contract() {

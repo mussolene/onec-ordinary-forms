@@ -737,11 +737,19 @@ void test_document_package_types(
                attribute(form_elements[cursor], "maxOccurs") == "1",
         "Form extensions must be a mutually exclusive optional choice");
     const auto extension_elements = direct_children(form_elements[cursor++], "element");
-    expect(extension_elements.size() == 4 && attribute(extension_elements[0], "name") == "DataProcessorFormExtension" &&
-               attribute(extension_elements[1], "name") == "CatalogItemFormExtension" &&
-               attribute(extension_elements[2], "name") == "CatalogListFormExtension" &&
-               attribute(extension_elements[3], "name") == "ReportFormExtension",
-        "Form extension choice must expose all named extension concepts");
+    constexpr std::array expected_form_extensions{
+        "DataProcessorFormExtension",
+        "CatalogItemFormExtension",
+        "CatalogListFormExtension",
+        "ReportFormExtension",
+        "DocumentListFormExtension",
+        "InformationRegisterRecordListFormExtension",
+    };
+    expect(extension_elements.size() == expected_form_extensions.size(),
+        "Form extension choice must expose every registered named extension concept");
+    for (std::size_t index = 0; index < expected_form_extensions.size(); ++index)
+        expect(attribute(extension_elements[index], "name") == expected_form_extensions[index],
+            "Form extension choice must follow descriptor registration order");
     expect(direct_children(extension_elements[0], "complexType").size() == 1 &&
                direct_children(extension_elements[1], "complexType").size() == 1,
         "Form extension concepts must use named types without raw settings");
@@ -2017,13 +2025,28 @@ int main() {
                    validate_document(compiled_form.get(),
                    R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><CatalogItemFormExtension/><DataProcessorFormExtension/></Form>)XML") != 0,
             "generated XSD must accept named catalog enum values and reject simultaneous extensions");
-        expect(validate_document(compiled_form.get(),
-                   R"XML(<Form id="1" name="List" ordinaryFormVersion="2.1"><CatalogListFormExtension/></Form>)XML") == 0 &&
-               validate_document(compiled_form.get(),
-                   R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><CatalogListFormExtension/><CatalogItemFormExtension/></Form>)XML") != 0 &&
-               schemas.ordinary_form_palette_xsd.find("CatalogListFormExtension") != std::string::npos &&
-               schemas.ordinary_form_palette_xsd.find("Расширение формы списка справочника") != std::string::npos,
-            "CatalogList schema and palette must declare the empty named exclusive extension");
+        for (const auto& extension : {
+                 oof::model::metamodel::catalog_list_form_extension,
+                 oof::model::metamodel::document_list_form_extension,
+                 oof::model::metamodel::information_register_record_list_form_extension,
+             }) {
+            const auto name = std::string(extension.xml_name);
+            const auto empty_form = "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\"><" + name +
+                "/></Form>";
+            const auto invalid_attribute = "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\"><" + name +
+                " settings=\"0\"/></Form>";
+            const auto invalid_field = "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\"><" + name +
+                "><Unexpected/></" + name + "></Form>";
+            const auto multiple_extensions = "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\"><" + name +
+                "/><CatalogItemFormExtension/></Form>";
+            expect(validate_document(compiled_form.get(), empty_form) == 0 &&
+                       validate_document(compiled_form.get(), invalid_attribute) != 0 &&
+                       validate_document(compiled_form.get(), invalid_field) != 0 &&
+                       validate_document(compiled_form.get(), multiple_extensions) != 0 &&
+                       schemas.ordinary_form_palette_xsd.find(name) != std::string::npos &&
+                       schemas.ordinary_form_palette_xsd.find(as_utf8(extension.russian_name)) != std::string::npos,
+                "Empty list extension schema and palette must expose only its named exclusive concept");
+        }
         expect(schemas.ordinary_form_xsd.find("<xs:complexType name=\"StyleValueType\">") != std::string::npos &&
                schemas.ordinary_form_xsd.find("<xs:attribute name=\"styleId\" type=\"UuidValueType\" use=\"optional\"/>") != std::string::npos,
             "Form.Style schema is a named optional UUID reference");

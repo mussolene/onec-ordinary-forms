@@ -24727,76 +24727,82 @@ void test_input_field_composite_reference_domains_round_trip_and_guards() {
     }
 }
 
-void test_catalog_list_form_extension_named_round_trip_and_guards() {
-    std::string xml = R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><Height>400</Height><Width>600</Width><MainAttribute attributeId="0"/><CatalogListFormExtension/><Attributes><Attribute id="0" name="CatalogList"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute><Attribute id="30" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="31" name="Choices"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
-    const std::array kinds{"Button", "LabelDecoration", "InputField", "CheckBox", "ChoiceField",
-        "RadioButton", "ProgressBar", "TrackBar", "CalendarField", "ListBox", "TextDocumentField", "HTMLDocumentField"};
-    for (std::size_t index = 0; index < kinds.size(); ++index) {
-        const std::string kind = kinds[index];
-        xml += "<" + kind + " id=\"" + std::to_string(index + 2) + "\" name=\"Control" +
-            std::to_string(index) + "\">";
-        if (kind == "InputField") xml += "<ValueType><Entry term=\"string\"/></ValueType>";
-        else if (kind == "CheckBox") xml += "<DataPath attributeId=\"30\"/>";
-        else if (kind == "ListBox") xml += "<DataPath attributeId=\"31\"/>";
-        xml += "<Position/></" + kind + ">";
-    }
-    xml += "</ChildItems></Form>";
-    auto parsed = oof::source::parse_form_xml(xml);
-    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
-    const auto encoded = form_stream::encode_document(parsed.value());
-    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
-    expect(list_stream::dump_compact(encoded.value().items[3]) ==
-        "{53fb5449-841a-459c-9a83-576f05941e1f,0}",
-        "CatalogList must encode exactly its observed empty native record");
-    const auto decoded = form_stream::decode_document(encoded.value(), "CatalogList");
-    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
-    expect(decoded.value().form().extension == model::FormExtensionKind::catalog_list &&
-        decoded.value().form().main_attribute.id() == model::ObjectId{0} &&
-        decoded.value().collections().controls.size() == kinds.size(),
-        "CatalogList must preserve explicit main Attribute zero and twelve control types");
-    const auto public_xml = oof::source::serialize_form_xml(decoded.value());
-    expect(public_xml.ok(), public_xml ? "" : public_xml.diagnostics().front().message);
-    const auto reparsed = oof::source::parse_form_xml(public_xml.value());
-    expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
-    const auto rebuilt = form_stream::encode_document(reparsed.value());
-    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
-        "CatalogList must rebuild canonically through named XML with twelve control types");
-    auto corrupt = encoded.value();
-    for (const auto record : {"{53fb5449-841a-459c-9a83-576f05941e1f,1,{0}}",
-             "{53fb5449-841a-459c-9a83-576f05941e1f,0,{0}}",
-             "{53fb5449-841a-459c-9a83-576f05941e1f,1}"}) {
-        corrupt.items[3] = list_stream::parse(record);
-        expect(!form_stream::decode_document(corrupt, "List"), "CatalogList accepts only the exact empty native record");
-    }
-    corrupt = encoded.value();
-    corrupt.items[2].items[0] = list_stream::parse("{-1}");
-    expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1122", "$/2/0",
-        "CatalogList decoder must require its explicit main context");
-    for (const auto flag : {1u, 2u}) {
+void test_empty_form_extensions_named_round_trip_and_guards() {
+    for (const auto* descriptor : {&model::metamodel::catalog_list_form_extension,
+             &model::metamodel::document_list_form_extension,
+             &model::metamodel::information_register_record_list_form_extension}) {
+        std::string xml = R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><Height>400</Height><Width>600</Width><MainAttribute attributeId="0"/><CatalogListFormExtension/><Attributes><Attribute id="0" name="CatalogList"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute><Attribute id="30" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="31" name="Choices"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
+        const std::string original_extension = "<CatalogListFormExtension/>";
+        xml.replace(xml.find(original_extension), original_extension.size(),
+            "<" + std::string(descriptor->xml_name) + "/>");
+        const std::array kinds{"Button", "LabelDecoration", "InputField", "CheckBox", "ChoiceField",
+            "RadioButton", "ProgressBar", "TrackBar", "CalendarField", "ListBox", "TextDocumentField", "HTMLDocumentField"};
+        for (std::size_t index = 0; index < kinds.size(); ++index) {
+            const std::string kind = kinds[index];
+            xml += "<" + kind + " id=\"" + std::to_string(index + 2) + "\" name=\"Control" +
+                std::to_string(index) + "\">";
+            if (kind == "InputField") xml += "<ValueType><Entry term=\"string\"/></ValueType>";
+            else if (kind == "CheckBox") xml += "<DataPath attributeId=\"30\"/>";
+            else if (kind == "ListBox") xml += "<DataPath attributeId=\"31\"/>";
+            xml += "<Position/></" + kind + ">";
+        }
+        xml += "</ChildItems></Form>";
+        auto parsed = oof::source::parse_form_xml(xml);
+        expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+        const auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        expect(list_stream::dump_compact(encoded.value().items[3]) ==
+            "{" + std::string(descriptor->guid) + ",0}",
+            "List form extension must encode exactly its observed empty native record");
+        const auto decoded = form_stream::decode_document(encoded.value(), "CatalogList");
+        expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+        expect(decoded.value().form().extension == descriptor->kind &&
+            decoded.value().form().main_attribute.id() == model::ObjectId{0} &&
+            decoded.value().collections().controls.size() == kinds.size(),
+            "List form extension must preserve explicit main Attribute zero and twelve control types");
+        const auto public_xml = oof::source::serialize_form_xml(decoded.value());
+        expect(public_xml.ok(), public_xml ? "" : public_xml.diagnostics().front().message);
+        const auto reparsed = oof::source::parse_form_xml(public_xml.value());
+        expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+        const auto rebuilt = form_stream::encode_document(reparsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "List form extension must rebuild canonically through named XML with twelve control types");
+        auto corrupt = encoded.value();
+        const auto identity = std::string(descriptor->guid);
+        for (const auto& record : {"{" + identity + ",1,{0}}", "{" + identity + ",0,{0}}", "{" + identity + ",1}"}) {
+            corrupt.items[3] = list_stream::parse(record);
+            expect(!form_stream::decode_document(corrupt, "List"), "List form extension accepts only the exact empty native record");
+        }
         corrupt = encoded.value();
-        corrupt.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
+        corrupt.items[2].items[0] = list_stream::parse("{-1}");
         expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1122", "$/2/0",
-            "CatalogList decoder must reject nondefault main context flags");
+            "List form extension decoder must require its explicit main context");
+        for (const auto flag : {1u, 2u}) {
+            corrupt = encoded.value();
+            corrupt.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
+            expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1122", "$/2/0",
+                "List form extension decoder must reject nondefault main context flags");
+        }
+        corrupt = encoded.value();
+        corrupt.items[3].items[0] = list_stream::ListValue::raw_atom("33333333-3333-3333-3333-333333333333");
+        expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1106", "$/3/0",
+            "Unknown extension GUID must fail closed");
+        auto form = parsed.value().form();
+        form.main_attribute = {};
+        parsed.value().set_form(form);
+        expect(!form_stream::encode_document(parsed.value()), "List form extension must require explicit main context");
+        form.main_attribute = model::AttributeRef{model::ObjectId{0}};
+        parsed.value().set_form(form);
+        auto* main = const_cast<model::Attribute*>(parsed.value().find_attribute(model::ObjectId{0}));
+        main->type.entries.front().term = model::TypeDomainTerm::list;
+        expect(!form_stream::encode_document(parsed.value()), "List form extension native context uses concrete object, not L token");
+        main->type.entries.front().term = model::TypeDomainTerm::object;
+        main->stored_data.set(true);
+        expect(!form_stream::encode_document(parsed.value()), "List form extension must reject nondefault main context flags");
+        main->stored_data.reset();
+        main->type.entries.front().type_uuid = model::UuidValue{"00000000-0000-0000-0000-000000000000"};
+        expect(!form_stream::encode_document(parsed.value()), "List form extension must reject null object type identity");
     }
-    corrupt = encoded.value();
-    corrupt.items[3].items[0] = list_stream::ListValue::raw_atom("33333333-3333-3333-3333-333333333333");
-    expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1106", "$/3/0",
-        "Unknown extension GUID must fail closed");
-    auto form = parsed.value().form();
-    form.main_attribute = {};
-    parsed.value().set_form(form);
-    expect(!form_stream::encode_document(parsed.value()), "CatalogList must require explicit main context");
-    form.main_attribute = model::AttributeRef{model::ObjectId{0}};
-    parsed.value().set_form(form);
-    auto* main = const_cast<model::Attribute*>(parsed.value().find_attribute(model::ObjectId{0}));
-    main->type.entries.front().term = model::TypeDomainTerm::list;
-    expect(!form_stream::encode_document(parsed.value()), "CatalogList native context uses concrete object, not L token");
-    main->type.entries.front().term = model::TypeDomainTerm::object;
-    main->stored_data.set(true);
-    expect(!form_stream::encode_document(parsed.value()), "CatalogList must reject nondefault main context flags");
-    main->stored_data.reset();
-    main->type.entries.front().type_uuid = model::UuidValue{"00000000-0000-0000-0000-000000000000"};
-    expect(!form_stream::encode_document(parsed.value()), "CatalogList must reject null object type identity");
 }
 
 void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
@@ -25401,7 +25407,7 @@ int main() {
         test_data_processor_form_extension_named_round_trip_and_guards();
         test_saved_values_and_report_form_extension_round_trip_and_guards();
         test_catalog_item_form_extension_named_round_trip_and_guards();
-        test_catalog_list_form_extension_named_round_trip_and_guards();
+        test_empty_form_extensions_named_round_trip_and_guards();
         test_input_field_reference_extensions_round_trip_and_guards();
         test_input_field_composite_reference_domains_round_trip_and_guards();
         test_embedded_chart_dynamic_back_color();

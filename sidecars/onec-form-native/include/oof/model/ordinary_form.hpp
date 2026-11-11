@@ -1343,6 +1343,8 @@ enum class FormExtensionKind : std::uint8_t {
     catalog_item,
     catalog_list,
     report,
+    document_list,
+    information_register_record_list,
 };
 
 inline constexpr std::size_t max_saved_value_bindings = 100000;
