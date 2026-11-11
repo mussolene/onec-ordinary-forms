@@ -1490,7 +1490,7 @@
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="PictureReferenceContentType"><xs:union memberTypes="ObjectIdType"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value=""/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>
-  <xs:complexType name="PictureReferenceValueType"><xs:simpleContent><xs:extension base="PictureReferenceContentType"><xs:attribute name="standardName" type="StandardPictureNameType" use="optional"/></xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="PictureReferenceValueType"><xs:simpleContent><xs:extension base="PictureReferenceContentType"><xs:attribute name="standardName" type="StandardPictureNameType" use="optional"/><xs:attribute name="commonPicture" type="UuidValueType" use="optional"/><xs:attribute name="width" type="xs:int"/><xs:attribute name="height" type="xs:int"/><xs:attribute name="transparent" type="xs:boolean"/></xs:extension></xs:simpleContent></xs:complexType>
 
   <xs:complexType name="DataPathMemberType" mixed="true">
     <xs:sequence>
@@ -1626,7 +1626,7 @@
     </xs:sequence>
   </xs:complexType>
 
-  <xs:simpleType name="StandardMenuCommandType"><xs:restriction base="xs:string"><xs:enumeration value="Close"/><xs:enumeration value="SaveValues"/><xs:enumeration value="RestoreValues"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="StandardMenuCommandType"><xs:restriction base="xs:string"><xs:enumeration value="Close"/><xs:enumeration value="SaveValues"/><xs:enumeration value="RestoreValues"/><xs:enumeration value="FinishEditing"/><xs:enumeration value="SortDescending"/><xs:enumeration value="SortAscending"/><xs:enumeration value="MoveDown"/><xs:enumeration value="MoveUp"/><xs:enumeration value="Change"/><xs:enumeration value="Delete"/><xs:enumeration value="Add"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="CommandBarButtonKindType"><xs:restriction base="xs:string"><xs:enumeration value="Action"/><xs:enumeration value="Submenu"/><xs:enumeration value="Separator"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ButtonRepresentationType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Picture"/><xs:enumeration value="Text"/><xs:enumeration value="PictureText"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ClientInterfaceVariantType"><xs:restriction base="xs:string"><xs:enumeration value="Version8_0"/><xs:enumeration value="Version8_2"/><xs:enumeration value="Version8_2_OrdinaryApp"/></xs:restriction></xs:simpleType>
@@ -2088,6 +2088,11 @@
   <xs:complexType name="TableColumnControlType">
     <xs:sequence>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:choice minOccurs="0" maxOccurs="1">
+        <xs:element name="CatalogInputFieldExtension"><xs:complexType/></xs:element>
+        <xs:element name="ChartOfAccountsInputFieldExtension"><xs:complexType/></xs:element>
+        <xs:element name="ChartOfCharacteristicTypesInputFieldExtension"><xs:complexType/></xs:element>
+      </xs:choice>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Wrap" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

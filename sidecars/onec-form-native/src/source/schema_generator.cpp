@@ -1071,7 +1071,7 @@ void append_value_types(std::string& output) {
     output +=
         "    </xs:restriction>\n  </xs:simpleType>\n"
         "  <xs:simpleType name=\"PictureReferenceContentType\"><xs:union memberTypes=\"ObjectIdType\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:enumeration value=\"\"/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>\n"
-        "  <xs:complexType name=\"PictureReferenceValueType\"><xs:simpleContent><xs:extension base=\"PictureReferenceContentType\"><xs:attribute name=\"standardName\" type=\"StandardPictureNameType\" use=\"optional\"/></xs:extension></xs:simpleContent></xs:complexType>\n";
+        "  <xs:complexType name=\"PictureReferenceValueType\"><xs:simpleContent><xs:extension base=\"PictureReferenceContentType\"><xs:attribute name=\"standardName\" type=\"StandardPictureNameType\" use=\"optional\"/><xs:attribute name=\"commonPicture\" type=\"UuidValueType\" use=\"optional\"/><xs:attribute name=\"width\" type=\"xs:int\"/><xs:attribute name=\"height\" type=\"xs:int\"/><xs:attribute name=\"transparent\" type=\"xs:boolean\"/></xs:extension></xs:simpleContent></xs:complexType>\n";
 }
 
 void append_document_types(std::string& output) {
@@ -1479,6 +1479,10 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "    <xs:sequence>\n"
         "      <xs:element name=\"ValueType\" type=\"TypeDomainValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         ;
+    output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n";
+    for (const auto& extension : model::metamodel::input_field_extensions)
+        output += "        <xs:element name=\"" + std::string(extension.xml_name) + "\"><xs:complexType/></xs:element>\n";
+    output += "      </xs:choice>\n";
     for (const auto name : model::metamodel::table_column_input_properties) {
         output += "      <xs:element name=\"" + std::string(name) +
             "\" type=\"" + (name == "BorderColor" ? "ColorValueType" : "xs:boolean") + "\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";

@@ -470,7 +470,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::shortcut &&
                        metamodel::find_shortcut_key(typed_value.key) != nullptr;
             } else if constexpr (std::is_same_v<Value, PictureRef>) {
-                return expected == metamodel::ValueCodec::picture;
+                return expected == metamodel::ValueCodec::picture && typed_value.width >= -1 && typed_value.height >= -1 &&
+                    (!typed_value.asset.id() || (typed_value.width == -1 && typed_value.height == -1 && !typed_value.transparent));
             } else if constexpr (std::is_same_v<Value, ControlRef>) {
                 return expected == metamodel::ValueCodec::control_reference ||
                        expected == metamodel::ValueCodec::action_source_reference ||
@@ -617,6 +618,8 @@ bool context_menu_button_resolves(const OrdinaryFormDocument& document, const Co
     return true;
 }
 
+bool valid_typed_uuid(std::string_view uuid) noexcept;
+
 bool property_value_references_resolve(
     const OrdinaryFormDocument& document,
     const PropertyValue& value) noexcept {
@@ -639,6 +642,9 @@ bool property_value_references_resolve(
             } else if constexpr (std::is_same_v<Value, CommandRef>) {
                 return document.find_command(typed_value.id()) != nullptr;
             } else if constexpr (std::is_same_v<Value, PictureRef>) {
+                if (typed_value.common_picture) return !typed_value.asset.id() && !typed_value.standard_name &&
+                    valid_typed_uuid(typed_value.common_picture->canonical) &&
+                    typed_value.common_picture->canonical != "00000000-0000-0000-0000-000000000000";
                 if (typed_value.standard_name) {
                     return !typed_value.asset.id() &&
                         metamodel::find_standard_picture(typed_value.standard_name->value) != nullptr;
@@ -1021,8 +1027,11 @@ bool validate_value_list_contents(const ValueListValue& value, TypedValueBudget&
         if (!validate_typed_value_node(item.value, budget, depth + 2) ||
             !validate_typed_value_node(item.presentation, budget, depth + 2)) return false;
         if (item.picture) {
-            if (budget.nodes >= max_typed_value_nodes || item.picture->asset.id() || !item.picture->standard_name ||
-                !metamodel::find_standard_picture(item.picture->standard_name->value)) return false;
+            if (budget.nodes >= max_typed_value_nodes || item.picture->width < -1 || item.picture->height < -1 || item.picture->asset.id() || (!item.picture->standard_name && !item.picture->common_picture) ||
+                (item.picture->standard_name && !metamodel::find_standard_picture(item.picture->standard_name->value)) ||
+                (item.picture->common_picture && (item.picture->standard_name ||
+                    !valid_typed_uuid(item.picture->common_picture->canonical) ||
+                    item.picture->common_picture->canonical == "00000000-0000-0000-0000-000000000000"))) return false;
             ++budget.nodes;
         }
     }
@@ -2869,12 +2878,12 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
     if (descriptor->owner == metamodel::DescriptorOwner::form && descriptor->api_name == "CaptionPicture") {
         const auto& picture = std::get<PictureRef>(value);
         if (picture.asset.id()) return PropertyMutationStatus::invalid_value;
-        if (picture.standard_name && !property_value_references_resolve(*this, value))
+        if ((picture.standard_name || picture.common_picture) && !property_value_references_resolve(*this, value))
             return PropertyMutationStatus::invalid_reference;
         ObjectId old_asset{};
         if (const auto* old = properties->find(descriptor->id))
             if (const auto* old_picture = std::get_if<PictureRef>(&old->value)) old_asset = old_picture->asset.id();
-        if (picture.standard_name) properties->set_explicit(descriptor->id, std::move(value));
+        if (picture.standard_name || picture.common_picture) properties->set_explicit(descriptor->id, std::move(value));
         else properties->unset(descriptor->id);
         remove_unreferenced_caption_asset(old_asset);
         return PropertyMutationStatus::applied;
@@ -3581,6 +3590,16 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
     };
     const auto require_picture = [&](ObjectId source, const PictureRef& reference) {
+        if (reference.width < -1 || reference.height < -1 ||
+            (reference.asset.id() && (reference.width != -1 || reference.height != -1 || reference.transparent)))
+            add_violation(report, InvariantCode::invalid_property, source, {}, "Invalid picture reference dimensions");
+        if (reference.common_picture) {
+            if (reference.asset.id() || reference.standard_name || !valid_typed_uuid(reference.common_picture->canonical) ||
+                reference.common_picture->canonical == "00000000-0000-0000-0000-000000000000")
+                add_violation(report, InvariantCode::invalid_property, source, {},
+                    "CommonPicture reference requires one nonzero UUID and no other target");
+            return;
+        }
         if (reference.standard_name) {
             if (reference.asset.id() ||
                 metamodel::find_standard_picture(reference.standard_name->value) == nullptr) {
@@ -4386,6 +4405,16 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
                 if (!column.control) continue;
+                if (column.control->extension) {
+                    const auto extension = std::ranges::find(metamodel::input_field_extensions,
+                        *column.control->extension, &metamodel::InputFieldExtensionDescriptor::kind);
+                    const auto& type = column.control->value_type;
+                    if (column.control->kind != ControlKind::input_field ||
+                        extension == std::end(metamodel::input_field_extensions) || !type ||
+                        type->entries.size() != 1 || type->entries.front().term != TypeDomainTerm::object ||
+                        !type->entries.front().type_uuid || type->entries.front().type_uuid->canonical == "00000000-0000-0000-0000-000000000000")
+                        invalid_table("Table Column reference extension requires an InputField with one concrete nominal type");
+                }
                 if (column.control->kind != ControlKind::input_field && !column.control->events.empty())
                     invalid_table("Table Column events require an InputField editor");
                 std::set<std::string_view> editor_event_names;

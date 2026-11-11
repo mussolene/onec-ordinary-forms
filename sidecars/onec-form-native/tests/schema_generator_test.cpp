@@ -1217,6 +1217,14 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     for (std::size_t index = 0; index < expected.size(); ++index) {
         expect_element_shape(elements[index], expected[index].first, expected[index].second, "0", "1");
     }
+    const auto extension_choices = direct_children(direct_child(type, "sequence"), "choice");
+    expect(extension_choices.size() == 1, "column editor must have one optional extension choice");
+    const auto extensions = direct_children(extension_choices.front(), "element");
+    expect(extensions.size() == std::size(oof::model::metamodel::input_field_extensions),
+        "column editor extension schema must reuse the shared descriptor registry");
+    for (std::size_t index = 0; index < extensions.size(); ++index)
+        expect(attribute(extensions[index], "name") == oof::model::metamodel::input_field_extensions[index].xml_name,
+            "column editor extension names must match standalone InputField names");
     expect_type_attribute(schema, "TableColumnControlType", "type", "TableColumnEditorKindType", "required");
 
     xmlNodePtr column_sequence = sequence_for_type(schema, "TableColumnType");
@@ -1797,6 +1805,7 @@ void test_value_list_schema(const GeneratedSchemas& schemas, xmlSchemaPtr schema
         R"XML(<ValueList><ValueType><Entry term="numeric" length="12" precision="3"/></ValueType><AvailableValues><ValueList><Items><Item id="0"><Value><Number>10</Number></Value></Item></Items></ValueList></AvailableValues><Items><Item id="0"><Value><Number>10</Number></Value></Item></Items></ValueList>)XML",
         R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value><Presentation><FormattedString formatted="true"><Value><String>До &lt;img 0:448d6f55-d885-496c-870d-d1bd78374745/&gt; после</String></Value></FormattedString></Presentation><Check>true</Check></Item></Items></ValueList>)XML",
         R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value><Picture standardName="PictureLib.CloneListItem"/></Item></Items></ValueList>)XML",
+        R"XML(<ValueList><Items><Item id="0"><Value><String>x</String></Value><Picture commonPicture="11111111-2222-4333-8444-555555555555"/></Item></Items></ValueList>)XML",
         R"XML(<ValueList><Items><Item id="0"><Value><Array><Item><Structure><Field name="Nested"><String>Значение</String></Field></Structure></Item></Array></Value><Presentation><String>Представление</String></Presentation><Check>true</Check></Item></Items></ValueList>)XML",
         R"XML(<ValueList><ValueType><Entry term="string" length="30"/></ValueType><AvailableValues><ValueList/></AvailableValues></ValueList>)XML"})
         expect(validate_document(schema, document(value)) == 0, "ValueList schema must cover twelve native-shaped variants on both property families");

@@ -1254,6 +1254,12 @@ LV encode_control_color(const model::ColorValue& color, std::string_view path) {
         fail("OOF1122", std::string(path), "named style color without channels", "non-default channels",
             "Control style colors cannot carry explicit channels");
     }
+    if (const auto* reference = std::get_if<model::CompositeIdValue>(&color.style)) {
+        if (reference->is_null || reference->uuid.canonical == null_uuid)
+            fail("OOF1122", std::string(path), "non-null metadata style reference", "null reference",
+                "Control style reference requires its metadata GUID");
+        return list({raw("4"), raw("3"), encoded_composite_id(*reference, path), raw("3")});
+    }
     const auto* name = std::get_if<model::QualifiedName>(&color.style);
     if (name == nullptr) {
         fail("OOF1122", std::string(path), "known QualifiedName style reference", "non-named style",
@@ -1303,6 +1309,17 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
         color.red = static_cast<std::uint8_t>(packed & 0xff);
         color.green = static_cast<std::uint8_t>((packed >> 8) & 0xff);
         color.blue = static_cast<std::uint8_t>((packed >> 16) & 0xff);
+        return color;
+    }
+    if (kind == 3 && value.items[2].is_list && value.items[2].items.size() == 2) {
+        if (!legacy_v3) require_raw_constant(value.items[3], "3", child_path(path, 3));
+        const auto reference = composite_id(value.items[2], child_path(path, 2));
+        if (reference.is_null || reference.uuid.canonical == null_uuid)
+            fail("OOF1114", child_path(path, 2), "non-null metadata style reference", "null reference",
+                "Control style reference requires its metadata GUID");
+        model::ColorValue color;
+        color.kind = model::ColorKind::style_reference;
+        color.style = reference;
         return color;
     }
     if (kind >= 1 && kind <= 3) {
@@ -3912,7 +3929,7 @@ struct DecodedPictureDescriptor {
     std::vector<std::uint8_t> bytes;
     bool transparent = false;
     model::PictureFormat format = model::PictureFormat::gif;
-    std::optional<std::string> standard_name;
+    std::optional<model::PictureRef> reference;
 };
 
 
@@ -4334,7 +4351,8 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control,
         const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
         const auto border_color = explicit_control_color(control.properties, "BorderColor");
         LV info = canonical_input_field_info(
-            empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{}, nullptr, &border_color);
+            control.extension ? value_type : empty_type, enabled, read_only, flags, InputFieldTextValues{},
+            InputFieldLayoutValues{}, nullptr, &border_color, {}, control.extension);
         info.items[1] = encoded_type_domain(value_type, std::string(path) + "/ValueType");
         if (!value_type.entries.empty() && value_type.entries.size() == 1 &&
             value_type.entries.front().term == model::TypeDomainTerm::string) {
@@ -4345,9 +4363,9 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control,
         if (value_type.entries.size() == 1 &&
             value_type.entries.front().term == model::TypeDomainTerm::value_list) {
             info.items[3] = canonical_table_value_list_type_pair(std::string(path) + "/ValueType");
-        } else if (value_type.entries.empty() ||
+        } else if (!control.extension && (value_type.entries.empty() ||
             ((value_type.entries.front().term == model::TypeDomainTerm::object ||
-              value_type.entries.front().term == model::TypeDomainTerm::reference) && value_type.entries.front().type_uuid)) {
+              value_type.entries.front().term == model::TypeDomainTerm::reference) && value_type.entries.front().type_uuid))) {
             info.items[3] = list({raw("0")});
         }
         if (document) info.items[4] = encode_named_control_events(*document, owner, control.events,
@@ -4697,6 +4715,29 @@ LV encode_standard_button_picture(const model::metamodel::StandardPictureDescrip
         raw("-1"), raw("-1"), raw("0"), raw("0"), string_value("")});
 }
 
+LV encode_picture_reference(const model::PictureRef& reference, std::string_view path) {
+    if (reference.asset.id() || (reference.standard_name.has_value() == reference.common_picture.has_value()))
+        fail("OOF1122", std::string(path), "one library or CommonPicture target", {}, "Picture reference has inconsistent targets");
+    LV picture;
+    if (reference.standard_name) {
+        const auto* descriptor = model::metamodel::find_standard_picture(reference.standard_name->value);
+        if (!descriptor) fail("OOF1122", std::string(path), "known PictureLib name", {}, "Unknown library picture");
+        picture = encode_standard_button_picture(*descriptor);
+    } else {
+        const auto uuid = uuid_atom(raw(reference.common_picture->canonical), path);
+        if (uuid.canonical == null_uuid)
+            fail("OOF1122", std::string(path), "nonzero CommonPicture UUID", {}, "CommonPicture reference is empty");
+        picture = list({raw("4"), raw("1"), list({raw("0"), raw(uuid.canonical)}), string_value(""),
+            raw("-1"), raw("-1"), raw("0"), raw("0"), string_value("")});
+    }
+    if (reference.width < -1 || reference.height < -1)
+        fail("OOF1122", std::string(path), "picture dimensions at least -1", {}, "Invalid picture dimensions");
+    picture.items[4] = raw(std::to_string(reference.width));
+    picture.items[5] = raw(std::to_string(reference.height));
+    picture.items[6] = raw(reference.transparent ? "1" : "0");
+    return picture;
+}
+
 std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, std::string_view path) {
     if (is_empty_picture_descriptor(value)) return std::nullopt;
     if (value.items.size() >= 2 && value.items[0].atom == "4" && value.items[1].atom == "1") {
@@ -4722,15 +4763,23 @@ std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, s
             fail("OOF1114", child_path(path, 2), "list-wrapped standard picture identity", "atom",
                 "Standard picture identity is malformed");
         }
-        if (descriptor == nullptr) fail("OOF1114", child_path(path, 2), "known standard picture identity", "unknown", "Button standard picture is unsupported");
+        if (descriptor == nullptr && (identity.items.size() != 2 ||
+            uuid_atom(identity.items[1], child_path(child_path(path, 2), 1)).canonical == null_uuid))
+            fail("OOF1114", child_path(path, 2), "known library picture or nonzero CommonPicture UUID", "unknown", "Picture identity is unsupported");
         require_exact(value.items[3], string_value(""), child_path(path, 3), "Standard picture descriptor is unsupported");
-        require_raw_constant(value.items[4], "-1", child_path(path, 4));
-        require_raw_constant(value.items[5], "-1", child_path(path, 5));
-        require_raw_constant(value.items[6], "0", child_path(path, 6));
+        const auto width = integer_atom<std::int32_t>(value.items[4], child_path(path, 4));
+        const auto height = integer_atom<std::int32_t>(value.items[5], child_path(path, 5));
+        const auto transparent = bool_atom(value.items[6], child_path(path, 6));
+        if (width < -1 || height < -1) fail("OOF1114", std::string(path), "picture dimensions at least -1", {}, "Invalid picture dimensions");
         require_raw_constant(value.items[7], "0", child_path(path, 7));
         require_exact(value.items[8], string_value(""), child_path(path, 8), "Standard picture descriptor is unsupported");
         DecodedPictureDescriptor picture;
-        picture.standard_name = std::string(descriptor->runtime_name);
+        if (descriptor) picture.reference = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{std::string(descriptor->runtime_name)}};
+        else picture.reference = model::PictureRef{model::PictureAssetRef{}, std::nullopt,
+            uuid_atom(identity.items[1], child_path(child_path(path, 2), 1))};
+        picture.reference->width = width;
+        picture.reference->height = height;
+        picture.reference->transparent = transparent;
         return picture;
     }
     require_arity(value, 10, path);
@@ -4787,11 +4836,7 @@ LV encode_value_list_body(const model::ValueListValue& value, std::string_view p
         auto picture = canonical_button_picture();
         picture.items[6] = raw("0");
         if (item.picture) {
-            if (!item.picture->standard_name || item.picture->asset.id())
-                fail("OOF1122", std::string(path), "empty or library ValueList picture", {}, "ValueList file pictures require document asset context");
-            const auto* descriptor = model::metamodel::find_standard_picture(item.picture->standard_name->value);
-            if (!descriptor) fail("OOF1122", std::string(path), "known library picture", {}, "Unknown ValueList picture");
-            picture = encode_standard_button_picture(*descriptor);
+            picture = encode_picture_reference(*item.picture, path);
         }
         std::vector<LV> fields;
         fields.reserve(7);
@@ -4887,9 +4932,9 @@ model::ValueListValue decode_value_list_body(const LV& value, std::string_view p
         } else {
             consume_typed_storage_budget(picture_path, depth + 2, budget);
             const auto picture = decode_button_picture(picture_record, picture_path);
-            if (!picture || !picture->standard_name)
+            if (!picture || !picture->reference)
                 fail("OOF1122", picture_path, "library picture", {}, "ValueList file picture is unsupported");
-            item.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}};
+            item.picture = *picture->reference;
         }
         result.items.push_back(std::move(item));
     }
@@ -4914,16 +4959,7 @@ LV encode_named_control_picture(
     const auto* reference = std::get_if<model::PictureRef>(&entry->value);
     if (reference == nullptr)
         fail("OOF1122", std::string(path), "PictureRef", "different value type", "Control picture has the wrong value type");
-    if (reference->standard_name) {
-        if (reference->asset.id().value() != 0)
-            fail("OOF1122", std::string(path), "standard picture with empty asset ID",
-                std::to_string(reference->asset.id().value()), "Picture reference has conflicting targets");
-        const auto* picture = model::metamodel::find_standard_picture(reference->standard_name->value);
-        if (picture == nullptr)
-            fail("OOF1122", std::string(path), "known PictureLib name", reference->standard_name->value,
-                "Standard picture is unsupported");
-        return encode_standard_button_picture(*picture);
-    }
+    if (reference->standard_name || reference->common_picture) return encode_picture_reference(*reference, path);
     if (reference->asset.id().value() == 0)
         fail("OOF1122", std::string(path), "positive asset ID", "0", "Picture asset reference is empty");
     const auto* asset = document.find_asset(reference->asset.id());
@@ -5085,12 +5121,8 @@ LV menu_entry_properties(const model::CommandBarButton& entry, std::string_view 
 }
 
 LV menu_picture(const model::PictureRef& reference, const model::OrdinaryFormDocument& document) {
-    if (reference.standard_name) {
-        const auto* descriptor = model::metamodel::find_standard_picture(reference.standard_name->value);
-        if (!descriptor || reference.asset) fail("OOF1122", "$/Button/Buttons/Picture", "valid standard picture",
-            reference.standard_name->value, "Menu picture reference is inconsistent");
-        return encode_standard_button_picture(*descriptor);
-    }
+    if (reference.standard_name || reference.common_picture)
+        return encode_picture_reference(reference, "$/Button/Buttons/Picture");
     const auto* asset = document.find_asset(reference.asset.id());
     if (!asset) fail("OOF1123", "$/Button/Buttons/Picture", "existing picture asset", "missing", "Menu picture reference is dangling");
     return encode_button_picture(*asset, "$/Button/Buttons/Picture");
@@ -5436,7 +5468,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 const auto slot = cursor;
                 const auto picture = decode_button_picture(take(), child_path(action_path, slot));
                 if (!picture) fail("OOF1114", child_path(action_path, slot), "nonempty picture", "empty", "Menu picture flag is inconsistent");
-                if (picture->standard_name) entry.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}};
+                if (picture->reference) entry.picture = *picture->reference;
                 else {
                     decoded.assets.push_back(model::PictureAsset{model::ObjectId{decoded.assets.size() + 1},
                         asset_path + "/" + entry.name + "/Picture." + std::string(picture_format_extension(picture->format)),
@@ -5520,6 +5552,7 @@ struct DecodedControl {
     std::string menu_owner{};
     std::unordered_map<std::uint64_t, std::vector<std::string>> menu_paths{};
     std::vector<DecodedTableColumnEvent> column_events{};
+    std::optional<std::uint64_t> menu_root_id{};
 };
 
 struct DecodedChartInfo {
@@ -6444,6 +6477,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     std::get<model::CommandBarPayload>(control.payload).buttons = std::move(menu.entries);
     control.position = geometry.position;
     DecodedControl result{std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
+    result.menu_root_id = root_group_id;
     result.menu_owner = std::move(menu.owner);
     result.menu_paths = std::move(menu.paths);
     return result;
@@ -6643,7 +6677,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     }
     std::optional<model::PictureAsset> picture_asset;
-    if (picture && !picture->standard_name) {
+    if (picture && !picture->reference) {
         picture_asset = model::PictureAsset{
             {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
             picture->format, picture->bytes, picture->transparent};
@@ -6716,10 +6750,9 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         control.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
     }
     control.position = std::move(decoded_geometry.position);
-    if (picture && picture->standard_name) {
+    if (picture && picture->reference) {
         control.properties().set_explicit(model::PropertyId::from_name("Picture"),
-            model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
-                model::QualifiedName{*picture->standard_name}});
+            *picture->reference);
     }
     DecodedMenu menu;
     if (menu_mode != 0) {
@@ -6750,9 +6783,21 @@ DecodedControl decode_picture_decoration(
     const std::string info_path = child_path(path, 2);
     require_arity(info, 3, info_path);
     require_raw_constant(info.items[0], "1", child_path(info_path, 0));
-    const auto& picture_properties = info.items[1];
+    auto picture_properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
     require_arity(picture_properties, 15, properties_path);
+    const auto& old_style = picture_properties.items[4];
+    const auto style_path = child_path(properties_path, 4);
+    const auto generation = picture_style_version(old_style);
+    if (!generation) fail("OOF1106", style_path, "picture style generation 3 through 10", {}, "Unsupported picture style generation");
+    require_arity(old_style, generation == 3 ? 3 : generation + 1, style_path);
+    if (generation != 10) {
+        auto current_style = canonical_picture_properties(true).items[4];
+        std::copy(old_style.items.begin() + 1, old_style.items.end(), current_style.items.begin() + 1);
+        for (const auto slot : {2U, 3U, 4U})
+            if (is_empty_picture_descriptor(current_style.items[slot])) current_style.items[slot] = canonical_button_picture();
+        picture_properties.items[4] = std::move(current_style);
+    }
     require_raw_constant(picture_properties.items[1], "20", child_path(properties_path, 1));
     auto base_properties = picture_properties.items[0];
     const std::string base_path = child_path(properties_path, 0);
@@ -6822,7 +6867,7 @@ DecodedControl decode_picture_decoration(
         "PictureDecoration cannot contain storage children");
 
     std::optional<model::PictureAsset> picture_asset;
-    if (picture && !picture->standard_name) {
+    if (picture && !picture->reference) {
         picture_asset = model::PictureAsset{
             {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
             picture->format, picture->bytes, picture->transparent};
@@ -6858,10 +6903,9 @@ DecodedControl decode_picture_decoration(
         control.properties().set_explicit(model::PropertyId::from_name("PictureSize"),
             model::EnumerationValue{"PictureSize", std::string(members[picture_info.picture_size])});
     }
-    if (picture && picture->standard_name) {
+    if (picture && picture->reference) {
         control.properties().set_explicit(model::PropertyId::from_name("Picture"),
-            model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
-                model::QualifiedName{*picture->standard_name}});
+            *picture->reference);
     }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {},
@@ -7263,7 +7307,8 @@ constexpr std::array label_properties_layouts{
 };
 
 constexpr std::array label_picture_layouts{
-    RecordLayout{"3", 3}, RecordLayout{"10", 11},
+    RecordLayout{"3", 3}, RecordLayout{"4", 5}, RecordLayout{"5", 6}, RecordLayout{"6", 7},
+    RecordLayout{"7", 8}, RecordLayout{"8", 9}, RecordLayout{"9", 10}, RecordLayout{"10", 11},
 };
 
 std::optional<LV> upgrade_label_properties(const LV& properties, std::string_view path) {
@@ -7283,7 +7328,7 @@ std::optional<LV> upgrade_label_properties(const LV& properties, std::string_vie
     const auto picture_version = raw_atom(picture.items[0], child_path(picture_path, 0));
     const auto picture_layout = std::ranges::find(label_picture_layouts, picture_version, &RecordLayout::version);
     if (picture_layout == label_picture_layouts.end())
-        fail("OOF1106", child_path(picture_path, 0), "LabelDecoration picture generation 3 or 10", picture_version,
+        fail("OOF1106", child_path(picture_path, 0), "LabelDecoration picture generation 3 through 10", picture_version,
             "LabelDecoration picture version is unsupported");
     require_arity(picture, picture_layout->arity, picture_path);
     if (version == "11" && picture_version == "10") return std::nullopt;
@@ -7292,8 +7337,10 @@ std::optional<LV> upgrade_label_properties(const LV& properties, std::string_vie
     auto current_picture = current.items[12];
     std::copy(properties.items.begin(), properties.items.end(), current.items.begin());
     current.items[1] = raw("11");
-    if (picture_version == "3") {
+    if (picture_version != "10") {
         std::copy(picture.items.begin() + 1, picture.items.end(), current_picture.items.begin() + 1);
+        for (const auto slot : {2U, 3U, 4U})
+            if (is_empty_picture_descriptor(current_picture.items[slot])) current_picture.items[slot] = canonical_button_picture();
         current.items[12] = std::move(current_picture);
     }
     return current;
@@ -7451,13 +7498,13 @@ DecodedControl decode_label(
         constexpr std::array members{"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "", "", "ByFontSize"};
         control.properties().set_explicit(model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", members.at(picture_size)});
     }
-    if (picture && picture->standard_name)
+    if (picture && picture->reference)
         control.properties().set_explicit(model::PropertyId::from_name("Picture"),
-            model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}});
+            *picture->reference);
     control.position = std::move(decoded_geometry.position);
     DecodedControl decoded{std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {},
         std::move(named_events)};
-    if (picture && !picture->standard_name)
+    if (picture && !picture->reference)
         decoded.picture_property_assets.push_back({"Picture", model::PictureAsset{
             {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
             picture->format, picture->bytes, picture->transparent}});
@@ -9993,10 +10040,9 @@ DecodedControl decode_choice_field(
         const auto picture_path = child_path(info_properties_path, slot);
         const auto picture = decode_button_picture(info_properties.items[slot], picture_path);
         if (!picture) continue;
-        if (picture->standard_name) {
+        if (picture->reference) {
             control.properties().set_explicit(model::PropertyId::from_name(property_name),
-                model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
-                    model::QualifiedName{*picture->standard_name}});
+                *picture->reference);
         } else {
             decoded_picture_assets.push_back({std::string(property_name), model::PictureAsset{
                 {}, "Items/" + name + "/" + std::string(property_name) + "." +
@@ -11300,10 +11346,9 @@ DecodedControl decode_input_field(
             std::pair<std::string_view, std::size_t>{"Picture", 28}, std::pair<std::string_view, std::size_t>{"ChoiceButtonPicture", 29}}) {
         const auto picture = decode_button_picture(payload.items[slot], child_path(payload_path, slot));
         if (!picture) continue;
-        if (picture->standard_name) {
+        if (picture->reference) {
             control.properties().set_explicit(model::PropertyId::from_name(property_name),
-                model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
-                    model::QualifiedName{*picture->standard_name}});
+                *picture->reference);
         } else {
             decoded_picture_assets.push_back({std::string(property_name), model::PictureAsset{
                 {}, "Items/" + name + "/" + std::string(property_name) + "." +
@@ -11461,7 +11506,19 @@ model::TableColumn decode_table_column(
             } else {
                 require_arity(editor_info.items[3], 2, paired_path);
                 require_raw_constant(editor_info.items[3].items[0], "1", child_path(paired_path, 0));
-                if (embedded_type.entries.size() == 1 &&
+                require_arity(editor_info.items[3].items[1], 2, child_path(paired_path, 1));
+                const auto context_guid = uuid_atom(editor_info.items[3].items[1].items[0],
+                    child_path(child_path(paired_path, 1), 0)).canonical;
+                const auto extension = std::ranges::find(model::metamodel::input_field_extensions, context_guid,
+                    &model::metamodel::InputFieldExtensionDescriptor::guid);
+                if (extension != std::end(model::metamodel::input_field_extensions)) {
+                    if (!is_concrete_input_reference_type(embedded_type) || embedded_type.entries.size() != 1)
+                        fail("OOF1122", paired_path, "single nominal type for reference editor", "incompatible type",
+                            "Table Column reference extension requires its named type");
+                    require_exact(editor_info.items[3].items[1], input_field_reference_pair(extension->kind),
+                        child_path(paired_path, 1), "Table Column reference extension settings are unsupported");
+                    column.control->extension = extension->kind;
+                } else if (embedded_type.entries.size() == 1 &&
                     embedded_type.entries.front().term == model::TypeDomainTerm::value_list) {
                     require_exact(editor_info.items[3], canonical_table_value_list_type_pair(
                         child_path(editor_path, 1)), paired_path,
@@ -11944,31 +12001,7 @@ LV encode_button(
     const auto button_text_color = explicit_control_color(control.properties(), "ButtonTextColor");
     const auto button_back_color = explicit_control_color(control.properties(), "ButtonBackColor");
     const auto font = explicit_control_font(control.properties(), "$/Button/Font");
-    const model::PictureAsset* picture_asset = nullptr;
-    const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
-    if (const auto* picture_entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
-        if (!std::holds_alternative<model::PictureRef>(picture_entry->value)) {
-            fail("OOF1122", "$/Button/Picture", "PictureRef", "different value type", "Button.Picture has the wrong value type");
-        }
-        const auto& reference = std::get<model::PictureRef>(picture_entry->value);
-        if (reference.standard_name) {
-            if (reference.asset.id().value() != 0) {
-                fail("OOF1122", "$/Button/Picture", "standard picture with empty asset ID",
-                    std::to_string(reference.asset.id().value()), "Picture reference has conflicting targets");
-            }
-            standard_picture = model::metamodel::find_standard_picture(reference.standard_name->value);
-            if (standard_picture == nullptr) fail("OOF1122", "$/Button/Picture", "known PictureLib name",
-                reference.standard_name->value, "Standard picture name is unsupported");
-        } else {
-            if (reference.asset.id().value() == 0) {
-                fail("OOF1122", "$/Button/Picture", "positive asset ID", "0", "Picture asset reference is empty");
-            }
-            picture_asset = document.find_asset(reference.asset.id());
-            if (picture_asset == nullptr) {
-                fail("OOF1123", "$/Button/Picture", "existing PictureAsset", "missing", "Button picture reference is dangling");
-            }
-        }
-    }
+
     const auto horizontal_align = explicit_enum_storage_value(control.properties(), "Button", "HorizontalAlign",
         "HorizontalAlign", 1, {{"Left", 0}, {"Center", 1}, {"Right", 2}});
     const auto vertical_align = explicit_enum_storage_value(control.properties(), "Button", "VerticalAlign",
@@ -11988,13 +12021,13 @@ LV encode_button(
         picture_location, picture_size, menu_mode, multi_line, tool_tip,
         border_color, button_text_color, button_back_color, font, shortcut);
     button_properties.items[5] = raw(explicit_bool(control.extension_properties, "DefaultButton", false) ? "1" : "0");
-    if (picture_asset != nullptr) button_properties.items[8] = encode_button_picture(*picture_asset, "$/Button/Picture");
+    button_properties.items[8] = encode_named_control_picture(document, control, "Picture", "$/Button/Picture");
     const auto& menu_entries = std::get<model::ButtonPayload>(control.payload).buttons;
     if (!menu_entries.empty()) {
         if (menu_mode == 0) fail("OOF1122", "$/Button/Buttons", "enabled MenuMode", "DontUse", "Menu entries require MenuMode");
         button_properties.items[12] = encode_button_menu(menu_entries, document, control.id.value());
     }
-    if (standard_picture != nullptr) button_properties.items[8] = encode_standard_button_picture(*standard_picture);
+
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
@@ -12106,36 +12139,7 @@ LV encode_picture_decoration(
             {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3}, {"AutoSize", 4}, {"ByFontSize", 7}}),
         explicit_named_shortcut(control.properties(), "$/PictureDecoration/Shortcut"),
     };
-    const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
-    const model::PictureAsset* picture_asset = nullptr;
-    if (const auto* entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
-        if (!std::holds_alternative<model::PictureRef>(entry->value)) {
-            fail("OOF1122", "$/PictureDecoration/Picture", "PictureRef", "different value type",
-                "PictureDecoration.Picture has the wrong value type");
-        }
-        const auto& reference = std::get<model::PictureRef>(entry->value);
-        if (reference.standard_name) {
-            if (reference.asset.id().value() != 0) {
-                fail("OOF1122", "$/PictureDecoration/Picture", "standard picture with empty asset ID",
-                    std::to_string(reference.asset.id().value()), "Picture reference has conflicting targets");
-            }
-            standard_picture = model::metamodel::find_standard_picture(reference.standard_name->value);
-            if (standard_picture == nullptr) {
-                fail("OOF1122", "$/PictureDecoration/Picture", "known PictureLib name",
-                    reference.standard_name->value, "Standard picture name is unsupported");
-            }
-        } else {
-            if (reference.asset.id().value() == 0) {
-                fail("OOF1122", "$/PictureDecoration/Picture", "positive asset ID", "0",
-                    "Picture asset reference is empty");
-            }
-            picture_asset = document.find_asset(reference.asset.id());
-            if (picture_asset == nullptr) {
-                fail("OOF1123", "$/PictureDecoration/Picture", "existing PictureAsset", "missing",
-                    "PictureDecoration picture reference is dangling");
-            }
-        }
-    }
+
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
     auto picture_properties = canonical_picture_properties(enabled, tool_tip, &font, &border_color,
         transparent, picture_info);
@@ -12143,11 +12147,7 @@ LV encode_picture_decoration(
         control.properties(), "$/PictureDecoration");
     encode_named_control_border(picture_properties.items[0], model::ControlKind::picture_decoration,
         control.properties(), "$/PictureDecoration");
-    if (standard_picture != nullptr) {
-        picture_properties.items[4].items[2] = encode_standard_button_picture(*standard_picture);
-    } else if (picture_asset != nullptr) {
-        picture_properties.items[4].items[2] = encode_button_picture(*picture_asset, "$/PictureDecoration/Picture");
-    }
+    picture_properties.items[4].items[2] = encode_named_control_picture(document, control, "Picture", "$/PictureDecoration/Picture");
     auto picture_events = encode_control_event_collection(document, control, "$/PictureDecoration/Events");
     return list({
         raw(std::string(descriptor.guid)),
@@ -14171,8 +14171,8 @@ Result<model::OrdinaryFormDocument> decode_document(
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
         if (configuration_style) form.properties.set_explicit(model::PropertyId::from_name("Style"), model::StyleValue{configuration_style});
-        if (caption_picture && caption_picture->standard_name) form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"),
-            model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*caption_picture->standard_name}});
+        if (caption_picture && caption_picture->reference) form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"),
+            *caption_picture->reference);
         if (appearance_mode != 1) form.properties.set_explicit(model::PropertyId::from_name("WindowAppearanceMode"),
             model::EnumerationValue{"WindowAppearanceModeVariant", appearance_mode == 0 ? "Minimized" : "Maximized"});
         if (connectable_window) form.properties.set_explicit(model::PropertyId::from_name("ConnectableWindow"), true);
@@ -14532,10 +14532,10 @@ Result<model::OrdinaryFormDocument> decode_document(
                             panel_owner.incoming, panel_owner.default_controls, child_path(record_path, 5));
                         for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
                         const auto picture = decode_button_picture(*panel_owner.picture, child_path(record_path, 2) + "/Picture");
-                        if (picture && picture->standard_name)
-                            panel.properties().set_explicit(model::PropertyId::from_name("Picture"), model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}});
+                        if (picture && picture->reference)
+                            panel.properties().set_explicit(model::PropertyId::from_name("Picture"), *picture->reference);
                         child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
-                        if (picture && !picture->standard_name)
+                        if (picture && !picture->reference)
                             child.picture_property_assets.push_back({"Picture", model::PictureAsset{{}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)), picture->format, picture->bytes, picture->transparent}});
                     } else {
                         fail("OOF1122", record_path, "supported leaf controls or Panel", guid, "Control payload is unsupported");
@@ -14711,7 +14711,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         std::uint64_t synthetic_event_offset = 0;
         const std::uint64_t event_id_base = std::max(actual_max_id, next_page_id - 1);
         std::vector<model::PictureAsset> decoded_picture_assets;
-        if (caption_picture && !caption_picture->standard_name) {
+        if (caption_picture && !caption_picture->reference) {
             if (synthetic_event_offset >= std::numeric_limits<std::uint64_t>::max() - event_id_base)
                 fail("OOF1120", "$/13/2", "allocatable caption picture ID", "uint64 max", "Caption picture ID overflows");
             const model::ObjectId asset_id{event_id_base + ++synthetic_event_offset};
@@ -14755,7 +14755,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     if (!controls.contains(owner_id) || controls.at(owner_id)->control.kind() != model::ControlKind::command_bar)
                         fail("OOF1123", "$/11", "existing CommandBar", std::to_string(owner_id), "Context menu target is invalid");
                     auto* owner = controls.at(owner_id);
-                    if (owner->control.kind() == model::ControlKind::command_bar && marker == command_bar_root_marker && item_id == owner_id)
+                    if (owner->control.kind() == model::ControlKind::command_bar && marker == command_bar_root_marker && owner->menu_root_id == item_id)
                         properties.set_explicit(model::PropertyId::from_name("ContextMenu"), model::ControlRef{model::ObjectId{owner_id}});
                     else {
                         if (marker != owner->menu_owner || !owner->menu_paths.contains(item_id))
@@ -14845,7 +14845,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 std::function<void(std::vector<model::CommandBarButton>&)> update;
                 update = [&](auto& entries) {
                     for (auto& entry : entries) {
-                        if (entry.picture && !entry.picture->standard_name)
+                        if (entry.picture && !entry.picture->standard_name && !entry.picture->common_picture)
                             entry.picture->asset = model::PictureAssetRef{asset_ids.at(entry.picture->asset.id().value())};
                         update(entry.buttons);
                     }
@@ -14934,7 +14934,7 @@ Result<list_stream::ListValue> encode_document(
         std::unordered_set<std::uint64_t> referenced_picture_ids;
         if (const auto* entry = document.form().properties.find(model::PropertyId::from_name("CaptionPicture"))) {
             const auto* picture = std::get_if<model::PictureRef>(&entry->value);
-            if (picture != nullptr && !picture->standard_name && picture->asset.id())
+            if (picture != nullptr && !picture->standard_name && !picture->common_picture && picture->asset.id())
                 referenced_picture_ids.insert(picture->asset.id().value());
         }
         for (const auto& control : document.collections().controls) {
@@ -14946,12 +14946,8 @@ Result<list_stream::ListValue> encode_document(
                     fail("OOF1122", path, "PictureRef", "different value type", "Control picture has the wrong value type");
                 }
                 const auto& reference = std::get<model::PictureRef>(picture->value);
-                if (reference.standard_name) {
-                    if (reference.asset.id().value() != 0 ||
-                        model::metamodel::find_standard_picture(reference.standard_name->value) == nullptr) {
-                        fail("OOF1122", path, "known standard picture with empty asset target",
-                            reference.standard_name->value, "Picture reference has inconsistent targets");
-                    }
+                if (reference.standard_name || reference.common_picture) {
+                    (void)encode_picture_reference(reference, path);
                 } else {
                     if (reference.asset.id().value() == 0) {
                         fail("OOF1122", path, "positive picture asset ID", "0", "Picture asset reference is empty");
@@ -14965,7 +14961,7 @@ Result<list_stream::ListValue> encode_document(
             std::function<void(const std::vector<model::CommandBarButton>&)> collect_pictures;
             collect_pictures = [&](const auto& entries) {
                 for (const auto& entry : entries) {
-                    if (entry.picture && !entry.picture->standard_name) referenced_picture_ids.insert(entry.picture->asset.id().value());
+                    if (entry.picture && !entry.picture->standard_name && !entry.picture->common_picture) referenced_picture_ids.insert(entry.picture->asset.id().value());
                     collect_pictures(entry.buttons);
                 }
             };
@@ -15519,11 +15515,8 @@ Result<list_stream::ListValue> encode_document(
             const auto* picture = std::get_if<model::PictureRef>(&entry->value);
             if (picture == nullptr)
                 fail("OOF1122", "$/Form/CaptionPicture", "picture reference", "invalid type", "Form CaptionPicture has the wrong value type");
-            if (picture->standard_name) {
-                if (picture->asset.id()) fail("OOF1122", "$/Form/CaptionPicture", "one picture target", "conflicting targets", "Form CaptionPicture is invalid");
-                const auto* standard = model::metamodel::find_standard_picture(picture->standard_name->value);
-                if (standard == nullptr) fail("OOF1122", "$/Form/CaptionPicture", "known PictureLib picture", picture->standard_name->value, "Form CaptionPicture is unsupported");
-                root_style.items[2] = encode_standard_button_picture(*standard);
+            if (picture->standard_name || picture->common_picture) {
+                root_style.items[2] = encode_picture_reference(*picture, "$/Form/CaptionPicture");
             } else {
                 const auto* asset = document.find_asset(picture->asset.id());
                 if (asset == nullptr) fail("OOF1123", "$/Form/CaptionPicture", "existing picture asset", "missing", "Form CaptionPicture asset is unavailable");

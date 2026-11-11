@@ -2270,7 +2270,7 @@ void test_command_bar_action_source_model() {
 void test_standard_menu_command_registry_and_runtime_contracts() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
-    expect(standard_menu_commands.size() == 3 &&
+    expect(standard_menu_commands.size() == 11 &&
         find_standard_menu_command(StandardMenuCommand::close) == &standard_menu_commands[0] &&
         find_standard_menu_command("SaveValues") == &standard_menu_commands[1] &&
         find_standard_menu_command(144) == &standard_menu_commands[2] &&

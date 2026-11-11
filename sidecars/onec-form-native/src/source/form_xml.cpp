@@ -1085,6 +1085,22 @@ model::PictureRef parse_picture_reference(
     std::string_view property,
     std::string_view object_id
 ) {
+    const auto dimensions = [&](model::PictureRef reference) {
+        if (const auto width = optional_attribute(node, "width")) reference.width = parse_integer<std::int32_t>(*width, node, property, object_id);
+        if (const auto height = optional_attribute(node, "height")) reference.height = parse_integer<std::int32_t>(*height, node, property, object_id);
+        if (const auto transparent = optional_attribute(node, "transparent")) reference.transparent = parse_boolean(*transparent, node, property, object_id);
+        if (reference.width < -1 || reference.height < -1)
+            fail("OOF2003", node, std::string(object_id), std::string(property), "picture dimensions at least -1", {}, "Invalid picture dimensions");
+        return reference;
+    };
+    if (const auto uuid = optional_attribute(node, "commonPicture")) {
+        const auto canonical = canonical_uuid(*uuid);
+        if (optional_attribute(node, "standardName") || !node_text(node).empty() ||
+            canonical == "00000000-0000-0000-0000-000000000000")
+            fail("OOF2003", node, std::string(object_id), std::string(property),
+                "one nonzero CommonPicture UUID", {}, "Picture reference has inconsistent targets");
+        return dimensions(model::PictureRef{model::PictureAssetRef{}, std::nullopt, model::UuidValue{canonical}});
+    }
     if (const auto standard_name = optional_attribute(node, "standardName")) {
         const std::string text = node_text(node);
         if (!text.empty()) {
@@ -1096,9 +1112,12 @@ model::PictureRef parse_picture_reference(
             fail("OOF2003", node, std::string(object_id), std::string(property),
                 "known PictureLib name", *standard_name, "Unknown standard picture name");
         }
-        return model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
-            model::QualifiedName{*standard_name}};
+        return dimensions(model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+            model::QualifiedName{*standard_name}});
     }
+    if (optional_attribute(node, "width") || optional_attribute(node, "height") || optional_attribute(node, "transparent"))
+        fail("OOF2003", node, std::string(object_id), std::string(property), "file asset reference without resource dimensions", {},
+            "File picture dimensions belong to the asset");
     return model::PictureRef{model::PictureAssetRef{
         parse_object_id(node_text(node), node, property, object_id)}, std::nullopt};
 }
@@ -1231,7 +1250,7 @@ model::PropertyValue parse_typed_node(xmlNodePtr field, std::string_view owner,
                         } else if (property == "Picture" && value_seen && item_stage <= 3) {
                             consume_typed_value_budget(budget, depth + 2, part, owner);
                             auto picture = parse_picture_reference(part, property, owner);
-                            if (!picture.standard_name)
+                            if (!picture.standard_name && !picture.common_picture)
                                 fail("OOF2003", part, std::string(owner), property, "named standard Picture", "file reference",
                                     "ValueList Picture file references are not supported");
                             item.picture = std::move(picture);
@@ -3072,6 +3091,18 @@ private:
                     std::set<std::string> control_properties;
                     for (xmlNodePtr property_node : element_children(field)) {
                         const std::string property_name = node_name(property_node);
+                        const auto extension = std::ranges::find(mm::input_field_extensions, property_name,
+                            &mm::InputFieldExtensionDescriptor::xml_name);
+                        if (extension != std::end(mm::input_field_extensions)) {
+                            if (column.control->kind != model::ControlKind::input_field || column.control->extension ||
+                                property_node->properties || !element_children(property_node).empty() ||
+                                !trim_ascii(node_text(property_node)).empty())
+                                fail("OOF2003", property_node, std::string(owner), property_name,
+                                    "one empty named InputField extension", "invalid owner, settings or duplicate",
+                                    "Invalid Table Column editor extension");
+                            column.control->extension = extension->kind;
+                            continue;
+                        }
                         if (property_name == "Events") {
                             if (column.control->kind != model::ControlKind::input_field ||
                                 !control_properties.insert(property_name).second)
@@ -4012,6 +4043,21 @@ private:
         const model::PictureRef& reference,
         std::string_view object_id
     ) {
+        XmlAttributes attributes;
+        if (reference.width < -1 || reference.height < -1)
+            serialization_fail(std::string(object_id), std::string(element_name), "picture dimensions at least -1", {}, "Invalid picture dimensions");
+        if (reference.width != -1) attributes.emplace_back("width", std::to_string(reference.width));
+        if (reference.height != -1) attributes.emplace_back("height", std::to_string(reference.height));
+        if (reference.transparent) attributes.emplace_back("transparent", "true");
+        if (reference.common_picture) {
+            const auto uuid = canonical_uuid(reference.common_picture->canonical);
+            if (reference.standard_name || reference.asset.id() || uuid == "00000000-0000-0000-0000-000000000000")
+                serialization_fail(std::string(object_id), std::string(element_name),
+                    "one nonzero CommonPicture UUID", {}, "Picture reference has inconsistent targets");
+            attributes.emplace_back("commonPicture", uuid);
+            writer_.empty(element_name, attributes);
+            return;
+        }
         if (reference.standard_name) {
             if (reference.asset.id().value() != 0 ||
                 mm::find_standard_picture(reference.standard_name->value) == nullptr) {
@@ -4019,9 +4065,13 @@ private:
                     "known standard picture name with empty asset target", "invalid target",
                     "Picture reference has inconsistent targets");
             }
-            writer_.empty(element_name, {{"standardName", reference.standard_name->value}});
+            attributes.emplace_back("standardName", reference.standard_name->value);
+            writer_.empty(element_name, attributes);
             return;
         }
+        if (!attributes.empty())
+            serialization_fail(std::string(object_id), std::string(element_name), "file asset without resource dimensions", {},
+                "File picture dimensions belong to the asset");
         if (reference.asset.id().value() == 0) {
             serialization_fail(std::string(object_id), std::string(element_name),
                 "positive picture asset ID", "0", "Picture asset reference is empty");
@@ -5305,6 +5355,14 @@ private:
                     }
                     if (!column.control->value_type->entries.empty())
                         write_type_domain("ValueType", *column.control->value_type, owner);
+                }
+                if (column.control->extension) {
+                    const auto extension = std::ranges::find(mm::input_field_extensions, *column.control->extension,
+                        &mm::InputFieldExtensionDescriptor::kind);
+                    if (extension == std::end(mm::input_field_extensions))
+                        serialization_fail(std::string(owner), "InputFieldExtension", "declared extension", "unknown",
+                            "Table Column editor extension is not declared");
+                    writer_.empty(extension->xml_name);
                 }
                 const auto write_editor_property = [&](std::string_view name) {
                     const auto* descriptor = metamodel_.property(column.control->kind, name);

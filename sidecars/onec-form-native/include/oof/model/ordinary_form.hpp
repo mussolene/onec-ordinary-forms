@@ -539,6 +539,10 @@ struct PictureAsset {
 struct PictureRef {
     PictureAssetRef asset;
     std::optional<QualifiedName> standard_name = std::nullopt;
+    std::optional<UuidValue> common_picture = std::nullopt;
+    std::int32_t width = -1;
+    std::int32_t height = -1;
+    bool transparent = false;
 
     friend bool operator==(const PictureRef&, const PictureRef&) = default;
 };
@@ -556,7 +560,10 @@ enum class CommandBarButtonKind : std::uint8_t { action, submenu, separator };
 enum class CommandBarButtonOrder : std::uint8_t { none, ascending, descending };
 enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, picture_text };
 enum class ClientInterfaceVariant : std::uint8_t { version8_0, version8_2, version8_2_ordinary_app };
-enum class StandardMenuCommand : std::uint8_t { close, save_values, restore_values };
+enum class StandardMenuCommand : std::uint8_t {
+    close, save_values, restore_values, finish_editing, sort_descending, sort_ascending,
+    move_down, move_up, change, delete_item, add,
+};
 enum class StandardMenuActionSource : std::uint8_t { form, all_sources, control };
 enum class StandardMenuActionContext : std::uint8_t { command_bar, default_context, form };
 
@@ -1253,9 +1260,10 @@ struct SpreadsheetDocumentCell final {
 };
 struct TableColumnControl {
     ControlKind kind = ControlKind::input_field;
-    std::vector<EventRef> events;
     std::optional<TypeDomainPatternValue> value_type;
     PropertySet properties;
+    std::vector<EventRef> events;
+    std::optional<InputFieldExtensionKind> extension;
 };
 
 enum class TableSourceExtensionKind : std::uint8_t { document_list };

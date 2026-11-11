@@ -1884,13 +1884,14 @@ void test_table_input_field_value_type_round_trip() {
     const std::array terms{model::TypeDomainTerm::string, model::TypeDomainTerm::numeric,
         model::TypeDomainTerm::date, model::TypeDomainTerm::boolean, model::TypeDomainTerm::value_list};
     std::array<model::TypeDomainPatternValue, 15> expected_types;
+    std::array<std::optional<model::InputFieldExtensionKind>, 15> expected_extensions;
     for (std::size_t index = 0; index < expected_types.size(); ++index) {
         model::TypeDomainEntry entry;
         entry.term = terms[index % terms.size()];
         if (entry.term == model::TypeDomainTerm::string) entry.string = {64, false};
         if (entry.term == model::TypeDomainTerm::numeric) entry.numeric = {12, 2, true};
         if (entry.term == model::TypeDomainTerm::date) entry.date = {true, false};
-        if (index == 13) {
+        if (index >= 10 && index <= 13) {
             entry = {};
             entry.term = model::TypeDomainTerm::object;
             entry.type_uuid = model::UuidValue{"11111111-2222-3333-4444-555555555555"};
@@ -1906,7 +1907,14 @@ void test_table_input_field_value_type_round_trip() {
             model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
                 model::QualifiedName{"StyleColors.BorderColor"}});
         column.control->value_type = model::TypeDomainPatternValue{{entry}};
+        if (index >= 10 && index <= 12) {
+            constexpr std::array extensions{model::InputFieldExtensionKind::catalog,
+                model::InputFieldExtensionKind::chart_of_accounts, model::InputFieldExtensionKind::chart_of_characteristic_types};
+            column.control->extension = extensions[index - 10];
+        }
+
         expected_types[index] = *column.control->value_type;
+        expected_extensions[index] = column.control->extension;
         std::size_t property_index = 0;
         for (const auto name : model::metamodel::table_column_input_boolean_properties) {
             const auto* descriptor = model::metamodel::find_property(model::ControlKind::input_field, name);
@@ -1935,6 +1943,11 @@ void test_table_input_field_value_type_round_trip() {
     auto* wrong_event = const_cast<model::Event*>(wrong_owner.find_event(wrong_columns[0].control->events.front().id()));
     std::get<model::TableColumnControlRef>(wrong_event->owner).column = wrong_columns[1].name;
     expect(!wrong_owner.validate().ok(), "an editor must reject an event owned by a different column of the same Table");
+    auto wrong_extension = parsed.value();
+    auto& wrong_extension_columns = std::get<model::TablePayload>(const_cast<model::ControlNode*>(
+        wrong_extension.find_control(model::ObjectId{3}))->payload).columns;
+    wrong_extension_columns[0].control->extension = model::InputFieldExtensionKind::catalog;
+    expect(!wrong_extension.validate().ok(), "a reference editor extension must reject a scalar type");
     auto encoded = form_stream::encode_document(parsed.value());
     expect(encoded.ok(), "fifteen named Table InputField ValueTypes must encode without a baseline");
     const auto value_list_editor = table_column_editor_info(encoded.value(), 4);
@@ -1953,6 +1966,8 @@ void test_table_input_field_value_type_round_trip() {
         constexpr std::array modes{"Directly", "Enter", "EnterOnInput", "Auto"};
         expect(decoded_columns[index].edit_mode == model::EnumerationValue{"ColumnEditMode", modes[index % modes.size()]},
             "four edit modes must independently survive in fifteen named columns");
+        expect(decoded_columns[index].control->extension == expected_extensions[index],
+            "all three existing reference extensions must survive column XML and stream serialization");
         const auto& editor_events = decoded_columns[index].control->events;
         const auto* editor_event = editor_events.size() == 1 ? decoded.value().find_event(editor_events.front().id()) : nullptr;
         const auto* editor_owner = editor_event ? std::get_if<model::TableColumnControlRef>(&editor_event->owner) : nullptr;
@@ -6135,11 +6150,18 @@ void test_standard_menu_action_default_context_and_control_source() {
 }
 
 void test_save_restore_standard_actions_batch_aliases_and_guards() {
+    constexpr std::array commands{model::StandardMenuCommand::save_values, model::StandardMenuCommand::restore_values,
+        model::StandardMenuCommand::save_values, model::StandardMenuCommand::restore_values,
+        model::StandardMenuCommand::save_values, model::StandardMenuCommand::restore_values,
+        model::StandardMenuCommand::finish_editing, model::StandardMenuCommand::sort_descending,
+        model::StandardMenuCommand::sort_ascending, model::StandardMenuCommand::move_down,
+        model::StandardMenuCommand::move_up, model::StandardMenuCommand::change,
+        model::StandardMenuCommand::delete_item, model::StandardMenuCommand::add};
     model::Form form; form.id = model::ObjectId{1}; form.name = "RuntimeStandardActions";
-    for (std::uint64_t index = 0; index < 12; ++index)
+    for (std::uint64_t index = 0; index < commands.size() * 2; ++index)
         form.children.push_back(model::ControlRef{model::ObjectId{100 + index}});
     model::OrdinaryFormDocument document(std::move(form));
-    for (std::uint64_t index = 0; index < 12; ++index) {
+    for (std::uint64_t index = 0; index < commands.size() * 2; ++index) {
         const auto id = model::ObjectId{100 + index};
         const bool command_bar = index % 2 == 0;
         model::ControlNode control{id, "Owner" + std::to_string(index),
@@ -6149,7 +6171,7 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
                 model::EnumerationValue{"MenuMode", "Use"});
         model::CommandBarButton entry;
         entry.name = "Runtime";
-        const auto command = (index / 2) % 2 == 0 ? model::StandardMenuCommand::save_values : model::StandardMenuCommand::restore_values;
+        const auto command = commands[index / 2];
         entry.standard_action = model::StandardMenuAction{command, {}, model::StandardMenuActionSource::form,
             model::StandardMenuActionContext::default_context, {}};
         if (command_bar) std::get<model::CommandBarPayload>(control.payload).buttons.push_back(entry);
@@ -6157,19 +6179,19 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
         document.add_control(std::move(control));
     }
     const auto encoded = form_stream::encode_document(document);
-    expect(encoded.ok(), "12 CommandBar and Button owners must encode runtime standard commands");
+    expect(encoded.ok(), "28 CommandBar and Button owners must encode runtime standard command families");
     const auto action_payload = [](const list_stream::ListValue& record, bool command_bar) -> const list_stream::ListValue& {
         const auto& properties = record.items.at(2).items.at(1);
         const auto& menu = properties.items.at(command_bar ? 7 : 12);
         return menu.items.at(5).items.at(4);
     };
-    for (std::uint64_t index = 0; index < 12; ++index) {
+    for (std::uint64_t index = 0; index < commands.size() * 2; ++index) {
         const auto* record = find_control_record(encoded.value(), 100 + index);
         expect(record != nullptr, "batch must include each command owner independent of its ID");
         const auto& payload = action_payload(*record, index % 2 == 0);
-        const bool save_values = (index / 2) % 2 == 0;
+        const auto* descriptor = model::metamodel::find_standard_menu_command(commands[index / 2]);
         expect(payload.items.at(1).atom == "4294967295" &&
-            payload.items.at(3).atom == (save_values ? "143" : "144") &&
+            payload.items.at(3).atom == std::to_string(descriptor->storage_id) &&
             payload.items.at(4).items.at(0).atom == "1" && payload.items.at(4).items.at(1).atom == "99" &&
             payload.items.at(4).items.at(2).atom == "b78f2e80-ec68-11d4-9dcf-0050bae2bc79" &&
             payload.items.at(4).items.at(3).atom == "4" && payload.items.at(4).items.at(4).atom == "1" &&
@@ -6178,7 +6200,7 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     }
     const auto decoded = form_stream::decode_document(encoded.value(), "RuntimeStandardActions");
     expect(decoded.ok() && decoded.value().reconstruction_complete(),
-        "canonical SaveValues and RestoreValues actions must decode without losing completeness");
+        "canonical standard command families must decode without losing completeness");
     const auto xml = source::serialize_form_xml(decoded.value());
     expect(xml.ok() && xml.value().find("command=\"SaveValues\" context=\"Default\" source=\"Form\"") != std::string::npos &&
         xml.value().find("command=\"RestoreValues\" context=\"Default\" source=\"Form\"") != std::string::npos &&
@@ -7220,7 +7242,7 @@ void test_form_caption_picture() {
         expect(decoded.ok() && decoded.value().get_prop_val(owner, id).value == model::PropertyValue{picture}, "caption picture must decode");
         const auto xml = source::serialize_form_xml(decoded.value());
         expect(xml.ok() && source::parse_form_xml(xml.value()).ok(), "caption picture XML must roundtrip");
-        auto malformed = encoded.value(); malformed.items[13].items[2].items[4] = list_stream::ListValue::raw_atom("0");
+        auto malformed = encoded.value(); malformed.items[13].items[2].items[4] = list_stream::ListValue::raw_atom("-2");
         expect(!form_stream::decode_document(malformed, "CaptionPicture").ok(), "malformed caption picture must fail");
         auto dropped_nonempty_caption = encoded.value();
         dropped_nonempty_caption.items[13].items[6] = list_stream::ListValue::raw_atom("2");
@@ -7231,8 +7253,8 @@ void test_form_caption_picture() {
         expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Unknown"}}) == model::PropertyMutationStatus::invalid_reference &&
             document.get_prop_val(owner, id).value == model::PropertyValue{picture}, "unknown library caption picture is rejected atomically");
         auto unknown = encoded.value();
-        unknown.items[13].items[2].items[2] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000001")});
-        expect(!form_stream::decode_document(unknown, "CaptionPicture").ok(), "unknown library identity must fail");
+        unknown.items[13].items[2].items[2] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"), list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000")});
+        expect(!form_stream::decode_document(unknown, "CaptionPicture").ok(), "null resource identity must fail");
         expect(document.set_prop_val(owner, id, model::PictureRef{}) == model::PropertyMutationStatus::applied &&
             document.get_prop_val(owner, id).value == model::PropertyValue{model::PictureRef{}}, "empty assignment restores caption default");
         expect(document.set_prop_val(owner, id, picture) == model::PropertyMutationStatus::applied &&
@@ -7308,6 +7330,57 @@ void test_all_standard_button_pictures_round_trip_without_assets() {
     bad.add_control(std::move(button));
     expect_failure(form_stream::encode_document(bad), "OOF1123", "$",
         "unknown named standard pictures must be rejected");
+
+    const std::string common_id = "11111111-2222-4333-8444-555555555555";
+    std::string xml = "<Form id=\"1\" name=\"CommonPictures\" ordinaryFormVersion=\"2.1\"><CaptionPicture commonPicture=\"" + common_id + "\"/><ChildItems>";
+    constexpr std::array kinds{"Button", "LabelDecoration", "PictureDecoration", "InputField"};
+    for (unsigned index = 0; index < 12; ++index) {
+        const std::string kind = kinds[index % kinds.size()];
+        xml += "<" + kind + " id=\"" + std::to_string(index + 2) + "\" name=\"Item" + std::to_string(index) +
+            "\">" + (kind == "InputField" ? std::string("<ValueType><Entry term=\"string\" length=\"20\"/></ValueType>") : std::string{}) +
+            "<Position/><Picture width=\"14\" height=\"1\" transparent=\"true\" commonPicture=\"" + common_id + "\"/></" + kind + ">";
+    }
+    xml += "</ChildItems></Form>";
+    const auto common = source::parse_form_xml(xml);
+    expect(common.ok(), "CommonPicture references must parse for twelve controls and form caption");
+    const auto common_stream = form_stream::encode_document(common.value());
+    expect(common_stream.ok(), "CommonPicture references must encode without metadata or file assets");
+    const auto common_decoded = form_stream::decode_document(common_stream.value(), "CommonPictures");
+    expect(common_decoded.ok() && common_decoded.value().reconstruction_complete() && common_decoded.value().assets().empty(),
+        "CommonPicture references must decode as named properties without file assets");
+    const auto common_xml = source::serialize_form_xml(common_decoded.value());
+    expect(common_xml.ok() && common_xml.value().find("commonPicture=\"" + common_id + "\"") != std::string::npos,
+        "public XML must preserve the external CommonPicture UUID");
+    const auto common_parsed = source::parse_form_xml(common_xml.value());
+    expect(common_parsed.ok(), "CommonPicture XML must rebuild independently");
+    const auto common_rebuilt = form_stream::encode_document(common_parsed.value());
+    expect(common_rebuilt.ok() && list_stream::dump_compact(common_stream.value()) == list_stream::dump_compact(common_rebuilt.value()),
+        "CommonPicture XML-only rebuild must preserve all picture identities");
+    for (const unsigned version : {3U, 4U, 5U, 6U, 7U, 8U, 9U}) {
+        auto legacy = common_stream.value();
+        for (auto& record : legacy.items[1].items[2].items[2].items) {
+            if (!record.is_list || record.items.size() != 6 || record.items[0].atom !=
+                model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid) continue;
+            auto& style = record.items[2].items[1].items[4];
+            style.items.resize(version == 3 ? 3 : version + 1);
+            style.items[0] = list_stream::ListValue::raw_atom(std::to_string(version));
+        }
+        const auto result = form_stream::decode_document(legacy, "CommonPictures");
+        expect(result.ok() && result.value().reconstruction_complete(), "known PictureDecoration style generations must decode completely");
+        const auto rebuilt = form_stream::encode_document(result.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(common_stream.value()),
+            "legacy picture styles must use current owner defaults without losing resource references");
+    }
+    for (const std::string& invalid : std::vector<std::string>{
+        "<Picture commonPicture=\"00000000-0000-0000-0000-000000000000\"/>",
+        "<Picture commonPicture=\"invalid\"/>",
+        "<Picture commonPicture=\"" + common_id + "\" standardName=\"PictureLib.Write\"/>",
+        "<Picture commonPicture=\"" + common_id + "\">5</Picture>"}) {
+        const auto begin = xml.find("<Picture ");
+        auto malformed = xml;
+        malformed.replace(begin, malformed.find("/>", begin) + 2 - begin, invalid);
+        expect(!source::parse_form_xml(malformed), "CommonPicture references must reject malformed, null or conflicting targets");
+    }
 }
 
 void test_label_decoration_shared_attribute_links_round_trip() {
@@ -7619,7 +7692,7 @@ void test_label_property_and_picture_generations() {
     const auto current = form_stream::encode_document(document);
     expect(current.ok(), "ten varied Label controls must encode");
     for (const bool old_properties : {false, true}) {
-        for (const bool old_picture : {false, true}) {
+        for (const unsigned picture_version : {3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U}) {
             auto stream = current.value();
             std::size_t changed = 0;
             for (auto& record : stream.items[1].items[2].items[2].items) {
@@ -7627,7 +7700,8 @@ void test_label_property_and_picture_generations() {
                     model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid) continue;
                 auto& properties = record.items[2].items[1];
                 if (old_properties) { properties.items.resize(14); properties.items[1] = list_stream::ListValue::raw_atom("7"); }
-                if (old_picture) { properties.items[12].items.resize(3); properties.items[12].items[0] = list_stream::ListValue::raw_atom("3"); }
+                properties.items[12].items.resize(picture_version == 3 ? 3 : picture_version + 1);
+                properties.items[12].items[0] = list_stream::ListValue::raw_atom(std::to_string(picture_version));
                 ++changed;
             }
             expect(changed == 10, "each independent layout combination must cover ten Label controls");
@@ -7647,7 +7721,7 @@ void test_label_property_and_picture_generations() {
                 if (corruption == 0) properties.items[1] = list_stream::ListValue::raw_atom("8");
                 if (corruption == 1) properties.items.push_back(list_stream::ListValue::raw_atom("0"));
                 if (corruption == 2) properties.items.pop_back();
-                if (corruption == 3) properties.items[12].items[0] = list_stream::ListValue::raw_atom("4");
+                if (corruption == 3) properties.items[12].items[0] = list_stream::ListValue::raw_atom("11");
                 if (corruption == 4) properties.items[12].items.push_back(list_stream::ListValue::raw_atom("0"));
                 if (corruption == 5) properties.items[12].items[1] = list_stream::ListValue::raw_atom("1");
                 expect(!form_stream::decode_document(malformed, "LabelGenerations"),
@@ -12275,6 +12349,34 @@ void test_all_named_base_color_pairs_public_xml_round_trip() {
             model::PropertyId::from_name(test_case.property));
         expect(default_value.value && *default_value.value == model::PropertyValue{default_color(test_case.default_style)},
             "GetPropVal must materialize the typed default for each named base color");
+        auto metadata_style_document = absent_xml.value();
+        model::ColorValue metadata_style;
+        metadata_style.kind = model::ColorKind::style_reference;
+        metadata_style.style = composite(0, "11111111-2222-3333-4444-555555555555");
+        const_cast<model::ControlNode*>(metadata_style_document.find_control(model::ObjectId{2}))->properties().set_explicit(
+            model::PropertyId::from_name(test_case.property), metadata_style);
+        const auto metadata_style_stream = form_stream::encode_document(metadata_style_document);
+        expect(metadata_style_stream.ok(), "all base color owners must encode a named metadata style reference");
+        for (const bool legacy : {false, true}) {
+            auto stored = metadata_style_stream.value();
+            if (legacy) {
+                auto* base = base_for(stored, test_case);
+                base->items[test_case.slot].items[0] = list_stream::ListValue::raw_atom("3");
+                base->items[test_case.slot].items.pop_back();
+            }
+            const auto decoded = form_stream::decode_document(stored, "MetadataStyleColor");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                "metadata style references must decode completely in both Color3 and Color4");
+            const auto value = decoded.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+                model::PropertyId::from_name(test_case.property));
+            expect(value.value && *value.value == model::PropertyValue{metadata_style},
+                "metadata style GUID and object identity must remain typed property values");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            const auto parsed = source::parse_form_xml(xml.value());
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(metadata_style_stream.value()),
+                "metadata style colors must rebuild through existing XML without the source stream");
+        }
         const auto* control = absent_xml.value().find_control(model::ObjectId{2});
         expect(control && control->properties().find(model::PropertyId::from_name(test_case.property)) == nullptr,
             "absent named base colors must remain implicit properties");
@@ -21680,6 +21782,30 @@ void test_context_menu_named_reference_roundtrip() {
     auto reread = form_stream::decode_document(rebuilt.value());
     expect(reread.ok() && reread.value().reconstruction_complete(), "rebuilt context menu stream must decode");
     check(reread.value());
+
+    auto separate_root = encoded.value();
+    auto* bar_record = find_record_with_guid(separate_root, model::metamodel::descriptor_for(model::ControlKind::command_bar).guid);
+    auto& bar_properties = bar_record->items[2].items[1];
+    bar_properties.items[9] = list_stream::ListValue::raw_atom("777");
+    std::function<void(list_stream::ListValue&)> rename_root = [&](auto& value) {
+        if (value.is_list && value.items.size() >= 5 && value.items[0].atom == "5" &&
+            value.items[1].atom == "b78f2e80-ec68-11d4-9dcf-0050bae2bc79" && value.items[2].atom == "2")
+            value.items[2] = list_stream::ListValue::raw_atom("777");
+        for (auto& item : value.items) rename_root(item);
+    };
+    rename_root(bar_properties.items[7]);
+    auto& context_rows = separate_root.items[11];
+    for (std::size_t index = 1; index + 4 < context_rows.items.size(); index += 5)
+        if (context_rows.items[index + 1].atom == "2" &&
+            context_rows.items[index + 2].atom == "b78f2e80-ec68-11d4-9dcf-0050bae2bc79")
+            context_rows.items[index + 3] = list_stream::ListValue::raw_atom("777");
+    const auto separate_read = form_stream::decode_document(separate_root);
+    expect(separate_read.ok() && separate_read.value().reconstruction_complete(),
+        "context menu root collection identity must be independent from the command bar control identity");
+    check(separate_read.value());
+    const auto separate_xml = source::serialize_form_xml(separate_read.value());
+    expect(separate_xml.ok() && separate_xml.value() == public_xml.value(),
+        "sixteen control types must resolve the same named ContextMenu from a separately identified root collection");
 
     auto& menu = std::get<model::CommandBarPayload>(bar->payload).buttons;
     std::reverse(menu.begin(), menu.end());
