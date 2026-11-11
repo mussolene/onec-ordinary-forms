@@ -17776,6 +17776,83 @@ void test_root_pages_round_trip_with_page_local_control_order() {
         "Page-local traversal order must round-trip without moving ChildItems across Pages");
     const_cast<model::ControlNode*>(document.find_control(model::ObjectId{4}))->position.tab_order.set(std::optional<std::int32_t>{3});
     expect(!form_stream::encode_document(document).ok(), "TabOrder must be bounded by its own Page rather than total owner count");
+
+    model::Form batch_form;
+    batch_form.id = model::ObjectId{1};
+    batch_form.name = "PageGenerations";
+    batch_form.children = {model::PageRef{model::ObjectId{40}}};
+    model::OrdinaryFormDocument batch(std::move(batch_form));
+    batch.add_attribute(model::Attribute{model::ObjectId{100}, "Text", string_type});
+    for (const auto& [id, name, term] : {
+             std::tuple{101ULL, "Flag", model::TypeDomainTerm::boolean},
+             std::tuple{102ULL, "Choices", model::TypeDomainTerm::value_list}}) {
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = term;
+        type.entries.push_back(entry);
+        batch.add_attribute(model::Attribute{model::ObjectId{id}, name, type});
+    }
+    model::Page batch_page;
+    batch_page.id = model::ObjectId{40};
+    batch_page.name = "Batch";
+    batch_page.title.set(model::LocalizedStringValue{{{"ru", "Общая страница"}}});
+    batch_page.visible.set(false);
+    batch_page.enabled.set(false);
+    batch_page.position.set(page_position(0, 0, 400, 300, 0, 0));
+    const std::array<model::ControlPayload, 10> payloads{
+        model::ButtonPayload{}, model::LabelDecorationPayload{}, model::InputFieldPayload{},
+        model::CheckBoxPayload{}, model::ChoiceFieldPayload{}, model::RadioButtonPayload{},
+        model::ProgressBarPayload{}, model::TrackBarPayload{}, model::CalendarFieldPayload{},
+        model::ListBoxPayload{}};
+    for (std::size_t index = 0; index < payloads.size(); ++index) {
+        const model::ObjectId id{index + 2};
+        model::ControlNode node{id, "Control" + std::to_string(index), payloads[index]};
+        if (index == 2 || index == 3 || index == 9) {
+            node.data_path = model::DataPath{model::AttributeRef{
+                model::ObjectId{index == 2 ? 100ULL : index == 3 ? 101ULL : 102ULL}}, {}};
+        }
+        batch_page.children.push_back(model::ControlRef{id});
+        batch.add_control(std::move(node));
+    }
+    batch.add_page(batch_page);
+    const auto batch_encoded = form_stream::encode_document(batch);
+    expect(batch_encoded.ok(), batch_encoded ? "ten-control Page batch must encode" :
+        batch_encoded.diagnostics().front().message);
+    for (const auto generation : {4U, 5U}) {
+        auto historical = batch_encoded.value();
+        auto& owner = historical.items[1].items[2].items[1].items[1];
+        std::size_t cursor = 2;
+        for (std::size_t axis = 0; axis < 6; ++axis) {
+            cursor += 1 + static_cast<std::size_t>(std::stoul(owner.items[cursor].atom));
+        }
+        auto& page_row = owner.items[cursor + 3].items[2];
+        page_row.items[0] = list_stream::ListValue::raw_atom(std::to_string(generation));
+        page_row.items[2].items[0] = list_stream::ListValue::raw_atom("8");
+        page_row.items[2].items.resize(9);
+        page_row.items[8] = list_stream::parse("{3,4,{0}}");
+        page_row.items[9] = list_stream::parse("{3,4,{0}}");
+        page_row.items.resize(generation == 4 ? 10 : 11);
+        const auto restored = form_stream::decode_document(historical, "PageGenerations");
+        expect(restored.ok(), restored ? "ten-control historical Page batch must decode" :
+            restored.diagnostics().front().message);
+        expect(restored.value().collections().controls.size() == 10 &&
+                   restored.value().collections().pages.size() == 1,
+            "Page generations must retain ten control types and their owner Page");
+        const auto& restored_page = restored.value().collections().pages.front();
+        expect(restored_page.name == batch_page.name &&
+                   restored_page.title.value() == batch_page.title.value() &&
+                   !restored_page.visible.value() && !restored_page.enabled.value(),
+            "historical Page properties must survive with all ten child control types");
+        for (std::size_t index = 0; index < payloads.size(); ++index) {
+            const auto* control = restored.value().find_control(model::ObjectId{index + 2});
+            expect(control && model::payload_kind(control->payload) == model::payload_kind(payloads[index]),
+                "historical Page normalization must preserve each concrete child control type");
+        }
+        const auto rebuilt = form_stream::encode_document(restored.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                   list_stream::dump_compact(batch_encoded.value()),
+            "historical Page batches must rebuild through the current writer without control drift");
+    }
 }
 
 void test_owned_panel_colors_and_repeated_background() {
@@ -23326,6 +23403,81 @@ void test_page_table_codec() {
     expect(legacy_rebuilt.ok() &&
                list_stream::dump_compact(legacy_rebuilt.value()) == list_stream::dump_compact(table.value()),
         "Page3 decode must rebuild through the canonical Page6 writer with confirmed appended defaults");
+
+    const auto legacy_page_table = [&](std::uint32_t version, bool truncated_style) {
+        auto legacy = expected;
+        auto row = legacy.items[2];
+        row.items[0] = list_stream::ListValue::raw_atom(std::to_string(version));
+        if (truncated_style) {
+            row.items[2].items.resize(9);
+            row.items[2].items[0] = list_stream::ListValue::raw_atom("8");
+        }
+        row.items.resize(version == 4 ? 10 : 11);
+        legacy.items[2] = std::move(row);
+        return legacy;
+    };
+    const auto legacy_v4 = legacy_page_table(4, true);
+    const auto legacy_v5 = legacy_page_table(5, false);
+    const auto legacy_v4_full_style = legacy_page_table(4, false);
+    const auto legacy_v5_truncated_style = legacy_page_table(5, true);
+    expect(form_stream::decode_page_table(legacy_v4_full_style, 40).ok() &&
+               form_stream::decode_page_table(legacy_v5_truncated_style, 40).ok(),
+        "Page4 and Page5 must accept both exact canonical default style representations");
+    auto legacy_v4_mixed_colors = legacy_v4;
+    legacy_v4_mixed_colors.items[2].items[8] = list_stream::parse("{3,4,{0}}");
+    auto legacy_v5_mixed_colors = legacy_v5;
+    legacy_v5_mixed_colors.items[2].items[9] = list_stream::parse("{3,4,{0}}");
+    for (const auto* legacy : {&legacy_v4_mixed_colors, &legacy_v5_mixed_colors}) {
+        const auto decoded_legacy = form_stream::decode_page_table(*legacy, 40);
+        expect(decoded_legacy.ok() && decoded_legacy.value().size() == 1 &&
+                   decoded_legacy.value()[0].id == model::ObjectId{40} &&
+                   decoded_legacy.value()[0].name == page.name &&
+                   decoded_legacy.value()[0].title.value() == page.title.value() &&
+                   decoded_legacy.value()[0].visible.value() && decoded_legacy.value()[0].enabled.value(),
+            "Page4 and Page5 defaults and equivalent automatic color encodings must decode");
+        const auto rebuilt_legacy = form_stream::encode_page_table(decoded_legacy.value());
+        expect(rebuilt_legacy.ok() &&
+                   list_stream::dump_compact(rebuilt_legacy.value()) == list_stream::dump_compact(table.value()),
+            "Page4 and Page5 decode must rebuild as the canonical Page6 row");
+
+        auto edited_legacy = *legacy;
+        edited_legacy.items[2].items[1].items[2].items[1] = list_stream::ListValue::string_atom("Legacy title");
+        edited_legacy.items[2].items[4] = list_stream::ListValue::raw_atom("0");
+        edited_legacy.items[2].items[5] = list_stream::ListValue::raw_atom("0");
+        edited_legacy.items[2].items[6] = list_stream::ListValue::string_atom("LegacyPage");
+        auto expected_edited_canonical = expected;
+        expected_edited_canonical.items[2].items[1].items[2].items[1] =
+            list_stream::ListValue::string_atom("Legacy title");
+        expected_edited_canonical.items[2].items[4] = list_stream::ListValue::raw_atom("0");
+        expected_edited_canonical.items[2].items[5] = list_stream::ListValue::raw_atom("0");
+        expected_edited_canonical.items[2].items[6] = list_stream::ListValue::string_atom("LegacyPage");
+        const auto decoded_edited_legacy = form_stream::decode_page_table(edited_legacy, 60);
+        expect(decoded_edited_legacy.ok() && decoded_edited_legacy.value().size() == 1 &&
+                   decoded_edited_legacy.value()[0].id == model::ObjectId{60} &&
+                   decoded_edited_legacy.value()[0].name == "LegacyPage" &&
+                   decoded_edited_legacy.value()[0].title.value().items[0].text == "Legacy title" &&
+                   !decoded_edited_legacy.value()[0].visible.value() &&
+                   !decoded_edited_legacy.value()[0].enabled.value(),
+            "Page4 and Page5 must preserve edited named Page properties");
+        const auto canonical_edited = form_stream::encode_page_table(decoded_edited_legacy.value());
+        expect(canonical_edited.ok() &&
+                   list_stream::dump_compact(canonical_edited.value()) ==
+                       list_stream::dump_compact(expected_edited_canonical),
+            "edited Page4 and Page5 rows must canonicalize to the exact Page6 writer output");
+    }
+
+    auto nondefault_v4_style = legacy_v4;
+    nondefault_v4_style.items[2].items[2].items[5] = list_stream::ListValue::raw_atom("99");
+    expect_failure(form_stream::decode_page_table(nondefault_v4_style, 40), "OOF1114", "$/Pages/2/2",
+        "Page4 must reject nondefault style values");
+    auto nondefault_v5_color = legacy_v5;
+    nondefault_v5_color.items[2].items[8] = list_stream::parse("{4,3,{-7},3}");
+    expect_failure(form_stream::decode_page_table(nondefault_v5_color, 40), "OOF1114", "$/Pages/2/8",
+        "Page5 must reject nondefault color values");
+    auto nondefault_v5_font = legacy_v5;
+    nondefault_v5_font.items[2].items[10] = list_stream::parse("{8,2,0,{-20},1,100}");
+    expect_failure(form_stream::decode_page_table(nondefault_v5_font, 40), "OOF1114", "$/Pages/2/10",
+        "Page5 must reject nondefault font values");
 
     auto unobserved_legacy_style = legacy_v3;
     unobserved_legacy_style.items[2].items[2] = list_stream::parse("{3,0,0}");

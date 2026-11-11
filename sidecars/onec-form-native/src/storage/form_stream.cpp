@@ -979,12 +979,15 @@ LV encode_page_record(const model::Page& page, std::string_view path) {
 
 model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_view path) {
     require_list(row, path);
-    const bool legacy_v3 = row.items.size() == 8 &&
+    const auto version = !row.items.empty() &&
         !row.items[0].is_list &&
-        row.items[0].atom_kind == LV::AtomKind::raw &&
-        row.items[0].atom == "3";
-    require_arity(row, legacy_v3 ? 8 : 12, path);
-    require_raw_constant(row.items[0], legacy_v3 ? "3" : "6", child_path(path, 0));
+        row.items[0].atom_kind == LV::AtomKind::raw ? row.items[0].atom : std::string{};
+    const bool legacy_v3 = version == "3";
+    const bool legacy_v4 = version == "4";
+    const bool legacy_v5 = version == "5";
+    require_arity(row, legacy_v3 ? 8 : legacy_v4 ? 10 : legacy_v5 ? 11 : 12, path);
+    require_raw_constant(row.items[0], legacy_v3 ? "3" : legacy_v4 ? "4" : legacy_v5 ? "5" : "6",
+        child_path(path, 0));
     model::LocalizedStringValue title;
     try {
         list_stream::ListInStream in(row.items[1]);
@@ -1004,7 +1007,11 @@ model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_vi
             parse_constant("{3,0,{3,0,{0},\"\",-1,-1,1,0}}"), child_path(path, 2),
             "Legacy Page style contains an unsupported variation");
     } else {
-        require_exact(row.items[2], canonical_style_record(10), child_path(path, 2),
+        const auto& style = row.items[2];
+        const bool legacy_style = (legacy_v4 || legacy_v5) && style.is_list &&
+            !style.items.empty() && !style.items[0].is_list &&
+            style.items[0].atom_kind == LV::AtomKind::raw && style.items[0].atom == "8";
+        require_exact(style, canonical_style_record(legacy_style ? 8 : 10), child_path(path, 2),
             "Page style contains an unsupported variation");
     }
     require_raw_constant(row.items[3], "-1", child_path(path, 3));
@@ -1016,13 +1023,23 @@ model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_vi
     }
     require_raw_constant(row.items[7], "1", child_path(path, 7));
     if (!legacy_v3) {
-        require_exact(row.items[8], parse_constant("{4,4,{0},4}"), child_path(path, 8),
-            "Page default property contains an unsupported variation");
-        require_exact(row.items[9], parse_constant("{4,4,{0},4}"), child_path(path, 9),
-            "Page default property contains an unsupported variation");
-        require_exact(row.items[10], parse_constant("{8,3,0,1,100}"), child_path(path, 10),
-            "Page default property contains an unsupported variation");
-        require_raw_constant(row.items[11], "1", child_path(path, 11));
+        for (const auto slot : {8U, 9U}) {
+            if (decode_control_color(row.items[slot], child_path(path, slot)) != model::ColorValue{}) {
+                fail("OOF1114", child_path(path, slot), "automatic Page color", describe(row.items[slot]),
+                    "Page color contains an unsupported variation");
+            }
+        }
+        if (!legacy_v4) {
+            const auto font_path = child_path(path, 10);
+            if (decode_control_font(row.items[10], font_path) !=
+                decode_control_font(parse_constant("{8,3,0,1,100}"), font_path)) {
+                fail("OOF1114", font_path, "default Page font", describe(row.items[10]),
+                    "Page font contains an unsupported variation");
+            }
+        }
+        if (!legacy_v4 && !legacy_v5) {
+            require_raw_constant(row.items[11], "1", child_path(path, 11));
+        }
     }
 
     model::Page page;
