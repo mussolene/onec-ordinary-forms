@@ -1694,9 +1694,22 @@ void read_common_control_base(LV& base, std::string_view path, CurrentBaseFactor
             std::string(read_context.owner_name) + " state from strict export is normalized as confirmed by native reload."});
         return;
     }
-    std::copy(base.items.begin() + 1, base.items.end(), current.items.begin() + 1);
+    const bool legacy_zero_state = version == "16" &&
+        read_context.state_policy != CommonControlBaseStatePolicy::preserve &&
+        std::all_of(state_slots.begin(), state_slots.begin() + 2, [&](const auto slot) {
+            const auto& value = base.items[slot];
+            return !value.is_list && value.atom_kind == LV::AtomKind::raw && value.atom == "0";
+        });
+    const auto copied_end = legacy_zero_state ? base.items.begin() + 16 : base.items.end();
+    std::copy(base.items.begin() + 1, copied_end, current.items.begin() + 1);
     base = std::move(current);
     normalize_common_base_value_encodings(base, path);
+    if (legacy_zero_state) {
+        read_context.diagnostics.push_back({"OOF1146", DiagnosticSeverity::info,
+            std::to_string(read_context.owner_id), std::string(path), std::string(read_context.owner_name),
+            "native-confirmed legacy serialization", "constructor state",
+            std::string(read_context.owner_name) + " legacy zero state is normalized as confirmed by native reload."});
+    }
 }
 
 CommonControlBaseFields decode_common_control_base(
@@ -11441,7 +11454,7 @@ DecodedControl decode_table(
     auto base = info.items[2].items[0];
     read_common_control_base(base, base_path, [&] {
         return canonical_info.items[2].items[0];
-    }, {warnings, raw_id, "Table", CommonControlBaseStatePolicy::strict_default_layouts});
+    }, {warnings, raw_id, "Table", CommonControlBaseStatePolicy::strict_default_layouts_with_constructor_first});
     const auto common = decode_common_control_base(base, base_path,
         CommonControlBaseCapabilities{true, true, model::ControlKind::table, model::ControlKind::table});
     apply_common_control_base(control.properties(), common);

@@ -11526,6 +11526,7 @@ void test_legacy_common_control_base10_batch() {
             expect(!form_stream::decode_document(invalid, "LegacyCommonBase").ok(),
                 name + " common base must reject unsupported version/arity combinations");
         }
+        const bool supports_zero_state = kind != model::ControlKind::panel;
         for (const bool old_base16 : {false, true}) {
             auto intermediate = current.value();
             auto& base = base_for(intermediate, kind);
@@ -11553,6 +11554,57 @@ void test_legacy_common_control_base10_batch() {
             expect(intermediate_rebuilt.ok() && list_stream::dump_compact(intermediate_rebuilt.value()) == list_stream::dump_compact(current.value()),
                 name + " intermediate layout must rebuild the complete current stream");
             if (old_base16) {
+                if (supports_zero_state) {
+                    auto legacy_zero_state = intermediate;
+                    for (const auto slot : {16U, 17U})
+                        base_for(legacy_zero_state, kind).items[slot] = list_stream::ListValue::raw_atom("0");
+                    const auto legacy_zero_decoded = form_stream::decode_document(legacy_zero_state, "LegacyCommonBase");
+                    expect(legacy_zero_decoded.ok() && legacy_zero_decoded.value().reconstruction_complete(),
+                        name + " exact legacy16 raw-zero state must decode as a complete named model");
+                    expect(std::ranges::count_if(legacy_zero_decoded.diagnostics(), [](const auto& diagnostic) {
+                        return diagnostic.code == "OOF1146" && diagnostic.severity == oof::DiagnosticSeverity::info;
+                    }) == 1, name + " exact legacy16 raw-zero state must report one normalization");
+                    expect(std::ranges::none_of(legacy_zero_decoded.diagnostics(), [](const auto& diagnostic) {
+                        return diagnostic.severity == oof::DiagnosticSeverity::warning;
+                    }), name + " exact legacy16 raw-zero state must not emit warnings");
+                    if (legacy_zero_decoded) {
+                        const auto legacy_zero_xml = source::serialize_form_xml(legacy_zero_decoded.value());
+                        expect(legacy_zero_xml.ok() && legacy_zero_xml.value() == intermediate_xml.value(),
+                            name + " exact legacy16 raw-zero state must preserve the complete named property model");
+                        if (legacy_zero_xml) {
+                            const auto parsed_zero_xml = source::parse_form_xml(legacy_zero_xml.value());
+                            expect(parsed_zero_xml.ok(), name + " normalized legacy16 XML must parse");
+                            if (parsed_zero_xml) {
+                                const auto rebuilt_zero = form_stream::encode_document(parsed_zero_xml.value());
+                                expect(rebuilt_zero.ok() && list_stream::dump_compact(rebuilt_zero.value()) ==
+                                        list_stream::dump_compact(current.value()),
+                                    name + " legacy16 normalization must XML-only rebuild as canonical current storage");
+                            }
+                        }
+                    }
+
+                    const auto expect_unconfirmed_zero = [&](const list_stream::ListValue& state,
+                                                              std::string_view label) {
+                        const auto result = form_stream::decode_document(state, "LegacyCommonBase");
+                        expect(!result.ok() || !result.value().reconstruction_complete(),
+                            name + " " + std::string(label) + " must not be treated as a confirmed zero state");
+                        expect(std::ranges::none_of(result.diagnostics(), [](const auto& diagnostic) {
+                            return diagnostic.code == "OOF1146";
+                        }), name + " " + std::string(label) + " must not report zero-state normalization");
+                    };
+                    for (const auto& [slot, replacement, label] : {
+                             std::tuple{16U, list_stream::ListValue::string_atom("0"), "quoted zero"},
+                             std::tuple{17U, list_stream::parse("{0}"), "nested zero"},
+                             std::tuple{16U, list_stream::ListValue::raw_atom("00"), "noncanonical raw zero"},
+                             std::tuple{17U, list_stream::ListValue::raw_atom("99"), "unknown state"}}) {
+                        auto invalid_state = legacy_zero_state;
+                        base_for(invalid_state, kind).items[slot] = replacement;
+                        expect_unconfirmed_zero(invalid_state, label);
+                    }
+                    auto mixed_prefix = legacy_zero_state;
+                    base_for(mixed_prefix, kind).items[17] = base_for(intermediate, kind).items[17];
+                    expect_unconfirmed_zero(mixed_prefix, "mixed unconfirmed prefix");
+                }
                 for (const auto length : {13U, 17U, 19U, 21U}) {
                     auto invalid = intermediate;
                     base_for(invalid, kind).items.resize(length);
@@ -11569,7 +11621,6 @@ void test_legacy_common_control_base10_batch() {
         auto zero_state = current.value();
         for (const auto slot : {16U, 17U, 18U, 19U})
             base_for(zero_state, kind).items[slot] = list_stream::ListValue::raw_atom("0");
-        const bool supports_zero_state = kind != model::ControlKind::panel;
         if (supports_zero_state) {
             const auto check_normalized_state = [&](const list_stream::ListValue& state, std::string_view label) {
                 const auto decoded_state = form_stream::decode_document(state, "LegacyCommonBase");
@@ -11611,21 +11662,21 @@ void test_legacy_common_control_base10_batch() {
                 return diagnostic.code == "OOF1146";
             }), name + " unproven suffix must not report normalization");
 
-            if (kind == model::ControlKind::list_box) {
-                auto strict_list_box = zero_state;
-                base_for(strict_list_box, kind).items[16] = base_for(current.value(), kind).items[16];
-                check_normalized_state(strict_list_box, "native strict state with constructor first field");
+            if (kind == model::ControlKind::list_box || kind == model::ControlKind::table) {
+                auto strict_constructor_first = zero_state;
+                base_for(strict_constructor_first, kind).items[16] = base_for(current.value(), kind).items[16];
+                check_normalized_state(strict_constructor_first, "native strict state with constructor first field");
                 for (const auto& replacement : {list_stream::ListValue::raw_atom("1"),
                          list_stream::ListValue::raw_atom("3"), list_stream::ListValue::string_atom("2"),
                          list_stream::parse("{2}")}) {
-                    auto invalid = strict_list_box;
+                    auto invalid = strict_constructor_first;
                     base_for(invalid, kind).items[16] = replacement;
                     const auto invalid_result = form_stream::decode_document(invalid, "LegacyCommonBase");
                     expect(!invalid_result.ok() || !invalid_result.value().reconstruction_complete(),
-                        "ListBox must not normalize an unconfirmed first state field");
+                        name + " must not normalize an unconfirmed first state field");
                     expect(std::ranges::none_of(invalid_result.diagnostics(), [](const auto& diagnostic) {
                         return diagnostic.code == "OOF1146";
-                    }), "ListBox unconfirmed first state field must not report normalization");
+                    }), name + " unconfirmed first state field must not report normalization");
                 }
             }
             for (const auto& replacement : {list_stream::ListValue::raw_atom("00"),
