@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -650,6 +651,11 @@ private:
 [[nodiscard]] std::span<const PropertyDescriptor> property_descriptors(
     ControlKind kind) noexcept;
 [[nodiscard]] std::span<const EventDescriptor> event_descriptors(ControlKind kind) noexcept;
+// Настройки редактора ячейки с подтвержденным общим кодеком InputField.
+inline constexpr std::initializer_list<std::string_view> table_column_input_boolean_properties{
+    "Enabled", "ReadOnly", "Wrap", "ChooseType", "ChoiceButton", "OpenButton", "ClearButton",
+    "SpinButton", "ChoiceListButton", "MarkNegatives", "AutoMarkIncomplete", "AutoChoiceIncomplete", "Transparent"};
+
 [[nodiscard]] std::span<const TableColumnBooleanDescriptor> table_column_boolean_descriptors() noexcept;
 [[nodiscard]] std::span<const TableColumnEnumerationDescriptor> table_column_enumeration_descriptors() noexcept;
 [[nodiscard]] std::span<const TableSourceExtensionDescriptor> table_source_extension_descriptors() noexcept;

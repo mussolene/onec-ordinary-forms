@@ -1477,8 +1477,12 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "  <xs:complexType name=\"TableColumnControlType\">\n"
         "    <xs:sequence>\n"
         "      <xs:element name=\"ValueType\" type=\"TypeDomainValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
-        "      <xs:element name=\"Enabled\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
-        "      <xs:element name=\"ReadOnly\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        ;
+    for (const auto name : model::metamodel::table_column_input_boolean_properties) {
+        output += "      <xs:element name=\"" + std::string(name) +
+            "\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+    }
+    output +=
         "      <xs:element name=\"Caption\" type=\"xs:string\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"ToolTip\" type=\"xs:string\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Font\" type=\"FontValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"

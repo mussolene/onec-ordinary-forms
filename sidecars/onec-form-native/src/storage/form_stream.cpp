@@ -4239,10 +4239,11 @@ LV canonical_table_value_list_type_pair(std::string_view path) {
 LV canonical_table_column_editor_info(const model::TableColumnControl& control) {
     constexpr std::string_view path = "$/Table/Columns/Column/Control";
     if (control.kind == model::ControlKind::input_field) {
-        require_allowed_properties(control.properties, {"Enabled", "ReadOnly"}, path);
+        require_allowed_properties(control.properties, model::metamodel::table_column_input_boolean_properties, path);
         InputFieldFlagValues flags{};
         for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
-            flags[index] = input_field_flag_mappings[index].default_value;
+            const auto& mapping = input_field_flag_mappings[index];
+            flags[index] = explicit_bool(control.properties, mapping.name, mapping.default_value);
         }
         const model::TypeDomainPatternValue empty_type;
         const auto& value_type = control.value_type.value_or(empty_type);
@@ -11380,8 +11381,15 @@ model::TableColumn decode_table_column(
                         "Table Column InputField paired metadata does not match its named ValueType");
                 }
             }
-            static_cast<void>(decode_input_field_flags(editor_info, editor_path,
-                input_field_scalar_pair ? InputFieldPairMode::require_matching_pair : InputFieldPairMode::payload_only));
+            const auto flags = decode_input_field_flags(editor_info, editor_path,
+                input_field_scalar_pair ? InputFieldPairMode::require_matching_pair : InputFieldPairMode::payload_only);
+            for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+                const auto& mapping = input_field_flag_mappings[index];
+                if (std::ranges::find(model::metamodel::table_column_input_boolean_properties, mapping.name) !=
+                        model::metamodel::table_column_input_boolean_properties.end() &&
+                    flags[index] != mapping.default_value)
+                    column.control->properties.set_explicit(model::PropertyId::from_name(mapping.name), flags[index]);
+            }
             if (!embedded_type.entries.empty()) column.control->value_type = std::move(embedded_type);
             const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], editor_path);
             const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], editor_path);

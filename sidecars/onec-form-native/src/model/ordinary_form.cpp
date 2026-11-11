@@ -791,7 +791,8 @@ std::optional<PropertyValue> materialize_default(
 bool table_column_editor_property_allowed(ControlKind kind, std::string_view name) {
     switch (kind) {
         case ControlKind::input_field:
-            return name == "Enabled" || name == "ReadOnly";
+            return std::ranges::find(metamodel::table_column_input_boolean_properties, name) !=
+                metamodel::table_column_input_boolean_properties.end();
         case ControlKind::choice_field:
             return name == "Enabled" || name == "ToolTip";
         case ControlKind::check_box:
@@ -807,7 +808,8 @@ bool table_column_editor_property_value_supported(
         return std::holds_alternative<bool>(value) &&
             (kind == ControlKind::input_field || std::get<bool>(value));
     }
-    if (name == "ReadOnly") return kind == ControlKind::input_field && std::holds_alternative<bool>(value);
+    if (kind == ControlKind::input_field && table_column_editor_property_allowed(kind, name))
+        return std::holds_alternative<bool>(value);
     if (name == "Caption" || name == "ToolTip") {
         return std::holds_alternative<std::string>(value) && std::get<std::string>(value).empty();
     }

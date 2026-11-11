@@ -1633,8 +1633,9 @@ bool valid_table_column_editor_property(
         return std::holds_alternative<bool>(value) &&
             (kind == model::ControlKind::input_field || std::get<bool>(value));
     }
-    if (descriptor.api_name == "ReadOnly")
-        return kind == model::ControlKind::input_field && std::holds_alternative<bool>(value);
+    if (kind == model::ControlKind::input_field &&
+        std::ranges::find(mm::table_column_input_boolean_properties, descriptor.api_name) !=
+            mm::table_column_input_boolean_properties.end()) return std::holds_alternative<bool>(value);
     if (kind == model::ControlKind::input_field) return false;
     return equals_descriptor_default(descriptor, value);
 }
@@ -3042,7 +3043,8 @@ private:
                         }
                         const bool supported_property =
                             (column.control->kind == model::ControlKind::input_field &&
-                                (property_name == "Enabled" || property_name == "ReadOnly")) ||
+                                (std::ranges::find(mm::table_column_input_boolean_properties, property_name) !=
+                                    mm::table_column_input_boolean_properties.end())) ||
                             (column.control->kind == model::ControlKind::choice_field &&
                                 (property_name == "Enabled" || property_name == "ToolTip")) ||
                             (column.control->kind == model::ControlKind::check_box &&
@@ -5219,7 +5221,8 @@ private:
                     const auto* descriptor = metamodel_.property(column.control->kind, entry.id);
                     const bool supported = descriptor != nullptr &&
                         ((column.control->kind == model::ControlKind::input_field &&
-                            (descriptor->api_name == "Enabled" || descriptor->api_name == "ReadOnly")) ||
+                            (std::ranges::find(mm::table_column_input_boolean_properties, descriptor->api_name) !=
+                                mm::table_column_input_boolean_properties.end())) ||
                          (column.control->kind == model::ControlKind::choice_field &&
                             (descriptor->api_name == "Enabled" || descriptor->api_name == "ToolTip")) ||
                          (column.control->kind == model::ControlKind::check_box &&
@@ -5286,8 +5289,7 @@ private:
                     write_property(*descriptor, entry->value, owner);
                 };
                 if (column.control->kind == model::ControlKind::input_field) {
-                    write_editor_property("Enabled");
-                    write_editor_property("ReadOnly");
+                    for (const auto name : mm::table_column_input_boolean_properties) write_editor_property(name);
                 } else if (column.control->kind == model::ControlKind::choice_field) {
                     write_editor_property("Enabled");
                     write_editor_property("ToolTip");

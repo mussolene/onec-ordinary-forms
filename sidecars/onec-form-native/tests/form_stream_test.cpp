@@ -1856,10 +1856,10 @@ void test_table_input_field_value_type_round_trip() {
     auto& columns = std::get<model::TablePayload>(table.payload).columns;
     const std::array terms{model::TypeDomainTerm::string, model::TypeDomainTerm::numeric,
         model::TypeDomainTerm::date, model::TypeDomainTerm::boolean, model::TypeDomainTerm::value_list};
-    std::array<model::TypeDomainPatternValue, 5> expected_types;
-    for (std::size_t index = 0; index < terms.size(); ++index) {
+    std::array<model::TypeDomainPatternValue, 15> expected_types;
+    for (std::size_t index = 0; index < expected_types.size(); ++index) {
         model::TypeDomainEntry entry;
-        entry.term = terms[index];
+        entry.term = terms[index % terms.size()];
         if (entry.term == model::TypeDomainTerm::string) entry.string = {64, false};
         if (entry.term == model::TypeDomainTerm::numeric) entry.numeric = {12, 2, true};
         if (entry.term == model::TypeDomainTerm::date) entry.date = {true, false};
@@ -1870,20 +1870,25 @@ void test_table_input_field_value_type_round_trip() {
         column.control->kind = model::ControlKind::input_field;
         column.control->value_type = model::TypeDomainPatternValue{{entry}};
         expected_types[index] = *column.control->value_type;
-        if (index == 0) {
-            column.control->properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
-            column.control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+        std::size_t property_index = 0;
+        for (const auto name : model::metamodel::table_column_input_boolean_properties) {
+            const auto* descriptor = model::metamodel::find_property(model::ControlKind::input_field, name);
+            expect(descriptor != nullptr, "each editor Boolean must have an InputField descriptor");
+            const bool default_value = descriptor->default_value.canonical == "true";
+            column.control->properties.set_explicit(model::PropertyId::from_name(name),
+                index == 0 || index == property_index + 2 ? !default_value : default_value);
+            ++property_index;
         }
         columns.push_back(std::move(column));
     }
     document.add_control(std::move(table));
 
     auto xml = source::serialize_form_xml(document);
-    expect(xml.ok(), "five typed Table InputField columns must serialize as named XML");
+    expect(xml.ok(), "fifteen typed Table InputField columns must serialize as named XML");
     auto parsed = source::parse_form_xml(xml.value());
-    expect(parsed.ok(), "five named Table InputField ValueTypes must parse");
+    expect(parsed.ok(), "fifteen named Table InputField ValueTypes must parse");
     auto encoded = form_stream::encode_document(parsed.value());
-    expect(encoded.ok(), "five named Table InputField ValueTypes must encode without a baseline");
+    expect(encoded.ok(), "fifteen named Table InputField ValueTypes must encode without a baseline");
     const auto value_list_editor = table_column_editor_info(encoded.value(), 4);
     const auto expected_value_list_pair = list_stream::parse(
         std::string("{1,{") + "83a29520-06e8-4348-989c-abe69e8e33e2" + ",{0,{\"Pattern\"}}}}");
@@ -1891,14 +1896,24 @@ void test_table_input_field_value_type_round_trip() {
             list_stream::dump_compact(expected_value_list_pair),
         "named ValueList must emit its proven typed factory pair and empty TypeDomain restriction");
     auto decoded = form_stream::decode_document(encoded.value(), "TypedTableColumns");
-    expect(decoded.ok(), "five typed Table InputField columns must decode");
+    expect(decoded.ok(), "fifteen typed Table InputField columns must decode");
     const auto* decoded_table = decoded.value().find_control(model::ObjectId{3});
     expect(decoded_table != nullptr, "decoded typed Table must remain addressable");
     const auto& decoded_columns = std::get<model::TablePayload>(decoded_table->payload).columns;
-    expect(decoded_columns.size() == terms.size(), "all five typed columns must be retained");
-    for (std::size_t index = 0; index < terms.size(); ++index) {
+    expect(decoded_columns.size() == expected_types.size(), "all fifteen typed columns must be retained");
+    for (std::size_t index = 0; index < expected_types.size(); ++index) {
         expect(decoded_columns[index].control->value_type == expected_types[index],
             "each outer and embedded InputField ValueType must survive native round-trip");
+        std::size_t property_index = 0;
+        for (const auto name : model::metamodel::table_column_input_boolean_properties) {
+            const auto* descriptor = model::metamodel::find_property(model::ControlKind::input_field, name);
+            const bool default_value = descriptor->default_value.canonical == "true";
+            const auto* entry = decoded_columns[index].control->properties.find(descriptor->id);
+            expect((entry ? std::get<bool>(entry->value) : default_value) ==
+                (index == 0 || index == property_index + 2 ? !default_value : default_value),
+                "all supported editor Booleans must survive independently in fifteen columns");
+            ++property_index;
+        }
     }
     const auto* enabled = decoded_columns[0].control->properties.find(model::PropertyId::from_name("Enabled"));
     const auto* read_only = decoded_columns[0].control->properties.find(model::PropertyId::from_name("ReadOnly"));
@@ -1955,7 +1970,7 @@ void test_table_input_field_value_type_round_trip() {
     auto unrepresented_boolean = empty_type_without_pair;
     auto unrepresented_boolean_editor = table_column_editor_info(unrepresented_boolean, 0);
     unrepresented_boolean_editor.items[2].items[0].items[4] = list_stream::ListValue::raw_atom("1");
-    unrepresented_boolean_editor.items[2].items[0].items[7] = list_stream::ListValue::raw_atom("1");
+    unrepresented_boolean_editor.items[2].items[0].items[26] = list_stream::ListValue::raw_atom("1");
     replace_table_column_editor_info(unrepresented_boolean, 0, unrepresented_boolean_editor);
     const auto unrepresented_boolean_result = form_stream::decode_document(
         unrepresented_boolean, "UnrepresentedTableInputFlag");
