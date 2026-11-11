@@ -536,7 +536,20 @@ model::LocalizedStringValue parse_localized_string(xmlNodePtr node) {
     model::LocalizedStringValue value;
     std::set<std::string> languages;
     for (xmlNodePtr item : element_children(node)) {
-        const std::string language = required_attribute(item, "language");
+        const bool neutral = node_name(item) == "DefaultText";
+        if (node_name(item) != "Item" && !neutral)
+            fail("OOF2003", item, {}, node_name(item), "DefaultText or Item", node_name(item),
+                "Localized string contains an unknown named value");
+        if (neutral && (item->properties != nullptr || !element_children(item).empty()))
+            fail("OOF2003", item, {}, "DefaultText", "plain default text", "attributes or children",
+                "DefaultText cannot contain attributes or child elements");
+        const std::string language = neutral ? "#" : required_attribute(item, "language");
+        if (!neutral && language == "#")
+            fail("OOF2003", item, {}, "language", "DefaultText for neutral text", language,
+                "Neutral text must use the named DefaultText element");
+        if (value.items.size() >= model::max_localized_text_items)
+            fail("OOF2003", item, {}, "LocalizedString", "bounded translation count", "too many entries",
+                "Localized string exceeds its resource budget");
         if (!languages.insert(language).second) {
             fail(
                 "OOF2003",
@@ -2003,12 +2016,13 @@ private:
     std::vector<model::EventRef> parse_control_events(
         xmlNodePtr node,
         model::ObjectId owner,
-        model::ControlKind kind
+        std::span<const mm::EventDescriptor> descriptors
     ) {
         std::vector<model::EventRef> references;
         for (xmlNodePtr event_node : element_children(node)) {
             const std::string name = node_name(event_node);
-            const mm::EventDescriptor* descriptor = metamodel_.event(kind, name);
+            const auto found = std::ranges::find(descriptors, name, &mm::EventDescriptor::xml_name);
+            const mm::EventDescriptor* descriptor = found == descriptors.end() ? nullptr : &*found;
             if (descriptor == nullptr) {
                 fail("OOF2003", event_node, object_id_text(owner), name, "declared control event", name, "Control event is not declared by the executable metamodel");
             }
@@ -2094,6 +2108,47 @@ private:
         }
     }
 
+    model::DataPathMember parse_metadata_member(xmlNodePtr member, std::string_view owner_id) {
+        model::DataPathMember descriptor;
+        for (xmlAttrPtr attribute = member->properties; attribute != nullptr; attribute = attribute->next) {
+            const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+            if (attribute->ns != nullptr || (name != "name" && name != "uuid"))
+                fail("OOF2003", member, std::string(owner_id), "Member", "name or uuid", std::string(name),
+                    "Data path member contains an unsupported attribute");
+        }
+        const auto name = optional_attribute(member, "name");
+        const auto uuid = optional_attribute(member, "uuid");
+        std::string text;
+        for (xmlNodePtr child = member->children; child != nullptr; child = child->next) {
+            if (child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE)
+                text += node_text(child);
+            else if (child->type == XML_ELEMENT_NODE) {
+                if (node_name(child) != "TypeDomain" || descriptor.type)
+                    fail("OOF2003", child, std::string(owner_id), "Member", "one TypeDomain", node_name(child),
+                        "Data path member contains an unsupported or duplicate type descriptor");
+                descriptor.type = parse_type_domain(child);
+            }
+        }
+        const std::string_view text_name = trim_ascii(text);
+        if (name && !text_name.empty() && *name != text_name)
+            fail("OOF2003", member, std::string(owner_id), "Member", "matching text and attribute names", text,
+                "Data path member names conflict");
+        descriptor.name = name ? *name : std::string(text_name);
+        if (name && trim_ascii(*name).empty())
+            fail("OOF2003", member, std::string(owner_id), "name", "nonempty member name", *name,
+                "Data path member name is empty");
+        if (uuid) {
+            if (!nonzero_uuid(*uuid))
+                fail("OOF2003", member, std::string(owner_id), "uuid", "nonzero UUID", *uuid,
+                    "Data path member UUID is malformed or zero");
+            descriptor.uuid = model::UuidValue{canonical_uuid(*uuid)};
+        }
+        if (descriptor.name.empty() && !descriptor.uuid)
+            fail("OOF2003", member, std::string(owner_id), "Member", "member name or UUID", "missing",
+                "Data path member descriptor has no identity");
+        return descriptor;
+    }
+
     model::DataPath parse_data_path(xmlNodePtr node, std::string_view owner_id) {
         model::DataPath path;
         path.attribute = model::AttributeRef{parse_attribute_id(
@@ -2106,44 +2161,7 @@ private:
             if (node_name(member) != "Member" || path.members.size() >= 128)
                 fail("OOF2003", member, std::string(owner_id), "DataPath", "at most 128 Member elements",
                     node_name(member), "Data path contains unsupported content or exceeds its depth limit");
-            model::DataPathMember descriptor;
-            for (xmlAttrPtr attribute = member->properties; attribute != nullptr; attribute = attribute->next) {
-                const std::string_view name(reinterpret_cast<const char*>(attribute->name));
-                if (attribute->ns != nullptr || (name != "name" && name != "uuid"))
-                    fail("OOF2003", member, std::string(owner_id), "Member", "name or uuid", std::string(name),
-                        "Data path member contains an unsupported attribute");
-            }
-            const auto name = optional_attribute(member, "name");
-            const auto uuid = optional_attribute(member, "uuid");
-            std::string text;
-            for (xmlNodePtr child = member->children; child != nullptr; child = child->next) {
-                if (child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE)
-                    text += node_text(child);
-                else if (child->type == XML_ELEMENT_NODE) {
-                    if (node_name(child) != "TypeDomain" || descriptor.type)
-                        fail("OOF2003", child, std::string(owner_id), "Member", "one TypeDomain", node_name(child),
-                            "Data path member contains an unsupported or duplicate type descriptor");
-                    descriptor.type = parse_type_domain(child);
-                }
-            }
-            const std::string_view text_name = trim_ascii(text);
-            if (name && !text_name.empty() && *name != text_name)
-                fail("OOF2003", member, std::string(owner_id), "Member", "matching text and attribute names", text,
-                    "Data path member names conflict");
-            descriptor.name = name ? *name : std::string(text_name);
-            if (name && trim_ascii(*name).empty())
-                fail("OOF2003", member, std::string(owner_id), "name", "nonempty member name", *name,
-                    "Data path member name is empty");
-            if (uuid) {
-                if (!nonzero_uuid(*uuid))
-                    fail("OOF2003", member, std::string(owner_id), "uuid", "nonzero UUID", *uuid,
-                        "Data path member UUID is malformed or zero");
-                descriptor.uuid = model::UuidValue{canonical_uuid(*uuid)};
-            }
-            if (descriptor.name.empty() && !descriptor.uuid)
-                fail("OOF2003", member, std::string(owner_id), "Member", "member name or UUID", "missing",
-                    "Data path member descriptor has no identity");
-            path.members.push_back(std::move(descriptor));
+            path.members.push_back(parse_metadata_member(member, owner_id));
         }
         return path;
     }
@@ -2293,6 +2311,7 @@ private:
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
         bool type_link_seen = false;
+        bool control_events_seen = false;
         bool position_seen = false;
         bool chart_summary_series_seen = false;
         bool chart_values_seen = false;
@@ -2684,6 +2703,33 @@ private:
                 else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
             } else if (name == "Columns" && descriptor->kind == model::ControlKind::table) {
                 std::get<model::TablePayload>(control.payload).columns = parse_table_columns(child, id_text);
+            } else if (name == "DocumentListTableExtension" && descriptor->kind == model::ControlKind::table) {
+                auto& table = std::get<model::TablePayload>(control.payload);
+                if (table.source_extension)
+                    fail("OOF2003", child, id_text, name, "one named Table source extension", "duplicate or content",
+                        "Table source extension is duplicated or malformed");
+                require_typed_container(child, id_text);
+                table.source_extension = model::TableSourceExtensionKind::document_list;
+                std::set<std::string> seen;
+                const auto properties = mm::table_source_property_descriptors(*table.source_extension);
+                for (auto* property_node : element_children(child)) {
+                    const auto property_name = node_name(property_node);
+                    if (!seen.insert(property_name).second)
+                        fail("OOF2003", property_node, id_text, property_name, "one extension member", "duplicate",
+                            "Table source extension member is duplicated");
+                    if (property_name == "Events") {
+                        auto events = parse_control_events(property_node, id,
+                            mm::table_source_event_descriptors(*table.source_extension));
+                        control.events.insert(control.events.end(), events.begin(), events.end());
+                        continue;
+                    }
+                    const auto found = std::ranges::find(properties, property_name, &mm::PropertyDescriptor::xml_name);
+                    if (found == properties.end())
+                        fail("OOF2003", property_node, id_text, property_name, "declared Table source property", property_name,
+                            "Table source property is not declared");
+                    auto value = parse_property_value(property_node, found->value_codec, id_text, typed_budget_);
+                    if (!equals_descriptor_default(*found, value)) control.properties().set_explicit(found->id, std::move(value));
+                }
             } else if (name == "DataPath") {
                 control.data_path = parse_data_path(child, id_text);
             } else if (input_field != nullptr && std::ranges::any_of(mm::input_field_extensions,
@@ -2723,7 +2769,11 @@ private:
                 control.position = parse_position(child, id_text);
                 position_seen = true;
             } else if (name == "Events") {
-                control.events = parse_control_events(child, id, descriptor->kind);
+                if (control_events_seen)
+                    fail("OOF2003", child, id_text, name, "one Events collection", "duplicate", "Control Events is duplicated");
+                control_events_seen = true;
+                auto events = parse_control_events(child, id, metamodel_.events_for(descriptor->kind));
+                control.events.insert(control.events.end(), events.begin(), events.end());
             } else if (name == "ChildItems") {
                 control.children = parse_child_items(child);
             } else if (descriptor->kind == model::ControlKind::gantt_chart &&
@@ -2889,6 +2939,27 @@ private:
                 if (field_name == "DataPath") {
                     column.data_path = node_text(field);
                     data_path_seen = true;
+                } else if (field_name == "Source") {
+                    require_typed_container(field, owner);
+                    const auto children = element_children(field);
+                    if (children.size() != 1)
+                        fail("OOF2003", field, std::string(owner), "Source", "one named column source", "invalid count",
+                            "Table Column Source must contain one named source");
+                    auto* source_node = children.front();
+                    if (node_name(source_node) == "MetadataField") {
+                        auto member = parse_metadata_member(source_node, owner);
+                        if (member.type)
+                            fail("OOF2003", source_node, std::string(owner), "Source", "field identity only", "TypeDomain",
+                                "Column value type belongs to Column or Control");
+                        column.source = model::TableMetadataColumnField{std::move(member)};
+                    } else if (node_name(source_node) == "StandardPicture") {
+                        require_typed_container(source_node, owner);
+                        if (!element_children(source_node).empty())
+                            fail("OOF2003", source_node, std::string(owner), "StandardPicture", "empty element", "children",
+                                "StandardPicture cannot contain child elements");
+                        column.source = model::TableStandardPictureColumn{};
+                    } else fail("OOF2003", source_node, std::string(owner), "Source", "MetadataField or StandardPicture",
+                        node_name(source_node), "Unknown Table Column source");
                 } else if (field_name == "Header") {
                     column.header = parse_localized_string(field);
                     header_seen = true;
@@ -2917,8 +2988,12 @@ private:
                     column.layout_width = model::DecimalValue{std::move(width)};
                 } else if (field_name == "TextFont") {
                     column.text_font = parse_font(field);
-                } else if (field_name == "Visible") {
-                    column.visible = parse_boolean(node_text(field), field, "Visible", owner);
+                } else if (const auto property = std::ranges::find(mm::table_column_boolean_descriptors(), field_name,
+                    &mm::TableColumnBooleanDescriptor::name); property != mm::table_column_boolean_descriptors().end()) {
+                    column.*property->member = parse_boolean(node_text(field), field, field_name, owner);
+                } else if (const auto property = std::ranges::find(mm::table_column_enumeration_descriptors(), field_name,
+                    &mm::TableColumnEnumerationDescriptor::name); property != mm::table_column_enumeration_descriptors().end()) {
+                    column.*property->member = parse_enumeration(field);
                 } else if (field_name == "ValueType") {
                     column.value_type = parse_type_domain(field);
                 } else if (field_name == "Control") {
@@ -3006,7 +3081,8 @@ private:
                     "Table Column stored type cannot have two owners");
             }
             if (column.value_type && column.value_type->entries.empty()) column.value_type.reset();
-            if (!data_path_seen || !header_seen || column.data_path.empty() || column.header.items.empty()) {
+            if ((!column.source && (!data_path_seen || column.data_path.empty())) ||
+                (column.source && data_path_seen) || !header_seen || (!column.source && column.header.items.empty())) {
                 fail("OOF2003", column_node, std::string(owner), "Column fields",
                     "DataPath and localized Header", "incomplete", "Table Column is incomplete");
             }
@@ -3640,9 +3716,10 @@ private:
             return;
         }
         writer_.open(name);
-        for (const auto& item : value.items) {
-            writer_.text("Item", item.text, {{"language", item.language}});
-        }
+        for (const auto& item : value.items)
+            if (item.language == "#") writer_.text("DefaultText", item.text);
+        for (const auto& item : value.items)
+            if (item.language != "#") writer_.text("Item", item.text, {{"language", item.language}});
         writer_.close(name);
     }
 
@@ -4393,8 +4470,8 @@ private:
                     const mm::EventDescriptor* actual =
                         std::holds_alternative<model::FormRef>(event->owner)
                             ? metamodel_.form_event(event->name)
-                            : metamodel_.event(
-                                  document_.find_control(std::get<model::ControlRef>(event->owner).id())->kind(),
+                            : mm::find_event(
+                                  *document_.find_control(std::get<model::ControlRef>(event->owner).id()),
                                   event->name);
                     if (actual == &descriptor) ordered.emplace_back(&descriptor, event);
                 }
@@ -5096,7 +5173,26 @@ private:
             }
             writer_.close("Values");
         }
-        write_events("Events", control.events, metamodel_.events_for(control.kind()), id);
+        auto common_events = control.events;
+        if (const auto* table = std::get_if<model::TablePayload>(&control.payload); table && table->source_extension) {
+            if (*table->source_extension != model::TableSourceExtensionKind::document_list)
+                serialization_fail(id, "TableSourceExtension", "registered source interface", "unknown kind",
+                    "Table source extension is unsupported");
+            const auto descriptors = mm::table_source_event_descriptors(*table->source_extension);
+            std::vector<model::EventRef> source_events;
+            std::erase_if(common_events, [&](const auto& reference) {
+                const auto* event = document_.find_event(reference.id());
+                const bool belongs = event && std::ranges::any_of(descriptors,
+                    [&](const auto& descriptor) { return descriptor.api_name == event->name; });
+                if (belongs) source_events.push_back(reference);
+                return belongs;
+            });
+            writer_.open("DocumentListTableExtension");
+            write_property_set(control.properties(), mm::table_source_property_descriptors(*table->source_extension), id);
+            write_events("Events", source_events, descriptors, id);
+            writer_.close("DocumentListTableExtension");
+        }
+        write_events("Events", common_events, metamodel_.events_for(control.kind()), id);
         write_child_items(control.children);
         writer_.close(descriptor.public_name);
     }
@@ -5138,7 +5234,16 @@ private:
                 });
             }
             writer_.open("Column", {{"name", column.name}});
-            writer_.text("DataPath", column.data_path);
+            if (column.source) {
+                writer_.open("Source");
+                if (const auto* field = std::get_if<model::TableMetadataColumnField>(&*column.source)) {
+                    XmlAttributes attributes;
+                    if (!field->field.name.empty()) attributes.emplace_back("name", field->field.name);
+                    if (field->field.uuid) attributes.emplace_back("uuid", canonical_uuid(field->field.uuid->canonical));
+                    writer_.empty("MetadataField", attributes);
+                } else writer_.empty("StandardPicture");
+                writer_.close("Source");
+            } else writer_.text("DataPath", column.data_path);
             write_localized("Header", column.header, owner);
             if (column.layout_width) {
                 const std::string width = canonical_decimal(column.layout_width->canonical, nullptr, "Width", owner);
@@ -5149,7 +5254,12 @@ private:
                 writer_.text("Width", width, {{"unit", "form"}});
             }
             if (column.text_font != model::FontValue{}) write_font("TextFont", column.text_font, owner);
-            if (!column.visible) writer_.text("Visible", "false");
+            for (const auto& property : mm::table_column_boolean_descriptors())
+                if ((column.*property.member) != property.default_value)
+                    writer_.text(property.name, (column.*property.member) ? "true" : "false");
+            for (const auto& property : mm::table_column_enumeration_descriptors())
+                if ((column.*property.member).member != property.default_member)
+                    write_enumeration(property.name, column.*property.member);
             if (column.value_type && !column.value_type->entries.empty())
                 write_type_domain("ValueType", *column.value_type, owner);
             if (column.control) {

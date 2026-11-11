@@ -1251,9 +1251,21 @@ struct TableColumnControl {
     PropertySet properties;
 };
 
+enum class TableSourceExtensionKind : std::uint8_t { document_list };
+
+struct TableMetadataColumnField {
+    DataPathMember field;
+    friend bool operator==(const TableMetadataColumnField&, const TableMetadataColumnField&) = default;
+};
+struct TableStandardPictureColumn {
+    friend bool operator==(const TableStandardPictureColumn&, const TableStandardPictureColumn&) = default;
+};
+using TableColumnSource = std::variant<TableMetadataColumnField, TableStandardPictureColumn>;
+
 struct TableColumn {
     std::string name;
     std::string data_path;
+    std::optional<TableColumnSource> source;
     LocalizedStringValue header;
     std::optional<TableColumnControl> control = TableColumnControl{};
     // Собственный тип колонки хранится здесь только при отсутствии редактора.
@@ -1261,11 +1273,27 @@ struct TableColumn {
     // Ширина сохраняемого макета в единицах формы; API Width использует символы.
     std::optional<DecimalValue> layout_width;
     FontValue text_font;
+    EnumerationValue horizontal_align_in_column{"HorizontalAlign", "Auto"};
+    EnumerationValue header_horizontal_align{"HorizontalAlign", "Left"};
+    EnumerationValue footer_horizontal_align{"HorizontalAlign", "Left"};
     bool visible = true;
+    bool change_visible = true;
+    bool enabled = true;
+    bool auto_mark_incomplete = false;
+    bool change_setting = true;
+    bool auto_cell_height = false;
+    bool mark_negatives = false;
+    bool hyperlink = false;
+    bool show_hierarchy = false;
+    bool skip_on_input = false;
+    bool check_box_three_state = false;
+    bool read_only = false;
+    bool change_position = true;
 };
 
 struct TablePayload final : TypedControlPayload<ControlKind::table> {
     std::vector<TableColumn> columns;
+    std::optional<TableSourceExtensionKind> source_extension;
 };
 struct SpreadsheetDocumentFieldPayload final
     : TypedControlPayload<ControlKind::spreadsheet_document_field> {

@@ -2892,6 +2892,106 @@ const PropertyDescriptor* find_property(ControlKind kind, PropertyId id) noexcep
     return Metamodel::instance().property(kind, id);
 }
 
+std::span<const TableSourceExtensionDescriptor> table_source_extension_descriptors() noexcept {
+    static constexpr std::array descriptors{document_list_table_extension};
+    return descriptors;
+}
+
+std::span<const TableColumnEnumerationDescriptor> table_column_enumeration_descriptors() noexcept {
+    static constexpr std::array alignment{
+        TableColumnEnumerationMember{"Left", 0}, TableColumnEnumerationMember{"Center", 1},
+        TableColumnEnumerationMember{"Right", 2}, TableColumnEnumerationMember{"Auto", 4}};
+    static const std::array descriptors{
+        TableColumnEnumerationDescriptor{"HorizontalAlignInColumn", u8"ГоризонтальноеПоложениеВКолонке",
+            &TableColumn::horizontal_align_in_column, "HorizontalAlign", "Auto", alignment, 28},
+        TableColumnEnumerationDescriptor{"HeaderHorizontalAlign", u8"ГоризонтальноеПоложениеВШапке",
+            &TableColumn::header_horizontal_align, "HorizontalAlign", "Left", std::span{alignment}.first(3), 27},
+        TableColumnEnumerationDescriptor{"FooterHorizontalAlign", u8"ГоризонтальноеПоложениеВПодвале",
+            &TableColumn::footer_horizontal_align, "HorizontalAlign", "Left", std::span{alignment}.first(3), 29}};
+    return descriptors;
+}
+
+std::span<const TableColumnBooleanDescriptor> table_column_boolean_descriptors() noexcept {
+    static constexpr std::array descriptors{
+        TableColumnBooleanDescriptor{"Visible", u8"Видимость", &TableColumn::visible, true, 0x400U, false},
+        TableColumnBooleanDescriptor{"ChangeVisible", u8"ИзменятьВидимость", &TableColumn::change_visible, true, 0x40000U, true},
+        TableColumnBooleanDescriptor{"Enabled", u8"Доступность", &TableColumn::enabled, true, 0x200U, false},
+        TableColumnBooleanDescriptor{"AutoMarkIncomplete", u8"АвтоОтметкаНезаполненного", &TableColumn::auto_mark_incomplete, false, 0x80000U, false},
+        TableColumnBooleanDescriptor{"ChangeSetting", u8"ИзменятьНастройку", &TableColumn::change_setting, true, 0x400000U, false},
+        TableColumnBooleanDescriptor{"AutoCellHeight", u8"АвтоВысотаЯчейки", &TableColumn::auto_cell_height, false, 0x100000U, false},
+        TableColumnBooleanDescriptor{"MarkNegatives", u8"ВыделятьОтрицательные", &TableColumn::mark_negatives, false, 0x8000U, false},
+        TableColumnBooleanDescriptor{"Hyperlink", u8"Гиперссылка", &TableColumn::hyperlink, false, 0x200000U, false},
+        TableColumnBooleanDescriptor{"ShowHierarchy", u8"ОтображатьИерархию", &TableColumn::show_hierarchy, false, 0x1U, false},
+        TableColumnBooleanDescriptor{"SkipOnInput", u8"ПропускатьПриВводе", &TableColumn::skip_on_input, false, 0x10000U, false},
+        TableColumnBooleanDescriptor{"CheckBoxThreeState", u8"ТриСостоянияФлажка", &TableColumn::check_box_three_state, false, 0x8U, false},
+        TableColumnBooleanDescriptor{"ReadOnly", u8"ТолькоПросмотр", &TableColumn::read_only, false, 0x2U, false},
+        TableColumnBooleanDescriptor{"ChangePosition", u8"ИзменятьПозицию", &TableColumn::change_position, true, 0x800000U, false},
+    };
+    return descriptors;
+}
+
+std::span<const PropertyDescriptor> table_source_property_descriptors(TableSourceExtensionKind kind) noexcept {
+    static const std::array descriptors{
+        PropertyDescriptor{PropertyId::from_name("EnablePeriodSetting"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::table, 0, "EnablePeriodSetting", "EnablePeriodSetting",
+            u8"РазрешитьНастройкуПериода", u8"Булево", ValueKind::boolean, ValueCodec::boolean,
+            ApiAccess::read_write, VersionMask::all_supported, PersistenceClass::persisted_editable,
+            StorageCodec::control_info, {DefaultKind::boolean, "true"}},
+    };
+    return kind == TableSourceExtensionKind::document_list ? std::span<const PropertyDescriptor>{descriptors} : std::span<const PropertyDescriptor>{};
+}
+
+std::span<const EventDescriptor> table_source_event_descriptors(TableSourceExtensionKind kind) noexcept {
+    static const std::array descriptors{
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 0, "BeforeSetDeletionMark", "BeforeSetDeletionMark",
+            u8"ПередУстановкойПометкиУдаления", VersionMask::all_supported, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10000U},
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 1, "BeforePosting", "BeforePosting",
+            u8"ПередПроведением", VersionMask::all_supported, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10001U},
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 2, "BeforeUndoPosting", "BeforeUndoPosting",
+            u8"ПередОтменойПроведения", VersionMask::all_supported, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10002U},
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 3, "BeforeDateChange", "BeforeDateChange",
+            u8"ПередИзменениемДаты", VersionMask::all_supported, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10003U},
+    };
+    return kind == TableSourceExtensionKind::document_list ? std::span<const EventDescriptor>{descriptors} : std::span<const EventDescriptor>{};
+}
+
+const PropertyDescriptor* find_property(const ControlNode& control, std::string_view name) noexcept {
+    if (control.kind() == ControlKind::table) {
+        if (const auto* table = std::get_if<TablePayload>(&control.payload); table && table->source_extension) {
+            const auto descriptors = table_source_property_descriptors(*table->source_extension);
+            const auto found = std::ranges::find(descriptors, name, &PropertyDescriptor::api_name);
+            if (found != descriptors.end()) return &*found;
+        }
+    }
+    return find_property(control.kind(), name);
+}
+
+const PropertyDescriptor* find_property(const ControlNode& control, PropertyId id) noexcept {
+    if (control.kind() == ControlKind::table) {
+        if (const auto* table = std::get_if<TablePayload>(&control.payload); table && table->source_extension) {
+            const auto descriptors = table_source_property_descriptors(*table->source_extension);
+            const auto found = std::ranges::find(descriptors, id, &PropertyDescriptor::id);
+            if (found != descriptors.end()) return &*found;
+        }
+    }
+    return find_property(control.kind(), id);
+}
+
+const EventDescriptor* find_event(const ControlNode& control, std::string_view name) noexcept {
+    if (control.kind() == ControlKind::table) {
+        if (const auto* table = std::get_if<TablePayload>(&control.payload); table && table->source_extension) {
+            const auto descriptors = table_source_event_descriptors(*table->source_extension);
+            const auto found = std::ranges::find(descriptors, name, &EventDescriptor::api_name);
+            if (found != descriptors.end()) return &*found;
+        }
+    }
+    return find_event(control.kind(), name);
+}
+
 const PropertyDescriptor* find_form_property(PropertyId id) noexcept {
     return Metamodel::instance().form_property(id);
 }

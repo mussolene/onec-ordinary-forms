@@ -442,6 +442,9 @@ void test_localized_text_schema(xmlNodePtr schema, xmlSchemaPtr compiled_schema)
         "plain and named multilingual values must both satisfy the public schema");
     expect(validate_document(compiled_schema, document(R"XML(<Item language="bad_tag">Text</Item>)XML")) != 0,
         "localized text schema must reject malformed language tags");
+    expect(validate_document(compiled_schema, document("<DefaultText>Neutral</DefaultText><Item language=\"en\">English</Item>")) == 0 &&
+        validate_document(compiled_schema, document("<DefaultText>A</DefaultText><DefaultText>B</DefaultText>")) != 0,
+        "neutral default text must be a single named value alongside translations");
 }
 
 void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compiled_schema) {
@@ -1139,6 +1142,9 @@ void test_control_surfaces_and_property_order(
             expect_element_shape(elements[cursor++], "Points", "GanttPointCollectionType", "0", "1");
             expect_element_shape(elements[cursor++], "Intervals", "GanttIntervalCollectionType", "0", "1");
         }
+        if (control.kind == oof::model::ControlKind::table) {
+            expect_element_shape(elements[cursor++], "DocumentListTableExtension", "DocumentListTableExtensionType", "0", "1");
+        }
         expect_element_shape(
             elements[cursor++],
             "Events",
@@ -1211,13 +1217,23 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
 
     xmlNodePtr column_sequence = sequence_for_type(schema, "TableColumnType");
     const auto column_fields = direct_children(column_sequence, "element");
-    expect(column_fields.size() == 5, "Table Column layout properties must stay independent of the editor");
-    expect_element_shape(column_fields[0], "DataPath", "xs:string", "1", "1");
-    expect_element_shape(column_fields[1], "Header", "LocalizedStringValueType", "1", "1");
-    expect_element_shape(column_fields[2], "Width", "TableColumnWidthType", "0", "1");
-    expect_element_shape(column_fields[3], "TextFont", "FontValueType", "0", "1");
-    expect_element_shape(column_fields[4], "Visible", "xs:boolean", "0", "1");
-    xmlNodePtr owners = direct_child(column_sequence, "choice");
+    expect(column_fields.size() == 3 + oof::model::metamodel::table_column_boolean_descriptors().size() +
+        oof::model::metamodel::table_column_enumeration_descriptors().size(),
+        "Table Column properties must follow their shared descriptor tables");
+    expect_element_shape(column_fields[0], "Header", "LocalizedStringValueType", "1", "1");
+    expect_element_shape(column_fields[1], "Width", "TableColumnWidthType", "0", "1");
+    expect_element_shape(column_fields[2], "TextFont", "FontValueType", "0", "1");
+    std::size_t property_cursor = 3;
+    for (const auto& property : oof::model::metamodel::table_column_boolean_descriptors())
+        expect_element_shape(column_fields[property_cursor++], property.name, "xs:boolean", "0", "1");
+    for (const auto& property : oof::model::metamodel::table_column_enumeration_descriptors())
+        expect_element_shape(column_fields[property_cursor++], property.name, "EnumerationValueType", "0", "1");
+    const auto choices = direct_children(column_sequence, "choice");
+    expect(choices.size() == 2, "Column source and editor ownership must be separate choices");
+    const auto source_fields = direct_children(choices.front(), "element");
+    expect(source_fields.size() == 2 && attribute(source_fields[0], "name") == "DataPath" &&
+        attribute(source_fields[1], "name") == "Source", "Column source must be a data path or named metadata source");
+    xmlNodePtr owners = choices.back();
     expect(owners != nullptr && attribute(owners, "minOccurs") == "0" && attribute(owners, "maxOccurs") == "1",
         "Table Column stored type and Control must have a single optional owner");
     const auto owner_fields = direct_children(owners, "element");

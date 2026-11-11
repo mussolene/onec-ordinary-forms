@@ -3532,16 +3532,18 @@ DecodedControlEvent decode_event_action(const LV& payload, std::string_view path
 }
 
 const model::metamodel::EventDescriptor* find_event_by_storage_id(
-    model::ControlKind kind, std::uint32_t storage_id) {
-    for (const auto& descriptor : model::metamodel::event_descriptors(kind)) {
+    std::span<const model::metamodel::EventDescriptor> descriptors, std::uint32_t storage_id) {
+    for (const auto& descriptor : descriptors) {
         if (descriptor.storage_event_id == storage_id) return &descriptor;
     }
     return nullptr;
 }
 
-LV encode_control_event_collection(
+LV encode_named_control_events(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
+    std::span<const model::EventRef> references,
+    std::span<const model::metamodel::EventDescriptor> descriptors,
     std::string_view path) {
     struct EncodedEvent {
         std::uint32_t storage_id;
@@ -3552,8 +3554,8 @@ LV encode_control_event_collection(
     std::unordered_set<std::uint64_t> reference_ids;
     std::unordered_set<std::uint32_t> storage_ids;
     std::unordered_set<std::string_view> names;
-    encoded.reserve(control.events.size());
-    for (const auto& reference : control.events) {
+    encoded.reserve(references.size());
+    for (const auto& reference : references) {
         const auto event_path = child_path(path, encoded.size());
         if (!reference_ids.insert(reference.id().value()).second) {
             fail("OOF1122", event_path, "unique event reference", std::to_string(reference.id().value()),
@@ -3565,7 +3567,8 @@ LV encode_control_event_collection(
             fail("OOF1122", event_path, "event owned by this control", std::to_string(reference.id().value()),
                 "Control event reference does not resolve to an event owned by the control");
         }
-        const auto* descriptor = model::metamodel::find_event(control.kind(), event->name);
+        const auto found = std::ranges::find(descriptors, event->name, &model::metamodel::EventDescriptor::api_name);
+        const auto* descriptor = found == descriptors.end() ? nullptr : &*found;
         if (descriptor == nullptr || descriptor->persistence != model::metamodel::PersistenceClass::persisted_editable ||
             descriptor->storage_codec != model::metamodel::StorageCodec::event_record ||
             descriptor->storage_tag.empty() || !descriptor->storage_event_id) {
@@ -3593,15 +3596,22 @@ LV encode_control_event_collection(
     return list(std::move(items));
 }
 
-std::vector<DecodedControlEvent> decode_control_event_collection(
-    const LV& value, std::string_view path, model::ControlKind kind) {
+LV encode_control_event_collection(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    std::string_view path) {
+    return encode_named_control_events(document, control, control.events,
+        model::metamodel::event_descriptors(control.kind()), path);
+}
+
+std::vector<DecodedControlEvent> decode_named_control_events(
+    const LV& value, std::string_view path, std::span<const model::metamodel::EventDescriptor> descriptors) {
     require_list(value, path);
     if (value.items.empty()) {
         fail("OOF1103", child_path(path, 0), "event count", "missing", "Control event table has no count");
     }
     const auto count = integer_atom<std::uint32_t>(value.items[0], child_path(path, 0));
     require_arity(value, static_cast<std::size_t>(count) + 1, path);
-    const auto descriptors = model::metamodel::event_descriptors(kind);
     const auto supported_count = std::ranges::count_if(descriptors, [](const auto& descriptor) {
         return descriptor.persistence == model::metamodel::PersistenceClass::persisted_editable &&
             descriptor.storage_codec == model::metamodel::StorageCodec::event_record &&
@@ -3624,7 +3634,7 @@ std::vector<DecodedControlEvent> decode_control_event_collection(
             fail("OOF1114", child_path(event_path, 0), "unique event storage ID", std::to_string(storage_id),
                 "Control event storage ID is duplicated");
         }
-        const auto* descriptor = find_event_by_storage_id(kind, storage_id);
+        const auto* descriptor = find_event_by_storage_id(descriptors, storage_id);
         if (descriptor == nullptr || descriptor->persistence != model::metamodel::PersistenceClass::persisted_editable ||
             descriptor->storage_codec != model::metamodel::StorageCodec::event_record ||
             descriptor->storage_tag.empty() || !descriptor->storage_event_id) {
@@ -3644,6 +3654,11 @@ std::vector<DecodedControlEvent> decode_control_event_collection(
     result.reserve(decoded.size());
     for (auto& entry : decoded) result.push_back(std::move(entry.second));
     return result;
+}
+
+std::vector<DecodedControlEvent> decode_control_event_collection(
+    const LV& value, std::string_view path, model::ControlKind kind) {
+    return decode_named_control_events(value, path, model::metamodel::event_descriptors(kind));
 }
 
 LV encode_menu_action(const model::CommandBarAction& action, std::string_view path) {
@@ -4234,17 +4249,18 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
         if (!value_type.entries.empty()) {
             if (value_type.entries.size() != 1) {
                 fail("OOF1122", std::string(path) + "/ValueType",
-                    "single String, Numeric, Date-only, Boolean, or ValueList TypeDomain",
+                    "single String, Numeric, Date, DateTime, Boolean, or ValueList TypeDomain",
                     std::to_string(value_type.entries.size()) + " entries",
                     "Table Column InputField ValueType is outside the proven typed profile");
             }
             const auto term = value_type.entries.front().term;
             const bool supported = term == model::TypeDomainTerm::string ||
                 term == model::TypeDomainTerm::numeric || term == model::TypeDomainTerm::boolean ||
-                term == model::TypeDomainTerm::value_list || is_single_date_only_type_domain(value_type);
+                term == model::TypeDomainTerm::value_list || is_single_date_only_type_domain(value_type) ||
+                is_single_date_time_type_domain(value_type);
             if (!supported) {
                 fail("OOF1122", std::string(path) + "/ValueType",
-                    "single String, Numeric, Date-only, Boolean, or ValueList TypeDomain",
+                    "single String, Numeric, Date, DateTime, Boolean, or ValueList TypeDomain",
                     std::to_string(static_cast<unsigned>(term)),
                     "Table Column InputField ValueType is outside the proven typed profile");
             }
@@ -4363,10 +4379,20 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
     const bool has_editor = column.control.has_value();
     auto properties = canonical_table_column_properties(has_editor);
     properties.items[1] = encoded_localized(column.header);
-    constexpr std::uint32_t visible_mask = 0x400U;
-    if (!column.visible) {
-        const auto flags = integer_atom<std::uint32_t>(properties.items[9], std::string(path) + "/Flags");
-        properties.items[9] = raw(std::to_string(flags & ~visible_mask));
+    auto flags = integer_atom<std::uint32_t>(properties.items[9], std::string(path) + "/Flags");
+    for (const auto& property : model::metamodel::table_column_boolean_descriptors()) {
+        const bool bit = (column.*property.member) != property.inverted;
+        flags = bit ? flags | property.mask : flags & ~property.mask;
+    }
+    properties.items[9] = raw(std::to_string(flags));
+    for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
+        const auto& value = column.*property.member;
+        const auto member = std::ranges::find(property.members, value.member,
+            &model::metamodel::TableColumnEnumerationMember::name);
+        if (value.type_name != property.enumeration_type || member == property.members.end())
+            fail("OOF1122", std::string(path) + "/" + std::string(property.name), "supported named Column enumeration",
+                value.member, "Table Column enumeration value is unsupported");
+        properties.items[property.storage_slot] = raw(std::to_string(member->storage_value));
     }
     if (tree_source) {
         properties.items[5] = raw(std::to_string(ordinal));
@@ -4397,6 +4423,27 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         properties.items[38] = raw(std::string(model::metamodel::descriptor_for(column.control->kind).guid));
         properties.items[39] = encode_table_column_editor_packet(
             canonical_table_column_editor_info(*column.control), std::string(path) + "/Control");
+    }
+    if (column.source) {
+        properties.items[5] = raw(std::to_string(ordinal));
+        properties.items[6] = raw("-1");
+        LV field = list({raw("-1")});
+        const bool picture = std::holds_alternative<model::TableStandardPictureColumn>(*column.source);
+        if (picture && has_editor)
+            fail("OOF1122", std::string(path) + "/Control", "no editor on StandardPicture", "editor present",
+                "StandardPicture Table column cannot have an editor");
+        if (picture) properties.items[33] = raw("1");
+        if (const auto* source = std::get_if<model::TableMetadataColumnField>(&*column.source)) {
+            if (source->field.uuid) field = encoded_composite_id(
+                model::CompositeIdValue{0, *source->field.uuid, false}, std::string(path) + "/Source/MetadataField");
+            else if (source->field.name == "Date") field = list({raw("-3")});
+            else if (source->field.name == "Number") field = list({raw("-2")});
+            else fail("OOF1122", std::string(path) + "/Source", "metadata GUID, Date, or Number",
+                source->field.name, "Metadata Table column has no supported named field identity");
+        }
+        return list({raw("48a6ebc3-fcc8-4f8f-b399-459fb32aa46b"),
+            list({raw("4"), list({raw("8"), std::move(properties), std::move(field),
+                list({raw("-1")}), list({raw("-1")})}), raw(picture ? "1" : "0")})});
     }
     return list({
         raw("737535a4-21e6-4971-8513-3e3173a9fedd"),
@@ -4490,9 +4537,11 @@ LV canonical_table_control_info(
     const std::vector<model::TableColumn>& columns,
     bool read_only,
     std::string_view path,
-    bool tree_mode = true) {
+    bool tree_mode = true,
+    std::optional<model::TableSourceExtensionKind> source_extension = std::nullopt,
+    bool enable_period_setting = true) {
     const bool tree_source = is_single_value_tree_type_domain(source_type);
-    if ((!tree_source && columns.empty()) || columns.size() > 256) {
+    if ((!tree_source && !source_extension && columns.empty()) || columns.size() > 256) {
         fail("OOF1122", std::string(path) + "/Columns", "supported Table Column count",
             std::to_string(columns.size()), "Table Columns collection is outside the supported profile");
     }
@@ -4514,13 +4563,22 @@ LV canonical_table_control_info(
             columns[index], std::string(path) + "/Columns/Column[" + std::to_string(index) + "]", tree_source, index));
     }
     properties.items[23] = list(std::move(column_records));
+    LV source = tree_source
+        ? list({raw("9ab3fa70-d2e0-4e44-baac-730682272ed2"),
+            list({raw("4"), raw(tree_mode ? "1" : "0"), raw("1"), list({raw("0")})})})
+        : list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})});
+    if (source_extension) {
+        if (*source_extension != model::TableSourceExtensionKind::document_list)
+            fail("OOF1122", std::string(path), "known Table source extension", "unknown kind",
+                "Table source extension is unsupported");
+        source = list({raw(std::string(model::metamodel::document_list_table_extension.guid)),
+            list({raw("2"), list({raw("0")}), list({raw("3"), raw("1"),
+                list({raw("0"), raw(enable_period_setting ? "1" : "0")})})})});
+    }
     return list({
         raw("5"), encoded_type_domain(source_type, std::string(path) + "/ValueType"),
         list({std::move(base), std::move(properties)}),
-        tree_source
-            ? list({raw("9ab3fa70-d2e0-4e44-baac-730682272ed2"),
-                    list({raw("4"), raw(tree_mode ? "1" : "0"), raw("1"), list({raw("0")})})})
-            : list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
+        std::move(source),
         list({raw("0")})});
 }
 
@@ -11158,11 +11216,12 @@ model::TableColumn decode_table_column(
     const LV& value, std::string_view path, std::uint64_t table_id,
     Diagnostics& warnings, bool& reconstruction_complete, bool tree_source, std::size_t ordinal) {
     require_arity(value, 2, path);
-    require_raw_constant(value.items[0], "737535a4-21e6-4971-8513-3e3173a9fedd", child_path(path, 0));
+    const bool metadata_column = !value.items[0].is_list && value.items[0].atom == "48a6ebc3-fcc8-4f8f-b399-459fb32aa46b";
+    require_raw_constant(value.items[0], metadata_column ? "48a6ebc3-fcc8-4f8f-b399-459fb32aa46b" : "737535a4-21e6-4971-8513-3e3173a9fedd", child_path(path, 0));
     const auto body_path = child_path(path, 1);
     const auto& body = value.items[1];
-    require_arity(body, 6, body_path);
-    require_raw_constant(body.items[0], "8", child_path(body_path, 0));
+    require_arity(body, metadata_column ? 3 : 6, body_path);
+    require_raw_constant(body.items[0], metadata_column ? "4" : "8", child_path(body_path, 0));
     const auto info_path = child_path(body_path, 1);
     const auto& info = body.items[1];
     require_arity(info, 5, info_path);
@@ -11173,9 +11232,19 @@ model::TableColumn decode_table_column(
     const bool has_editor = raw_atom(properties.items[38], child_path(properties_path, 38)) != null_uuid;
 
     model::TableColumn column;
-    constexpr std::uint32_t visible_mask = 0x400U;
     const auto flags = integer_atom<std::uint32_t>(properties.items[9], child_path(properties_path, 9));
-    column.visible = (flags & visible_mask) != 0;
+    for (const auto& property : model::metamodel::table_column_boolean_descriptors())
+        column.*property.member = ((flags & property.mask) != 0) != property.inverted;
+    for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
+        const auto value = integer_atom<std::uint32_t>(properties.items[property.storage_slot],
+            child_path(properties_path, property.storage_slot));
+        const auto member = std::ranges::find(property.members, value,
+            &model::metamodel::TableColumnEnumerationMember::storage_value);
+        if (member == property.members.end())
+            fail("OOF1114", child_path(properties_path, property.storage_slot), "supported named Column enumeration",
+                std::to_string(value), "Table Column enumeration value is unsupported");
+        column.*property.member = {std::string(property.enumeration_type), std::string(member->name)};
+    }
     for (const auto slot : {4U, 32U, 45U}) {
         const auto width_path = child_path(properties_path, slot);
         const auto stored = raw_atom(properties.items[table_column_property_slot(slot, has_editor)], width_path);
@@ -11192,7 +11261,27 @@ model::TableColumn decode_table_column(
     }
     column.text_font = decode_control_font(properties.items[22], child_path(properties_path, 22));
     column.name = string_atom(properties.items[30], child_path(properties_path, 30));
-    column.data_path = string_atom(body.items[2], child_path(body_path, 2));
+    if (metadata_column) {
+        const bool picture = bool_atom(body.items[2], child_path(body_path, 2));
+        const auto field_path = child_path(info_path, 2);
+        const auto field = composite_id(info.items[2], field_path);
+        if (picture) {
+            require_exact(info.items[2], list({raw("-1")}), field_path,
+                "StandardPicture column must have no metadata field reference");
+            column.source = model::TableStandardPictureColumn{};
+        } else {
+            model::DataPathMember member;
+            if (info.items[2].items.size() == 1 && field.object_id == -3) member.name = "Date";
+            else if (info.items[2].items.size() == 1 && field.object_id == -2) member.name = "Number";
+            else if (info.items[2].items.size() == 2 && field.object_id == 0 && !field.is_null &&
+                field.uuid.canonical != null_uuid) member.uuid = field.uuid;
+            else fail("OOF1122", field_path, "metadata GUID, Date, or Number", describe(info.items[2]),
+                "Metadata Table column field identity is unsupported");
+            column.source = model::TableMetadataColumnField{std::move(member)};
+        }
+        (void)integer_atom<std::uint32_t>(properties.items[5], child_path(properties_path, 5));
+        (void)integer_atom<std::int32_t>(properties.items[6], child_path(properties_path, 6));
+    } else column.data_path = string_atom(body.items[2], child_path(body_path, 2));
     try {
         list_stream::ListInStream localized(properties.items[1]);
         column.header = value_codec::read_localized_string(localized);
@@ -11268,7 +11357,7 @@ model::TableColumn decode_table_column(
                     (embedded_type.entries.front().term == model::TypeDomainTerm::string ||
                      embedded_type.entries.front().term == model::TypeDomainTerm::numeric ||
                      embedded_type.entries.front().term == model::TypeDomainTerm::boolean ||
-                     is_single_date_only_type_domain(embedded_type))) {
+                     is_single_date_only_type_domain(embedded_type) || is_single_date_time_type_domain(embedded_type))) {
                     InputFieldFlagValues defaults{};
                     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
                         defaults[index] = input_field_flag_mappings[index].default_value;
@@ -11353,6 +11442,10 @@ model::TableColumn decode_table_column(
         const auto physical_slot = table_column_property_slot(slot, has_editor);
         normalized.items[1].items[1].items[1].items[physical_slot] = canonical.items[1].items[1].items[1].items[physical_slot];
     }
+    if (metadata_column) {
+        normalized.items[1].items[1].items[1].items[5] = canonical.items[1].items[1].items[1].items[5];
+        normalized.items[1].items[1].items[1].items[6] = canonical.items[1].items[1].items[1].items[6];
+    }
     if (has_editor)
         normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
     require_list_stream_shape(normalized, canonical, path,
@@ -11377,21 +11470,48 @@ DecodedControl decode_table(
     if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", child_path(path, 1), "positive int64 Table ID", std::to_string(raw_id), "Table ID is invalid");
     }
-    const bool tree_source = is_single_value_tree_type_domain(linked_attribute.required_type());
-    if (!tree_source && !is_single_value_table_type_domain(linked_attribute.required_type())) {
-        fail("OOF1122", child_path(path, 1), "DataPath to an unqualified ValueTable or ValueTree Attribute",
-            linked_attribute.name, "Table DataPath target must have a supported named collection type");
-    }
     const auto info_path = child_path(path, 2);
     const auto& info = record.items[2];
     require_arity(info, 5, info_path);
     require_raw_constant(info.items[0], "5", child_path(info_path, 0));
+    const bool document_list_source = info.items[3].is_list && info.items[3].items.size() == 2 &&
+        !info.items[3].items[0].is_list && info.items[3].items[0].atom == model::metamodel::document_list_table_extension.guid;
+    const auto source_extension = document_list_source
+        ? std::optional{model::TableSourceExtensionKind::document_list} : std::nullopt;
+    const auto& bound_type = linked_attribute.required_type();
+    const bool tree_source = is_single_value_tree_type_domain(bound_type);
+    bool supported_source = tree_source || is_single_value_table_type_domain(bound_type);
+    if (document_list_source && bound_type.entries.size() == 1) {
+        const auto& entry = bound_type.entries.front();
+        supported_source = entry.term == model::TypeDomainTerm::object && entry.type_uuid &&
+            entry.numeric == model::NumericQualifiers{} && entry.string == model::LengthQualifiers{} &&
+            entry.binary == model::LengthQualifiers{} && entry.date == model::DateQualifiers{};
+    } else if (document_list_source) supported_source = false;
+    if (!supported_source)
+        fail("OOF1122", child_path(path, 1), "matching Table source interface and named type domain",
+            linked_attribute.name, "Table DataPath target must have a supported named collection type");
     require_arity(info.items[2], 2, child_path(info_path, 2));
     const auto table_properties_path = child_path(child_path(info_path, 2), 1);
     const auto upgraded_properties = upgrade_table_properties(info.items[2].items[1], table_properties_path);
     const auto& properties = upgraded_properties ? *upgraded_properties : info.items[2].items[1];
     bool tree_mode = true;
-    if (tree_source) {
+    bool enable_period_setting = true;
+    std::vector<DecodedControlEvent> source_events;
+    if (document_list_source) {
+        const auto source_path = child_path(info_path, 3);
+        const auto& source = info.items[3].items[1];
+        require_arity(source, 3, child_path(source_path, 1));
+        require_raw_constant(source.items[0], "2", child_path(source_path, 1));
+        source_events = decode_named_control_events(source.items[1], child_path(child_path(source_path, 1), 1),
+            model::metamodel::table_source_event_descriptors(*source_extension));
+        const auto& settings = source.items[2];
+        require_arity(settings, 3, child_path(child_path(source_path, 1), 2));
+        require_raw_constant(settings.items[0], "3", source_path);
+        require_raw_constant(settings.items[1], "1", source_path);
+        require_arity(settings.items[2], 2, source_path);
+        require_raw_constant(settings.items[2].items[0], "0", source_path);
+        enable_period_setting = bool_atom(settings.items[2].items[1], source_path);
+    } else if (tree_source) {
         const auto mode_path = child_path(info_path, 3);
         require_arity(info.items[3], 2, mode_path);
         require_raw_constant(info.items[3].items[0], "9ab3fa70-d2e0-4e44-baac-730682272ed2", child_path(mode_path, 0));
@@ -11408,6 +11528,8 @@ DecodedControl decode_table(
     }
     auto named_events = decode_control_event_collection(info.items[4], child_path(info_path, 4),
         model::ControlKind::table);
+    named_events.insert(named_events.end(), std::make_move_iterator(source_events.begin()),
+        std::make_move_iterator(source_events.end()));
     if (!tree_source && std::ranges::any_of(named_events, [](const auto& event) { return event.name == "OnCurrentParentChange"; }))
         fail("OOF1122", child_path(info_path, 4), "ValueTree source for OnCurrentParentChange", "ValueTable",
             "OnCurrentParentChange is unavailable for a ValueTable source");
@@ -11437,6 +11559,8 @@ DecodedControl decode_table(
     decode_control_metadata(record.items[4], metadata_path, control);
     if (tree_source && !tree_mode) control.properties().set_explicit(model::PropertyId::from_name("Tree"), false);
     auto& table = std::get<model::TablePayload>(control.payload);
+    table.source_extension = source_extension;
+    if (!enable_period_setting) control.properties().set_explicit(model::PropertyId::from_name("EnablePeriodSetting"), false);
     table.columns.reserve(stored_columns.items.size() - 1);
     for (std::size_t index = 1; index < stored_columns.items.size(); ++index) {
         table.columns.push_back(decode_table_column(
@@ -11449,7 +11573,8 @@ DecodedControl decode_table(
         fail("OOF1114", child_path(info_path, 3), "Table Tree mode matching its flags", std::to_string(flags),
             "ValueTree Table mode and flags disagree");
     const bool read_only = (flags & 0x400U) == 0;
-    const LV canonical_info = canonical_table_control_info(linked_attribute.required_type(), table.columns, read_only, info_path, tree_mode);
+    const LV canonical_info = canonical_table_control_info(linked_attribute.required_type(), table.columns, read_only,
+        info_path, tree_mode, source_extension, enable_period_setting);
     const auto base_path = child_path(child_path(info_path, 2), 0);
     auto base = info.items[2].items[0];
     read_common_control_base(base, base_path, [&] {
@@ -11462,6 +11587,7 @@ DecodedControl decode_table(
     if (upgraded_properties) normalized_info.items[2].items[1] = *upgraded_properties;
     normalized_info.items[2].items[0] = std::move(base);
     normalized_info.items[4] = list({raw("0")});
+    if (document_list_source) normalized_info.items[3].items[1].items[1] = list({raw("0")});
     if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     auto& normalized_table_properties = normalized_info.items[2].items[1];
     auto normalized_flags = flags;
@@ -12800,7 +12926,7 @@ LV encode_table(
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "RowSelectionMode", "InitialListView", "InitialTreeView",
-        "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree"}, "$/Table");
+        "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree", "EnablePeriodSetting"}, "$/Table");
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
     const auto attribute = resolve_attribute_reference(document, *control.data_path);
     if (!attribute) {
@@ -12808,7 +12934,24 @@ LV encode_table(
             std::to_string(control.data_path->attribute.id().value()), "Table DataPath does not resolve");
     }
     const bool tree_source = is_single_value_tree_type_domain(attribute->required_type());
-    if (!tree_source && !is_single_value_table_type_domain(attribute->required_type())) {
+    const auto& table = std::get<model::TablePayload>(control.payload);
+    const bool document_list_source = table.source_extension == model::TableSourceExtensionKind::document_list;
+    if (!document_list_source && control.properties().find(model::PropertyId::from_name("EnablePeriodSetting")))
+        fail("OOF1122", "$/Table/EnablePeriodSetting", "DocumentList source extension", "other source",
+            "EnablePeriodSetting requires the DocumentList Table interface");
+    for (const auto& column : table.columns)
+        if (column.source.has_value() != document_list_source)
+            fail("OOF1122", "$/Table/Columns/Source", "column source matching the selected Table interface", column.name,
+                "Column source does not match its Table source extension");
+    bool supported_source = tree_source || is_single_value_table_type_domain(attribute->required_type());
+    if (document_list_source) {
+        const auto& type = attribute->required_type();
+        supported_source = type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::object &&
+            type.entries.front().type_uuid && type.entries.front().numeric == model::NumericQualifiers{} &&
+            type.entries.front().string == model::LengthQualifiers{} && type.entries.front().binary == model::LengthQualifiers{} &&
+            type.entries.front().date == model::DateQualifiers{};
+    }
+    if (!supported_source) {
         fail("OOF1122", "$/Table/DataPath", "unqualified ValueTable or ValueTree Attribute", attribute->name,
             "Table DataPath must target a supported named collection type");
     }
@@ -12823,11 +12966,27 @@ LV encode_table(
         }
     }
     const bool tree_mode = tree_source ? explicit_bool(control.properties(), "Tree", true) : true;
-    const auto& table = std::get<model::TablePayload>(control.payload);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
-    auto info = canonical_table_control_info(attribute->required_type(), table.columns, read_only, "$/Table", tree_mode);
+    const bool enable_period_setting = explicit_bool(control.properties(), "EnablePeriodSetting", true);
+    auto info = canonical_table_control_info(attribute->required_type(), table.columns, read_only, "$/Table", tree_mode,
+        table.source_extension, enable_period_setting);
     encode_named_control_border(info.items[2].items[0], model::ControlKind::table, control.properties(), "$/Table");
-    info.items.at(4) = encode_control_event_collection(document, control, "$/Table/Events");
+    std::vector<model::EventRef> common_events;
+    std::vector<model::EventRef> source_events;
+    const auto source_descriptors = document_list_source
+        ? model::metamodel::table_source_event_descriptors(*table.source_extension)
+        : std::span<const model::metamodel::EventDescriptor>{};
+    for (const auto reference : control.events) {
+        const auto* event = document.find_event(reference.id());
+        if (event && std::ranges::any_of(source_descriptors,
+            [&](const auto& descriptor) { return descriptor.api_name == event->name; })) source_events.push_back(reference);
+        else common_events.push_back(reference);
+    }
+    info.items.at(4) = encode_named_control_events(document, control, common_events,
+        model::metamodel::event_descriptors(control.kind()), "$/Table/Events");
+    if (document_list_source)
+        info.items[3].items[1].items[1] = encode_named_control_events(document, control, source_events,
+            source_descriptors, "$/Table/DocumentListTableExtension/Events");
     auto& table_properties = info.items.at(2).items.at(1);
     auto flags = integer_atom<std::uint32_t>(table_properties.items.at(1), "$/Table/Flags");
     for (const auto& spec : table_boolean_flags) {
@@ -14352,7 +14511,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 static_cast<std::uint64_t>(stored.id.object_id));
         }
         const std::uint64_t expected_slots = std::max<std::uint64_t>(
-            3,
+            empty_attributes ? 3 : 2,
             (empty_attributes ? actual_max_id : attribute_max_id) + 1);
         // Граница выделения ID может превышать последний объявленный реквизит.
         // Ее история не является свойством публичной формы; writer вычисляет свою границу.

@@ -183,7 +183,8 @@ bool valid_localized_string(const LocalizedStringValue& value) noexcept {
     try {
         std::set<std::string_view> languages;
         for (const auto& item : value.items) {
-            if (!valid_xs_language(item.language) || !languages.insert(item.language).second) return false;
+            if ((item.language != "#" && !valid_xs_language(item.language)) ||
+                !languages.insert(item.language).second) return false;
         }
     } catch (...) {
         return false;
@@ -2169,7 +2170,7 @@ PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyI
             const auto kind = property == PropertyId::from_name("PlotArea") ? ChartAreaKind::plot : property == PropertyId::from_name("TitleArea") ? ChartAreaKind::title : ChartAreaKind::legend;
             return {PropertyReadStatus::computed_value, PropertyValue{ChartAreaRef{control.id, kind}}};
         }
-        descriptor = metamodel::find_property(control.kind(), property);
+        descriptor = metamodel::find_property(control, property);
         if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
         if (descriptor->surface == metamodel::PropertySurface::control_extension && descriptor->api_name == "Value")
             return {PropertyReadStatus::unsupported_surface, std::nullopt};
@@ -2635,7 +2636,7 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
         }
         if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActivePoint"))
             return PropertyMutationStatus::unsupported_surface;
-        descriptor = metamodel::find_property(control.kind(), property);
+        descriptor = metamodel::find_property(control, property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (descriptor->surface == metamodel::PropertySurface::control_extension && descriptor->api_name == "Value")
             return PropertyMutationStatus::unsupported_surface;
@@ -3186,7 +3187,7 @@ PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, Pro
         }
         if (control.kind() == ControlKind::chart && property == PropertyId::from_name("ActivePoint"))
             return PropertyMutationStatus::unsupported_surface;
-        descriptor = metamodel::find_property(control.kind(), property);
+        descriptor = metamodel::find_property(control, property);
         if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
         if (descriptor->surface == metamodel::PropertySurface::control_extension && descriptor->api_name == "Value")
             return PropertyMutationStatus::unsupported_surface;
@@ -3343,7 +3344,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
             ? metamodel::find_form_extension_property(*form_.extension, id) : nullptr; });
     check_property_values(form_.panel.properties, [](PropertyId id) { return metamodel::find_property(ControlKind::panel, id); });
     for (const auto& control : collections_.controls) {
-        const auto resolve = [&](PropertyId id) { return metamodel::find_property(control.kind(), id); };
+        const auto resolve = [&](PropertyId id) { return metamodel::find_property(control, id); };
         check_property_values(control.properties(), resolve);
         check_property_values(control.extension_properties, resolve);
         if (const auto* chart = std::get_if<ChartPayload>(&control.payload)) {
@@ -4125,7 +4126,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 event,
                 ControlRef{control.id},
                 [&](std::string_view name) {
-                    return metamodel::find_event(control.kind(), name);
+                    return metamodel::find_event(control, name);
                 });
             if (const Event* resolved = find_event(event.id());
                 resolved != nullptr && !control_event_names.insert(resolved->name).second) {
@@ -4252,13 +4253,29 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
             bool tree_source = false;
+            const bool document_list_source = table->source_extension == TableSourceExtensionKind::document_list;
+            if (table->source_extension && std::ranges::none_of(
+                    metamodel::table_source_extension_descriptors(), [&](const auto& descriptor) {
+                        return descriptor.kind == *table->source_extension;
+                    })) {
+                invalid_table("Table source extension is not declared");
+            }
             if (!control.data_path) {
-                invalid_table("Table requires a DataPath to a ValueTable or ValueTree value");
+                invalid_table("Table requires a DataPath to its supported source value");
             } else {
                 const auto type = resolve_data_path_type(*control.data_path);
                 const TypeDomainEntry value_table{.term = TypeDomainTerm::value_table};
                 const TypeDomainEntry value_tree{.term = TypeDomainTerm::value_tree};
-                if (!type || type->entries.size() != 1 ||
+                const bool valid_document_list = type && type->entries.size() == 1 &&
+                    type->entries.front().term == TypeDomainTerm::object && type->entries.front().type_uuid &&
+                    valid_typed_uuid(type->entries.front().type_uuid->canonical) &&
+                    type->entries.front().numeric == NumericQualifiers{} &&
+                    type->entries.front().string == LengthQualifiers{} &&
+                    type->entries.front().binary == LengthQualifiers{} &&
+                    type->entries.front().date == DateQualifiers{};
+                if (document_list_source) {
+                    if (!valid_document_list) invalid_table("DocumentList Table DataPath requires one qualified object type GUID");
+                } else if (!type || type->entries.size() != 1 ||
                     (type->entries.front() != value_table && type->entries.front() != value_tree)) {
                     invalid_table("Table DataPath must reference the named ValueTable or ValueTree type");
                 } else {
@@ -4276,7 +4293,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
             }
-            if (!tree_source && table->columns.empty()) {
+            if (!document_list_source && !tree_source && table->columns.empty()) {
                 invalid_table("ValueTable requires at least one Column");
             }
             std::set<std::string> column_names;
@@ -4291,15 +4308,39 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         invalid_table("Table Column layout width is invalid");
                     }
                 }
+                for (const auto& property : metamodel::table_column_enumeration_descriptors()) {
+                    const auto& value = column.*property.member;
+                    if (value.type_name != property.enumeration_type || std::ranges::none_of(property.members,
+                        [&](const auto& member) { return member.name == value.member; }))
+                        invalid_table("Table Column enumeration is outside its named property contract");
+                }
                 try { (void)storage::value_codec::encode_font(column.text_font); }
                 catch (const std::exception&) { invalid_table("Table Column TextFont is invalid"); }
                 if (column.name.empty() || !column_names.insert(column.name).second) {
                     invalid_table("Table Column names must be non-empty and unique");
                 }
-                if (column.data_path.empty()) {
+                if (document_list_source && !column.source) invalid_table("DocumentList Table columns require a named source");
+                if (!document_list_source && column.source) invalid_table("Table column source requires the DocumentList Table extension");
+                if (column.source && !column.data_path.empty()) invalid_table("Table column DataPath must be empty when a named source is present");
+                if (!column.source && column.data_path.empty()) {
                     invalid_table("Table Column DataPath must be non-empty");
                 }
-                if (column.header.items.empty()) {
+                if (column.source) {
+                    std::visit([&](const auto& source) {
+                        using Source = std::remove_cvref_t<decltype(source)>;
+                        if constexpr (std::is_same_v<Source, TableMetadataColumnField>) {
+                            const auto& field = source.field;
+                            if (field.type) invalid_table("Table metadata field type belongs to the column or editor ValueType");
+                            if (field.uuid && !valid_typed_uuid(field.uuid->canonical)) invalid_table("Table metadata field GUID is invalid");
+                            if (!field.uuid && field.name != "Date" && field.name != "Number")
+                                invalid_table("Table metadata field without GUID must be Date or Number");
+                            if (field.name.empty() && !field.uuid) invalid_table("Table metadata field requires a GUID or a supported builtin name");
+                        } else if constexpr (std::is_same_v<Source, TableStandardPictureColumn>) {
+                            if (column.control) invalid_table("Standard Picture Table column cannot have an editor");
+                        }
+                    }, *column.source);
+                }
+                if (!column.source && column.header.items.empty()) {
                     invalid_table("Table Column Header must contain localized text");
                 }
                 std::set<std::string> languages;
@@ -4366,7 +4407,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
         validate_property_set(
             control.id,
             control.properties(),
-            [&](PropertyId id) { return metamodel::find_property(control.kind(), id); },
+            [&](PropertyId id) { return metamodel::find_property(control, id); },
             [](const metamodel::PropertyDescriptor& descriptor) {
                 return descriptor.surface == metamodel::PropertySurface::control_payload;
             });

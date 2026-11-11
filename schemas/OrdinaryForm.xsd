@@ -82,12 +82,14 @@
 
   <xs:complexType name="LocalizedStringValueType">
     <xs:sequence>
+      <xs:element name="DefaultText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="LocalizedTextValueType" mixed="true">
     <xs:sequence>
+      <xs:element name="DefaultText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="65536"/>
     </xs:sequence>
   </xs:complexType>
@@ -2095,11 +2097,35 @@
   </xs:complexType>
   <xs:complexType name="TableColumnType">
     <xs:sequence>
-      <xs:element name="DataPath" type="xs:string" minOccurs="1" maxOccurs="1"/>
+      <xs:choice>
+        <xs:element name="DataPath" type="xs:string"/>
+        <xs:element name="Source"><xs:complexType><xs:choice>
+          <xs:element name="MetadataField"><xs:complexType>
+            <xs:attribute name="name" type="xs:string" use="optional"/>
+            <xs:attribute name="uuid" type="UuidValueType" use="optional"/>
+          </xs:complexType></xs:element>
+          <xs:element name="StandardPicture"><xs:complexType/></xs:element>
+        </xs:choice></xs:complexType></xs:element>
+      </xs:choice>
       <xs:element name="Header" type="LocalizedStringValueType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Width" type="TableColumnWidthType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Visible" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangeVisible" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoMarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangeSetting" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoCellHeight" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MarkNegatives" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Hyperlink" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowHierarchy" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CheckBoxThreeState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangePosition" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalAlignInColumn" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HeaderHorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FooterHorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:choice minOccurs="0" maxOccurs="1">
         <xs:element name="Control" type="TableColumnControlType" minOccurs="0" maxOccurs="1"/>
         <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="1" maxOccurs="1"/>
@@ -2113,6 +2139,18 @@
     </xs:sequence>
   </xs:complexType>
 
+  <xs:complexType name="DocumentListTableExtensionEventsType">
+    <xs:sequence>
+      <xs:element name="BeforeSetDeletionMark" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforePosting" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeUndoPosting" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeDateChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="DocumentListTableExtensionType"><xs:sequence>
+    <xs:element name="EnablePeriodSetting" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Events" type="DocumentListTableExtensionEventsType" minOccurs="0"/></xs:sequence></xs:complexType>
   <xs:complexType name="PanelType">
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
@@ -2852,6 +2890,7 @@
       <xs:element name="FooterFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HeaderFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Tree" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DocumentListTableExtension" type="DocumentListTableExtensionType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="TableEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

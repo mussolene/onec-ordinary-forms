@@ -466,12 +466,14 @@ void append_value_types(std::string& output) {
 
   <xs:complexType name="LocalizedStringValueType">
     <xs:sequence>
+      <xs:element name="DefaultText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="LocalizedTextValueType" mixed="true">
     <xs:sequence>
+      <xs:element name="DefaultText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="65536"/>
     </xs:sequence>
   </xs:complexType>
@@ -1384,6 +1386,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "    <xs:sequence>\n"
         "      <xs:element name=\"Title\" type=\"LocalizedStringValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Visible\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+
         "      <xs:element name=\"Enabled\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"ChildItems\" type=\"ControlChildItemsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
@@ -1484,11 +1487,31 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "  </xs:complexType>\n"
         "  <xs:complexType name=\"TableColumnType\">\n"
         "    <xs:sequence>\n"
-        "      <xs:element name=\"DataPath\" type=\"xs:string\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
+        "      <xs:choice>\n"
+        "        <xs:element name=\"DataPath\" type=\"xs:string\"/>\n"
+        "        <xs:element name=\"Source\"><xs:complexType><xs:choice>\n"
+        "          <xs:element name=\"MetadataField\"><xs:complexType>\n"
+        "            <xs:attribute name=\"name\" type=\"xs:string\" use=\"optional\"/>\n"
+        "            <xs:attribute name=\"uuid\" type=\"UuidValueType\" use=\"optional\"/>\n"
+        "          </xs:complexType></xs:element>\n"
+        "          <xs:element name=\"StandardPicture\"><xs:complexType/></xs:element>\n"
+        "        </xs:choice></xs:complexType></xs:element>\n"
+        "      </xs:choice>\n"
         "      <xs:element name=\"Header\" type=\"LocalizedStringValueType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Width\" type=\"TableColumnWidthType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"TextFont\" type=\"FontValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
-        "      <xs:element name=\"Visible\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        ;
+    for (const auto& property : model::metamodel::table_column_boolean_descriptors()) {
+        output += "      <xs:element";
+        append_attribute(output, "name", property.name);
+        output += " type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+    }
+    for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
+        output += "      <xs:element";
+        append_attribute(output, "name", property.name);
+        output += " type=\"EnumerationValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+    }
+    output +=
         "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n"
         "        <xs:element name=\"Control\" type=\"TableColumnControlType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "        <xs:element name=\"ValueType\" type=\"TypeDomainValueType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
@@ -1501,6 +1524,18 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "      <xs:element name=\"Column\" type=\"TableColumnType\" minOccurs=\"0\" maxOccurs=\"unbounded\"/>\n"
         "    </xs:sequence>\n"
         "  </xs:complexType>\n\n";
+
+    for (const auto& extension : model::metamodel::table_source_extension_descriptors()) {
+        const std::string event_type = std::string(extension.xml_name) + "EventsType";
+        append_event_type(output, event_type, model::metamodel::table_source_event_descriptors(extension.kind));
+        output += "  <xs:complexType";
+        append_attribute(output, "name", std::string(extension.xml_name) + "Type");
+        output += "><xs:sequence>\n";
+        append_property_elements(output, model::metamodel::table_source_property_descriptors(extension.kind), "    ", false);
+        output += "    <xs:element name=\"Events\"";
+        append_attribute(output, "type", event_type);
+        output += " minOccurs=\"0\"/></xs:sequence></xs:complexType>\n";
+    }
 
     for (const auto& control : controls) {
         const std::string type_name = std::string(control.public_name) + "Type";
@@ -1566,6 +1601,14 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
                 "      <xs:element name=\"Intervals\" type=\"GanttIntervalCollectionType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
         }
 
+        if (control.kind == model::ControlKind::table) {
+            for (const auto& extension : model::metamodel::table_source_extension_descriptors()) {
+                output += "      <xs:element";
+                append_attribute(output, "name", extension.xml_name);
+                append_attribute(output, "type", std::string(extension.xml_name) + "Type");
+                output += " minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+            }
+        }
         output += "      <xs:element name=\"Events\" type=\"";
         append_xml_escaped(output, control.public_name);
         output += "EventsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
@@ -1721,6 +1764,16 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         append_attribute(output, "name", extension.xml_name);
         append_attribute(output, "russianName", as_utf8(extension.russian_name));
         output += "/>\n";
+    }
+    for (const auto& extension : model::metamodel::table_source_extension_descriptors()) {
+        output += "        <NamedConcept";
+        append_attribute(output, "name", extension.xml_name);
+        append_attribute(output, "russianName", as_utf8(extension.russian_name));
+        output += "><Properties>\n";
+        append_palette_properties(output, model::metamodel::table_source_property_descriptors(extension.kind), "          ");
+        output += "        </Properties><Events>\n";
+        append_palette_events(output, model::metamodel::table_source_event_descriptors(extension.kind), "          ");
+        output += "        </Events></NamedConcept>\n";
     }
     output += "        <Controls>\n";
 
@@ -1895,7 +1948,23 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"DataPath\" russianName=\"Данные\"/>\n"
         "          <Property name=\"Header\" russianName=\"ТекстШапки\"/>\n"
         "          <Property name=\"Width\" russianName=\"Ширина\" russianType=\"Число\" unit=\"form\"/><Property name=\"TextFont\" russianName=\"ШрифтТекста\" russianType=\"Шрифт\"/>\n"
-        "          <Property name=\"Visible\" russianName=\"Видимость\" russianType=\"Булево\"/>\n"
+        ;
+    for (const auto& property : model::metamodel::table_column_boolean_descriptors()) {
+        output += "          <Property";
+        append_attribute(output, "name", property.name);
+        append_attribute(output, "apiName", property.name);
+        append_attribute(output, "russianName", as_utf8(property.russian_name));
+        output += " russianType=\"Булево\" valueCodec=\"boolean\"/>\n";
+    }
+    for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
+        output += "          <Property";
+        append_attribute(output, "name", property.name);
+        append_attribute(output, "apiName", property.name);
+        append_attribute(output, "russianName", as_utf8(property.russian_name));
+        output += " russianType=\"ГоризонтальноеПоложение\" valueCodec=\"enumeration\"/>\n";
+    }
+    output +=
+
         "          <Property name=\"Control\" russianName=\"ЭлементУправления\"/>\n"
         "          <Property name=\"ValueType\" russianName=\"ОписаниеТипа\" russianType=\"ОписаниеТипов\" source=\"storedTypeDescriptor\"/>\n"
         "        </Properties></NamedConcept>\n"

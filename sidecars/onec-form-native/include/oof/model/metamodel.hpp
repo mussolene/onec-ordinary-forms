@@ -275,6 +275,18 @@ struct InputFieldExtensionDescriptor {
     std::string_view xml_name;
     std::u8string_view russian_name;
 };
+struct TableSourceExtensionDescriptor {
+    TableSourceExtensionKind kind;
+    std::string_view guid;
+    std::string_view xml_name;
+    std::u8string_view russian_name;
+};
+inline constexpr TableSourceExtensionDescriptor document_list_table_extension{
+    TableSourceExtensionKind::document_list,
+    "8d9c2111-ed81-11d5-b9b6-0050bae0a95d",
+    "DocumentListTableExtension",
+    u8"Расширение табличного поля списка документов",
+};
 inline constexpr InputFieldExtensionDescriptor input_field_extensions[]{
     {InputFieldExtensionKind::catalog, "8585207b-9ca7-425b-9385-e8fd67c4e148",
         "CatalogInputFieldExtension", u8"Расширение поля ввода справочника"},
@@ -340,6 +352,29 @@ struct PropertyDescriptor {
     std::span<const std::string_view> enumeration_members{};
     std::optional<FormExtensionKind> extension_kind{};
     bool designer_only = false;
+};
+
+struct TableColumnEnumerationMember {
+    std::string_view name;
+    std::uint32_t storage_value;
+};
+struct TableColumnEnumerationDescriptor {
+    std::string_view name;
+    std::u8string_view russian_name;
+    EnumerationValue TableColumn::*member;
+    std::string_view enumeration_type;
+    std::string_view default_member;
+    std::span<const TableColumnEnumerationMember> members;
+    std::size_t storage_slot;
+};
+
+struct TableColumnBooleanDescriptor {
+    std::string_view name;
+    std::u8string_view russian_name;
+    bool TableColumn::*member;
+    bool default_value;
+    std::uint32_t mask;
+    bool inverted = false;
 };
 
 enum class ChartSeriesStorage : std::uint8_t { row, style, companion, computed };
@@ -615,6 +650,11 @@ private:
 [[nodiscard]] std::span<const PropertyDescriptor> property_descriptors(
     ControlKind kind) noexcept;
 [[nodiscard]] std::span<const EventDescriptor> event_descriptors(ControlKind kind) noexcept;
+[[nodiscard]] std::span<const TableColumnBooleanDescriptor> table_column_boolean_descriptors() noexcept;
+[[nodiscard]] std::span<const TableColumnEnumerationDescriptor> table_column_enumeration_descriptors() noexcept;
+[[nodiscard]] std::span<const TableSourceExtensionDescriptor> table_source_extension_descriptors() noexcept;
+[[nodiscard]] std::span<const PropertyDescriptor> table_source_property_descriptors(TableSourceExtensionKind kind) noexcept;
+[[nodiscard]] std::span<const EventDescriptor> table_source_event_descriptors(TableSourceExtensionKind kind) noexcept;
 [[nodiscard]] std::span<const StandardPictureDescriptor> standard_picture_descriptors() noexcept;
 [[nodiscard]] const StandardPictureDescriptor* find_standard_picture(std::string_view runtime_name) noexcept;
 [[nodiscard]] const StandardPictureDescriptor* find_standard_picture_by_guid(std::string_view guid) noexcept;
@@ -639,6 +679,9 @@ private:
 [[nodiscard]] const EventDescriptor* find_event(
     ControlKind kind,
     std::string_view name) noexcept;
+[[nodiscard]] const PropertyDescriptor* find_property(const ControlNode& control, std::string_view name) noexcept;
+[[nodiscard]] const PropertyDescriptor* find_property(const ControlNode& control, PropertyId id) noexcept;
+[[nodiscard]] const EventDescriptor* find_event(const ControlNode& control, std::string_view name) noexcept;
 [[nodiscard]] const EventDescriptor* find_form_event(std::string_view name) noexcept;
 [[nodiscard]] const MetamodelCoverage& metamodel_coverage() noexcept;
 [[nodiscard]] std::string_view classification_name(ClassificationStatus status) noexcept;

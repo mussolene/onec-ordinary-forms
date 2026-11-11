@@ -2148,6 +2148,143 @@ void test_table_columns_named_profile() {
     expect(!source::parse_form_xml(dangling_source).ok(), "Table source must reject a dangling attribute link");
 }
 
+void test_neutral_localized_text_xml() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Neutral" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><DefaultText>Neutral &amp; literal</DefaultText><Item language="en">English</Item></Header></Column></Columns></Table><PictureDecoration id="4" name="Picture"><Position/><NonselectedPictureText><DefaultText>Picture text</DefaultText><Item language="en">Picture</Item></NonselectedPictureText></PictureDecoration></ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "neutral and translated text must share the existing localized value model" : parsed.diagnostics().front().message);
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<DefaultText>Neutral &amp; literal</DefaultText>") != std::string::npos &&
+        serialized.value().find("language=\"#\"") == std::string::npos,
+        "neutral text must have a named public representation rather than a platform language marker");
+    const auto native = oof::storage::form_stream::encode_document(parsed.value());
+    expect(native.ok(), "neutral localized values must encode through the existing string codec");
+    const auto decoded = oof::storage::form_stream::decode_document(native.value(), "Neutral");
+    expect(decoded.ok(), "neutral localized values must decode from the native string representation");
+    const auto public_xml = source::serialize_form_xml(decoded.value());
+    expect(public_xml.ok() && public_xml.value().find("<DefaultText>Neutral &amp; literal</DefaultText>") != std::string::npos,
+        "neutral default text must survive XML-only native roundtrip");
+    for (const auto value : {"<DefaultText>A</DefaultText><DefaultText>B</DefaultText>",
+             "<Item language=\"#\">A</Item>", "<DefaultText language=\"en\">A</DefaultText>"}) {
+        const auto invalid = std::string("<Form id=\"1\" name=\"Neutral\" ordinaryFormVersion=\"2.1\"><ChildItems><PictureDecoration id=\"4\" name=\"P\"><Position/><NonselectedPictureText>") + value + "</NonselectedPictureText></PictureDecoration></ChildItems></Form>";
+        expect(!source::parse_form_xml(invalid), "neutral text must reject duplicate defaults, wire markers and unsupported attributes");
+    }
+}
+
+void test_document_list_table_source_xml_and_native() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="List" ordinaryFormVersion="2.1">
+<Attributes><Attribute id="0" name="Rows"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute></Attributes>
+<ChildItems><Table id="3" name="Rows"><DataPath attributeId="0"/><Position/><Columns>
+<Column name="Picture"><Source><StandardPicture/></Source><Header/><Width unit="form">24</Width><ValueType><Entry term="string" length="10" variable="true"/></ValueType></Column>
+<Column name="Date"><Source><MetadataField name="Date"/></Source><Header><Item language="en">Date</Item></Header><Width unit="form">140</Width><Control type="InputField"><ValueType><Entry term="date" date="true" time="true"/></ValueType></Control></Column>
+<Column name="Number"><Source><MetadataField name="Number"/></Source><Header><Item language="en">Number</Item></Header><ValueType><Entry term="string" length="9" variable="true"/></ValueType></Column>
+<Column name="Custom"><Source><MetadataField uuid="44444444-4444-4444-4444-444444444444"/></Source><Header/><ValueType><Entry term="boolean"/></ValueType></Column>
+</Columns><DocumentListTableExtension><EnablePeriodSetting>false</EnablePeriodSetting><Events>
+<BeforeSetDeletionMark id="20">HandleDeletion</BeforeSetDeletionMark><BeforePosting id="21">HandlePosting</BeforePosting><BeforeUndoPosting id="22">HandleUndo</BeforeUndoPosting><BeforeDateChange id="23">HandleDate</BeforeDateChange>
+</Events></DocumentListTableExtension><Events><Selection id="24">HandleSelection</Selection></Events></Table></ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "named DocumentList source must parse" : parsed.diagnostics().front().message);
+    const auto* table_control = parsed.value().find_control(model::ObjectId{3});
+    const auto& table = std::get<model::TablePayload>(table_control->payload);
+    expect(table.source_extension == model::TableSourceExtensionKind::document_list && table.columns.size() == 4 &&
+        table.columns.front().header.items.empty() && !table.columns.front().control,
+        "source role, absent picture editor and empty header must be independent");
+    const auto public_xml = source::serialize_form_xml(parsed.value());
+    expect(public_xml.ok() && public_xml.value().find("DocumentListTableExtension") != std::string::npos &&
+        public_xml.value().find("uuid=\"44444444-4444-4444-4444-444444444444\"") != std::string::npos,
+        "source identity and extension events must serialize by name without configuration metadata");
+    const auto repeated = source::parse_form_xml(public_xml.value());
+    expect(repeated.ok(), "named source XML must parse after serialization");
+    const auto native = oof::storage::form_stream::encode_document(parsed.value());
+    expect(native.ok(), native ? "named source must encode without a baseline" : native.diagnostics().front().message);
+    const auto has_guid_reference = [&](auto&& self, const oof::storage::list_stream::ListValue& node) -> bool {
+        if (!node.is_list) return false;
+        if (node.items.size() == 2 && node.items[0].atom == "48a6ebc3-fcc8-4f8f-b399-459fb32aa46b") {
+            const auto& key = node.items[1].items[1].items[2];
+            if (key.is_list && key.items.size() == 2 && key.items[0].atom == "0" &&
+                key.items[1].atom == "44444444-4444-4444-4444-444444444444") return true;
+        }
+        return std::ranges::any_of(node.items, [&](const auto& child) { return self(self, child); });
+    };
+    expect(has_guid_reference(has_guid_reference, native.value()),
+        "metadata GUID source must use the observed CompositeID prefix, not a symmetric invented GUID record");
+    const auto decoded = oof::storage::form_stream::decode_document(native.value(), "List");
+    expect(decoded.ok(), decoded ? "named source must decode" : decoded.diagnostics().front().message);
+    expect(decoded.value().reconstruction_complete(), "the constructed named source must rebuild completely");
+    auto small_allocator = native.value();
+    small_allocator.items[2].items[1] = oof::storage::list_stream::ListValue::raw_atom("2");
+    const auto small_decoded = oof::storage::form_stream::decode_document(small_allocator, "List");
+    expect(small_decoded.ok() && small_decoded.value().reconstruction_complete(),
+        "native-confirmed two-slot allocator with Attribute zero must decode without configuration metadata");
+    small_allocator.items[2].items[1] = oof::storage::list_stream::ListValue::raw_atom("1");
+    expect(!oof::storage::form_stream::decode_document(small_allocator, "List"),
+        "the smaller unproven allocator layout must remain rejected");
+    const auto* decoded_control = decoded.value().find_control(model::ObjectId{3});
+    const auto& decoded_table = std::get<model::TablePayload>(decoded_control->payload);
+    expect(decoded_table.source_extension == table.source_extension && decoded_table.columns.size() == 4 &&
+        decoded_table.columns[1].source == table.columns[1].source &&
+        decoded_table.columns[3].source == table.columns[3].source &&
+        decoded_table.columns[1].layout_width == table.columns[1].layout_width,
+        "named field GUID, builtin source and layout width must survive native serialization");
+    expect(decoded.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{3}},
+        model::PropertyId::from_name("EnablePeriodSetting")).value == model::PropertyValue{false},
+        "the source Boolean must survive native serialization");
+    expect(decoded_control->events.size() == 5, "common and four extension events must survive separate event tables");
+    const auto decoded_xml = source::serialize_form_xml(decoded.value());
+    expect(decoded_xml.ok() && decoded_xml.value().find("<BeforePosting") != std::string::npos &&
+        decoded_xml.value().find("<Selection") != std::string::npos,
+        "source and common event scopes must both remain editable XML");
+    for (const auto& property : model::metamodel::table_column_boolean_descriptors()) {
+        auto changed = parsed.value();
+        auto& column = std::get<model::TablePayload>(const_cast<model::ControlNode*>(
+            changed.find_control(model::ObjectId{3}))->payload).columns[1];
+        column.*property.member = !property.default_value;
+        const auto changed_xml = source::serialize_form_xml(changed);
+        expect(changed_xml.ok() && changed_xml.value().find("<" + std::string(property.name) + ">") != std::string::npos,
+            "each common Column Boolean must have one editable named XML property");
+        const auto xml_model = source::parse_form_xml(changed_xml.value());
+        expect(xml_model.ok(), "each common Column Boolean XML must parse");
+        const auto stream = oof::storage::form_stream::encode_document(xml_model.value());
+        expect(stream.ok(), "each common Column Boolean must encode through its shared descriptor");
+        const auto model = oof::storage::form_stream::decode_document(stream.value(), "BooleanColumn");
+        expect(model.ok() && model.value().reconstruction_complete(), "each common Column Boolean must decode completely");
+        const auto& result = std::get<model::TablePayload>(model.value().find_control(model::ObjectId{3})->payload).columns[1];
+        expect((result.*property.member) == !property.default_value, "Column Boolean must retain its typed value");
+    }
+    for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
+        for (const auto& member : property.members) {
+            auto changed = parsed.value();
+            auto& column = std::get<model::TablePayload>(const_cast<model::ControlNode*>(
+                changed.find_control(model::ObjectId{3}))->payload).columns[1];
+            column.*property.member = {std::string(property.enumeration_type), std::string(member.name)};
+            const auto xml_value = source::serialize_form_xml(changed);
+            expect(xml_value.ok(), "named Column alignment must serialize");
+            const auto xml_model = source::parse_form_xml(xml_value.value());
+            expect(xml_model.ok(), "named Column alignment must parse");
+            const auto stream = oof::storage::form_stream::encode_document(xml_model.value());
+            expect(stream.ok(), "named Column alignment must encode");
+            const auto model = oof::storage::form_stream::decode_document(stream.value(), "AlignedColumn");
+            expect(model.ok() && model.value().reconstruction_complete(), "named Column alignment must decode completely");
+            const auto& result = std::get<model::TablePayload>(model.value().find_control(model::ObjectId{3})->payload).columns[1];
+            expect((result.*property.member) == (column.*property.member), "named Column alignment must retain its enum type and member");
+        }
+    }
+    auto mutate = [&](std::string_view before, std::string_view after) {
+        std::string changed(xml); const auto at = changed.find(before);
+        expect(at != std::string::npos, "negative source test must replace existing content");
+        changed.replace(at, before.size(), after); return changed;
+    };
+    for (const auto& bad : {
+        mutate("<MetadataField name=\"Date\"/>", "<MetadataField/>"),
+        mutate("<MetadataField name=\"Date\"/>", "<MetadataField name=\"UnknownBuiltin\"/>"),
+        mutate("<Source><StandardPicture/></Source>", "<DataPath>Picture</DataPath><Source><StandardPicture/></Source>"),
+        mutate("<StandardPicture/>", "<StandardPicture index=\"1\"/>"),
+        mutate("<EnablePeriodSetting>false</EnablePeriodSetting>", "<AutoRefresh>true</AutoRefresh>"),
+        mutate("<BeforePosting id=\"21\">HandlePosting</BeforePosting>", "<Selection id=\"21\">HandlePosting</Selection>"),
+        mutate("<Entry term=\"object\" typeUuid=\"11111111-1111-1111-1111-111111111111\"/>", "<Entry term=\"valueTable\"/>")}) {
+        expect(!source::parse_form_xml(bad), "source XML must reject unknown identity, wrong scope, mixed sources and invalid values");
+    }
+}
+
 void test_table_columns_without_editors_xml() {
     const auto xml = [](std::string_view type) {
         return std::string(R"XML(<Form id="1" name="NoEditors" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Width unit="form">140</Width><TextFont kind="absolute" faceName="Arial" height="10"/><Visible>false</Visible>)XML") +
@@ -4618,6 +4755,8 @@ int main() {
         test_table_column_visible_and_empty_tree_xml();
         test_table_fixed_column_xml();
         test_table_columns_named_profile();
+        test_neutral_localized_text_xml();
+        test_document_list_table_source_xml_and_native();
         test_table_columns_without_editors_xml();
         test_table_column_layout_xml();
         test_inherited_property_has_one_surface();

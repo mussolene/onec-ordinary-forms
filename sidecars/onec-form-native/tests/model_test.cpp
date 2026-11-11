@@ -2843,6 +2843,155 @@ void test_table_enum_properties() {
     }
 }
 
+void test_document_list_table_named_model() {
+    using namespace oof::model::metamodel;
+    const auto make_document = [](bool extension, std::optional<TableColumnSource> source = {}) {
+        Form form; form.id = ObjectId{1}; form.name = "DocumentList";
+        form.children.emplace_back(ControlRef{ObjectId{3}});
+        OrdinaryFormDocument document(std::move(form));
+        TypeDomainEntry object; object.term = TypeDomainTerm::object;
+        object.type_uuid = UuidValue{"11111111-1111-1111-1111-111111111111"};
+        object.type_name = QualifiedName{"Documents.Invoice"};
+        document.add_attribute(Attribute{ObjectId{2}, "Rows", TypeDomainPatternValue{{object}}});
+        TablePayload payload;
+        if (extension) payload.source_extension = TableSourceExtensionKind::document_list;
+        if (source) {
+            TableColumn column; column.name = "Field"; column.header.items.push_back({"en", "Field"});
+            column.source = std::move(source);
+            column.control.reset();
+            payload.columns.push_back(std::move(column));
+        }
+        ControlNode table{ObjectId{3}, "Rows", std::move(payload)};
+        table.data_path = DataPath{AttributeRef{ObjectId{2}}, {}};
+        document.add_control(std::move(table));
+        return document;
+    };
+    auto document = make_document(true);
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::control, ObjectId{3}};
+    const auto* property = find_property(*document.find_control(ObjectId{3}), "EnablePeriodSetting");
+    expect(property && property->storage_codec == StorageCodec::control_info &&
+        property->value_codec == ValueCodec::boolean && property->default_value.canonical == "true",
+        "DocumentList property descriptor must preserve its Boolean default and control property storage");
+    expect(document.get_prop_val(owner, PropertyId::from_name("EnablePeriodSetting")).value == PropertyValue{true},
+        "DocumentList property defaults to true");
+    expect(document.set_prop_val(owner, PropertyId::from_name("EnablePeriodSetting"), false) == PropertyMutationStatus::applied &&
+        document.get_prop_val(owner, PropertyId::from_name("EnablePeriodSetting")).value == PropertyValue{false},
+        "DocumentList property uses the existing table property set");
+    expect(document.reset_prop_val(owner, PropertyId::from_name("EnablePeriodSetting")) == PropertyMutationStatus::reset &&
+        document.get_prop_val(owner, PropertyId::from_name("EnablePeriodSetting")).value == PropertyValue{true},
+        "DocumentList property reset restores its default");
+    expect(document.set_prop_val(owner, PropertyId::from_name("EnablePeriodSetting"), std::int64_t{1}) == PropertyMutationStatus::invalid_value,
+        "DocumentList property rejects values of the wrong type");
+
+    constexpr std::array event_names{"BeforeSetDeletionMark", "BeforePosting", "BeforeUndoPosting", "BeforeDateChange"};
+    for (std::size_t index = 0; index < event_names.size(); ++index) {
+        const auto* descriptor = find_event(*document.find_control(ObjectId{3}), event_names[index]);
+        expect(descriptor && descriptor->storage_codec == StorageCodec::event_record &&
+            descriptor->storage_event_id == 10000U + index,
+            "DocumentList event descriptor must expose the observed persisted event record");
+    }
+    auto with_events = document;
+    for (std::size_t index = 0; index < event_names.size(); ++index) {
+        const ObjectId event_id{static_cast<std::uint64_t>(20 + index)};
+        with_events.add_event(Event{event_id, std::string(event_names[index]), std::string(event_names[index]), ControlRef{ObjectId{3}}});
+        const_cast<ControlNode*>(with_events.find_control(ObjectId{3}))->events.emplace_back(EventRef{event_id});
+    }
+    expect(with_events.validate().ok(), "all four DocumentList events validate on their selected Table owner");
+    expect(find_property(*document.find_control(ObjectId{3}), "Missing") == nullptr &&
+        find_property(ControlKind::table, "EnablePeriodSetting") == nullptr &&
+        find_event(ControlKind::table, "BeforePosting") == nullptr,
+        "DocumentList source descriptors must not enter unconditional Table registries");
+    auto without_marker = make_document(false);
+    expect(without_marker.get_prop_val(owner, PropertyId::from_name("EnablePeriodSetting")).status == PropertyReadStatus::unknown_property &&
+        find_event(*without_marker.find_control(ObjectId{3}), "BeforePosting") == nullptr,
+        "DocumentList properties and events are unavailable without the source marker");
+    without_marker.add_event(Event{ObjectId{20}, "BeforePosting", "BeforePosting", ControlRef{ObjectId{3}}});
+    const_cast<ControlNode*>(without_marker.find_control(ObjectId{3}))->events.emplace_back(EventRef{ObjectId{20}});
+    expect(without_marker.validate().has(InvariantCode::invalid_property),
+        "DocumentList event references are rejected without the source marker");
+
+    const auto accepted_field = [&](DataPathMember field) {
+        auto candidate = make_document(true, TableMetadataColumnField{std::move(field)});
+        return candidate.validate().ok();
+    };
+    expect(accepted_field(DataPathMember{"", UuidValue{"22222222-2222-2222-2222-222222222222"}}),
+        "metadata field GUID may be supplied without a descriptive name");
+    expect(accepted_field(DataPathMember{"Date"}) && accepted_field(DataPathMember{"Number"}),
+        "known builtin metadata fields may be named without GUIDs");
+    expect(!accepted_field(DataPathMember{"UnknownBuiltin"}),
+        "unknown builtin metadata field without GUID is rejected");
+    auto typed_field = DataPathMember{"Date"};
+    typed_field.type = TypeDomainPatternValue{{TypeDomainEntry{.term = TypeDomainTerm::date}}};
+    expect(!accepted_field(std::move(typed_field)), "metadata field source cannot carry a value type");
+    auto picture = make_document(true, TableStandardPictureColumn{});
+    expect(picture.validate().ok(), "standard Picture source is a named valid column source");
+    auto picture_copy = picture;
+    auto& copied_column = std::get<TablePayload>(const_cast<ControlNode*>(picture_copy.find_control(ObjectId{3}))->payload).columns.front();
+    copied_column.source = TableMetadataColumnField{DataPathMember{"Date"}};
+    expect(std::holds_alternative<TableStandardPictureColumn>(
+            *std::get<TablePayload>(picture.find_control(ObjectId{3})->payload).columns.front().source) &&
+        picture_copy.validate().ok(), "copied Table source values are independently owned");
+
+    auto missing_source = make_document(true, std::nullopt);
+    auto& missing_table = std::get<TablePayload>(const_cast<ControlNode*>(missing_source.find_control(ObjectId{3}))->payload);
+    TableColumn no_source; no_source.name = "NoSource"; no_source.header.items.push_back({"en", "NoSource"});
+    missing_table.columns.push_back(std::move(no_source));
+    expect(missing_source.validate().has(InvariantCode::invalid_property),
+        "DocumentList columns require a named source");
+    auto generic_with_source = make_document(false, TableMetadataColumnField{DataPathMember{"Date"}});
+    expect(generic_with_source.validate().has(InvariantCode::invalid_property),
+        "named source columns require the DocumentList extension");
+    auto bad_picture_editor = make_document(true, TableStandardPictureColumn{});
+    std::get<TablePayload>(const_cast<ControlNode*>(bad_picture_editor.find_control(ObjectId{3}))->payload).columns.front().control.emplace();
+    expect(bad_picture_editor.validate().has(InvariantCode::invalid_property),
+        "standard Picture source rejects an editor");
+
+    auto bad_qualifiers = make_document(true);
+    auto* attribute = const_cast<Attribute*>(bad_qualifiers.find_attribute(ObjectId{2}));
+    attribute->type.entries.front().string.length = 1;
+    expect(bad_qualifiers.validate().has(InvariantCode::invalid_property),
+        "DocumentList source requires default object type qualifiers");
+    auto missing_type_guid = make_document(true);
+    auto* missing_guid_attribute = const_cast<Attribute*>(missing_type_guid.find_attribute(ObjectId{2}));
+    missing_guid_attribute->type.entries.front().type_uuid.reset();
+    expect(missing_type_guid.validate().has(InvariantCode::invalid_property),
+        "DocumentList source object type requires a GUID");
+    expect(document.validate().ok(), "DocumentList named model remains valid after property reset");
+}
+
+void test_table_column_boolean_descriptor_registry() {
+    using namespace oof::model::metamodel;
+    const auto descriptors = table_column_boolean_descriptors();
+    expect(descriptors.size() == 13, "TableColumn Boolean registry exposes exactly the persisted properties");
+    constexpr std::array expected_names{"Visible", "ChangeVisible", "Enabled", "AutoMarkIncomplete", "ChangeSetting",
+        "AutoCellHeight", "MarkNegatives", "Hyperlink", "ShowHierarchy", "SkipOnInput", "CheckBoxThreeState",
+        "ReadOnly", "ChangePosition"};
+    std::set<std::string_view> names;
+    std::set<std::uint32_t> masks;
+    TableColumn original;
+    for (std::size_t index = 0; index < descriptors.size(); ++index) {
+        const auto& descriptor = descriptors[index];
+        expect(descriptor.name == expected_names[index] && descriptor.inverted == (index == 1),
+            "TableColumn Boolean registry preserves its public order and inversion mapping");
+        expect(names.insert(descriptor.name).second && masks.insert(descriptor.mask).second,
+            "TableColumn Boolean names and masks are unique");
+        expect(original.*descriptor.member == descriptor.default_value,
+            "TableColumn Boolean descriptor default matches default construction");
+        auto copy = original;
+        copy.*descriptor.member = !descriptor.default_value;
+        expect(original.*descriptor.member == descriptor.default_value &&
+            copy.*descriptor.member == !descriptor.default_value,
+            "TableColumn Boolean members are independent in copied columns");
+    }
+    TableColumn generic;
+    TableColumn document_list;
+    document_list.source = TableMetadataColumnField{DataPathMember{"Date"}};
+    const auto after_columns = table_column_boolean_descriptors();
+    expect(after_columns.data() == descriptors.data() && after_columns.size() == descriptors.size() &&
+        generic.visible && document_list.source.has_value(),
+        "TableColumn Boolean registry is shared and independent of source column variants");
+}
+
 void test_output_enum_properties() {
     using namespace oof::model::metamodel;
     struct Case {
@@ -6593,6 +6742,8 @@ int main() {
         test_chart_type_property();
         test_chart_enum_properties();
         test_table_enum_properties();
+        test_document_list_table_named_model();
+        test_table_column_boolean_descriptor_registry();
         test_output_enum_properties();
         test_chart_appearance_defaults();
         test_help_metamodel();
