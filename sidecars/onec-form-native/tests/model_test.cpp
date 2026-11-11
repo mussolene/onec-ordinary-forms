@@ -2998,14 +2998,15 @@ void test_help_metamodel() {
         coverage.panel_placement_property_count == 9,
         "panel-control extension must retain its 9 properties");
     expect(coverage.form_property_count == 39, "Form descriptors must include the two platform-confirmed context properties");
-    expect(coverage.form_event_count == 19, "Form must retain 13 common, four CatalogItem and two DataProcessor extension events");
+    expect(coverage.form_event_count == 19, "Form must retain 13 common, four shared CatalogItem/Document and two DataProcessor extension events");
     for (const auto name : {"BeforeWrite", "OnWrite", "AfterWrite", "OnDataChange"}) {
         const auto* descriptor = find_form_event(name);
-        expect(descriptor && descriptor->extension_kinds.size() == 1 &&
+        expect(descriptor && descriptor->extension_kinds.size() == 2 &&
             form_event_uses_table(*descriptor, FormExtensionKind::catalog_item) &&
+            form_event_uses_table(*descriptor, FormExtensionKind::document) &&
             descriptor->persistence == PersistenceClass::persisted_editable &&
             descriptor->storage_codec == StorageCodec::event_record && descriptor->storage_event_id &&
-            !descriptor->storage_tag.empty(), "CatalogItem events require scoped storage descriptors");
+            !descriptor->storage_tag.empty(), "CatalogItem and Document events require shared scoped storage descriptors");
     }
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
@@ -4460,8 +4461,8 @@ void test_catalog_list_form_extension_model() {
 
 void test_saved_form_settings_model() {
     using namespace oof::model::metamodel;
-    expect(form_extension_property_descriptors().size() == 7,
-        "four form extension owners expose seven scoped property descriptors");
+    expect(form_extension_property_descriptors().size() == 11,
+        "four form extension owners expose eleven scoped property descriptors");
     const auto save = PropertyId::from_name("SaveValues");
     const auto restore = PropertyId::from_name("RestoreValuesOnOpen");
     const auto result = PropertyId::from_name("ReportResult");
@@ -4583,6 +4584,83 @@ void test_catalog_item_form_extension_property_api() {
                unextended.set_prop_val(owner, autonumeration, EnumerationValue{"AutonumerationInForm", "Auto"}) ==
                    PropertyMutationStatus::unsupported_surface,
         "CatalogItemFormExtension properties must be unavailable when no extension is selected");
+}
+
+void test_document_form_extension_property_api() {
+    Form form;
+    form.id = ObjectId{1};
+    form.extension = FormExtensionKind::document;
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    const auto repost = PropertyId::from_name("RepostOnWrite");
+    const auto posting = PropertyId::from_name("UsePostingMode");
+    const auto auto_time = PropertyId::from_name("AutoTime");
+    const auto autonumeration = PropertyId::from_name("Autonumeration");
+    expect(document.get_prop_val(owner, repost).status == PropertyReadStatus::proven_default &&
+               document.get_prop_val(owner, repost).value == PropertyValue{true} &&
+               document.get_prop_val(owner, posting).status == PropertyReadStatus::proven_default &&
+               document.get_prop_val(owner, posting).value ==
+                   PropertyValue{EnumerationValue{"PostingModeUse", "Auto"}} &&
+               document.get_prop_val(owner, auto_time).status == PropertyReadStatus::proven_default &&
+               document.get_prop_val(owner, auto_time).value ==
+                   PropertyValue{EnumerationValue{"AutoTimeMode", "CurrentOrLast"}} &&
+               document.get_prop_val(owner, autonumeration).status == PropertyReadStatus::proven_default &&
+               document.get_prop_val(owner, autonumeration).value ==
+                   PropertyValue{EnumerationValue{"AutonumerationInForm", "Auto"}},
+        "DocumentFormExtension properties must expose the native confirmed defaults through the form API");
+
+    expect(document.set_prop_val(owner, repost, false) == PropertyMutationStatus::applied &&
+               document.get_prop_val(owner, repost).value == PropertyValue{false} &&
+               document.set_prop_val(owner, repost, std::string{"true"}) == PropertyMutationStatus::invalid_value &&
+               document.reset_prop_val(owner, repost) == PropertyMutationStatus::reset &&
+               document.get_prop_val(owner, repost).value == PropertyValue{true},
+        "RepostOnWrite must support typed set, reject wrong value kinds, and reset");
+
+    for (const auto& [property, type, member] : std::array{
+             std::tuple{posting, std::string_view{"PostingModeUse"}, std::string_view{"Regular"}},
+             std::tuple{posting, std::string_view{"PostingModeUse"}, std::string_view{"RealTime"}},
+             std::tuple{posting, std::string_view{"PostingModeUse"}, std::string_view{"Ask"}},
+             std::tuple{posting, std::string_view{"PostingModeUse"}, std::string_view{"Auto"}},
+             std::tuple{auto_time, std::string_view{"AutoTimeMode"}, std::string_view{"DontUse"}},
+             std::tuple{auto_time, std::string_view{"AutoTimeMode"}, std::string_view{"First"}},
+             std::tuple{auto_time, std::string_view{"AutoTimeMode"}, std::string_view{"Last"}},
+             std::tuple{auto_time, std::string_view{"AutoTimeMode"}, std::string_view{"CurrentOrFirst"}},
+             std::tuple{auto_time, std::string_view{"AutoTimeMode"}, std::string_view{"CurrentOrLast"}},
+             std::tuple{autonumeration, std::string_view{"AutonumerationInForm"}, std::string_view{"Auto"}},
+             std::tuple{autonumeration, std::string_view{"AutonumerationInForm"}, std::string_view{"DontUse"}}}) {
+        const EnumerationValue value{std::string(type), std::string(member)};
+        expect(document.set_prop_val(owner, property, value) == PropertyMutationStatus::applied &&
+                   document.get_prop_val(owner, property).status == PropertyReadStatus::explicit_value &&
+                   document.get_prop_val(owner, property).value == PropertyValue{value},
+            "DocumentFormExtension must accept each documented enum member through the named property API");
+        const PropertyValue expected_default = property == posting
+            ? PropertyValue{EnumerationValue{"PostingModeUse", "Auto"}}
+            : property == auto_time
+                ? PropertyValue{EnumerationValue{"AutoTimeMode", "CurrentOrLast"}}
+                : PropertyValue{EnumerationValue{"AutonumerationInForm", "Auto"}};
+        expect(document.reset_prop_val(owner, property) == PropertyMutationStatus::reset &&
+                   document.get_prop_val(owner, property).status == PropertyReadStatus::proven_default &&
+                   document.get_prop_val(owner, property).value == expected_default,
+            "DocumentFormExtension enum properties must reset to their exact native confirmed defaults");
+    }
+    expect(document.set_prop_val(owner, posting, EnumerationValue{"AutoTimeMode", "First"}) ==
+               PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(owner, posting, EnumerationValue{"PostingModeUse", "Unknown"}) ==
+               PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(owner, auto_time, EnumerationValue{"AutoTimeMode", "Unknown"}) ==
+               PropertyMutationStatus::invalid_value &&
+               document.set_prop_val(owner, autonumeration, EnumerationValue{"AutonumerationInForm", "Unknown"}) ==
+               PropertyMutationStatus::invalid_value,
+        "DocumentFormExtension enum properties must reject unknown types and members");
+
+    Form catalog_form;
+    catalog_form.id = ObjectId{1};
+    catalog_form.extension = FormExtensionKind::catalog_item;
+    OrdinaryFormDocument catalog(std::move(catalog_form));
+    expect(catalog.get_prop_val(owner, repost).status == PropertyReadStatus::unsupported_surface &&
+               catalog.set_prop_val(owner, posting, EnumerationValue{"PostingModeUse", "Auto"}) ==
+                   PropertyMutationStatus::unsupported_surface,
+        "DocumentFormExtension properties must be unavailable on unrelated extensions");
 }
 
 void test_control_position_property_api() {
@@ -6531,6 +6609,7 @@ int main() {
         test_document_property_api();
         test_saved_form_settings_model();
         test_catalog_item_form_extension_property_api();
+        test_document_form_extension_property_api();
         test_catalog_list_form_extension_model();
         test_control_position_property_api();
         test_input_field_type_link_model();

@@ -255,10 +255,18 @@ inline constexpr FormExtensionDescriptor information_register_record_list_form_e
     FormExtensionStorageKind::empty,
 };
 
+inline constexpr FormExtensionDescriptor document_form_extension{
+    FormExtensionKind::document,
+    "4b7f5926-3927-48c8-a955-c1b03658f9c4",
+    "DocumentFormExtension",
+    u8"Расширение формы документа",
+};
+
 inline constexpr std::array form_extensions{
     data_processor_form_extension, catalog_item_form_extension,
     catalog_list_form_extension, report_form_extension,
     document_list_form_extension, information_register_record_list_form_extension,
+    document_form_extension,
 };
 
 struct InputFieldExtensionDescriptor {

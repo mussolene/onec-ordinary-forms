@@ -24217,8 +24217,9 @@ void test_catalog_item_form_extension_named_round_trip_and_guards() {
     for (std::size_t index = 0; index < catalog_event_names.size(); ++index) {
         catalog_events[index] = model::metamodel::find_form_event(catalog_event_names[index]);
         expect(catalog_events[index] != nullptr &&
-                   catalog_events[index]->extension_kinds.size() == 1 &&
+                   catalog_events[index]->extension_kinds.size() == 2 &&
                    model::metamodel::form_event_uses_table(*catalog_events[index], model::FormExtensionKind::catalog_item) &&
+                   model::metamodel::form_event_uses_table(*catalog_events[index], model::FormExtensionKind::document) &&
                    !model::metamodel::form_event_uses_table(*catalog_events[index], model::FormExtensionKind::report) &&
                    !model::metamodel::form_event_uses_table(*catalog_events[index], std::nullopt) &&
                    catalog_events[index]->storage_event_id.has_value() &&
@@ -24725,6 +24726,146 @@ void test_input_field_composite_reference_domains_round_trip_and_guards() {
             }
         }
     }
+}
+
+void test_document_form_extension_named_round_trip_and_guards() {
+    struct Sample {
+        bool repost;
+        std::string_view posting;
+        unsigned posting_ordinal;
+        std::string_view auto_time;
+        unsigned auto_time_ordinal;
+        std::string_view autonumeration;
+        unsigned autonumeration_ordinal;
+    };
+    constexpr std::array samples{
+        Sample{true, "Regular", 0, "DontUse", 0, "Auto", 0},
+        Sample{false, "RealTime", 1, "Last", 1, "DontUse", 1},
+        Sample{true, "Ask", 2, "First", 2, "Auto", 0},
+        Sample{false, "Auto", 3, "CurrentOrLast", 3, "DontUse", 1},
+        Sample{true, "Auto", 3, "CurrentOrFirst", 4, "Auto", 0},
+    };
+    const std::string guid = "4b7f5926-3927-48c8-a955-c1b03658f9c4";
+    std::string prefix = R"XML(<Form id="1" name="Document" ordinaryFormVersion="2.1"><Height>400</Height><Width>600</Width><MainAttribute attributeId="0"/><DocumentFormExtension/><Attributes><Attribute id="0" name="DocumentObject"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute><Attribute id="30" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="31" name="Choices"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
+    const std::array kinds{"Button", "LabelDecoration", "InputField", "CheckBox", "ChoiceField", "RadioButton",
+        "ProgressBar", "TrackBar", "CalendarField", "ListBox", "TextDocumentField", "HTMLDocumentField"};
+    for (std::size_t index = 0; index < kinds.size(); ++index) {
+        const std::string kind = kinds[index];
+        prefix += "<" + kind + " id=\"" + std::to_string(index + 2) + "\" name=\"Control" +
+            std::to_string(index) + "\">";
+        if (kind == "InputField") prefix += "<ValueType><Entry term=\"string\"/></ValueType>";
+        else if (kind == "CheckBox") prefix += "<DataPath attributeId=\"30\"/>";
+        else if (kind == "ListBox") prefix += "<DataPath attributeId=\"31\"/>";
+        prefix += "<Position/></" + kind + ">";
+    }
+    prefix += "</ChildItems></Form>";
+
+    model::OrdinaryFormDocument::ObjectKey form_owner{model::ObjectCategory::form, model::ObjectId{1}};
+    for (const auto& sample : samples) {
+        auto xml = prefix;
+        const auto empty_extension = std::string("<DocumentFormExtension/>");
+        const auto extension_xml = "<DocumentFormExtension><RepostOnWrite>" + std::string(sample.repost ? "true" : "false") +
+            "</RepostOnWrite><UsePostingMode type=\"PostingModeUse\" member=\"" + std::string(sample.posting) +
+            "\"/><AutoTime type=\"AutoTimeMode\" member=\"" + std::string(sample.auto_time) +
+            "\"/><Autonumeration type=\"AutonumerationInForm\" member=\"" + std::string(sample.autonumeration) +
+            "\"/></DocumentFormExtension>";
+        xml.replace(xml.find(empty_extension), empty_extension.size(), extension_xml);
+        auto parsed = oof::source::parse_form_xml(xml);
+        expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+        const auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        const auto expected = "{" + guid + ",1,{4,{0}," + std::string(sample.repost ? "1" : "0") + "," +
+            std::to_string(sample.posting_ordinal) + "," + std::to_string(sample.auto_time_ordinal) + "," +
+            std::to_string(sample.autonumeration_ordinal) + "}}";
+        expect(list_stream::dump_compact(encoded.value().items[3]) == expected,
+            "DocumentFormExtension must write its exact current version, event table, boolean, and library ordinals");
+        const auto decoded = form_stream::decode_document(encoded.value(), "Document");
+        expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                   decoded.value().form().extension == model::FormExtensionKind::document &&
+                   decoded.value().form().main_attribute.id() == model::ObjectId{0} &&
+                   decoded.value().collections().controls.size() == kinds.size() &&
+                   decoded.value().find_attribute(model::ObjectId{30}) != nullptr &&
+                   decoded.value().find_attribute(model::ObjectId{31}) != nullptr,
+            "DocumentFormExtension must decode with its concrete MainAttribute, attributes, DataPaths, and controls");
+        const std::array expected_properties{
+            std::pair<std::string_view, model::PropertyValue>{"RepostOnWrite", sample.repost},
+            std::pair<std::string_view, model::PropertyValue>{"UsePostingMode", model::EnumerationValue{"PostingModeUse", std::string(sample.posting)}},
+            std::pair<std::string_view, model::PropertyValue>{"AutoTime", model::EnumerationValue{"AutoTimeMode", std::string(sample.auto_time)}},
+            std::pair<std::string_view, model::PropertyValue>{"Autonumeration", model::EnumerationValue{"AutonumerationInForm", std::string(sample.autonumeration)}},
+        };
+        for (const auto& [name, value] : expected_properties)
+            expect(decoded.value().get_prop_val(form_owner, model::PropertyId::from_name(name)).value == value,
+                "DocumentFormExtension native ordinals must map to exact named properties");
+        const auto public_xml = oof::source::serialize_form_xml(decoded.value());
+        expect(public_xml.ok() && public_xml.value().find("4b7f5926") == std::string::npos &&
+                   public_xml.value().find("<DocumentFormExtension>") != std::string::npos,
+            "DocumentFormExtension must serialize only its named public representation");
+        const auto reparsed = oof::source::parse_form_xml(public_xml.value());
+        expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+        const auto rebuilt = form_stream::encode_document(reparsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "DocumentFormExtension must rebuild canonical bytes through named XML");
+    }
+
+    auto base = oof::source::parse_form_xml(prefix.replace(prefix.find("<DocumentFormExtension/>"),
+        std::string("<DocumentFormExtension/>").size(),
+        "<DocumentFormExtension><RepostOnWrite>true</RepostOnWrite><UsePostingMode type=\"PostingModeUse\" member=\"Auto\"/><AutoTime type=\"AutoTimeMode\" member=\"CurrentOrLast\"/><Autonumeration type=\"AutonumerationInForm\" member=\"Auto\"/></DocumentFormExtension>"));
+    expect(base.ok(), base ? "" : base.diagnostics().front().message);
+    const auto current = form_stream::encode_document(base.value());
+    expect(current.ok(), current ? "" : current.diagnostics().front().message);
+    constexpr std::array historical{
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{0,{0}}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{1,{0},0}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{2,{0},1,2}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{3,{0},0,3,4}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{4,{0},1,3,3,1}}"},
+    };
+    constexpr std::array upgraded_records{
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{4,{0},1,3,3,0}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{4,{0},0,3,3,0}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{4,{0},1,2,3,0}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{4,{0},0,3,4,0}}"},
+        std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{4,{0},1,3,3,1}}"},
+    };
+    for (std::size_t index = 0; index < historical.size(); ++index) {
+        auto legacy = current.value();
+        legacy.items[3] = list_stream::parse(historical[index]);
+        const auto decoded = form_stream::decode_document(legacy, "DocumentHistory");
+        expect(decoded.ok(), "DocumentFormExtension historical settings must decode");
+        const auto upgraded = form_stream::encode_document(decoded.value());
+        expect(upgraded.ok() && list_stream::dump_compact(upgraded.value().items[3]) == upgraded_records[index],
+            "DocumentFormExtension historical versions must fill omitted defaults and upgrade to version 4");
+    }
+    auto invalid = current.value();
+    invalid.items[3] = list_stream::parse("{" + guid + ",1,{5,{0},1,3,3,0,0}}");
+    expect_failure(form_stream::decode_document(invalid, "DocumentV5"), "OOF1114", "$/3/2/0",
+        "DocumentFormExtension must reject an unsupported settings version");
+    invalid.items[3] = list_stream::parse("{" + guid + ",1,{4,{0},1,3,3}}");
+    expect_failure(form_stream::decode_document(invalid, "DocumentArity"), "OOF1102", "$/3/2",
+        "DocumentFormExtension must reject ambiguous settings arity");
+    invalid.items[3] = list_stream::parse("{" + guid + ",1,{4,{0},1,4,3,0}}");
+    expect_failure(form_stream::decode_document(invalid, "DocumentEnum"), "OOF1114", "$/3/2/3",
+        "DocumentFormExtension must reject out-of-range enum ordinals");
+    invalid.items[3] = list_stream::parse("{" + guid + ",1,{4,{0},2,3,3,0}}");
+    expect_failure(form_stream::decode_document(invalid, "DocumentBoolean"), "OOF1105", "$/3/2/2",
+        "DocumentFormExtension must reject invalid boolean values");
+
+    auto missing_main = base.value();
+    auto form = missing_main.form();
+    form.main_attribute = {};
+    missing_main.set_form(std::move(form));
+    expect(!form_stream::encode_document(missing_main), "DocumentFormExtension must require a concrete MainAttribute");
+    for (const auto flag : {1u, 2u}) {
+        auto invalid_main = current.value();
+        invalid_main.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(invalid_main, "DocumentMainFlags"),
+            "DocumentFormExtension MainAttribute flags must remain at their defaults");
+    }
+    auto null_uuid = base.value();
+    auto* main = const_cast<model::Attribute*>(null_uuid.find_attribute(model::ObjectId{0}));
+    main->type.entries.front().type_uuid = model::UuidValue{"00000000-0000-0000-0000-000000000000"};
+    expect(!form_stream::encode_document(null_uuid), "DocumentFormExtension must reject a null MainAttribute object UUID");
 }
 
 void test_empty_form_extensions_named_round_trip_and_guards() {
@@ -25407,6 +25548,7 @@ int main() {
         test_data_processor_form_extension_named_round_trip_and_guards();
         test_saved_values_and_report_form_extension_round_trip_and_guards();
         test_catalog_item_form_extension_named_round_trip_and_guards();
+        test_document_form_extension_named_round_trip_and_guards();
         test_empty_form_extensions_named_round_trip_and_guards();
         test_input_field_reference_extensions_round_trip_and_guards();
         test_input_field_composite_reference_domains_round_trip_and_guards();

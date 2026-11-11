@@ -421,6 +421,8 @@
   <xs:complexType name="RadarChartScaleTypeValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="RadarChartScaleType"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Circle"/><xs:enumeration value="Polygon"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="AutonumerationInFormValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="AutonumerationInForm"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="DontUse"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="FoldersAndItemsUseValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="FoldersAndItemsUse"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Items"/><xs:enumeration value="Folders"/><xs:enumeration value="FoldersAndItems"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
+  <xs:complexType name="PostingModeUseValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="PostingModeUse"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Regular"/><xs:enumeration value="RealTime"/><xs:enumeration value="Ask"/><xs:enumeration value="Auto"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
+  <xs:complexType name="AutoTimeModeValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="AutoTimeMode"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="DontUse"/><xs:enumeration value="Last"/><xs:enumeration value="First"/><xs:enumeration value="CurrentOrLast"/><xs:enumeration value="CurrentOrFirst"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="ChartScaleLocationValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="ChartScaleLocation"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="BaseValue"/><xs:enumeration value="Edge"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="ChartScaleMarkLocationValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="ChartScaleMarkLocation"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Outside"/><xs:enumeration value="Inside"/><xs:enumeration value="Center"/><xs:enumeration value="None"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
   <xs:complexType name="ShowChartScaleTitleValueType"><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="ShowChartScaleTitle"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="DontShow"/><xs:enumeration value="Show"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>
@@ -2045,6 +2047,12 @@
         </xs:sequence></xs:complexType></xs:element>
         <xs:element name="DocumentListFormExtension"><xs:complexType/></xs:element>
         <xs:element name="InformationRegisterRecordListFormExtension"><xs:complexType/></xs:element>
+        <xs:element name="DocumentFormExtension"><xs:complexType><xs:sequence>
+          <xs:element name="RepostOnWrite" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="UsePostingMode" type="PostingModeUseValueType" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="AutoTime" type="AutoTimeModeValueType" minOccurs="0" maxOccurs="1"/>
+          <xs:element name="Autonumeration" type="AutonumerationInFormValueType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence></xs:complexType></xs:element>
       </xs:choice>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>

@@ -60,10 +60,10 @@
             <Event name="OnClose" apiName="OnClose" russianName="ПриЗакрытии"/>
             <Event name="OnOpen" apiName="OnOpen" russianName="ПриОткрытии"/>
             <Event name="OnReopen" apiName="OnReopen" russianName="ПриПовторномОткрытии"/>
-            <Event name="BeforeWrite" apiName="BeforeWrite" russianName="ПередЗаписью" formExtensions="CatalogItemFormExtension"/>
-            <Event name="OnWrite" apiName="OnWrite" russianName="ПриЗаписи" formExtensions="CatalogItemFormExtension"/>
-            <Event name="AfterWrite" apiName="AfterWrite" russianName="ПослеЗаписи" formExtensions="CatalogItemFormExtension"/>
-            <Event name="OnDataChange" apiName="OnDataChange" russianName="ПриИзмененииДанных" formExtensions="CatalogItemFormExtension"/>
+            <Event name="BeforeWrite" apiName="BeforeWrite" russianName="ПередЗаписью" formExtensions="CatalogItemFormExtension DocumentFormExtension"/>
+            <Event name="OnWrite" apiName="OnWrite" russianName="ПриЗаписи" formExtensions="CatalogItemFormExtension DocumentFormExtension"/>
+            <Event name="AfterWrite" apiName="AfterWrite" russianName="ПослеЗаписи" formExtensions="CatalogItemFormExtension DocumentFormExtension"/>
+            <Event name="OnDataChange" apiName="OnDataChange" russianName="ПриИзмененииДанных" formExtensions="CatalogItemFormExtension DocumentFormExtension"/>
             <Event name="BeforeSaveValues" apiName="BeforeSaveValues" russianName="ПередСохранениемЗначений" formExtensions="DataProcessorFormExtension ReportFormExtension"/>
             <Event name="AfterRestoreValues" apiName="AfterRestoreValues" russianName="ПослеВосстановленияЗначений" formExtensions="DataProcessorFormExtension ReportFormExtension"/>
           </Events>
@@ -76,6 +76,10 @@
           <Property name="SaveValues" apiName="SaveValues" russianName="Сохранять значения" russianType="Булево" designerOnly="true" formExtension="ReportFormExtension" valueCodec="boolean"/>
           <Property name="RestoreValuesOnOpen" apiName="RestoreValuesOnOpen" russianName="ВосстанавливатьЗначенияПриОткрытии" russianType="Булево" formExtension="ReportFormExtension" valueCodec="boolean"/>
           <Property name="ReportResult" apiName="ReportResult" russianName="РезультатОтчета" russianType="ПолеТабличногоДокумента ; Неопределено" formExtension="ReportFormExtension" valueCodec="control-reference"/>
+          <Property name="RepostOnWrite" apiName="RepostOnWrite" russianName="ПриЗаписиПерепроводить" russianType="Булево" formExtension="DocumentFormExtension" valueCodec="boolean"/>
+          <Property name="UsePostingMode" apiName="UsePostingMode" russianName="ИспользоватьРежимПроведения" russianType="ИспользованиеРежимаПроведения" formExtension="DocumentFormExtension" valueCodec="enumeration"/>
+          <Property name="AutoTime" apiName="AutoTime" russianName="АвтоВремя" russianType="РежимАвтоВремя" formExtension="DocumentFormExtension" valueCodec="enumeration"/>
+          <Property name="Autonumeration" apiName="Autonumeration" russianName="Автонумерация" russianType="АвтонумерацияВФорме" formExtension="DocumentFormExtension" valueCodec="enumeration"/>
         </SharedProperties>
         <SharedProperties surface="controlExtension">
           <Property name="AutoContextMenu" apiName="AutoContextMenu" russianName="АвтоКонтекстноеМеню" russianType="Булево" valueCodec="boolean"/>
@@ -113,6 +117,7 @@
         <NamedConcept name="SavedValue" russianName="Сохраняемое значение" formExtension="ReportFormExtension"/>
         <NamedConcept name="DocumentListFormExtension" russianName="Расширение формы списка документов"/>
         <NamedConcept name="InformationRegisterRecordListFormExtension" russianName="Расширение формы списка записей регистра сведений"/>
+        <NamedConcept name="DocumentFormExtension" russianName="Расширение формы документа"/>
         <NamedConcept name="CatalogInputFieldExtension" russianName="Расширение поля ввода справочника"/>
         <NamedConcept name="ChartOfAccountsInputFieldExtension" russianName="Расширение поля ввода плана счетов"/>
         <NamedConcept name="ChartOfCharacteristicTypesInputFieldExtension" russianName="Расширение поля ввода вида характеристик"/>

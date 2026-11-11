@@ -3240,6 +3240,73 @@ void test_catalog_item_form_extension_xml_contract() {
         "form extension XML choices must be mutually exclusive");
 }
 
+void test_document_form_extension_xml_contract() {
+    const auto owner = model::OrdinaryFormDocument::ObjectKey{
+        model::ObjectCategory::form, model::ObjectId{1}};
+    const std::string xml = R"XML(<Form id="1" name="Document" ordinaryFormVersion="2.1"><DocumentFormExtension><RepostOnWrite>true</RepostOnWrite><UsePostingMode type="PostingModeUse" member="RealTime"/><AutoTime type="AutoTimeMode" member="First"/><Autonumeration type="AutonumerationInForm" member="Auto"/></DocumentFormExtension></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    expect(parsed.value().form().extension == model::FormExtensionKind::document &&
+               parsed.value().get_prop_val(owner, model::PropertyId::from_name("RepostOnWrite")).value ==
+                   model::PropertyValue{true} &&
+               parsed.value().get_prop_val(owner, model::PropertyId::from_name("UsePostingMode")).value ==
+                   model::PropertyValue{model::EnumerationValue{"PostingModeUse", "RealTime"}} &&
+               parsed.value().get_prop_val(owner, model::PropertyId::from_name("AutoTime")).value ==
+                   model::PropertyValue{model::EnumerationValue{"AutoTimeMode", "First"}} &&
+               parsed.value().get_prop_val(owner, model::PropertyId::from_name("Autonumeration")).value ==
+                   model::PropertyValue{model::EnumerationValue{"AutonumerationInForm", "Auto"}},
+        "DocumentFormExtension XML must populate its four named typed properties");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("DocumentFormExtension") != std::string::npos &&
+               serialized.value().find("<Field") == std::string::npos,
+        "DocumentFormExtension XML must serialize named values without raw fields");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+    for (const auto name : {"RepostOnWrite", "UsePostingMode", "AutoTime", "Autonumeration"})
+        expect(reparsed.value().get_prop_val(owner, model::PropertyId::from_name(name)).value ==
+                   parsed.value().get_prop_val(owner, model::PropertyId::from_name(name)).value,
+            "DocumentFormExtension named properties must survive XML serialize and reparse");
+
+    for (const auto& [name, type, members] : {
+             std::tuple<std::string_view, std::string_view, std::vector<std::string_view>>{
+                 "UsePostingMode", "PostingModeUse", {"Regular", "RealTime", "Ask", "Auto"}},
+             {"AutoTime", "AutoTimeMode", {"DontUse", "First", "Last", "CurrentOrFirst", "CurrentOrLast"}},
+             {"Autonumeration", "AutonumerationInForm", {"Auto", "DontUse"}},
+         }) {
+        for (const auto member : members) {
+            const auto candidate = "<Form id=\"1\" name=\"Document\" ordinaryFormVersion=\"2.1\"><DocumentFormExtension><" +
+                std::string(name) + " type=\"" + std::string(type) + "\" member=\"" + std::string(member) +
+                "\"/></DocumentFormExtension></Form>";
+            const auto value = source::parse_form_xml(candidate);
+            expect(value.ok(), "DocumentFormExtension XML must accept every documented enum member");
+        }
+    }
+    const auto defaults = source::parse_form_xml(
+        R"XML(<Form id="1" name="Document" ordinaryFormVersion="2.1"><DocumentFormExtension/></Form>)XML");
+    expect(defaults.ok() && defaults.value().form().extension == model::FormExtensionKind::document,
+        "empty DocumentFormExtension must parse without asserting undocumented defaults");
+    for (const auto body : {
+             "<RepostOnWrite>yes</RepostOnWrite>",
+             "<UsePostingMode type=\"Wrong\" member=\"Auto\"/>",
+             "<UsePostingMode type=\"PostingModeUse\" member=\"Unknown\"/>",
+             "<AutoTime type=\"AutoTimeMode\" member=\"Unknown\"/>",
+             "<Autonumeration type=\"AutonumerationInForm\" member=\"Unknown\"/>",
+             "<Unknown>0</Unknown>",
+             "<RepostOnWrite>true</RepostOnWrite><RepostOnWrite>false</RepostOnWrite>",
+         }) {
+        const auto invalid = std::string(R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><DocumentFormExtension>)XML") +
+            body + "</DocumentFormExtension></Form>";
+        expect(!source::parse_form_xml(invalid),
+            "DocumentFormExtension XML must reject wrong types, members, unknown fields, and duplicates");
+    }
+    expect(!source::parse_form_xml(
+               R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><DocumentFormExtension settings="0"/></Form>)XML"),
+        "DocumentFormExtension XML must reject unnamed settings attributes");
+    expect(!source::parse_form_xml(
+               R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><DocumentFormExtension/><CatalogItemFormExtension/></Form>)XML"),
+        "document and other form extensions must remain mutually exclusive");
+}
+
 void test_main_panel_typed_xml_contract() {
     const std::string xml = R"XML(<Form id="1" name="Traversal" ordinaryFormVersion="2.1"><Panel><AutoTabOrder>false</AutoTabOrder></Panel></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
@@ -4510,6 +4577,7 @@ int main() {
         test_data_processor_form_extension_xml_contract();
         test_saved_values_form_extension_xml_contract();
         test_catalog_item_form_extension_xml_contract();
+        test_document_form_extension_xml_contract();
         test_catalog_list_form_extension_xml_contract();
         test_input_field_reference_extension_xml_contract();
         test_chart_base_value_xml();

@@ -540,10 +540,17 @@ std::vector<PropertyDescriptor> make_form_extension_property_descriptors() {
         std::string_view{"Auto"}, std::string_view{"DontUse"}};
     static constexpr std::array folders_and_items_members{
         std::string_view{"Items"}, std::string_view{"Folders"}, std::string_view{"FoldersAndItems"}};
+    static constexpr std::array posting_mode_members{
+        std::string_view{"Regular"}, std::string_view{"RealTime"},
+        std::string_view{"Ask"}, std::string_view{"Auto"}};
+    static constexpr std::array auto_time_members{
+        std::string_view{"DontUse"}, std::string_view{"Last"}, std::string_view{"First"},
+        std::string_view{"CurrentOrLast"}, std::string_view{"CurrentOrFirst"}};
     const auto make_descriptor = [](std::size_t order, std::string_view xml_name,
         std::string_view api_name, std::u8string_view russian_name,
         std::u8string_view platform_type, std::string_view enumeration_type,
-        std::span<const std::string_view> members, std::string_view default_value) {
+        std::span<const std::string_view> members, std::string_view default_value,
+        FormExtensionKind kind = FormExtensionKind::catalog_item) {
         PropertyDescriptor descriptor{
             PropertyId::from_name(api_name), DescriptorOwner::form, PropertySurface::form_extension,
             ControlKind::panel, order, xml_name, api_name, russian_name, platform_type,
@@ -552,7 +559,7 @@ std::vector<PropertyDescriptor> make_form_extension_property_descriptors() {
             {DefaultKind::enumeration, default_value}};
         descriptor.enumeration_type = enumeration_type;
         descriptor.enumeration_members = members;
-        descriptor.extension_kind = FormExtensionKind::catalog_item;
+        descriptor.extension_kind = kind;
         return descriptor;
     };
     std::vector<PropertyDescriptor> descriptors{
@@ -562,6 +569,22 @@ std::vector<PropertyDescriptor> make_form_extension_property_descriptors() {
             u8"ИспользованиеДляГруппИЭлементов", u8"ИспользованиеГруппИЭлементов",
             "FoldersAndItemsUse", folders_and_items_members, "FoldersAndItemsUse.Items"),
     };
+    PropertyDescriptor repost{PropertyId::from_name("RepostOnWrite"), DescriptorOwner::form,
+        PropertySurface::form_extension, ControlKind::panel, 0, "RepostOnWrite", "RepostOnWrite",
+        u8"ПриЗаписиПерепроводить", u8"Булево", ValueKind::boolean, ValueCodec::boolean,
+        ApiAccess::read_write, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+        StorageCodec::root_record, {DefaultKind::boolean, "true"}};
+    repost.extension_kind = FormExtensionKind::document;
+    descriptors.push_back(repost);
+    descriptors.push_back(make_descriptor(1, "UsePostingMode", "UsePostingMode",
+        u8"ИспользоватьРежимПроведения", u8"ИспользованиеРежимаПроведения",
+        "PostingModeUse", posting_mode_members, "PostingModeUse.Auto", FormExtensionKind::document));
+    descriptors.push_back(make_descriptor(2, "AutoTime", "AutoTime", u8"АвтоВремя",
+        u8"РежимАвтоВремя", "AutoTimeMode", auto_time_members,
+        "AutoTimeMode.CurrentOrLast", FormExtensionKind::document));
+    descriptors.push_back(make_descriptor(3, "Autonumeration", "Autonumeration", u8"Автонумерация",
+        u8"АвтонумерацияВФорме", "AutonumerationInForm", autonumeration_members,
+        "AutonumerationInForm.Auto", FormExtensionKind::document));
     for (const auto kind : {FormExtensionKind::data_processor, FormExtensionKind::report}) {
         PropertyDescriptor save{PropertyId::from_name("SaveValues"), DescriptorOwner::form,
             PropertySurface::form_extension, ControlKind::panel, 0, "SaveValues", "SaveValues",
@@ -623,7 +646,7 @@ std::vector<EventDescriptor> make_form_event_descriptors() {
         {"BeforeSaveValues", u8"ПередСохранениемЗначений", 80000U, FormExtensionKind::data_processor},
         {"AfterRestoreValues", u8"ПослеВосстановленияЗначений", 80001U, FormExtensionKind::data_processor},
     }};
-    static constexpr std::array catalog_scope{FormExtensionKind::catalog_item};
+    static constexpr std::array object_scope{FormExtensionKind::catalog_item, FormExtensionKind::document};
     static constexpr std::array settings_scope{FormExtensionKind::data_processor, FormExtensionKind::report};
     for (const auto& event : extension_events) {
         descriptors.push_back({DescriptorOwner::form, ControlKind::panel, descriptors.size(),
@@ -631,7 +654,7 @@ std::vector<EventDescriptor> make_form_event_descriptors() {
             PersistenceClass::persisted_editable, StorageCodec::event_record,
             "e1692cc2-605b-4535-84dd-28440238746c", event.storage_id,
             event.extension == FormExtensionKind::catalog_item
-                ? std::span<const FormExtensionKind>{catalog_scope}
+                ? std::span<const FormExtensionKind>{object_scope}
                 : std::span<const FormExtensionKind>{settings_scope}});
     }
     return descriptors;
@@ -2270,8 +2293,8 @@ struct Metamodel::Impl {
         for (const auto& descriptor : form_events) {
             std::set<FormExtensionKind> scopes;
             for (const auto kind : descriptor.extension_kinds) {
-                if ((kind != FormExtensionKind::catalog_item && kind != FormExtensionKind::data_processor &&
-                        kind != FormExtensionKind::report) || !scopes.insert(kind).second)
+                if (std::ranges::find(form_extensions, kind, &FormExtensionDescriptor::kind) ==
+                        form_extensions.end() || !scopes.insert(kind).second)
                     throw std::logic_error("form event extension scope is invalid or duplicated");
                 if (descriptor.storage_event_id && !form_event_storage_ids.emplace(kind, *descriptor.storage_event_id).second)
                     throw std::logic_error("duplicate form event ID in the same extension table");

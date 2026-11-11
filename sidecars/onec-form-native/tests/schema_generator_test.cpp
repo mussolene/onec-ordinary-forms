@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 #include <libxml/parser.h>
@@ -744,6 +745,7 @@ void test_document_package_types(
         "ReportFormExtension",
         "DocumentListFormExtension",
         "InformationRegisterRecordListFormExtension",
+        "DocumentFormExtension",
     };
     expect(extension_elements.size() == expected_form_extensions.size(),
         "Form extension choice must expose every registered named extension concept");
@@ -760,6 +762,20 @@ void test_document_package_types(
                attribute(catalog_properties[1], "name") == "UseForFoldersAndItems" &&
                attribute(catalog_properties[1], "type") == "FoldersAndItemsUseValueType",
         "CatalogItemFormExtension XSD must expose its descriptor-backed enum properties");
+    const auto document_properties = direct_children(
+        direct_child(direct_children(extension_elements[6], "complexType")[0], "sequence"), "element");
+    constexpr std::array expected_document_properties{
+        std::pair{"RepostOnWrite", "xs:boolean"},
+        std::pair{"UsePostingMode", "PostingModeUseValueType"},
+        std::pair{"AutoTime", "AutoTimeModeValueType"},
+        std::pair{"Autonumeration", "AutonumerationInFormValueType"},
+    };
+    expect(document_properties.size() == expected_document_properties.size(),
+        "DocumentFormExtension XSD must expose exactly its four named properties");
+    for (std::size_t index = 0; index < expected_document_properties.size(); ++index)
+        expect(attribute(document_properties[index], "name") == expected_document_properties[index].first &&
+                   attribute(document_properties[index], "type") == expected_document_properties[index].second,
+            "DocumentFormExtension XSD must preserve descriptor property names, types, and order");
     const auto input_choices = direct_children(sequence_for_type(schema, "InputFieldType"), "choice");
     expect(input_choices.size() == 1 && direct_children(input_choices[0], "element").size() == 3,
         "InputField must expose exactly three mutually exclusive named reference extensions");
@@ -2025,6 +2041,36 @@ int main() {
                    validate_document(compiled_form.get(),
                    R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><CatalogItemFormExtension/><DataProcessorFormExtension/></Form>)XML") != 0,
             "generated XSD must accept named catalog enum values and reject simultaneous extensions");
+        for (const auto& [type, property, members] : {
+                 std::tuple<std::string_view, std::string_view, std::vector<std::string_view>>{
+                     "PostingModeUse", "UsePostingMode", {"Regular", "RealTime", "Ask", "Auto"}},
+                 {"AutoTimeMode", "AutoTime", {"DontUse", "First", "Last", "CurrentOrFirst", "CurrentOrLast"}},
+                 {"AutonumerationInForm", "Autonumeration", {"Auto", "DontUse"}},
+             }) {
+            for (const auto member : members) {
+                const auto xml = "<Form id=\"1\" name=\"Document\" ordinaryFormVersion=\"2.1\"><DocumentFormExtension><" +
+                    std::string(property) + " type=\"" + std::string(type) + "\" member=\"" + std::string(member) +
+                    "\"/></DocumentFormExtension></Form>";
+                expect(validate_document(compiled_form.get(), xml) == 0,
+                    "DocumentFormExtension XSD must accept every named enum member");
+            }
+        }
+        expect(validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Document" ordinaryFormVersion="2.1"><DocumentFormExtension><RepostOnWrite>true</RepostOnWrite><UsePostingMode type="PostingModeUse" member="RealTime"/><AutoTime type="AutoTimeMode" member="First"/><Autonumeration type="AutonumerationInForm" member="Auto"/></DocumentFormExtension></Form>)XML") == 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><DocumentFormExtension/><CatalogItemFormExtension/></Form>)XML") != 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><DocumentFormExtension><RepostOnWrite>yes</RepostOnWrite></DocumentFormExtension></Form>)XML") != 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><DocumentFormExtension><UsePostingMode type="Wrong" member="Auto"/></DocumentFormExtension></Form>)XML") != 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><DocumentFormExtension><AutoTime type="AutoTimeMode" member="Unknown"/></DocumentFormExtension></Form>)XML") != 0,
+            "DocumentFormExtension XSD must enforce named values, types, and exclusive extension selection");
+        expect(validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><DocumentFormExtension settings="0"/></Form>)XML") != 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><DocumentFormExtension><RepostOnWrite>true</RepostOnWrite><RepostOnWrite>false</RepostOnWrite></DocumentFormExtension></Form>)XML") != 0,
+            "DocumentFormExtension XSD must reject raw settings and duplicate properties");
         for (const auto& extension : {
                  oof::model::metamodel::catalog_list_form_extension,
                  oof::model::metamodel::document_list_form_extension,
