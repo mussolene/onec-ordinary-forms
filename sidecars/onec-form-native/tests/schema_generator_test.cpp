@@ -1204,13 +1204,13 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     xmlNodePtr type = schema_component(schema, "complexType", "TableColumnControlType");
     expect(type != nullptr, "Table Column Control must have its named type");
     const auto elements = direct_children(direct_child(type, "sequence"), "element");
-    const std::array<std::pair<std::string_view, std::string_view>, 17> expected{{
+    const std::array<std::pair<std::string_view, std::string_view>, 18> expected{{
         {"ValueType", "TypeDomainValueType"}, {"Enabled", "xs:boolean"},
         {"ReadOnly", "xs:boolean"}, {"Wrap", "xs:boolean"}, {"ChooseType", "xs:boolean"},
         {"ChoiceButton", "xs:boolean"}, {"OpenButton", "xs:boolean"}, {"ClearButton", "xs:boolean"},
         {"SpinButton", "xs:boolean"}, {"ChoiceListButton", "xs:boolean"}, {"MarkNegatives", "xs:boolean"},
         {"AutoMarkIncomplete", "xs:boolean"}, {"AutoChoiceIncomplete", "xs:boolean"},
-        {"Transparent", "xs:boolean"}, {"Caption", "xs:string"},
+        {"Transparent", "xs:boolean"}, {"BorderColor", "ColorValueType"}, {"Caption", "xs:string"},
         {"ToolTip", "xs:string"}, {"Font", "FontValueType"},
     }};
     expect(elements.size() == expected.size(), "Table Column Control must expose only named properties");
@@ -1313,8 +1313,9 @@ void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
     xmlNodePtr handler = schema_component(schema, "complexType", "EventHandlerType");
     expect(attribute(handler, "mixed") == "true", "event handler must support mixed content");
-    xmlNodePtr action = direct_child_with_attribute(direct_child(handler, "sequence"), "element", "name", "Action");
-    expect_element_shape(action, "Action", "EventActionMetadataType", "0", "1");
+    xmlNodePtr action = direct_child_with_attribute(direct_child(handler, "choice"), "element", "name", "Action");
+    expect_element_shape(action, "Action", "EventActionMetadataType", "", "");
+    expect(attribute(direct_child(handler, "choice"), "minOccurs") == "0", "event action choice must be optional");
     xmlNodePtr metadata = schema_component(schema, "complexType", "EventActionMetadataType");
     const auto fields = direct_children(direct_child(metadata, "sequence"), "element");
     expect(fields.size() == 3 && attribute(fields[0], "name") == "Text" &&
@@ -1518,8 +1519,8 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
         "column edit mode must retain its own platform enumeration type");
     const auto editor = direct_child_with_attribute(palette, "NamedConcept", "name", "TableColumnControl");
     const auto editor_properties = direct_child(editor, "Properties");
-    expect(direct_children(editor_properties, "Property").size() == 18,
-        "editor palette must describe its type, value type, thirteen Booleans and three other named properties");
+    expect(direct_children(editor_properties, "Property").size() == 19,
+        "editor palette must describe its type, value type, thirteen Booleans and four other named properties");
     for (const auto name : oof::model::metamodel::table_column_input_boolean_properties) {
         const auto* descriptor = metamodel.property(oof::model::ControlKind::input_field, name);
         const auto property = direct_child_with_attribute(editor_properties, "Property", "name", name);
@@ -1940,7 +1941,7 @@ void test_standard_menu_action_schema(xmlSchemaPtr schema) {
         "context=\"Default\" source=\"Control\" sourceControlId=\"2147483647\"",
         "context=\"CommandBar\" commandBarId=\"4\" source=\"Control\" sourceControlId=\"4\""})
         expect(validate_document(schema, make_xml(attributes)) == 0, "named StandardAction variants must be schema-valid");
-    for (const auto attributes : {"context=\"Form\" source=\"Form\"", "source=\"Form\"",
+    for (const auto attributes : {"context=\"Unknown\" source=\"Form\"", "source=\"Form\"",
         "context=\"Default\" source=\"Other\"", "context=\"Default\" source=\"Control\" sourceControlId=\"0\"",
         "context=\"Default\" source=\"Control\" sourceControlId=\"-1\"",
         "context=\"Default\" source=\"Control\" sourceControlId=\"2147483648\""})

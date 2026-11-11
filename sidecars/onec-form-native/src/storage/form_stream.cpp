@@ -2278,6 +2278,25 @@ LV canonical_check_box_info(bool enabled, model::PropertyValue caption, model::P
     });
 }
 
+void read_check_box_info(LV& info, std::string_view path) {
+    require_arity(info, 3, path);
+    require_raw_constant(info.items[0], "1", child_path(path, 0));
+    auto& payload = info.items[1];
+    const auto payload_path = child_path(path, 1);
+    require_list(payload, payload_path);
+    if (payload.items.size() == 4 && raw_atom(payload.items[1], child_path(payload_path, 1)) == "1") {
+        const auto prototype = canonical_check_box_info(true, std::string{}, std::string{}).items[1];
+        auto& properties = payload.items[0];
+        const auto properties_path = child_path(payload_path, 0);
+        require_arity(properties, 6, properties_path);
+        require_raw_constant(properties.items[1], "4", child_path(properties_path, 1));
+        properties.items[1] = prototype.items[0].items[1];
+        properties.items.insert(properties.items.end(), prototype.items[0].items.begin() + 6, prototype.items[0].items.end());
+        payload.items[1] = prototype.items[1];
+        payload.items.insert(payload.items.end(), prototype.items.begin() + 4, prototype.items.end());
+    }
+}
+
 // The remaining fixed CalendarField values come from one controlled synthetic Add sample.
 // Other profile fields remain unrepresented; named common properties use the shared base codec.
 LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "00010101000000",
@@ -3016,8 +3035,13 @@ void insert_incoming_anchor_lists(LV& value, const IncomingAnchorLists& incoming
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value);
 void require_allowed_properties(
     const model::PropertySet& properties,
-    std::initializer_list<std::string_view> allowed,
+    std::span<const std::string_view> allowed,
     std::string_view path);
+
+void require_allowed_properties(const model::PropertySet& properties,
+    std::initializer_list<std::string_view> allowed, std::string_view path) {
+    require_allowed_properties(properties, std::span{allowed.begin(), allowed.size()}, path);
+}
 void warn_incomplete_profile(
     Diagnostics& warnings,
     bool& reconstruction_complete,
@@ -3514,10 +3538,16 @@ LV encode_event_action(const model::Event& event, std::string_view path) {
     return encode_menu_action(action, path);
 }
 
+constexpr std::string_view standard_menu_action_guid = "fbe38877-b914-4fd5-8540-07dde06ba2e1";
+LV encode_standard_menu_action(const model::StandardMenuAction& action,
+    const model::OrdinaryFormDocument& document, std::string_view path);
+model::StandardMenuAction decode_standard_menu_action(const LV& value, std::string_view path, bool& save_values_alias);
+
 struct DecodedControlEvent {
     std::string name;
     std::string handler;
     std::optional<model::EventActionMetadata> action_metadata;
+    std::optional<model::StandardMenuAction> standard_action = std::nullopt;
 };
 
 DecodedControlEvent decode_event_action(const LV& payload, std::string_view path, std::string_view name) {
@@ -3730,10 +3760,13 @@ model::CommandBarAction decode_menu_action(const LV& payload, std::string_view p
     return action;
 }
 
-LV canonical_event_table(const model::Event* event) {
+LV canonical_event_table(const model::Event* event, const model::OrdinaryFormDocument& document) {
     if (!event) {
         return list({raw("0")});
     }
+    if (event->standard_action)
+        return list({raw("1"), list({raw("0"), raw(std::string(standard_menu_action_guid)),
+            encode_standard_menu_action(*event->standard_action, document, "$/Button/Events/Click")})});
     const auto* descriptor = model::metamodel::find_event(model::ControlKind::button, "Click");
     if (descriptor == nullptr || descriptor->storage_tag.empty()) {
         throw std::logic_error("Button.Click has no executable storage tag");
@@ -3770,6 +3803,16 @@ std::optional<DecodedControlEvent> decode_button_event(
     const auto* descriptor = model::metamodel::find_event(model::ControlKind::button, "Click");
     if (descriptor == nullptr || descriptor->storage_tag.empty()) {
         throw std::logic_error("Button.Click has no executable storage tag");
+    }
+    if (raw_atom(event_record.items[1], child_path(event_path, 1)) == standard_menu_action_guid) {
+        bool alias = false;
+        auto action = decode_standard_menu_action(event_record.items[2], child_path(event_path, 2), alias);
+        // A button action uses the form command collection, not a CommandBar control.
+        if (action.context == model::StandardMenuActionContext::command_bar && action.command_bar.id().value() == 4) {
+            action.context = model::StandardMenuActionContext::form;
+            action.command_bar = {};
+        }
+        return DecodedControlEvent{"Click", {}, {}, std::move(action)};
     }
     require_raw_constant(
         event_record.items[1],
@@ -4230,6 +4273,20 @@ std::string explicit_string(
 
 constexpr std::string_view table_value_list_editor_type_guid = "83a29520-06e8-4348-989c-abe69e8e33e2";
 
+void read_input_field_payload(LV& payload, std::string_view path) {
+    require_list(payload, path);
+    if (payload.items.size() == 39 && raw_atom(payload.items[1], child_path(path, 1)) == "21") {
+        const auto prototype = canonical_input_field_info({}, true, false, {}, {}, {}).items[2].items[0];
+        payload.items[1] = prototype.items[1];
+        for (const auto slot : {28U, 29U}) {
+            if (is_empty_picture_descriptor(payload.items[slot])) payload.items[slot] = prototype.items[slot];
+        }
+        payload.items.insert(payload.items.end(), prototype.items.begin() + 39, prototype.items.end());
+    }
+    require_arity(payload, 46, path);
+    require_raw_constant(payload.items[1], "31", child_path(path, 1));
+}
+
 LV canonical_table_value_list_type_pair(std::string_view path) {
     const model::TypeDomainPatternValue empty_type;
     return list({raw("1"), list({raw(std::string(table_value_list_editor_type_guid)),
@@ -4239,7 +4296,7 @@ LV canonical_table_value_list_type_pair(std::string_view path) {
 LV canonical_table_column_editor_info(const model::TableColumnControl& control) {
     constexpr std::string_view path = "$/Table/Columns/Column/Control";
     if (control.kind == model::ControlKind::input_field) {
-        require_allowed_properties(control.properties, model::metamodel::table_column_input_boolean_properties, path);
+        require_allowed_properties(control.properties, model::metamodel::table_column_input_properties, path);
         InputFieldFlagValues flags{};
         for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
             const auto& mapping = input_field_flag_mappings[index];
@@ -4268,8 +4325,9 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
         }
         const bool enabled = explicit_bool(control.properties, "Enabled", true);
         const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
+        const auto border_color = explicit_control_color(control.properties, "BorderColor");
         LV info = canonical_input_field_info(
-            empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{});
+            empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{}, nullptr, &border_color);
         info.items[1] = encoded_type_domain(value_type, std::string(path) + "/ValueType");
         if (!value_type.entries.empty() && value_type.entries.size() == 1 &&
             value_type.entries.front().term == model::TypeDomainTerm::string) {
@@ -4377,6 +4435,9 @@ std::optional<LV> upgrade_table_column_properties(const LV& source, std::string_
         if (font.is_list && !font.items.empty() && !font.items[0].is_list &&
             (font.items[0].atom == "6" || font.items[0].atom == "7"))
             current.items[slot] = encode_control_font(decode_control_font(font, child_path(path, slot)), child_path(path, slot));
+    }
+    for (const auto slot : {10U, 11U, 12U}) {
+        if (is_empty_picture_descriptor(current.items[slot])) current.items[slot] = canonical_button_picture();
     }
     for (const auto slot : {16U, 17U, 18U, 19U, 20U, 21U}) {
         const auto& color = current.items[slot];
@@ -4861,7 +4922,6 @@ LV encode_named_control_picture(
 constexpr std::string_view menu_owner_guid = "31946946-0a9b-40a2-95cf-82f200778341";
 constexpr std::string_view menu_action_guid = "e1692cc2-605b-4535-84dd-28440238746c";
 constexpr std::string_view menu_reference_guid = "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6";
-constexpr std::string_view standard_menu_action_guid = "fbe38877-b914-4fd5-8540-07dde06ba2e1";
 
 // frame.so stores this default-context GUID followed by INT32_MAX in .rodata.
 constexpr std::string_view standard_menu_default_context_marker = "357c6a54-357d-425d-a2bd-22f4f6e86c87";
@@ -4888,6 +4948,11 @@ LV encode_standard_menu_action(const model::StandardMenuAction& action,
                 fail("OOF1123", std::string(path), "Default context without CommandBar reference", "commandBarId", "Standard command context is invalid");
             context = list({raw("1"), raw("0"), raw(std::string(standard_menu_default_context_marker)),
                 raw(std::to_string(std::numeric_limits<std::int32_t>::max())), raw("0")});
+            break;
+        case model::StandardMenuActionContext::form:
+            if (action.command_bar.id().value() != 0)
+                fail("OOF1123", std::string(path), "Form context without CommandBar reference", "commandBarId", "Standard command context is invalid");
+            context = list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)), raw("4"), raw("0")});
             break;
         case model::StandardMenuActionContext::command_bar: {
             const auto* command_bar = document.find_control(action.command_bar.id());
@@ -6451,12 +6516,19 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const std::string info_path = child_path(path, 2);
     require_arity(info, 3, info_path);
     require_raw_constant(info.items[0], "1", child_path(info_path, 0));
-    const auto& properties = info.items[1];
+    auto properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
     require_list(properties, properties_path);
     if (properties.items.size() < 12) {
         fail("OOF1102", properties_path, "Button properties including MenuMode", describe(properties),
             "Button property record is too short");
+    }
+    if (properties.items.size() == 12 && raw_atom(properties.items[1], child_path(properties_path, 1)) == "10") {
+        require_raw_constant(properties.items[11], "0", child_path(properties_path, 11));
+        const auto prototype = canonical_button_properties(true, std::string{}, 1, 1, 0, 0, 0, false,
+            std::string{}, {}, {}, {}, {}, {});
+        properties.items[1] = prototype.items[1];
+        properties.items.insert(properties.items.end(), prototype.items.begin() + 12, prototype.items.end());
     }
     require_raw_constant(properties.items[1], "14", child_path(properties_path, 1));
     auto base = properties.items[0];
@@ -9703,8 +9775,9 @@ DecodedControl decode_check_box(
         fail("OOF1122", "$/2/3", "link to a single Boolean Attribute", linked_attribute.name,
             "CheckBox DataPath must target a Boolean attribute");
     }
-    const auto& info = record.items[2];
+    auto info = record.items[2];
     const auto info_path = child_path(path, 2);
+    read_check_box_info(info, info_path);
     require_arity(info, 3, info_path);
     require_raw_constant(info.items[0], "1", child_path(info_path, 0));
     const auto& info_payload = info.items[1];
@@ -10896,7 +10969,7 @@ DecodedControl decode_input_field(
         fail("OOF1122", child_path(path, 1), "positive InputField ID", "0", "InputField ID is invalid");
     }
 
-    const auto& info = record.items[2];
+    auto info = record.items[2];
     const auto info_path = child_path(path, 2);
     require_arity(info, 10, info_path);
     require_raw_constant(info.items[0], "9", child_path(info_path, 0));
@@ -10951,10 +11024,9 @@ DecodedControl decode_input_field(
     const auto& control_info = info.items[2];
     const auto control_info_path = child_path(info_path, 2);
     require_arity(control_info, 1, control_info_path);
-    const auto& payload = at(control_info, 0, control_info_path);
+    auto& payload = info.items[2].items[0];
     const auto payload_path = child_path(control_info_path, 0);
-    require_arity(payload, 46, payload_path);
-    require_raw_constant(payload.items[1], "31", child_path(payload_path, 1));
+    read_input_field_payload(payload, payload_path);
     auto base_info = at(payload, 0, payload_path);
     const auto base_info_path = child_path(payload_path, 0);
     read_common_control_base(base_info, base_info_path, [&] {
@@ -11339,16 +11411,22 @@ model::TableColumn decode_table_column(
         const auto editor_path = child_path(properties_path, 39);
         bool input_field_pair_absent = false;
         bool input_field_scalar_pair = false;
+        if (editor_kind == model::ControlKind::check_box) read_check_box_info(editor_info, editor_path);
         if (editor_kind == model::ControlKind::input_field) {
             require_arity(editor_info, 10, editor_path);
             require_raw_constant(editor_info.items[0], "9", child_path(editor_path, 0));
             require_arity(editor_info.items[2], 1, child_path(editor_path, 2));
             const auto payload_path = editor_path + "/payload";
             const auto base_path = editor_path + "/base";
-            require_arity(editor_info.items[2].items[0], 46, payload_path);
-            require_raw_constant(editor_info.items[2].items[0].items[1], "31", child_path(payload_path, 1));
-            require_arity(editor_info.items[2].items[0].items[0], 21, base_path);
-            require_raw_constant(editor_info.items[2].items[0].items[0].items[0], "19", child_path(base_path, 0));
+            auto& payload = editor_info.items[2].items[0];
+            read_input_field_payload(payload, payload_path);
+            auto& base = payload.items[0];
+            read_common_control_base(base, base_path, [&] {
+                return canonical_input_field_info({}, true, false, {}, {}, {}).items[2].items[0].items[0];
+            }, {warnings, table_id, "TableColumn.InputField", CommonControlBaseStatePolicy::strict_default_layouts});
+            const auto border_color = decode_control_color(base.items[6], child_path(base_path, 6));
+            if (border_color != model::ColorValue{})
+                column.control->properties.set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
             auto embedded_type = type_domain(editor_info.items[1], child_path(editor_path, 1));
             if (embedded_type != column_type) {
                 fail("OOF1122", child_path(editor_path, 1), "ValueType matching Table Column ValueType",
@@ -11434,10 +11512,10 @@ model::TableColumn decode_table_column(
                 require_arity(editor_info.items[1].items[0], 9, child_path(embedded_payload_path, 0));
                 require_raw_constant(editor_info.items[1].items[0].items[1], "7",
                     child_path(child_path(embedded_payload_path, 0), 1));
-                require_arity(editor_info.items[1].items[0].items[0], 21,
-                    child_path(child_path(embedded_payload_path, 0), 0));
-                require_raw_constant(editor_info.items[1].items[0].items[0].items[0], "19",
-                    child_path(child_path(child_path(embedded_payload_path, 0), 0), 0));
+                const auto base_path = child_path(child_path(embedded_payload_path, 0), 0);
+                read_common_control_base(editor_info.items[1].items[0].items[0], base_path, [&] {
+                    return canonical_check_box_info(true, std::string{}, std::string{}).items[1].items[0].items[0];
+                }, {warnings, table_id, "TableColumn.CheckBox", CommonControlBaseStatePolicy::strict_default_layouts});
                 require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
                     "Table Column CheckBox cannot contain storage children");
                 enabled_atom = &editor_info.items[1].items[0].items[0].items[1];
@@ -11781,7 +11859,7 @@ std::int32_t explicit_enum_storage_value(
 
 void require_allowed_properties(
     const model::PropertySet& properties,
-    std::initializer_list<std::string_view> names,
+    std::span<const std::string_view> names,
     std::string_view path) {
     std::unordered_set<model::PropertyId, model::PropertyIdHash> allowed;
     for (const auto name : names) {
@@ -11809,7 +11887,7 @@ const model::Event* button_click_handler(
         fail("OOF1122", "$", "zero or one Button.Click event", std::to_string(control.events.size()), "Button has unsupported events");
     }
     const auto* event = document.find_event(control.events.front().id());
-    if (event == nullptr || event->name != "Click" || event->handler.empty() ||
+    if (event == nullptr || event->name != "Click" || (event->handler.empty() && !event->standard_action) ||
         !std::holds_alternative<model::ControlRef>(event->owner) ||
         std::get<model::ControlRef>(event->owner).id() != control.id) {
         fail("OOF1122", "$", "owned Button.Click event", "different event", "Button event cannot be encoded");
@@ -11897,7 +11975,7 @@ LV encode_button(
         list({
             raw("1"),
             std::move(button_properties),
-            canonical_event_table(handler),
+            canonical_event_table(handler, document),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         encode_control_metadata(control, "$/Button"),
@@ -14691,6 +14769,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     decoded_control.click_handler->handler,
                     model::ControlRef{decoded_control.control.id},
                     decoded_control.click_handler->action_metadata,
+                    decoded_control.click_handler->standard_action,
                 });
             }
             if (decoded_control.picture_asset) {

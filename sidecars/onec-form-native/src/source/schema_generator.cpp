@@ -796,9 +796,10 @@ void append_value_types(std::string& output) {
     <xs:attribute name="name" type="xs:string" use="required"/>
   </xs:complexType>
   <xs:complexType name="EventHandlerType" mixed="true">
-    <xs:sequence>
-      <xs:element name="Action" type="EventActionMetadataType" minOccurs="0" maxOccurs="1"/>
-    </xs:sequence>
+    <xs:choice minOccurs="0">
+      <xs:element name="Action" type="EventActionMetadataType"/>
+      <xs:element name="StandardAction" type="StandardMenuActionType"/>
+    </xs:choice>
     <xs:attribute name="id" type="ObjectIdType" use="required"/>
   </xs:complexType>
 )XSD";
@@ -1332,7 +1333,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     <xs:element name="Text" type="LocalizedStringValueType"/><xs:element name="ToolTip" type="LocalizedStringValueType"/><xs:element name="Description" type="LocalizedStringValueType"/>
   </xs:sequence><xs:attribute name="handler" type="CommandBarActionHandlerType" use="required"/><xs:attribute name="name" type="xs:string" use="required"/></xs:complexType>
   <xs:simpleType name="StandardMenuActionSourceType"><xs:restriction base="xs:string"><xs:enumeration value="Form"/><xs:enumeration value="AllSources"/><xs:enumeration value="Control"/></xs:restriction></xs:simpleType>
-  <xs:simpleType name="StandardMenuActionContextType"><xs:restriction base="xs:string"><xs:enumeration value="Default"/><xs:enumeration value="CommandBar"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="StandardMenuActionContextType"><xs:restriction base="xs:string"><xs:enumeration value="Default"/><xs:enumeration value="CommandBar"/><xs:enumeration value="Form"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="StandardMenuSourceControlIdType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="TypeLinkItemValueType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
   <xs:complexType name="StandardMenuActionType"><xs:attribute name="command" type="StandardMenuCommandType" use="required"/><xs:attribute name="context" type="StandardMenuActionContextType" use="required"/><xs:attribute name="commandBarId" type="ObjectIdType"/><xs:attribute name="source" type="StandardMenuActionSourceType" use="required"/><xs:attribute name="sourceControlId" type="StandardMenuSourceControlIdType"/></xs:complexType>
@@ -1478,9 +1479,9 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "    <xs:sequence>\n"
         "      <xs:element name=\"ValueType\" type=\"TypeDomainValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         ;
-    for (const auto name : model::metamodel::table_column_input_boolean_properties) {
+    for (const auto name : model::metamodel::table_column_input_properties) {
         output += "      <xs:element name=\"" + std::string(name) +
-            "\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+            "\" type=\"" + (name == "BorderColor" ? "ColorValueType" : "xs:boolean") + "\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
     }
     output +=
         "      <xs:element name=\"Caption\" type=\"xs:string\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
@@ -1978,7 +1979,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"TableColumnControl\" russianName=\"ЭлементУправленияКолонкиТабличногоПоля\"><Properties>\n"
         "          <Property name=\"Type\" russianName=\"ВидРедактора\"/><Property name=\"ValueType\" russianName=\"ТипЗначения\"/>\n";
-    for (const auto name : model::metamodel::table_column_input_boolean_properties) {
+    for (const auto name : model::metamodel::table_column_input_properties) {
         const auto* descriptor = metamodel.property(model::ControlKind::input_field, name);
         if (descriptor == nullptr) throw std::logic_error("missing InputField column editor descriptor");
         append_palette_properties(output, std::span{descriptor, 1}, "          ");

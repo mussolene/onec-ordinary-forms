@@ -558,7 +558,7 @@ enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, pictu
 enum class ClientInterfaceVariant : std::uint8_t { version8_0, version8_2, version8_2_ordinary_app };
 enum class StandardMenuCommand : std::uint8_t { close, save_values, restore_values };
 enum class StandardMenuActionSource : std::uint8_t { form, all_sources, control };
-enum class StandardMenuActionContext : std::uint8_t { command_bar, default_context };
+enum class StandardMenuActionContext : std::uint8_t { command_bar, default_context, form };
 
 struct StandardMenuAction {
     StandardMenuCommand command = StandardMenuCommand::close;
@@ -964,6 +964,7 @@ struct Event {
     std::string handler;
     EventOwner owner{FormRef{}};
     std::optional<EventActionMetadata> action_metadata = std::nullopt;
+    std::optional<StandardMenuAction> standard_action = std::nullopt;
 };
 
 enum class ControlKind : std::uint8_t {

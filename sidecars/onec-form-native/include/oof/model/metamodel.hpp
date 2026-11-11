@@ -662,6 +662,14 @@ inline constexpr std::initializer_list<std::string_view> table_column_input_bool
     "Enabled", "ReadOnly", "Wrap", "ChooseType", "ChoiceButton", "OpenButton", "ClearButton",
     "SpinButton", "ChoiceListButton", "MarkNegatives", "AutoMarkIncomplete", "AutoChoiceIncomplete", "Transparent"};
 
+inline constexpr auto table_column_input_properties = [] {
+    std::array<std::string_view, table_column_input_boolean_properties.size() + 1> names{};
+    std::size_t index = 0;
+    for (const auto name : table_column_input_boolean_properties) names[index++] = name;
+    names.back() = "BorderColor";
+    return names;
+}();
+
 [[nodiscard]] std::span<const TableColumnBooleanDescriptor> table_column_boolean_descriptors() noexcept;
 [[nodiscard]] std::span<const TableColumnEnumerationDescriptor> table_column_enumeration_descriptors() noexcept;
 [[nodiscard]] std::span<const TableSourceExtensionDescriptor> table_source_extension_descriptors() noexcept;

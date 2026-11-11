@@ -1399,6 +1399,7 @@
           <Property name="AutoMarkIncomplete" apiName="AutoMarkIncomplete" russianName="АвтоОтметкаНезаполненного" russianType="Булево" valueCodec="boolean"/>
           <Property name="AutoChoiceIncomplete" apiName="AutoChoiceIncomplete" russianName="АвтоВыборНезаполненного" russianType="Булево" valueCodec="boolean"/>
           <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+          <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
           <Property name="Caption" russianName="Заголовок"/>
           <Property name="ToolTip" russianName="Подсказка"/><Property name="Font" russianName="Шрифт"/>
         </Properties></NamedConcept>

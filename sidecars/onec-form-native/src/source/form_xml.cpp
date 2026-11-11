@@ -1634,8 +1634,9 @@ bool valid_table_column_editor_property(
             (kind == model::ControlKind::input_field || std::get<bool>(value));
     }
     if (kind == model::ControlKind::input_field &&
-        std::ranges::find(mm::table_column_input_boolean_properties, descriptor.api_name) !=
-            mm::table_column_input_boolean_properties.end()) return std::holds_alternative<bool>(value);
+        std::ranges::find(mm::table_column_input_properties, descriptor.api_name) !=
+            mm::table_column_input_properties.end())
+        return descriptor.api_name == "BorderColor" ? std::holds_alternative<model::ColorValue>(value) : std::holds_alternative<bool>(value);
     if (kind == model::ControlKind::input_field) return false;
     return equals_descriptor_default(descriptor, value);
 }
@@ -1945,20 +1946,67 @@ public:
 private:
     std::uint64_t next_page_id_{1};
 
-    std::pair<std::string, std::optional<model::EventActionMetadata>> parse_event_content(xmlNodePtr node) {
+    model::StandardMenuAction parse_standard_action(xmlNodePtr child, std::string_view owner) {
+        for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
+            const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+            if (attr_name != "command" && attr_name != "context" && attr_name != "commandBarId" && attr_name != "source" && attr_name != "sourceControlId") {
+                fail("OOF2003", child, std::string(owner), std::string(attr_name),
+                    "command, context, commandBarId, source, and sourceControlId attributes", std::string(attr_name), "Unsupported StandardAction attribute");
+            }
+        }
+        model::StandardMenuAction action;
+        const auto command = required_attribute(child, "command", owner);
+        const auto* descriptor = mm::find_standard_menu_command(command);
+        if (descriptor == nullptr)
+            fail("OOF2003", child, std::string(owner), "command", "registered standard menu command", command, "Unknown standard menu command");
+        action.command = descriptor->kind;
+        const auto context = required_attribute(child, "context", owner);
+        const auto command_bar_id = optional_attribute(child, "commandBarId");
+        if (context == "CommandBar") {
+            action.context = model::StandardMenuActionContext::command_bar;
+            action.command_bar = model::ControlRef{parse_object_id(required_attribute(child, "commandBarId", owner), child, "commandBarId", owner)};
+        } else if (context == "Default" || context == "Form") {
+            action.context = context == "Form" ? model::StandardMenuActionContext::form : model::StandardMenuActionContext::default_context;
+            if (command_bar_id)
+                fail("OOF2003", child, std::string(owner), "commandBarId", "absent for Default context", *command_bar_id, "Default context cannot have commandBarId");
+        } else fail("OOF2003", child, std::string(owner), "context", "Default or CommandBar", context, "Unknown standard menu action context");
+        const auto source = required_attribute(child, "source", owner);
+        const auto source_control_id = optional_attribute(child, "sourceControlId");
+        if (source == "Form") action.source = model::StandardMenuActionSource::form;
+        else if (source == "AllSources") action.source = model::StandardMenuActionSource::all_sources;
+        else if (source == "Control") {
+            action.source = model::StandardMenuActionSource::control;
+            const auto id = parse_object_id(required_attribute(child, "sourceControlId", owner), child, "sourceControlId", owner);
+            if (id.value() == 0 || id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
+                fail("OOF2003", child, std::string(owner), "sourceControlId", "positive int32 control reference", std::to_string(id.value()), "Standard action source reference is invalid");
+            action.source_control = model::ControlRef{id};
+        } else fail("OOF2003", child, std::string(owner), "source", "Form, AllSources, or Control", source, "Unknown standard menu action source");
+        if (source != "Control" && source_control_id)
+            fail("OOF2003", child, std::string(owner), "sourceControlId", "absent unless source is Control", *source_control_id, "Standard action source attributes are inconsistent");
+        return action;
+    }
+
+    std::tuple<std::string, std::optional<model::EventActionMetadata>, std::optional<model::StandardMenuAction>> parse_event_content(xmlNodePtr node) {
         std::string handler;
         std::optional<model::EventActionMetadata> metadata;
+        std::optional<model::StandardMenuAction> standard;
         for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
             if (child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) {
                 const std::string text = node_text(child);
-                if (!metadata) {
+                if (!metadata && !standard) {
                     handler += text;
                 } else if (text.find_first_not_of(" \t\r\n") != std::string::npos) {
                     fail("OOF2003", child, {}, "handler", "only XML whitespace after Action", text,
                         "Event handler text cannot follow Action");
                 }
             } else if (child->type == XML_ELEMENT_NODE) {
-                if (node_name(child) != "Action" || metadata) {
+                if (node_name(child) == "StandardAction" && !metadata && !standard &&
+                    handler.find_first_not_of(" \t\r\n") == std::string::npos) {
+                    handler.clear();
+                    standard = parse_standard_action(child, "Event");
+                    continue;
+                }
+                if (node_name(child) != "Action" || metadata || standard) {
                     fail("OOF2003", child, {}, node_name(child), "at most one Action", node_name(child), "Invalid event child");
                 }
                 model::EventActionMetadata action;
@@ -1987,10 +2035,10 @@ private:
                 metadata = std::move(action);
             }
         }
-        if (handler.empty()) {
+        if (handler.empty() && !standard) {
             fail("OOF2003", node, {}, "handler", "nonempty handler", "empty", "Event handler must not be empty");
         }
-        return {std::move(handler), std::move(metadata)};
+        return {std::move(handler), std::move(metadata), std::move(standard)};
     }
 
     std::vector<model::EventRef> parse_form_events(xmlNodePtr node, model::ObjectId owner) {
@@ -2006,9 +2054,9 @@ private:
                 event_node,
                 "id",
                 object_id_text(owner));
-            auto [handler, metadata] = parse_event_content(event_node);
+            auto [handler, metadata, standard] = parse_event_content(event_node);
             objects_.events.push_back({id, std::string(descriptor->api_name), std::move(handler),
-                model::FormRef{owner}, std::move(metadata)});
+                model::FormRef{owner}, std::move(metadata), std::move(standard)});
             references.push_back(model::EventRef{id});
         }
         return references;
@@ -2032,9 +2080,9 @@ private:
                 event_node,
                 "id",
                 object_id_text(owner));
-            auto [handler, metadata] = parse_event_content(event_node);
+            auto [handler, metadata, standard] = parse_event_content(event_node);
             objects_.events.push_back({id, std::string(descriptor->api_name), std::move(handler),
-                model::ControlRef{owner}, std::move(metadata)});
+                model::ControlRef{owner}, std::move(metadata), std::move(standard)});
             references.push_back(model::EventRef{id});
         }
         return references;
@@ -3043,8 +3091,8 @@ private:
                         }
                         const bool supported_property =
                             (column.control->kind == model::ControlKind::input_field &&
-                                (std::ranges::find(mm::table_column_input_boolean_properties, property_name) !=
-                                    mm::table_column_input_boolean_properties.end())) ||
+                                (std::ranges::find(mm::table_column_input_properties, property_name) !=
+                                    mm::table_column_input_properties.end())) ||
                             (column.control->kind == model::ControlKind::choice_field &&
                                 (property_name == "Enabled" || property_name == "ToolTip")) ||
                             (column.control->kind == model::ControlKind::check_box &&
@@ -3178,43 +3226,7 @@ private:
                 item.action = std::move(action);
             }
             else if (name == "StandardAction") {
-                for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
-                    const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
-                    if (attr_name != "command" && attr_name != "context" && attr_name != "commandBarId" && attr_name != "source" && attr_name != "sourceControlId") {
-                        fail("OOF2003", child, std::string(owner), std::string(attr_name),
-                            "command, context, commandBarId, source, and sourceControlId attributes", std::string(attr_name), "Unsupported StandardAction attribute");
-                    }
-                }
-                model::StandardMenuAction action;
-                const auto command = required_attribute(child, "command", owner);
-                const auto* descriptor = mm::find_standard_menu_command(command);
-                if (descriptor == nullptr)
-                    fail("OOF2003", child, std::string(owner), "command", "registered standard menu command", command, "Unknown standard menu command");
-                action.command = descriptor->kind;
-                const auto context = required_attribute(child, "context", owner);
-                const auto command_bar_id = optional_attribute(child, "commandBarId");
-                if (context == "CommandBar") {
-                    action.context = model::StandardMenuActionContext::command_bar;
-                    action.command_bar = model::ControlRef{parse_object_id(required_attribute(child, "commandBarId", owner), child, "commandBarId", owner)};
-                } else if (context == "Default") {
-                    action.context = model::StandardMenuActionContext::default_context;
-                    if (command_bar_id)
-                        fail("OOF2003", child, std::string(owner), "commandBarId", "absent for Default context", *command_bar_id, "Default context cannot have commandBarId");
-                } else fail("OOF2003", child, std::string(owner), "context", "Default or CommandBar", context, "Unknown standard menu action context");
-                const auto source = required_attribute(child, "source", owner);
-                const auto source_control_id = optional_attribute(child, "sourceControlId");
-                if (source == "Form") action.source = model::StandardMenuActionSource::form;
-                else if (source == "AllSources") action.source = model::StandardMenuActionSource::all_sources;
-                else if (source == "Control") {
-                    action.source = model::StandardMenuActionSource::control;
-                    const auto id = parse_object_id(required_attribute(child, "sourceControlId", owner), child, "sourceControlId", owner);
-                    if (id.value() == 0 || id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
-                        fail("OOF2003", child, std::string(owner), "sourceControlId", "positive int32 control reference", std::to_string(id.value()), "Standard action source reference is invalid");
-                    action.source_control = model::ControlRef{id};
-                } else fail("OOF2003", child, std::string(owner), "source", "Form, AllSources, or Control", source, "Unknown standard menu action source");
-                if (source != "Control" && source_control_id)
-                    fail("OOF2003", child, std::string(owner), "sourceControlId", "absent unless source is Control", *source_control_id, "Standard action source attributes are inconsistent");
-                item.standard_action = std::move(action);
+                item.standard_action = parse_standard_action(child, owner);
             }
             else if (name == "Order") {
                 has_order = true;
@@ -4457,6 +4469,26 @@ private:
         }
     }
 
+    void write_standard_action(const model::StandardMenuAction& action) {
+        const auto* descriptor = mm::find_standard_menu_command(action.command);
+        const char* command = descriptor == nullptr ? nullptr : descriptor->public_name.data();
+        const char* source = action.source == model::StandardMenuActionSource::form ? "Form" :
+            action.source == model::StandardMenuActionSource::all_sources ? "AllSources" :
+            action.source == model::StandardMenuActionSource::control ? "Control" : nullptr;
+        const char* context = action.context == model::StandardMenuActionContext::default_context ? "Default" :
+            action.context == model::StandardMenuActionContext::command_bar ? "CommandBar" :
+            action.context == model::StandardMenuActionContext::form ? "Form" : nullptr;
+        if (command == nullptr || source == nullptr || context == nullptr)
+            throw std::invalid_argument("Unknown StandardAction command, context, or source");
+        XmlAttributes attributes{{"command", command}, {"context", context}};
+        if (action.context == model::StandardMenuActionContext::command_bar)
+            attributes.emplace_back("commandBarId", object_id_text(action.command_bar.id()));
+        attributes.emplace_back("source", source);
+        if (action.source == model::StandardMenuActionSource::control)
+            attributes.emplace_back("sourceControlId", object_id_text(action.source_control.id()));
+        writer_.empty("StandardAction", attributes);
+    }
+
     void write_events(
         std::string_view container_name,
         const std::vector<model::EventRef>& references,
@@ -4484,6 +4516,12 @@ private:
         }
         writer_.open(container_name);
         for (const auto& [descriptor, event] : ordered) {
+            if (event->standard_action) {
+                writer_.open(descriptor->xml_name, {{"id", object_id_text(event->id)}});
+                write_standard_action(*event->standard_action);
+                writer_.close(descriptor->xml_name);
+                continue;
+            }
             if (!event->action_metadata) {
                 writer_.text(descriptor->xml_name, event->handler, {{"id", object_id_text(event->id)}});
                 continue;
@@ -4732,23 +4770,7 @@ private:
                 writer_.close("Action");
             }
             if (item.standard_action) {
-                const auto& action = *item.standard_action;
-                const auto* descriptor = mm::find_standard_menu_command(action.command);
-                const char* command = descriptor == nullptr ? nullptr : descriptor->public_name.data();
-                const char* source = action.source == model::StandardMenuActionSource::form ? "Form" :
-                    action.source == model::StandardMenuActionSource::all_sources ? "AllSources" :
-                    action.source == model::StandardMenuActionSource::control ? "Control" : nullptr;
-                const char* context = action.context == model::StandardMenuActionContext::default_context ? "Default" :
-                    action.context == model::StandardMenuActionContext::command_bar ? "CommandBar" : nullptr;
-                if (command == nullptr || source == nullptr || context == nullptr)
-                    throw std::invalid_argument("Unknown StandardAction command, context, or source");
-                XmlAttributes attributes{{"command", command}, {"context", context}};
-                if (action.context == model::StandardMenuActionContext::command_bar)
-                    attributes.emplace_back("commandBarId", object_id_text(action.command_bar.id()));
-                attributes.emplace_back("source", source);
-                if (action.source == model::StandardMenuActionSource::control)
-                    attributes.emplace_back("sourceControlId", object_id_text(action.source_control.id()));
-                writer_.empty("StandardAction", attributes);
+                write_standard_action(*item.standard_action);
             }
             if (item.type == model::CommandBarButtonKind::submenu && item.order != model::CommandBarButtonOrder::none) {
                 writer_.text("Order", item.order == model::CommandBarButtonOrder::ascending ? "Ascending" : "Descending");
@@ -5221,8 +5243,8 @@ private:
                     const auto* descriptor = metamodel_.property(column.control->kind, entry.id);
                     const bool supported = descriptor != nullptr &&
                         ((column.control->kind == model::ControlKind::input_field &&
-                            (std::ranges::find(mm::table_column_input_boolean_properties, descriptor->api_name) !=
-                                mm::table_column_input_boolean_properties.end())) ||
+                            (std::ranges::find(mm::table_column_input_properties, descriptor->api_name) !=
+                                mm::table_column_input_properties.end())) ||
                          (column.control->kind == model::ControlKind::choice_field &&
                             (descriptor->api_name == "Enabled" || descriptor->api_name == "ToolTip")) ||
                          (column.control->kind == model::ControlKind::check_box &&
@@ -5289,7 +5311,7 @@ private:
                     write_property(*descriptor, entry->value, owner);
                 };
                 if (column.control->kind == model::ControlKind::input_field) {
-                    for (const auto name : mm::table_column_input_boolean_properties) write_editor_property(name);
+                    for (const auto name : mm::table_column_input_properties) write_editor_property(name);
                 } else if (column.control->kind == model::ControlKind::choice_field) {
                     write_editor_property("Enabled");
                     write_editor_property("ToolTip");

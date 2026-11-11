@@ -791,8 +791,8 @@ std::optional<PropertyValue> materialize_default(
 bool table_column_editor_property_allowed(ControlKind kind, std::string_view name) {
     switch (kind) {
         case ControlKind::input_field:
-            return std::ranges::find(metamodel::table_column_input_boolean_properties, name) !=
-                metamodel::table_column_input_boolean_properties.end();
+            return std::ranges::find(metamodel::table_column_input_properties, name) !=
+                metamodel::table_column_input_properties.end();
         case ControlKind::choice_field:
             return name == "Enabled" || name == "ToolTip";
         case ControlKind::check_box:
@@ -808,6 +808,8 @@ bool table_column_editor_property_value_supported(
         return std::holds_alternative<bool>(value) &&
             (kind == ControlKind::input_field || std::get<bool>(value));
     }
+    if (kind == ControlKind::input_field && name == "BorderColor")
+        return std::holds_alternative<ColorValue>(value);
     if (kind == ControlKind::input_field && table_column_editor_property_allowed(kind, name))
         return std::holds_alternative<bool>(value);
     if (name == "Caption" || name == "ToolTip") {
@@ -3846,13 +3848,25 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
 
     for (const auto& event : collections_.events) {
-        if (event.handler.empty()) {
+        if (event.handler.empty() && !event.standard_action) {
             add_violation(
                 report,
                 InvariantCode::invalid_property,
                 event.id,
                 event.id,
                 "event handler must not be empty");
+        }
+        if (event.standard_action) {
+            const auto& action = *event.standard_action;
+            const auto* owner = std::get_if<ControlRef>(&event.owner);
+            const auto* control = owner ? find_control(owner->id()) : nullptr;
+            if (!event.handler.empty() || event.action_metadata || !control ||
+                control->kind() != ControlKind::button || event.name != "Click" ||
+                action.command != StandardMenuCommand::close || action.context != StandardMenuActionContext::form ||
+                action.command_bar.id().value() != 0 || action.source != StandardMenuActionSource::all_sources ||
+                action.source_control.id().value() != 0)
+                add_violation(report, InvariantCode::invalid_property, event.id, event.id,
+                    "standard Button.Click requires only Close with Form context and AllSources source");
         }
         std::visit(
             [&](const auto& owner) {

@@ -1894,6 +1894,9 @@ void test_table_input_field_value_type_round_trip() {
         column.edit_mode = {"ColumnEditMode", modes[index % modes.size()]};
         column.header.items.push_back({"en", column.name});
         column.control->kind = model::ControlKind::input_field;
+        if (index == 0) column.control->properties.set_explicit(model::PropertyId::from_name("BorderColor"),
+            model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+                model::QualifiedName{"StyleColors.BorderColor"}});
         column.control->value_type = model::TypeDomainPatternValue{{entry}};
         expected_types[index] = *column.control->value_type;
         std::size_t property_index = 0;
@@ -1949,6 +1952,18 @@ void test_table_input_field_value_type_round_trip() {
     expect(enabled != nullptr && !std::get<bool>(enabled->value) && read_only != nullptr &&
             std::get<bool>(read_only->value),
         "known InputField Enabled and ReadOnly values must survive native round-trip");
+    const auto* border = decoded_columns[0].control->properties.find(model::PropertyId::from_name("BorderColor"));
+    expect(border && std::get<model::ColorValue>(border->value).kind == model::ColorKind::style_reference,
+        "embedded editor BorderColor must survive the named XML and stream cycle");
+    auto old_record = encoded.value();
+    auto old_editor = table_column_editor_info(old_record, 0);
+    auto& old_payload = old_editor.items[2].items[0];
+    old_payload.items.resize(39);
+    old_payload.items[1] = list_stream::ListValue::raw_atom("21");
+    replace_table_column_editor_info(old_record, 0, old_editor);
+    const auto old_decoded = form_stream::decode_document(old_record, "LegacyEditor");
+    expect(old_decoded.ok() && old_decoded.value().reconstruction_complete(),
+        "legacy InputField21/39 must use the shared property record migration");
     auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
             list_stream::dump_compact(encoded.value()),
@@ -3504,6 +3519,51 @@ void test_shared_action_metadata_policies_and_rejections() {
         "the combined form, button and menu stream must round-trip without drift");
 }
 
+void test_button_standard_close_event_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "StandardClose";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode button{model::ObjectId{2}, "CloseForm", model::ButtonPayload{}};
+    button.events = {model::EventRef{model::ObjectId{3}}};
+    document.add_control(std::move(button));
+    model::StandardMenuAction action;
+    action.context = model::StandardMenuActionContext::form;
+    document.add_event({model::ObjectId{3}, "Click", {}, model::ControlRef{model::ObjectId{2}}, {}, action});
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "standard Close event must encode without a handler");
+    auto native = encoded.value();
+    auto* record = find_record_with_guid(native, model::metamodel::descriptor_for(model::ControlKind::button).guid);
+    expect(list_stream::dump_compact(record->items[2].items[2].items[1].items[2]) ==
+        "{6,0,00000000-0000-0000-0000-000000000000,142,{1,99,b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,0},0,1}",
+        "standard Close must retain the platform form context tuple");
+    auto legacy = native;
+    auto* legacy_button = find_record_with_guid(legacy, model::metamodel::descriptor_for(model::ControlKind::button).guid);
+    legacy_button->items[2].items[1].items.resize(12);
+    legacy_button->items[2].items[1].items[1] = list_stream::ListValue::raw_atom("10");
+    const auto legacy_decoded = form_stream::decode_document(legacy, "LegacyClose");
+    expect(legacy_decoded.ok() && legacy_decoded.value().reconstruction_complete(),
+        "Button generation10 must migrate without losing its standard Close event");
+    const auto decoded = form_stream::decode_document(native, "StandardClose");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "standard Close must decode completely");
+    const auto* control = decoded.value().find_control(model::ObjectId{2});
+    const auto* event = decoded.value().find_event(control->events.front().id());
+    expect(event && event->standard_action == action && event->handler.empty() && !event->action_metadata,
+        "standard Close must retain its named action without inventing a handler");
+    const auto xml = oof::source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<StandardAction command=\"Close\" context=\"Form\" source=\"AllSources\"") != std::string::npos,
+        "standard Close must appear as a named XML action");
+    const auto parsed = oof::source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named standard Close XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(native),
+        "standard Close XML must rebuild independently");
+    auto mixed = xml.value();
+    mixed.insert(mixed.find("<StandardAction"), "UnexpectedHandler");
+    expect(!oof::source::parse_form_xml(mixed).ok(), "standard action and handler text must be mutually exclusive");
+}
+
 void test_button_click_action_metadata_warning_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -4082,6 +4142,16 @@ void test_check_box_tooltip_round_trip_and_validation() {
     expect(list_stream::dump_compact(default_encoded.value()) ==
                list_stream::dump_compact(explicit_empty_encoded.value()),
         "explicit empty CheckBox ToolTip must normalize to the default storage");
+    auto legacy = default_encoded.value();
+    auto* legacy_record = find_record_with_guid(legacy, model::metamodel::descriptor_for(model::ControlKind::check_box).guid);
+    auto& legacy_payload = legacy_record->items[2].items[1];
+    legacy_payload.items.resize(4);
+    legacy_payload.items[1] = list_stream::ListValue::raw_atom("1");
+    legacy_payload.items[0].items.resize(6);
+    legacy_payload.items[0].items[1] = list_stream::ListValue::raw_atom("4");
+    const auto legacy_decoded = form_stream::decode_document(legacy, "LegacyCheckBox");
+    expect(legacy_decoded.ok() && legacy_decoded.value().reconstruction_complete(),
+        "legacy CheckBox1/4 and property generation4/6 must migrate to current named defaults");
     const auto default_decoded = form_stream::decode_document(explicit_empty_encoded.value(), "CheckBoxToolTip");
     expect(default_decoded.ok(), "explicit empty CheckBox ToolTip must decode");
     const auto* default_check_box = default_decoded.value().find_control(model::ObjectId{2});
@@ -26024,6 +26094,7 @@ int main() {
         test_form_close_strict_action_guards();
         test_form_named_events();
         test_shared_action_metadata_policies_and_rejections();
+        test_button_standard_close_event_round_trip();
         test_button_click_action_metadata_warning_round_trip();
         test_menu_action_values_and_optional_overrides_round_trip();
         test_button_multiline_round_trip_and_validation();
