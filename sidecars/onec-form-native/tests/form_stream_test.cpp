@@ -594,11 +594,13 @@ void test_table_column_generation_prototypes() {
     expect(found != seed.value().collections().controls.end(), "captured Table must exist");
     if (found == seed.value().collections().controls.end()) return;
     const auto table_id = found->id;
+    for (const std::string_view mode : {"Directly", "Enter", "EnterOnInput", "Auto"})
     for (const bool has_editor : {false, true}) {
         for (const auto term : {model::TypeDomainTerm::unknown, model::TypeDomainTerm::string, model::TypeDomainTerm::boolean}) {
             auto document = seed.value();
             auto* table = const_cast<model::ControlNode*>(document.find_control(table_id));
             auto& column = std::get<model::TablePayload>(table->payload).columns.front();
+            column.edit_mode = {"ColumnEditMode", std::string(mode)};
             column.layout_width = model::DecimalValue{"100"};
             column.visible = false;
             model::TypeDomainPatternValue type;
@@ -616,6 +618,7 @@ void test_table_column_generation_prototypes() {
             expect(properties(current.value()).items.size() == (has_editor ? 52 : 51),
                 "current column arity must reflect editor packet presence");
             for (const auto& layout : layouts) {
+                if (mode == "Auto" && layout.version != "23") continue;
                 auto legacy = current.value();
                 auto& stored = properties(legacy);
                 stored.items[0] = list_stream::ListValue::raw_atom(std::string(layout.version));
@@ -634,6 +637,12 @@ void test_table_column_generation_prototypes() {
                         color.items.pop_back();
                     }
                 }
+                if (layout.version != "23") {
+                    auto invalid_legacy_mode = legacy;
+                    properties(invalid_legacy_mode).items[25] = list_stream::ListValue::raw_atom("3");
+                    expect(!form_stream::decode_document(invalid_legacy_mode, "InvalidLegacyColumnMode"),
+                        "legacy layouts must reject a mode value outside their native three-value contract");
+                }
                 auto decoded = form_stream::decode_document(legacy, "ColumnGenerations");
                 expect(decoded.ok() && decoded.value().reconstruction_complete(),
                     "known column generation must decode without partial projection");
@@ -641,6 +650,8 @@ void test_table_column_generation_prototypes() {
                 const auto* restored_table = decoded.value().find_control(table_id);
                 const auto& restored = std::get<model::TablePayload>(restored_table->payload).columns.front();
                 expect(restored.control.has_value() == has_editor, "absent editor must never become InputField");
+                expect(restored.edit_mode == column.edit_mode,
+                    "current or legacy edit mode must retain its named enumeration");
                 expect(restored.layout_width == column.layout_width && restored.visible == column.visible,
                     "legacy width and visibility must retain their named values");
                 const auto restored_type = has_editor ? restored.control->value_type : restored.value_type;
@@ -662,6 +673,19 @@ void test_table_column_generation_prototypes() {
                         "known column layout must reject missing or extra fields");
                 }
             }
+            auto inconsistent_legacy_cache = current.value();
+            properties(inconsistent_legacy_cache).items[25] = list_stream::ListValue::raw_atom(mode == "Directly" ? "2" : "0");
+            auto normalized_cache = form_stream::decode_document(inconsistent_legacy_cache, "ColumnModeCache");
+            expect(normalized_cache.ok() && normalized_cache.value().reconstruction_complete(),
+                "current edit mode must ignore its bounded legacy cache as the native reader does");
+            if (normalized_cache) {
+                const auto& restored = std::get<model::TablePayload>(normalized_cache.value().find_control(table_id)->payload).columns.front();
+                expect(restored.edit_mode == column.edit_mode, "legacy cache cannot override the current named edit mode");
+            }
+            auto invalid_mode = current.value();
+            properties(invalid_mode).items[has_editor ? 47 : 46] = list_stream::ListValue::raw_atom("4");
+            expect(!form_stream::decode_document(invalid_mode, "InvalidColumnMode"),
+                "unrecognized current edit mode must fail closed");
             auto unknown = current.value();
             properties(unknown).items[0] = list_stream::ListValue::raw_atom("18");
             expect(!form_stream::decode_document(unknown, "UnknownColumnGeneration"), "unknown generation must reject");
@@ -1866,6 +1890,8 @@ void test_table_input_field_value_type_round_trip() {
         model::TableColumn column;
         column.name = "Column" + std::to_string(index);
         column.data_path = column.name;
+        constexpr std::array modes{"Directly", "Enter", "EnterOnInput", "Auto"};
+        column.edit_mode = {"ColumnEditMode", modes[index % modes.size()]};
         column.header.items.push_back({"en", column.name});
         column.control->kind = model::ControlKind::input_field;
         column.control->value_type = model::TypeDomainPatternValue{{entry}};
@@ -1902,6 +1928,9 @@ void test_table_input_field_value_type_round_trip() {
     const auto& decoded_columns = std::get<model::TablePayload>(decoded_table->payload).columns;
     expect(decoded_columns.size() == expected_types.size(), "all fifteen typed columns must be retained");
     for (std::size_t index = 0; index < expected_types.size(); ++index) {
+        constexpr std::array modes{"Directly", "Enter", "EnterOnInput", "Auto"};
+        expect(decoded_columns[index].edit_mode == model::EnumerationValue{"ColumnEditMode", modes[index % modes.size()]},
+            "four edit modes must independently survive in fifteen named columns");
         expect(decoded_columns[index].control->value_type == expected_types[index],
             "each outer and embedded InputField ValueType must survive native round-trip");
         std::size_t property_index = 0;

@@ -1374,6 +1374,7 @@
           <Property name="CheckBoxThreeState" apiName="CheckBoxThreeState" russianName="ТриСостоянияФлажка" russianType="Булево" valueCodec="boolean"/>
           <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
           <Property name="ChangePosition" apiName="ChangePosition" russianName="ИзменятьПозицию" russianType="Булево" valueCodec="boolean"/>
+          <Property name="EditMode" apiName="EditMode" russianName="РежимРедактирования" russianType="РежимРедактированияКолонки" valueCodec="enumeration"/>
           <Property name="HorizontalAlignInColumn" apiName="HorizontalAlignInColumn" russianName="ГоризонтальноеПоложениеВКолонке" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
           <Property name="HeaderHorizontalAlign" apiName="HeaderHorizontalAlign" russianName="ГоризонтальноеПоложениеВШапке" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
           <Property name="FooterHorizontalAlign" apiName="FooterHorizontalAlign" russianName="ГоризонтальноеПоложениеВПодвале" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
@@ -1384,8 +1385,21 @@
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
         </Properties></NamedConcept>
         <NamedConcept name="TableColumnControl" russianName="ЭлементУправленияКолонкиТабличногоПоля"><Properties>
-          <Property name="Type" russianName="ВидРедактора"/><Property name="ValueType" russianName="ТипЗначения"/><Property name="Enabled" russianName="Доступность"/>
-          <Property name="ReadOnly" russianName="ТолькоПросмотр"/><Property name="Caption" russianName="Заголовок"/>
+          <Property name="Type" russianName="ВидРедактора"/><Property name="ValueType" russianName="ТипЗначения"/>
+          <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
+          <Property name="Wrap" apiName="Wrap" russianName="АвтоПереносСтрок" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ChooseType" apiName="ChooseType" russianName="ВыбиратьТип" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ChoiceButton" apiName="ChoiceButton" russianName="КнопкаВыбора" russianType="Булево" valueCodec="boolean"/>
+          <Property name="OpenButton" apiName="OpenButton" russianName="КнопкаОткрытия" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ClearButton" apiName="ClearButton" russianName="КнопкаОчистки" russianType="Булево" valueCodec="boolean"/>
+          <Property name="SpinButton" apiName="SpinButton" russianName="КнопкаРегулирования" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ChoiceListButton" apiName="ChoiceListButton" russianName="КнопкаСпискаВыбора" russianType="Булево" valueCodec="boolean"/>
+          <Property name="MarkNegatives" apiName="MarkNegatives" russianName="ВыделятьОтрицательные" russianType="Булево" valueCodec="boolean"/>
+          <Property name="AutoMarkIncomplete" apiName="AutoMarkIncomplete" russianName="АвтоОтметкаНезаполненного" russianType="Булево" valueCodec="boolean"/>
+          <Property name="AutoChoiceIncomplete" apiName="AutoChoiceIncomplete" russianName="АвтоВыборНезаполненного" russianType="Булево" valueCodec="boolean"/>
+          <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+          <Property name="Caption" russianName="Заголовок"/>
           <Property name="ToolTip" russianName="Подсказка"/><Property name="Font" russianName="Шрифт"/>
         </Properties></NamedConcept>
       </Palette>

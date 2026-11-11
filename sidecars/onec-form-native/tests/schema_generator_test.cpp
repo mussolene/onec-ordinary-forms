@@ -1511,6 +1511,23 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
         "column width palette must declare layout units and its Russian platform name");
     expect(column_font != nullptr && attribute(column_font, "russianName") == "ШрифтТекста" &&
         attribute(column_font, "russianType") == "Шрифт", "column font palette must declare the platform name and type");
+    const auto edit_mode = direct_child_with_attribute(column_properties, "Property", "name", "EditMode");
+    expect(edit_mode && attribute(edit_mode, "apiName") == "EditMode" &&
+        attribute(edit_mode, "russianName") == "РежимРедактирования" &&
+        attribute(edit_mode, "russianType") == "РежимРедактированияКолонки",
+        "column edit mode must retain its own platform enumeration type");
+    const auto editor = direct_child_with_attribute(palette, "NamedConcept", "name", "TableColumnControl");
+    const auto editor_properties = direct_child(editor, "Properties");
+    expect(direct_children(editor_properties, "Property").size() == 18,
+        "editor palette must describe its type, value type, thirteen Booleans and three other named properties");
+    for (const auto name : oof::model::metamodel::table_column_input_boolean_properties) {
+        const auto* descriptor = metamodel.property(oof::model::ControlKind::input_field, name);
+        const auto property = direct_child_with_attribute(editor_properties, "Property", "name", name);
+        expect(property && attribute(property, "apiName") == name &&
+            attribute(property, "russianName") == as_utf8(descriptor->russian_name) &&
+            attribute(property, "russianType") == "Булево" && attribute(property, "valueCodec") == "boolean",
+            "editor palette must reuse InputField platform property descriptors");
+    }
     xmlNodePtr command_button = direct_child_with_attribute(palette, "NamedConcept", "name", "CommandBarButton");
     xmlNodePtr command_button_properties = direct_child(command_button, "Properties");
     const auto command_properties = direct_children(command_button_properties, "Property");

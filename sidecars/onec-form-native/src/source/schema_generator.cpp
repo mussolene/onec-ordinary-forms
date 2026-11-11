@@ -1965,7 +1965,8 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         append_attribute(output, "name", property.name);
         append_attribute(output, "apiName", property.name);
         append_attribute(output, "russianName", as_utf8(property.russian_name));
-        output += " russianType=\"ГоризонтальноеПоложение\" valueCodec=\"enumeration\"/>\n";
+        append_attribute(output, "russianType", as_utf8(property.platform_type));
+        output += " valueCodec=\"enumeration\"/>\n";
     }
     output +=
 
@@ -1976,8 +1977,14 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"ReadOnly\" russianName=\"ТолькоПросмотр\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"TableColumnControl\" russianName=\"ЭлементУправленияКолонкиТабличногоПоля\"><Properties>\n"
-        "          <Property name=\"Type\" russianName=\"ВидРедактора\"/><Property name=\"ValueType\" russianName=\"ТипЗначения\"/><Property name=\"Enabled\" russianName=\"Доступность\"/>\n"
-        "          <Property name=\"ReadOnly\" russianName=\"ТолькоПросмотр\"/><Property name=\"Caption\" russianName=\"Заголовок\"/>\n"
+        "          <Property name=\"Type\" russianName=\"ВидРедактора\"/><Property name=\"ValueType\" russianName=\"ТипЗначения\"/>\n";
+    for (const auto name : model::metamodel::table_column_input_boolean_properties) {
+        const auto* descriptor = metamodel.property(model::ControlKind::input_field, name);
+        if (descriptor == nullptr) throw std::logic_error("missing InputField column editor descriptor");
+        append_palette_properties(output, std::span{descriptor, 1}, "          ");
+    }
+    output +=
+        "          <Property name=\"Caption\" russianName=\"Заголовок\"/>\n"
         "          <Property name=\"ToolTip\" russianName=\"Подсказка\"/><Property name=\"Font\" russianName=\"Шрифт\"/>\n"
         "        </Properties></NamedConcept>\n"
         "      </Palette>\n"

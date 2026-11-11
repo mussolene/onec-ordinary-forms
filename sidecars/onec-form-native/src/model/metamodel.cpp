@@ -2901,13 +2901,19 @@ std::span<const TableColumnEnumerationDescriptor> table_column_enumeration_descr
     static constexpr std::array alignment{
         TableColumnEnumerationMember{"Left", 0}, TableColumnEnumerationMember{"Center", 1},
         TableColumnEnumerationMember{"Right", 2}, TableColumnEnumerationMember{"Auto", 4}};
+    static constexpr std::array edit_modes{
+        TableColumnEnumerationMember{"Directly", 0}, TableColumnEnumerationMember{"Enter", 1},
+        TableColumnEnumerationMember{"EnterOnInput", 2}, TableColumnEnumerationMember{"Auto", 3}};
     static const std::array descriptors{
+        TableColumnEnumerationDescriptor{"EditMode", u8"РежимРедактирования",
+            &TableColumn::edit_mode, "ColumnEditMode", u8"РежимРедактированияКолонки", "Enter", edit_modes, 47,
+            TableColumnLegacyEnumerationProjection{25, 2}},
         TableColumnEnumerationDescriptor{"HorizontalAlignInColumn", u8"ГоризонтальноеПоложениеВКолонке",
-            &TableColumn::horizontal_align_in_column, "HorizontalAlign", "Auto", alignment, 28},
+            &TableColumn::horizontal_align_in_column, "HorizontalAlign", u8"ГоризонтальноеПоложение", "Auto", alignment, 28},
         TableColumnEnumerationDescriptor{"HeaderHorizontalAlign", u8"ГоризонтальноеПоложениеВШапке",
-            &TableColumn::header_horizontal_align, "HorizontalAlign", "Left", std::span{alignment}.first(3), 27},
+            &TableColumn::header_horizontal_align, "HorizontalAlign", u8"ГоризонтальноеПоложение", "Left", std::span{alignment}.first(3), 27},
         TableColumnEnumerationDescriptor{"FooterHorizontalAlign", u8"ГоризонтальноеПоложениеВПодвале",
-            &TableColumn::footer_horizontal_align, "HorizontalAlign", "Left", std::span{alignment}.first(3), 29}};
+            &TableColumn::footer_horizontal_align, "HorizontalAlign", u8"ГоризонтальноеПоложение", "Left", std::span{alignment}.first(3), 29}};
     return descriptors;
 }
 

@@ -2134,6 +2134,7 @@
       <xs:element name="CheckBoxThreeState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChangePosition" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EditMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalAlignInColumn" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HeaderHorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FooterHorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>

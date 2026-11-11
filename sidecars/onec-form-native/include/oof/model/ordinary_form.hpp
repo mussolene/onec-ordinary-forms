@@ -1276,6 +1276,7 @@ struct TableColumn {
     EnumerationValue horizontal_align_in_column{"HorizontalAlign", "Auto"};
     EnumerationValue header_horizontal_align{"HorizontalAlign", "Left"};
     EnumerationValue footer_horizontal_align{"HorizontalAlign", "Left"};
+    EnumerationValue edit_mode{"ColumnEditMode", "Enter"};
     bool visible = true;
     bool change_visible = true;
     bool enabled = true;

@@ -359,14 +359,20 @@ struct TableColumnEnumerationMember {
     std::string_view name;
     std::uint32_t storage_value;
 };
+struct TableColumnLegacyEnumerationProjection {
+    std::size_t storage_slot;
+    std::uint32_t maximum_value;
+};
 struct TableColumnEnumerationDescriptor {
     std::string_view name;
     std::u8string_view russian_name;
     EnumerationValue TableColumn::*member;
     std::string_view enumeration_type;
+    std::u8string_view platform_type;
     std::string_view default_member;
     std::span<const TableColumnEnumerationMember> members;
     std::size_t storage_slot;
+    std::optional<TableColumnLegacyEnumerationProjection> legacy_projection = std::nullopt;
 };
 
 struct TableColumnBooleanDescriptor {

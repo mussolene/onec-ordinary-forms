@@ -4362,6 +4362,16 @@ std::optional<LV> upgrade_table_column_properties(const LV& source, std::string_
     std::copy(source.items.begin() + 1, source.items.end(), current.items.begin() + 1);
     if (!layout->has_layout_width)
         current.items[table_column_property_slot(45, has_editor)] = source.items[4];
+    for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
+        const auto target_slot = table_column_property_slot(property.storage_slot, has_editor);
+        if (!property.legacy_projection || target_slot < source.items.size()) continue;
+        const auto legacy_slot = table_column_property_slot(property.legacy_projection->storage_slot, has_editor);
+        const auto value = integer_atom<std::uint32_t>(source.items[legacy_slot], child_path(path, legacy_slot));
+        if (value > property.legacy_projection->maximum_value)
+            fail("OOF1114", child_path(path, legacy_slot), "supported legacy Column enumeration",
+                std::to_string(value), "Legacy Table Column enumeration value is unsupported");
+        current.items[target_slot] = source.items[legacy_slot];
+    }
     for (const auto slot : {22U, 23U, 24U}) {
         const auto& font = current.items[slot];
         if (font.is_list && !font.items.empty() && !font.items[0].is_list &&
@@ -4393,7 +4403,11 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         if (value.type_name != property.enumeration_type || member == property.members.end())
             fail("OOF1122", std::string(path) + "/" + std::string(property.name), "supported named Column enumeration",
                 value.member, "Table Column enumeration value is unsupported");
-        properties.items[property.storage_slot] = raw(std::to_string(member->storage_value));
+        properties.items[table_column_property_slot(property.storage_slot, has_editor)] =
+            raw(std::to_string(member->storage_value));
+        if (property.legacy_projection)
+            properties.items[table_column_property_slot(property.legacy_projection->storage_slot, has_editor)] =
+                raw(std::to_string(std::min(member->storage_value, property.legacy_projection->maximum_value)));
     }
     if (tree_source) {
         properties.items[5] = raw(std::to_string(ordinal));
@@ -11237,12 +11251,12 @@ model::TableColumn decode_table_column(
     for (const auto& property : model::metamodel::table_column_boolean_descriptors())
         column.*property.member = ((flags & property.mask) != 0) != property.inverted;
     for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
-        const auto value = integer_atom<std::uint32_t>(properties.items[property.storage_slot],
-            child_path(properties_path, property.storage_slot));
+        const auto slot = table_column_property_slot(property.storage_slot, has_editor);
+        const auto value = integer_atom<std::uint32_t>(properties.items[slot], child_path(properties_path, slot));
         const auto member = std::ranges::find(property.members, value,
             &model::metamodel::TableColumnEnumerationMember::storage_value);
         if (member == property.members.end())
-            fail("OOF1114", child_path(properties_path, property.storage_slot), "supported named Column enumeration",
+            fail("OOF1114", child_path(properties_path, slot), "supported named Column enumeration",
                 std::to_string(value), "Table Column enumeration value is unsupported");
         column.*property.member = {std::string(property.enumeration_type), std::string(member->name)};
     }
@@ -11446,6 +11460,13 @@ model::TableColumn decode_table_column(
     LV normalized = value;
     normalized.items[1].items[1].items[1] = properties;
     const LV canonical = canonical_table_column_record(column, path, tree_source, ordinal);
+    for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
+        if (!property.legacy_projection) continue;
+        const auto slot = table_column_property_slot(property.legacy_projection->storage_slot, has_editor);
+        const auto legacy = integer_atom<std::uint32_t>(properties.items[slot], child_path(properties_path, slot));
+        if (legacy <= property.legacy_projection->maximum_value)
+            normalized.items[1].items[1].items[1].items[slot] = canonical.items[1].items[1].items[1].items[slot];
+    }
     for (const auto slot : {4U, 22U, 32U, 45U}) {
         const auto physical_slot = table_column_property_slot(slot, has_editor);
         normalized.items[1].items[1].items[1].items[physical_slot] = canonical.items[1].items[1].items[1].items[physical_slot];
