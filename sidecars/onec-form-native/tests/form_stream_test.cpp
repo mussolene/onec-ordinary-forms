@@ -11526,7 +11526,6 @@ void test_legacy_common_control_base10_batch() {
             expect(!form_stream::decode_document(invalid, "LegacyCommonBase").ok(),
                 name + " common base must reject unsupported version/arity combinations");
         }
-        const bool supports_base16 = kind != model::ControlKind::panel;
         for (const bool old_base16 : {false, true}) {
             auto intermediate = current.value();
             auto& base = base_for(intermediate, kind);
@@ -11542,11 +11541,6 @@ void test_legacy_common_control_base10_batch() {
                 }
                 base.items.resize(18);
                 base.items[0] = list_stream::ListValue::raw_atom("16");
-            }
-            if (!supports_base16 && old_base16) {
-                expect(!form_stream::decode_document(intermediate, "LegacyCommonBase"),
-                    name + " unconfirmed owner/base16 combination must reject");
-                continue;
             }
             const auto intermediate_decoded = form_stream::decode_document(intermediate, "LegacyCommonBase");
             expect(intermediate_decoded.ok() && intermediate_decoded.value().reconstruction_complete(),
@@ -22872,6 +22866,48 @@ void test_supported_legacy_root_layout_decoding() {
         expect(rebuilt_layout.ok() && rebuilt_layout.value() == cases.back().expected,
             std::string(item.label) + " rebuild must use canonical layout 27/20/18/10");
     }
+
+    auto root_base16 = modern_payload;
+    auto& historical_root_base = root_base16.items[1].items[2].items[1].items[1].items[0];
+    expect(historical_root_base.items.size() == 21 && historical_root_base.items[0].atom == "19",
+        "modern empty-form fixture must expose the current root common-base layout");
+    historical_root_base.items[4].items[0] = list_stream::ListValue::raw_atom("7");
+    for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
+        auto& color_record = historical_root_base.items[slot];
+        if (color_record.items[1].atom == "3" || color_record.items[1].atom == "4") {
+            color_record.items.resize(3);
+            color_record.items[0] = list_stream::ListValue::raw_atom("3");
+        }
+    }
+    historical_root_base.items.resize(18);
+    historical_root_base.items[0] = list_stream::ListValue::raw_atom("16");
+    const auto legacy_root_document = form_stream::decode_document(root_base16, "Empty");
+    expect(legacy_root_document.ok() && legacy_root_document.value().reconstruction_complete(),
+        "root common-base16/18 must decode with the same named defaults as the current root");
+    if (legacy_root_document) {
+        const auto legacy_root_xml = source::serialize_form_xml(legacy_root_document.value());
+        expect(legacy_root_xml.ok() && legacy_root_xml.value() == modern_xml.value(),
+            "root common-base16/18 must produce the modern named XML without semantic drift");
+        const auto parsed_root_xml = source::parse_form_xml(legacy_root_xml.value());
+        expect(parsed_root_xml.ok(), "root common-base16/18 named XML must parse without storage-only helpers");
+        const auto modern_baseline = form_stream::encode_document(modern_document.value());
+        if (parsed_root_xml) {
+            const auto rebuilt_root = form_stream::encode_document(parsed_root_xml.value());
+            expect(rebuilt_root.ok() && modern_baseline.ok() &&
+                       list_stream::dump_compact(rebuilt_root.value()) == list_stream::dump_compact(modern_baseline.value()),
+                "root common-base16/18 XML-only rebuild must match the current canonical writer");
+        }
+    }
+    for (const auto arity : {17U, 19U, 21U}) {
+        auto invalid_root = root_base16;
+        invalid_root.items[1].items[2].items[1].items[1].items[0].items.resize(arity);
+        expect(!form_stream::decode_document(invalid_root, "Empty").ok(),
+            "root common-base16 must reject incorrect arities");
+    }
+    auto unknown_root_version = root_base16;
+    unknown_root_version.items[1].items[2].items[1].items[1].items[0].items[0] = list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(unknown_root_version, "Empty").ok(),
+        "root common-base must reject unknown versions");
 
     auto legacy_empty_picture = legacy23;
     legacy_empty_picture.items[13].items[2] = list_stream::parse("{3,0,{0},\"\",-1,-1,1,0}");
