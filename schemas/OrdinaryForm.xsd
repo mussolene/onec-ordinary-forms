@@ -2105,6 +2105,7 @@
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="InputFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="type" type="TableColumnEditorKindType" use="required"/>
   </xs:complexType>

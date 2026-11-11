@@ -1487,6 +1487,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "      <xs:element name=\"Caption\" type=\"xs:string\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"ToolTip\" type=\"xs:string\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Font\" type=\"FontValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"Events\" type=\"InputFieldEventsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "    </xs:sequence>\n"
         "    <xs:attribute name=\"type\" type=\"TableColumnEditorKindType\" use=\"required\"/>\n"
         "  </xs:complexType>\n"

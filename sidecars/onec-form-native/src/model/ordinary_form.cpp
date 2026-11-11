@@ -3551,7 +3551,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
         ++event_reference_counts[event->id];
         const OwnerRef* actual_owner = std::get_if<OwnerRef>(&event->owner);
-        if (actual_owner == nullptr || actual_owner->id() != expected_owner.id()) {
+        if (actual_owner == nullptr || *actual_owner != expected_owner) {
             add_violation(
                 report,
                 InvariantCode::invalid_property,
@@ -3880,8 +3880,17 @@ ValidationReport OrdinaryFormDocument::validate() const {
                             owner.id(),
                             "event owner does not resolve to the form");
                     }
-                } else {
+                } else if constexpr (std::is_same_v<Owner, ControlRef>) {
                     require_control(event.id, owner);
+                } else {
+                    require_control(event.id, owner.table);
+                    const auto* table = find_control(owner.table.id());
+                    const auto* payload = table ? std::get_if<TablePayload>(&table->payload) : nullptr;
+                    if (!payload || std::ranges::none_of(payload->columns, [&](const auto& column) {
+                            return column.name == owner.column && column.control.has_value();
+                        }))
+                        add_violation(report, InvariantCode::dangling_reference, event.id, owner.table.id(),
+                            "event owner does not resolve to a Table Column editor");
                 }
             },
             event.owner);
@@ -4377,6 +4386,15 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
                 if (!column.control) continue;
+                if (column.control->kind != ControlKind::input_field && !column.control->events.empty())
+                    invalid_table("Table Column events require an InputField editor");
+                std::set<std::string_view> editor_event_names;
+                for (const auto reference : column.control->events) {
+                    require_owned_event(control.id, reference, TableColumnControlRef{ControlRef{control.id}, column.name},
+                        [&](std::string_view name) { return metamodel::find_event(column.control->kind, name); });
+                    if (const auto* event = find_event(reference.id()); event && !editor_event_names.insert(event->name).second)
+                        invalid_table("Table Column editor event names must be unique");
+                }
                 if (column.control->value_type.has_value()) {
                     if (column.control->kind != ControlKind::input_field) {
                         invalid_table("Table Column ValueType is supported only for an InputField editor");

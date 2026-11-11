@@ -948,7 +948,12 @@ struct Command {
     Property<std::optional<PictureRef>> picture{std::nullopt};
 };
 
-using EventOwner = std::variant<FormRef, ControlRef>;
+struct TableColumnControlRef {
+    ControlRef table;
+    std::string column;
+    friend bool operator==(const TableColumnControlRef&, const TableColumnControlRef&) = default;
+};
+using EventOwner = std::variant<FormRef, ControlRef, TableColumnControlRef>;
 
 struct EventActionMetadata {
     std::string name;
@@ -1248,6 +1253,7 @@ struct SpreadsheetDocumentCell final {
 };
 struct TableColumnControl {
     ControlKind kind = ControlKind::input_field;
+    std::vector<EventRef> events;
     std::optional<TypeDomainPatternValue> value_type;
     PropertySet properties;
 };

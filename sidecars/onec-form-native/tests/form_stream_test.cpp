@@ -1835,8 +1835,11 @@ void test_table_column_choice_and_check_box_profiles() {
         auto editor = table_column_editor_info(embedded_event, column_index);
         editor.items.at(slot) = standalone_events;
         replace_table_column_editor_info(embedded_event, column_index, editor);
-        expect(!form_stream::decode_document(embedded_event, "TableEditorEvent"),
-            "embedded InputField and ChoiceField events must not be silently accepted or lost");
+        const auto decoded_event = form_stream::decode_document(embedded_event, "TableEditorEvent");
+        if (column_index == 0)
+            expect(decoded_event.ok() && decoded_event.value().reconstruction_complete(),
+                "embedded InputField events must decode through their declared owner");
+        else expect(!decoded_event, "unrepresented ChoiceField events must remain an explicit failure");
     }
 
     auto mismatched_guid = encoded.value();
@@ -1887,6 +1890,11 @@ void test_table_input_field_value_type_round_trip() {
         if (entry.term == model::TypeDomainTerm::string) entry.string = {64, false};
         if (entry.term == model::TypeDomainTerm::numeric) entry.numeric = {12, 2, true};
         if (entry.term == model::TypeDomainTerm::date) entry.date = {true, false};
+        if (index == 13) {
+            entry = {};
+            entry.term = model::TypeDomainTerm::object;
+            entry.type_uuid = model::UuidValue{"11111111-2222-3333-4444-555555555555"};
+        }
         model::TableColumn column;
         column.name = "Column" + std::to_string(index);
         column.data_path = column.name;
@@ -1908,6 +1916,11 @@ void test_table_input_field_value_type_round_trip() {
                 index == 0 || index == property_index + 2 ? !default_value : default_value);
             ++property_index;
         }
+        const model::ObjectId event_id{1000 + index};
+        column.control->events.push_back(model::EventRef{event_id});
+        constexpr std::array event_names{"OnChange", "StartChoice", "ChoiceProcessing"};
+        document.add_event({event_id, event_names[index % event_names.size()], "EditorHandler" + std::to_string(index),
+            model::TableColumnControlRef{model::ControlRef{model::ObjectId{3}}, column.name}});
         columns.push_back(std::move(column));
     }
     document.add_control(std::move(table));
@@ -1916,6 +1929,12 @@ void test_table_input_field_value_type_round_trip() {
     expect(xml.ok(), "fifteen typed Table InputField columns must serialize as named XML");
     auto parsed = source::parse_form_xml(xml.value());
     expect(parsed.ok(), "fifteen named Table InputField ValueTypes must parse");
+    auto wrong_owner = parsed.value();
+    const auto* wrong_table = wrong_owner.find_control(model::ObjectId{3});
+    const auto& wrong_columns = std::get<model::TablePayload>(wrong_table->payload).columns;
+    auto* wrong_event = const_cast<model::Event*>(wrong_owner.find_event(wrong_columns[0].control->events.front().id()));
+    std::get<model::TableColumnControlRef>(wrong_event->owner).column = wrong_columns[1].name;
+    expect(!wrong_owner.validate().ok(), "an editor must reject an event owned by a different column of the same Table");
     auto encoded = form_stream::encode_document(parsed.value());
     expect(encoded.ok(), "fifteen named Table InputField ValueTypes must encode without a baseline");
     const auto value_list_editor = table_column_editor_info(encoded.value(), 4);
@@ -1934,6 +1953,12 @@ void test_table_input_field_value_type_round_trip() {
         constexpr std::array modes{"Directly", "Enter", "EnterOnInput", "Auto"};
         expect(decoded_columns[index].edit_mode == model::EnumerationValue{"ColumnEditMode", modes[index % modes.size()]},
             "four edit modes must independently survive in fifteen named columns");
+        const auto& editor_events = decoded_columns[index].control->events;
+        const auto* editor_event = editor_events.size() == 1 ? decoded.value().find_event(editor_events.front().id()) : nullptr;
+        const auto* editor_owner = editor_event ? std::get_if<model::TableColumnControlRef>(&editor_event->owner) : nullptr;
+        expect(editor_owner && editor_owner->table.id() == model::ObjectId{3} &&
+            editor_owner->column == decoded_columns[index].name && editor_event->handler == "EditorHandler" + std::to_string(index),
+            "events of fifteen editors must retain their handlers and distinct column owners");
         expect(decoded_columns[index].control->value_type == expected_types[index],
             "each outer and embedded InputField ValueType must survive native round-trip");
         std::size_t property_index = 0;
@@ -1955,15 +1980,24 @@ void test_table_input_field_value_type_round_trip() {
     const auto* border = decoded_columns[0].control->properties.find(model::PropertyId::from_name("BorderColor"));
     expect(border && std::get<model::ColorValue>(border->value).kind == model::ColorKind::style_reference,
         "embedded editor BorderColor must survive the named XML and stream cycle");
-    auto old_record = encoded.value();
-    auto old_editor = table_column_editor_info(old_record, 0);
-    auto& old_payload = old_editor.items[2].items[0];
-    old_payload.items.resize(39);
-    old_payload.items[1] = list_stream::ListValue::raw_atom("21");
-    replace_table_column_editor_info(old_record, 0, old_editor);
-    const auto old_decoded = form_stream::decode_document(old_record, "LegacyEditor");
-    expect(old_decoded.ok() && old_decoded.value().reconstruction_complete(),
-        "legacy InputField21/39 must use the shared property record migration");
+    for (const auto [version, arity] : {std::pair{"21", 39U}, std::pair{"30", 44U}}) {
+        auto old_record = encoded.value();
+        auto old_editor = table_column_editor_info(old_record, 0);
+        auto& old_payload = old_editor.items[2].items[0];
+        old_payload.items.resize(arity);
+        old_payload.items[1] = list_stream::ListValue::raw_atom(version);
+        replace_table_column_editor_info(old_record, 0, old_editor);
+        auto* old_table = find_record_with_guid(old_record, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        auto& old_column = old_table->items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1];
+        old_column.items.resize(40);
+        old_column.items[0] = list_stream::ListValue::raw_atom("16");
+        for (const auto slot : {10U, 11U, 12U})
+            old_column.items[slot] = list_stream::parse("{3,0,{0},\"\",-1,-1,1,0}");
+
+        const auto old_decoded = form_stream::decode_document(old_record, "LegacyEditor");
+        expect(old_decoded.ok() && old_decoded.value().reconstruction_complete(),
+            "legacy InputField generations must use the shared property record migration");
+    }
     auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
             list_stream::dump_compact(encoded.value()),

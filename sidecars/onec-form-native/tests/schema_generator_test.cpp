@@ -1204,14 +1204,14 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     xmlNodePtr type = schema_component(schema, "complexType", "TableColumnControlType");
     expect(type != nullptr, "Table Column Control must have its named type");
     const auto elements = direct_children(direct_child(type, "sequence"), "element");
-    const std::array<std::pair<std::string_view, std::string_view>, 18> expected{{
+    const std::array<std::pair<std::string_view, std::string_view>, 19> expected{{
         {"ValueType", "TypeDomainValueType"}, {"Enabled", "xs:boolean"},
         {"ReadOnly", "xs:boolean"}, {"Wrap", "xs:boolean"}, {"ChooseType", "xs:boolean"},
         {"ChoiceButton", "xs:boolean"}, {"OpenButton", "xs:boolean"}, {"ClearButton", "xs:boolean"},
         {"SpinButton", "xs:boolean"}, {"ChoiceListButton", "xs:boolean"}, {"MarkNegatives", "xs:boolean"},
         {"AutoMarkIncomplete", "xs:boolean"}, {"AutoChoiceIncomplete", "xs:boolean"},
         {"Transparent", "xs:boolean"}, {"BorderColor", "ColorValueType"}, {"Caption", "xs:string"},
-        {"ToolTip", "xs:string"}, {"Font", "FontValueType"},
+        {"ToolTip", "xs:string"}, {"Font", "FontValueType"}, {"Events", "InputFieldEventsType"},
     }};
     expect(elements.size() == expected.size(), "Table Column Control must expose only named properties");
     for (std::size_t index = 0; index < expected.size(); ++index) {

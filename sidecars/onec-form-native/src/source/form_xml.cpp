@@ -2065,7 +2065,8 @@ private:
     std::vector<model::EventRef> parse_control_events(
         xmlNodePtr node,
         model::ObjectId owner,
-        std::span<const mm::EventDescriptor> descriptors
+        std::span<const mm::EventDescriptor> descriptors,
+        std::optional<std::string_view> column = std::nullopt
     ) {
         std::vector<model::EventRef> references;
         for (xmlNodePtr event_node : element_children(node)) {
@@ -2081,8 +2082,11 @@ private:
                 "id",
                 object_id_text(owner));
             auto [handler, metadata, standard] = parse_event_content(event_node);
+            const model::EventOwner event_owner = column
+                ? model::EventOwner{model::TableColumnControlRef{model::ControlRef{owner}, std::string(*column)}}
+                : model::EventOwner{model::ControlRef{owner}};
             objects_.events.push_back({id, std::string(descriptor->api_name), std::move(handler),
-                model::ControlRef{owner}, std::move(metadata), std::move(standard)});
+                event_owner, std::move(metadata), std::move(standard)});
             references.push_back(model::EventRef{id});
         }
         return references;
@@ -3068,6 +3072,16 @@ private:
                     std::set<std::string> control_properties;
                     for (xmlNodePtr property_node : element_children(field)) {
                         const std::string property_name = node_name(property_node);
+                        if (property_name == "Events") {
+                            if (column.control->kind != model::ControlKind::input_field ||
+                                !control_properties.insert(property_name).second)
+                                fail("OOF2003", property_node, std::string(owner), property_name,
+                                    "one InputField Events collection", "invalid owner or duplicate", "Invalid editor Events");
+                            column.control->events = parse_control_events(property_node,
+                                parse_object_id(std::string(owner), property_node, "ownerId"),
+                                mm::event_descriptors(column.control->kind), column.name);
+                            continue;
+                        }
                         if (property_name == "ValueType") {
                             if (column.control->kind != model::ControlKind::input_field) {
                                 fail("OOF2003", property_node, std::string(owner), property_name,
@@ -4501,13 +4515,7 @@ private:
             for (const model::EventRef reference : references) {
                 const model::Event* event = document_.find_event(reference.id());
                 if (event != nullptr) {
-                    const mm::EventDescriptor* actual =
-                        std::holds_alternative<model::FormRef>(event->owner)
-                            ? metamodel_.form_event(event->name)
-                            : mm::find_event(
-                                  *document_.find_control(std::get<model::ControlRef>(event->owner).id()),
-                                  event->name);
-                    if (actual == &descriptor) ordered.emplace_back(&descriptor, event);
+                    if (event->name == descriptor.api_name) ordered.emplace_back(&descriptor, event);
                 }
             }
         }
@@ -5321,6 +5329,7 @@ private:
                     write_editor_property("ToolTip");
                     write_editor_property("Font");
                 }
+                write_events("Events", column.control->events, mm::event_descriptors(column.control->kind), owner);
                 writer_.close("Control");
             }
             writer_.close("Column");
