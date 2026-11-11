@@ -4738,7 +4738,17 @@ LV encode_picture_reference(const model::PictureRef& reference, std::string_view
     return picture;
 }
 
-std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, std::string_view path) {
+std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& source, std::string_view path) {
+    std::optional<LV> upgraded;
+    if (source.is_list && source.items.size() >= 2 && source.items[0].atom == "3" && source.items[1].atom == "1") {
+        require_arity(source, 8, path);
+        require_raw_constant(source.items[0], "3", child_path(path, 0));
+        require_raw_constant(source.items[1], "1", child_path(path, 1));
+        upgraded = source;
+        upgraded->items[0] = raw("4");
+        upgraded->items.push_back(string_value(""));
+    }
+    const auto& value = upgraded ? *upgraded : source;
     if (is_empty_picture_descriptor(value)) return std::nullopt;
     if (value.items.size() >= 2 && value.items[0].atom == "4" && value.items[1].atom == "1") {
         require_arity(value, 9, path);

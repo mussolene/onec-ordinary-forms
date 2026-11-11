@@ -7393,6 +7393,46 @@ void test_all_standard_button_pictures_round_trip_without_assets() {
     const auto common_rebuilt = form_stream::encode_document(common_parsed.value());
     expect(common_rebuilt.ok() && list_stream::dump_compact(common_stream.value()) == list_stream::dump_compact(common_rebuilt.value()),
         "CommonPicture XML-only rebuild must preserve all picture identities");
+    for (const bool shared : {false, true}) {
+        const auto& current = shared ? common_stream.value() : encoded.value();
+        auto legacy = current;
+        std::size_t changed = 0;
+        std::function<void(list_stream::ListValue&)> downgrade = [&](auto& value) {
+            if (!value.is_list) return;
+            if (value.items.size() == 9 && value.items[0].atom == "4" && value.items[1].atom == "1") {
+                value.items.resize(8);
+                value.items[0] = list_stream::ListValue::raw_atom("3");
+                ++changed;
+            }
+            for (auto& child : value.items) downgrade(child);
+        };
+        downgrade(legacy);
+        expect(changed == (shared ? 13 : descriptors.size()),
+            "legacy picture generation must cover all 294 library pictures or twelve shared-picture controls plus caption");
+        const auto restored = form_stream::decode_document(legacy, shared ? "CommonPictures" : "StandardPictures");
+        expect(restored.ok() && restored.value().reconstruction_complete() && restored.diagnostics().empty(),
+            "reference picture generation3/8 must decode completely through the shared picture codec");
+        const auto legacy_xml = source::serialize_form_xml(restored.value());
+        const auto parsed = legacy_xml ? source::parse_form_xml(legacy_xml.value()) : source::parse_form_xml("");
+        expect(parsed.ok(), "legacy reference pictures must use the existing named XML contract");
+        const auto written = form_stream::encode_document(parsed.value());
+        expect(written.ok() && list_stream::dump_compact(written.value()) == list_stream::dump_compact(current),
+            "legacy reference pictures must rebuild the current stream from XML without a baseline");
+        for (unsigned invalid = 0; invalid < 7; ++invalid) {
+            auto malformed = legacy;
+            auto& picture = shared ? malformed.items[13].items[2] :
+                const_cast<list_stream::ListValue*>(find_control_record(malformed, 1000))->items[2].items[1].items[8];
+            if (invalid == 0) picture.items.pop_back();
+            if (invalid == 1) picture.items.push_back(list_stream::ListValue::string_atom(""));
+            if (invalid == 2) picture.items[0] = list_stream::ListValue::string_atom("3");
+            if (invalid == 3) picture.items[2] = list_stream::parse("{0,00000000-0000-0000-0000-000000000000}");
+            if (invalid == 4) picture.items[4] = list_stream::ListValue::raw_atom("-2");
+            if (invalid == 5) picture.items[6] = list_stream::ListValue::raw_atom("2");
+            if (invalid == 6) picture.items[7] = list_stream::ListValue::raw_atom("1");
+            expect(!form_stream::decode_document(malformed, "InvalidLegacyPicture"),
+                "legacy reference pictures must reject malformed headers, arities, identities, dimensions and flags");
+        }
+    }
     for (const unsigned version : {3U, 4U, 5U, 6U, 7U, 8U, 9U}) {
         auto legacy = common_stream.value();
         for (auto& record : legacy.items[1].items[2].items[2].items) {
