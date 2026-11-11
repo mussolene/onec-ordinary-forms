@@ -6211,6 +6211,43 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     expect(reparsed.ok() && rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
         "batch named XML must rebuild canonical runtime command storage");
 
+    for (const std::string generation : {"5", "7"}) {
+        auto legacy = encoded.value();
+        unsigned changed = 0;
+        std::function<void(list_stream::ListValue&)> downgrade = [&](auto& value) {
+            if (!value.is_list) return;
+            if (value.items.size() == 16 && value.items[0].atom == "8" &&
+                value.items[1].atom_kind == list_stream::ListValue::AtomKind::string && value.items[6].atom.size() == 36) {
+                value.items.resize(13);
+                value.items[0] = list_stream::ListValue::raw_atom(generation);
+                ++changed;
+            }
+            for (auto& child : value.items) downgrade(child);
+        };
+        downgrade(legacy);
+        expect(changed == 28, "legacy menu generations must cover all 28 independent command owners");
+        const auto restored = form_stream::decode_document(legacy, "RuntimeStandardActions");
+        expect(restored.ok() && restored.value().reconstruction_complete(),
+            "native-confirmed menu generations 5/13 and 7/13 must decode completely");
+        const auto legacy_xml = source::serialize_form_xml(restored.value());
+        expect(legacy_xml.ok() && legacy_xml.value() == xml.value(),
+            "legacy menu properties must preserve the same named command model");
+        const auto parsed = source::parse_form_xml(legacy_xml.value());
+        const auto written = parsed ? form_stream::encode_document(parsed.value()) : oof::Result<list_stream::ListValue>::failure({});
+        expect(written.ok() && list_stream::dump_compact(written.value()) == list_stream::dump_compact(encoded.value()),
+            "legacy menu generations must rebuild the canonical current stream from XML only");
+        for (unsigned invalid = 0; invalid < 3; ++invalid) {
+            auto broken = legacy;
+            auto* record = const_cast<list_stream::ListValue*>(find_control_record(broken, 100));
+            auto& properties = record->items[2].items[1].items[7].items[7].items[6];
+            if (invalid == 0) properties.items[0] = list_stream::ListValue::raw_atom("6");
+            if (invalid == 1) properties.items.pop_back();
+            if (invalid == 2) properties.items.push_back(list_stream::ListValue::raw_atom("0"));
+            expect(!form_stream::decode_document(broken, "InvalidLegacyMenu"),
+                "unknown menu generations and mismatched record arities must reject");
+        }
+    }
+
     const auto mutate_first_action = [&](auto mutate) {
         auto changed = encoded.value();
         auto* record = const_cast<list_stream::ListValue*>(find_control_record(changed, 100));

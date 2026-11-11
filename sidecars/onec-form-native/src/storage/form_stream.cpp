@@ -5239,6 +5239,10 @@ void warn_incomplete_profile(
         std::string(kind) + " contains property data not represented in the named model; these properties cannot be reproduced."});
 }
 
+constexpr std::array menu_entry_layouts{
+    RecordLayout{"5", 13}, RecordLayout{"7", 13}, RecordLayout{"8", 16},
+};
+
 constexpr std::array menu_action_layouts{
     RecordLayout{"6", 6},
     RecordLayout{"7", 7},
@@ -5347,9 +5351,17 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto guid = uuid_atom(group.items[5 + 2 * i], path).canonical;
             if (!actions.contains(guid) || !consumed_actions.insert(guid).second)
                 fail("OOF1114", std::string(path), "unique existing action reference", guid, "Menu action is dangling or shared");
-            const auto& props = group.items[6 + 2 * i];
-            require_arity(props, 16, path);
-            require_raw_constant(props.items[0], "8", child_path(path, 0));
+            auto props = group.items[6 + 2 * i];
+            const auto version = raw_atom(at(props, 0, path), child_path(path, 0));
+            const auto layout = std::ranges::find(menu_entry_layouts, version, &RecordLayout::version);
+            if (layout == menu_entry_layouts.end())
+                fail("OOF1106", child_path(path, 0), "menu entry generation 5, 7 or 8", version,
+                    "Menu entry properties version is unsupported");
+            require_arity(props, layout->arity, path);
+            if (version != "8") {
+                props.items.resize(16, raw("0"));
+                props.items[0] = raw("8");
+            }
             require_raw_constant(props.items[6], owner, child_path(path, 6));
             model::CommandBarButton entry;
             entry.name = string_atom(props.items[1], path);
