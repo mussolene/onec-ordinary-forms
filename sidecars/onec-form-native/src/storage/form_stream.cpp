@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
@@ -4921,12 +4922,15 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
             case model::ClientInterfaceVariant::version8_0:
                 client_interface_variant = 0;
                 break;
+            case model::ClientInterfaceVariant::version8_2:
+                client_interface_variant = 1;
+                break;
             case model::ClientInterfaceVariant::version8_2_ordinary_app:
                 client_interface_variant = 2;
                 break;
             default:
                 fail("OOF1122", "$/Button/Buttons/ClientInterfaceVariant",
-                    "Version8_0 or Version8_2_OrdinaryApp", "invalid enum value",
+                    "Version8_0, Version8_2 or Version8_2_OrdinaryApp", "invalid enum value",
                     "Client interface variant is unsupported");
         }
         std::vector<LV> record{raw("8"), raw(it->action_id), raw("1"),
@@ -4938,7 +4942,7 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
         if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_named_shortcut(entry.shortcut, "$/Button/Shortcut"));
         record.push_back(raw(std::to_string(client_interface_variant)));
-        record.push_back(raw("0"));
+        record.push_back(raw(client_interface_variant == 1 ? "1" : "0"));
         result.push_back(list(std::move(record)));
     }
     result.push_back(raw(std::to_string(1 + std::count_if(items.begin(), items.end(), [](const auto& item) {
@@ -4990,6 +4994,12 @@ void warn_incomplete_profile(
         std::string(kind) + " contains property data not represented in the named model; these properties cannot be reproduced."});
 }
 
+constexpr std::array menu_action_layouts{
+    RecordLayout{"6", 6},
+    RecordLayout{"7", 7},
+    RecordLayout{"8", 8},
+};
+
 DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::string_view control_name,
     Diagnostics& warnings, bool& reconstruction_complete,
                                std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0,
@@ -5005,15 +5015,26 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
     struct ActionRecord {
         const LV* value;
         std::string path;
+        const RecordLayout* layout;
+        unsigned mask;
     };
     std::unordered_map<std::string, ActionRecord> actions;
     for (std::size_t i = 0; i < action_count; ++i) {
         const auto& action = menu.items[5 + i];
         const auto action_path = child_path(path, 5 + i);
         require_list(action, action_path);
-        if (action.items.size() < 8) fail("OOF1102", action_path, "action header", describe(action), "Menu action is incomplete");
+        if (action.items.size() < 6) fail("OOF1102", action_path, "action header", describe(action), "Menu action is incomplete");
+        const auto version = raw_atom(action.items[0], child_path(action_path, 0));
+        const auto layout = std::ranges::find(menu_action_layouts, version, &RecordLayout::version);
+        if (layout == menu_action_layouts.end())
+            fail("OOF1114", child_path(action_path, 0), "Menu action version 6, 7 or 8",
+                version, "Menu action record version is unsupported");
+        const auto mask = integer_atom<unsigned>(action.items[5], child_path(action_path, 5));
+        if (mask > 15)
+            fail("OOF1114", child_path(action_path, 5), "known property flags", std::to_string(mask), "Menu action flags are unsupported");
+        require_arity(action, layout->arity + std::popcount(mask), action_path);
         const auto guid = uuid_atom(action.items[1], child_path(action_path, 1)).canonical;
-        if (!actions.emplace(guid, ActionRecord{&action, action_path}).second)
+        if (!actions.emplace(guid, ActionRecord{&action, action_path, &*layout, mask}).second)
             fail("OOF1114", child_path(action_path, 1), "unique actions", guid, "Duplicate menu action");
     }
     const auto group_count = integer_atom<std::size_t>(menu.items[5 + action_count], path);
@@ -5155,7 +5176,6 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto& action_record = actions.at(guid);
             const auto& action = *action_record.value;
             const auto& action_path = action_record.path;
-            require_raw_constant(action.items[0], "8", child_path(action_path, 0));
             require_raw_constant(action.items[2], "1", child_path(action_path, 2));
             if (type == 0) {
                 if (raw_atom(action.items[3], child_path(action_path, 3)) == standard_menu_action_guid) {
@@ -5188,8 +5208,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 warn_incomplete_profile(warnings, reconstruction_complete, id,
                     child_path(path, index), "MenuAction");
             }
-            const auto mask = integer_atom<unsigned>(action.items[5], child_path(action_path, 5));
-            if (mask > 15) fail("OOF1114", child_path(action_path, 5), "known property flags", std::to_string(mask), "Menu action flags are unsupported");
+            const auto mask = action_record.mask;
             std::size_t cursor = 6;
             const auto take = [&]() -> const LV& { return at(action, cursor++, action_path); };
             if (mask & 2) {
@@ -5217,23 +5236,32 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 entry.shortcut = decode_named_shortcut(take(), child_path(action_path, slot));
             }
             const auto variant_slot = cursor;
-            const auto client_interface_variant = integer_atom<std::int32_t>(take(), child_path(action_path, variant_slot));
+            const auto client_interface_variant = action_record.layout->arity == 6
+                ? (root_marker == command_bar_root_marker ? 2 : 1) :
+                integer_atom<std::int32_t>(take(), child_path(action_path, variant_slot));
             switch (client_interface_variant) {
                 case 0:
                     entry.client_interface_variant = model::ClientInterfaceVariant::version8_0;
+                    break;
+                case 1:
+                    entry.client_interface_variant = model::ClientInterfaceVariant::version8_2;
                     break;
                 case 2:
                     entry.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
                     break;
                 default:
-                    fail("OOF1114", child_path(action_path, variant_slot), "client interface variant 0 or 2",
+                    fail("OOF1114", child_path(action_path, variant_slot), "client interface variant 0, 1 or 2",
                         std::to_string(client_interface_variant), "Client interface variant is unsupported");
             }
             const auto second_tail_slot = cursor;
-            const auto second_tail_value = integer_atom<std::int32_t>(take(), child_path(action_path, second_tail_slot));
-            if (second_tail_value != 0) {
+            // В поколениях 6 и 7 отсутствующее второе поле получает значение 1.
+            const auto second_tail_value = action_record.layout->arity == 8
+                ? integer_atom<std::int32_t>(take(), child_path(action_path, second_tail_slot)) : 1;
+            const auto represented_tail = client_interface_variant == 1 ? 1 : 0;
+            if (second_tail_value != represented_tail) {
                 warn_incomplete_profile(warnings, reconstruction_complete, id,
-                    child_path(action_path, second_tail_slot), "MenuAction");
+                    action_record.layout->arity == 8 ? child_path(action_path, second_tail_slot) : action_path,
+                    "MenuAction");
             }
             require_arity(action, cursor, action_path);
             if (type == 1) {

@@ -5258,7 +5258,7 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
     expect(list_stream::dump_compact(changed.value()) == list_stream::dump_compact(expected_changed),
         "editing the client interface variant must change only its first tail atom from 0 to 2");
 
-    for (const auto& invalid : {"1", "3", "-1"}) {
+    for (const auto& invalid : {"3", "-1"}) {
         auto malformed = encoded.value();
         menu_at(malformed).items[5].items[6] = list_stream::ListValue::raw_atom(invalid);
         const auto rejected = form_stream::decode_document(malformed, "InvalidClientInterfaceVariant");
@@ -5301,6 +5301,126 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
         static_cast<model::ClientInterfaceVariant>(255);
     invalid_document.add_control(std::move(invalid_button));
     expect(!form_stream::encode_document(invalid_document), "writer must reject an invalid enum cast");
+}
+
+void test_menu_action_generations_share_named_model() {
+    for (const bool command_bar : {false, true}) {
+        for (const auto kind : {model::CommandBarButtonKind::action,
+                 model::CommandBarButtonKind::submenu, model::CommandBarButtonKind::separator}) {
+            for (unsigned properties = 0; properties < 4; ++properties) {
+                model::Form form; form.id = model::ObjectId{1}; form.name = "MenuGenerations";
+                form.children = {model::ControlRef{model::ObjectId{2}}};
+                model::OrdinaryFormDocument document(std::move(form));
+                model::CommandBarButton entry;
+                entry.name = "Entry"; entry.type = kind;
+                entry.client_interface_variant = command_bar ? model::ClientInterfaceVariant::version8_2_ordinary_app
+                    : model::ClientInterfaceVariant::version8_2;
+                if (kind != model::CommandBarButtonKind::separator) {
+                    if (properties & 1) entry.tooltip = "Own tooltip";
+                    if (properties & 2) entry.explanation = "Own explanation";
+                }
+                if (kind == model::CommandBarButtonKind::action)
+                    entry.action = model::CommandBarAction{"RunHandler", "OwnAction", {}, {}, {}};
+                if (kind == model::CommandBarButtonKind::submenu) {
+                    auto nested = entry;
+                    nested.name = "Nested"; nested.type = model::CommandBarButtonKind::action;
+                    nested.action = model::CommandBarAction{"RunHandler", "NestedAction", {}, {}, {}};
+                    entry.buttons.push_back(std::move(nested));
+                    model::CommandBarButton separator;
+                    separator.name = "Separator"; separator.type = model::CommandBarButtonKind::separator;
+                    separator.client_interface_variant = entry.client_interface_variant;
+                    entry.buttons.push_back(std::move(separator));
+                }
+                model::ControlNode control{model::ObjectId{2}, "Probe", command_bar
+                    ? model::ControlPayload{model::CommandBarPayload{}}
+                    : model::ControlPayload{model::ButtonPayload{}}};
+                if (command_bar) std::get<model::CommandBarPayload>(control.payload).buttons = {entry};
+                else {
+                    control.properties().set_explicit(model::PropertyId::from_name("MenuMode"),
+                        model::EnumerationValue{"MenuMode", "UseExtra"});
+                    std::get<model::ButtonPayload>(control.payload).buttons = {entry};
+                }
+                document.add_control(std::move(control));
+                const auto current = form_stream::encode_document(document);
+                expect(current.ok(), current ? "named Version8_2 menu must encode" : current.diagnostics().front().message);
+                const auto menu_at = [command_bar](auto& stream) -> auto& {
+                    auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(command_bar
+                        ? model::ControlKind::command_bar : model::ControlKind::button).guid);
+                    expect(record != nullptr, "menu owner must exist");
+                    return record->items[2].items[1].items[command_bar ? 7 : 12];
+                };
+                auto legacy = current.value();
+                auto& menu = menu_at(legacy);
+                const auto count = static_cast<std::size_t>(std::stoul(menu.items[4].atom));
+                for (std::size_t index = 0; index < count; ++index) {
+                    auto& action = menu.items[5 + index];
+                    expect(action.items[action.items.size() - 2].atom == (command_bar ? "2" : "1") &&
+                           action.items.back().atom == (command_bar ? "0" : "1"),
+                        "modern fixture must encode its represented context pair");
+                    action.items.resize(action.items.size() - 2);
+                    action.items[0] = list_stream::ListValue::raw_atom("6");
+                }
+                const auto decoded = form_stream::decode_document(legacy, "MenuGenerations");
+                expect(decoded.ok() && decoded.value().reconstruction_complete() == !command_bar,
+                    decoded ? "old CommandBar context must remain incomplete until independently represented"
+                            : decoded.diagnostics().front().message);
+                const auto* result = decoded.value().find_control(model::ObjectId{2});
+                const auto& entries = command_bar ? std::get<model::CommandBarPayload>(result->payload).buttons
+                    : std::get<model::ButtonPayload>(result->payload).buttons;
+                expect(entries == std::vector<model::CommandBarButton>{entry},
+                    "old and current menu generations must populate the same named properties and nested items");
+                const auto xml = source::serialize_form_xml(decoded.value());
+                const auto parsed = xml ? source::parse_form_xml(xml.value()) : source::parse_form_xml("");
+                expect(parsed.ok(), "old generation must serialize as valid named XML");
+                const auto rebuilt = form_stream::encode_document(parsed.value());
+                if (command_bar) {
+                    expect(rebuilt.ok() && std::ranges::any_of(rebuilt.diagnostics(), [](const auto& diagnostic) {
+                        return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+                    }), "unrepresented old CommandBar context must retain the incomplete-build warning");
+                } else {
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+                        "XML-only rebuild of complete old Button menu must equal the current named-model encoding");
+                }
+                for (int variant = 0; variant < 3; ++variant) {
+                    auto generation7 = legacy;
+                    auto& older_menu = menu_at(generation7);
+                    for (std::size_t index = 0; index < count; ++index) {
+                        auto& action = older_menu.items[5 + index];
+                        action.items[0] = list_stream::ListValue::raw_atom("7");
+                        action.items.push_back(list_stream::ListValue::raw_atom(std::to_string(variant)));
+                    }
+                    const auto older = form_stream::decode_document(generation7, "MenuGenerations");
+                    expect(older.ok() && older.value().reconstruction_complete() == (variant == 1),
+                        "generation7 implicit second context1 must not be inferred from explicit first context");
+                    const auto* older_control = older.value().find_control(model::ObjectId{2});
+                    const auto& older_entries = command_bar
+                        ? std::get<model::CommandBarPayload>(older_control->payload).buttons
+                        : std::get<model::ButtonPayload>(older_control->payload).buttons;
+                    expect(older_entries.front().client_interface_variant == static_cast<model::ClientInterfaceVariant>(variant),
+                        "generation7 must retain its explicit first context for either owner");
+                }
+                for (const auto version : {"5", "9"}) {
+                    auto malformed = legacy;
+                    menu_at(malformed).items[5].items[0] = list_stream::ListValue::raw_atom(version);
+                    expect(!form_stream::decode_document(malformed, "MenuGenerations"), "unknown action generations must reject");
+                }
+                auto extra = legacy;
+                menu_at(extra).items[5].items.push_back(list_stream::ListValue::raw_atom("0"));
+                expect(!form_stream::decode_document(extra, "MenuGenerations"), "version6 cannot have an unexplained trailer");
+                auto truncated = legacy;
+                menu_at(truncated).items[5].items.pop_back();
+                expect(!form_stream::decode_document(truncated, "MenuGenerations"), "version6 required fields cannot be truncated");
+                auto unknown_mask = legacy;
+                menu_at(unknown_mask).items[5].items[5] = list_stream::ListValue::raw_atom("16");
+                expect(!form_stream::decode_document(unknown_mask, "MenuGenerations"), "old action flags must remain bounded");
+                auto unknown_context = current.value();
+                menu_at(unknown_context).items[5].items.back() = list_stream::ListValue::raw_atom(command_bar ? "1" : "0");
+                const auto partial = form_stream::decode_document(unknown_context, "MenuGenerations");
+                expect(partial.ok() && !partial.value().reconstruction_complete(),
+                    "unexplained Version8_2 context must not be silently declared complete");
+            }
+        }
+    }
 }
 
 void test_automatic_button_text_without_explicit_text_round_trip() {
@@ -25280,6 +25400,7 @@ int main() {
         test_button_menu_mode_round_trip_and_validation();
         test_named_button_menu_round_trip_and_invalid_references();
         test_button_menu_client_interface_variant_round_trip_and_validation();
+        test_menu_action_generations_share_named_model();
         test_automatic_button_text_without_explicit_text_round_trip();
         test_form_caption_picture();
         test_form_caption_picture_assets();

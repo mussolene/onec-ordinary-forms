@@ -3053,8 +3053,9 @@ private:
             } else if (name == "ClientInterfaceVariant") {
                 const auto variant = node_text(child);
                 if (variant == "Version8_0") item.client_interface_variant = model::ClientInterfaceVariant::version8_0;
+                else if (variant == "Version8_2") item.client_interface_variant = model::ClientInterfaceVariant::version8_2;
                 else if (variant == "Version8_2_OrdinaryApp") item.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
-                else fail("OOF2003", child, std::string(owner), name, "Version8_0 or Version8_2_OrdinaryApp", variant, "Unknown client interface variant");
+                else fail("OOF2003", child, std::string(owner), name, "Version8_0, Version8_2, or Version8_2_OrdinaryApp", variant, "Unknown client interface variant");
             } else if (name == "Shortcut") item.shortcut = parse_shortcut(child);
             else if (name == "Picture") item.picture = parse_picture_reference(child, "Picture", owner);
             else if (name == "Action") {
@@ -4628,6 +4629,9 @@ private:
             switch (item.client_interface_variant) {
                 case model::ClientInterfaceVariant::version8_0:
                     writer_.text("ClientInterfaceVariant", "Version8_0");
+                    break;
+                case model::ClientInterfaceVariant::version8_2:
+                    writer_.text("ClientInterfaceVariant", "Version8_2");
                     break;
                 case model::ClientInterfaceVariant::version8_2_ordinary_app:
                     break;

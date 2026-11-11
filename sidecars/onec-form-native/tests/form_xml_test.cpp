@@ -2811,16 +2811,18 @@ void test_button_menu_model_roundtrip_and_rejections() {
 }
 
 void test_client_interface_variant_xml_contract() {
-    const auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="zero" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="default" type="Action"><Action handler="Default" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML");
+    const auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="zero" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="version8_2" type="Action"><ClientInterfaceVariant>Version8_2</ClientInterfaceVariant><Action handler="Version82" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="default" type="Action"><Action handler="Default" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML");
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
     const auto& buttons = std::get<model::ButtonPayload>(parsed.value().find_control(model::ObjectId{2})->payload).buttons;
     expect(buttons[0].client_interface_variant == model::ClientInterfaceVariant::version8_0 &&
-               buttons[1].client_interface_variant == model::ClientInterfaceVariant::version8_2_ordinary_app,
-        "explicit Version8_0 and omitted Version8_2_OrdinaryApp must map to named variants");
+               buttons[1].client_interface_variant == model::ClientInterfaceVariant::version8_2 &&
+               buttons[2].client_interface_variant == model::ClientInterfaceVariant::version8_2_ordinary_app,
+        "explicit Version8_0 and Version8_2, and the omitted Version8_2_OrdinaryApp default must map to named variants");
     const auto xml = source::serialize_form_xml(parsed.value());
     expect(xml.ok() && xml.value().find("<ClientInterfaceVariant>Version8_0</ClientInterfaceVariant>") != std::string::npos &&
+               xml.value().find("<ClientInterfaceVariant>Version8_2</ClientInterfaceVariant>") != std::string::npos &&
                xml.value().find("<ClientInterfaceVariant>Version8_2_OrdinaryApp</ClientInterfaceVariant>") == std::string::npos,
-        "XML must write Version8_0 and omit the Version8_2_OrdinaryApp default");
+        "XML must write explicit Version8_0 and Version8_2, and omit the Version8_2_OrdinaryApp default");
     expect(source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><ClientInterfaceVariant>Unsupported</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok() == false,
         "unsupported client interface variant names must be rejected");
     expect(source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><ClientInterfaceVariant>Version8_2_OrdinaryApp</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok() == false,

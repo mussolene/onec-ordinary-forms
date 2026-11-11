@@ -460,8 +460,8 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
     std::vector<std::string> variant_members;
     for (xmlNodePtr item : direct_children(variant_restriction, "enumeration"))
         variant_members.push_back(attribute(item, "value"));
-    expect(variant_members == std::vector<std::string>{"Version8_0", "Version8_2_OrdinaryApp"},
-        "client interface variant schema must expose exactly the two supported names");
+    expect(variant_members == std::vector<std::string>{"Version8_0", "Version8_2", "Version8_2_OrdinaryApp"},
+        "client interface variant schema must expose exactly the three supported names");
     expect(element_type("SplitterType", "Orientation") == "EnumerationValueType",
         "other controls must keep the shared generic Orientation value type");
 
@@ -585,6 +585,8 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
     const std::string variant_suffix = "</ClientInterfaceVariant><Action handler=\"Run\" name=\"\"><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>";
     expect(validate_document(compiled_schema, variant_form + "Version8_2_OrdinaryApp" + variant_suffix) == 0,
         "named client interface variant must validate in its generated sequence position");
+    expect(validate_document(compiled_schema, variant_form + "Version8_2" + variant_suffix) == 0,
+        "Version8_2 client interface variant must validate in its generated sequence position");
     expect(validate_document(compiled_schema, variant_form + "Unsupported" + variant_suffix) != 0,
         "generated XSD must reject unsupported client interface variant names");
 }

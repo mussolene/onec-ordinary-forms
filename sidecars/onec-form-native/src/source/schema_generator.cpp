@@ -1322,7 +1322,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     output += "</xs:restriction></xs:simpleType>\n";
     output += R"XSD(  <xs:simpleType name="CommandBarButtonKindType"><xs:restriction base="xs:string"><xs:enumeration value="Action"/><xs:enumeration value="Submenu"/><xs:enumeration value="Separator"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ButtonRepresentationType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Picture"/><xs:enumeration value="Text"/><xs:enumeration value="PictureText"/></xs:restriction></xs:simpleType>
-  <xs:simpleType name="ClientInterfaceVariantType"><xs:restriction base="xs:string"><xs:enumeration value="Version8_0"/><xs:enumeration value="Version8_2_OrdinaryApp"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ClientInterfaceVariantType"><xs:restriction base="xs:string"><xs:enumeration value="Version8_0"/><xs:enumeration value="Version8_2"/><xs:enumeration value="Version8_2_OrdinaryApp"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="CommandBarButtonOrderType"><xs:restriction base="xs:string"><xs:enumeration value="DontOrder"/><xs:enumeration value="Ascending"/><xs:enumeration value="Descending"/></xs:restriction></xs:simpleType>
   <xs:complexType name="CommandBarButtonsType"><xs:sequence><xs:element ref="CommandBarButton" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
   <xs:simpleType name="CommandBarActionHandlerType"><xs:restriction base="xs:string"><xs:minLength value="1"/></xs:restriction></xs:simpleType>
