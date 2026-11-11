@@ -7032,6 +7032,47 @@ DecodedControl decode_html_document_field(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}, std::move(named_events)};
 }
 
+constexpr std::array label_properties_layouts{
+    RecordLayout{"7", 14}, RecordLayout{"11", 21},
+};
+
+constexpr std::array label_picture_layouts{
+    RecordLayout{"3", 3}, RecordLayout{"10", 11},
+};
+
+std::optional<LV> upgrade_label_properties(const LV& properties, std::string_view path) {
+    require_list(properties, path);
+    if (properties.items.size() < 2) require_arity(properties, 21, path);
+    const auto version = raw_atom(properties.items[1], child_path(path, 1));
+    const auto layout = std::ranges::find(label_properties_layouts, version, &RecordLayout::version);
+    if (layout == label_properties_layouts.end())
+        fail("OOF1106", child_path(path, 1), "LabelDecoration properties generation 7 or 11", version,
+            "LabelDecoration properties version is unsupported");
+    require_arity(properties, layout->arity, path);
+
+    const auto& picture = properties.items[12];
+    const auto picture_path = child_path(path, 12);
+    require_list(picture, picture_path);
+    if (picture.items.empty()) require_arity(picture, 11, picture_path);
+    const auto picture_version = raw_atom(picture.items[0], child_path(picture_path, 0));
+    const auto picture_layout = std::ranges::find(label_picture_layouts, picture_version, &RecordLayout::version);
+    if (picture_layout == label_picture_layouts.end())
+        fail("OOF1106", child_path(picture_path, 0), "LabelDecoration picture generation 3 or 10", picture_version,
+            "LabelDecoration picture version is unsupported");
+    require_arity(picture, picture_layout->arity, picture_path);
+    if (version == "11" && picture_version == "10") return std::nullopt;
+
+    auto current = canonical_label_properties(std::string{}, 0, {});
+    auto current_picture = current.items[12];
+    std::copy(properties.items.begin(), properties.items.end(), current.items.begin());
+    current.items[1] = raw("11");
+    if (picture_version == "3") {
+        std::copy(picture.items.begin() + 1, picture.items.end(), current_picture.items.begin() + 1);
+        current.items[12] = std::move(current_picture);
+    }
+    return current;
+}
+
 DecodedControl decode_label(
     const LV& record,
     std::string_view path,
@@ -7050,9 +7091,9 @@ DecodedControl decode_label(
     const std::string info_path = child_path(path, 2);
     require_arity(info, 3, info_path);
     require_raw_constant(info.items[0], "3", child_path(info_path, 0));
-    const auto& properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
-    require_arity(properties, 21, properties_path);
+    const auto upgraded_properties = upgrade_label_properties(info.items[1], properties_path);
+    const auto& properties = upgraded_properties ? *upgraded_properties : info.items[1];
     auto base_properties = properties.items[0];
     const std::string base_properties_path = child_path(properties_path, 0);
     read_common_control_base(base_properties, base_properties_path, [&] {

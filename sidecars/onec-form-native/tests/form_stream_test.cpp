@@ -7399,6 +7399,89 @@ void test_button_then_label_decoration_round_trip() {
         "unsupported LabelDecoration storage leaves must fail closed");
 }
 
+void test_label_property_and_picture_generations() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "LabelGenerations";
+    for (std::uint64_t id = 2; id < 12; ++id) form.children.push_back(model::ControlRef{model::ObjectId{id}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (unsigned i = 0; i < 10; ++i) {
+        model::ControlNode label{model::ObjectId{i + 2}, "Label" + std::to_string(i), model::LabelDecorationPayload{}};
+        auto& properties = label.properties();
+        properties.set_explicit(model::PropertyId::from_name("Caption"), std::string("Own caption ") + std::to_string(i));
+        properties.set_explicit(model::PropertyId::from_name("Enabled"), (i & 1) == 0);
+        properties.set_explicit(model::PropertyId::from_name("Hyperlink"), (i & 2) != 0);
+        properties.set_explicit(model::PropertyId::from_name("MarkNegatives"), (i & 4) != 0);
+        properties.set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Own tooltip"));
+        constexpr std::array alignments{"Left", "Center", "Right", "Auto"};
+        properties.set_explicit(model::PropertyId::from_name("HorizontalAlign"), model::EnumerationValue{"HorizontalAlign", alignments[i % 4]});
+        properties.set_explicit(model::PropertyId::from_name("Format"), std::string("Own format"));
+        if (i % 2) {
+            properties.set_explicit(model::PropertyId::from_name("Picture"),
+                model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+            properties.set_explicit(model::PropertyId::from_name("Shortcut"), model::ShortcutValue{"PageDown", true, false, true});
+        }
+        if (i % 3) {
+            model::FontValue font; font.kind = model::FontKind::absolute; font.face_name = "Arial";
+            font.height = 10.5; font.italic = true;
+            properties.set_explicit(model::PropertyId::from_name("Font"), font);
+            properties.set_explicit(model::PropertyId::from_name("TextColor"),
+                model::ColorValue{model::ColorKind::absolute, 12, 34, 56, 255, std::monostate{}});
+        }
+        if (i == 0) {
+            label.events = {model::EventRef{model::ObjectId{12}}};
+            document.add_event(model::Event{model::ObjectId{12}, "Click", "OnLabelClick", model::ControlRef{model::ObjectId{2}}});
+        }
+        document.add_control(std::move(label));
+    }
+    const auto current = form_stream::encode_document(document);
+    expect(current.ok(), "ten varied Label controls must encode");
+    for (const bool old_properties : {false, true}) {
+        for (const bool old_picture : {false, true}) {
+            auto stream = current.value();
+            std::size_t changed = 0;
+            for (auto& record : stream.items[1].items[2].items[2].items) {
+                if (!record.is_list || record.items.size() != 6 || record.items[0].atom !=
+                    model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid) continue;
+                auto& properties = record.items[2].items[1];
+                if (old_properties) { properties.items.resize(14); properties.items[1] = list_stream::ListValue::raw_atom("7"); }
+                if (old_picture) { properties.items[12].items.resize(3); properties.items[12].items[0] = list_stream::ListValue::raw_atom("3"); }
+                ++changed;
+            }
+            expect(changed == 10, "each independent layout combination must cover ten Label controls");
+            const auto decoded = form_stream::decode_document(stream, "LabelGenerations");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                decoded ? "known Label generations must have a complete named model" : decoded.diagnostics().front().message);
+            const auto xml = source::serialize_form_xml(decoded.value());
+            const auto parsed = xml ? source::parse_form_xml(xml.value()) : source::parse_form_xml("");
+            expect(parsed.ok(), "old Label generations must use the existing named XML contract");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+                "independent Label property/picture generations must rebuild the canonical current stream from XML");
+            for (unsigned corruption = 0; corruption < 6; ++corruption) {
+                auto malformed = stream;
+                auto& properties = find_record_with_guid(malformed,
+                    model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid)->items[2].items[1];
+                if (corruption == 0) properties.items[1] = list_stream::ListValue::raw_atom("8");
+                if (corruption == 1) properties.items.push_back(list_stream::ListValue::raw_atom("0"));
+                if (corruption == 2) properties.items.pop_back();
+                if (corruption == 3) properties.items[12].items[0] = list_stream::ListValue::raw_atom("4");
+                if (corruption == 4) properties.items[12].items.push_back(list_stream::ListValue::raw_atom("0"));
+                if (corruption == 5) properties.items[12].items[1] = list_stream::ListValue::raw_atom("1");
+                expect(!form_stream::decode_document(malformed, "LabelGenerations"),
+                    "unknown/truncated/extended Label layouts and inconsistent picture copies must reject");
+            }
+            if (!old_properties) {
+                auto unrepresented = stream;
+                find_record_with_guid(unrepresented,
+                    model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid)->items[2].items[1].items[15] =
+                        list_stream::ListValue::raw_atom("1");
+                const auto partial = form_stream::decode_document(unrepresented, "LabelGenerations");
+                expect(partial.ok() && !partial.value().reconstruction_complete(),
+                    "upgrading a known old picture must not hide unrepresented modern Label fields");
+            }
+        }
+    }
+}
+
 void test_label_decoration_click_event_round_trip_and_guards() {
     const auto make_document = [](bool include_event, bool event_owner_is_control = true,
                                   std::uint64_t reference_id = 3, std::string handler = "LabelHandler") {
@@ -25412,6 +25495,7 @@ int main() {
         test_attribute_id_zero_form_bin_round_trip();
         test_metadata_member_binding_shared_round_trip();
         test_button_then_label_decoration_round_trip();
+        test_label_property_and_picture_generations();
         test_label_decoration_click_event_round_trip_and_guards();
         test_label_border_color_round_trip();
         test_label_font_round_trip_and_validation();
