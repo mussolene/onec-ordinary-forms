@@ -915,6 +915,64 @@ model::PropertyValue explicit_localized_text(
         "plain or localized text", "different value type", "Localized text property has the wrong model value type");
 }
 
+bool same_list_value(const LV& left, const LV& right) {
+    if (left.is_list != right.is_list || left.atom_kind != right.atom_kind || left.atom != right.atom || left.items.size() != right.items.size()) return false;
+    for (std::size_t index = 0; index < left.items.size(); ++index) {
+        if (!same_list_value(left.items[index], right.items[index])) return false;
+    }
+    return true;
+}
+
+LV canonical_button_picture() {
+    return parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}");
+}
+
+bool is_empty_picture_descriptor(const LV& value) {
+    if (!value.is_list || (value.items.size() != 8 && value.items.size() != 9)) return false;
+    const bool legacy = value.items.size() == 8;
+    const auto expected = legacy
+        ? parse_constant("{3,0,{0},\"\",-1,-1,1,0}")
+        : canonical_button_picture();
+    for (std::size_t index = 0; index < expected.items.size(); ++index) {
+        if (index == 6) {
+            if (!same_list_value(value.items[index], raw("0")) &&
+                !same_list_value(value.items[index], raw("1"))) return false;
+        } else if (!same_list_value(value.items[index], expected.items[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::uint32_t picture_style_version(const LV& value) {
+    if (!value.is_list || value.items.empty() || value.items[0].is_list ||
+        value.items[0].atom_kind != LV::AtomKind::raw) return 0;
+    const auto& marker = value.items[0].atom;
+    if (marker.size() == 1 && marker[0] >= '3' && marker[0] <= '9')
+        return static_cast<std::uint32_t>(marker[0] - '0');
+    return marker == "10" ? 10 : 0;
+}
+
+LV normalize_empty_picture_style(const LV& value) {
+    auto normalized = value;
+    const auto version = picture_style_version(value);
+    if (version == 3 && value.items.size() == 3) {
+        if (is_empty_picture_descriptor(value.items[2]))
+            normalized.items[2] = parse_constant("{3,0,{0},\"\",-1,-1,1,0}");
+    } else if (version >= 4 && value.items.size() == version + 1) {
+        bool all_empty = true;
+        for (const auto slot : {2U, 3U, 4U}) {
+            const bool empty = is_empty_picture_descriptor(value.items[slot]);
+            all_empty = all_empty && empty;
+            if (empty) normalized.items[slot] = canonical_button_picture();
+        }
+        // The native renderer skips these flags before loading them for an empty image.
+        if (version >= 6 && all_empty && same_list_value(value.items[6], raw("2")))
+            normalized.items[6] = raw("0");
+    }
+    return normalized;
+}
+
 LV canonical_style_record(std::uint32_t version) {
     if (version == 3) {
         return parse_constant("{3,0,0}");
@@ -924,9 +982,7 @@ LV canonical_style_record(std::uint32_t version) {
         "{4,0,{0},\"\",-1,-1,1,0,\"\"},"
         "{4,0,{0},\"\",-1,-1,1,0,\"\"},100,0,0,0,0,0}");
     value.items[0] = raw(std::to_string(version));
-    if (version == 8) {
-        value.items.resize(9);
-    }
+    if (version >= 4 && version <= 10) value.items.resize(version + 1);
     return value;
 }
 
@@ -1002,16 +1058,14 @@ model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_vi
         fail("OOF1108", child_path(path, 1), "LocalizedString record", describe(row.items[1]), error.what());
     }
     validate_localized_languages(title, child_path(path, 1));
-    if (legacy_v3) {
-        require_exact(row.items[2],
+    const auto style = normalize_empty_picture_style(row.items[2]);
+    const auto style_version = picture_style_version(style);
+    if (style_version == 3) {
+        require_exact(style,
             parse_constant("{3,0,{3,0,{0},\"\",-1,-1,1,0}}"), child_path(path, 2),
             "Legacy Page style contains an unsupported variation");
     } else {
-        const auto& style = row.items[2];
-        const bool legacy_style = (legacy_v4 || legacy_v5) && style.is_list &&
-            !style.items.empty() && !style.items[0].is_list &&
-            style.items[0].atom_kind == LV::AtomKind::raw && style.items[0].atom == "8";
-        require_exact(style, canonical_style_record(legacy_style ? 8 : 10), child_path(path, 2),
+        require_exact(style, canonical_style_record(style_version >= 4 ? style_version : 10), child_path(path, 2),
             "Page style contains an unsupported variation");
     }
     require_raw_constant(row.items[3], "-1", child_path(path, 3));
@@ -3631,8 +3685,6 @@ model::LocalizedStringValue decode_action_localized(const LV& value, std::string
     return decoded;
 }
 
-bool same_list_value(const LV& left, const LV& right);
-
 model::CommandBarAction decode_menu_action(const LV& payload, std::string_view path) {
     require_arity(payload, 3, path);
     require_raw_constant(payload.items[0], "3", child_path(path, 0));
@@ -3650,7 +3702,7 @@ model::CommandBarAction decode_menu_action(const LV& payload, std::string_view p
     action.tooltip = decode_action_localized(metadata.items[3], child_path(metadata_path, 3));
     action.description = decode_action_localized(metadata.items[4], child_path(metadata_path, 4));
     const auto expected = encode_menu_action(action, path).items[2];
-    if (!same_list_value(metadata.items[5], parse_constant("{3,0,{0},\"\",-1,-1,1,0}"))) {
+    if (!is_empty_picture_descriptor(metadata.items[5])) {
         require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5),
             "Action style record is unsupported");
     }
@@ -3801,9 +3853,6 @@ struct DecodedPictureDescriptor {
     std::optional<std::string> standard_name;
 };
 
-LV canonical_button_picture() {
-    return parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}");
-}
 
 std::string_view picture_format_extension(model::PictureFormat format) {
     switch (format) {
@@ -3844,13 +3893,6 @@ std::string encode_base64(std::span<const std::uint8_t> bytes) {
     return output;
 }
 
-bool same_list_value(const LV& left, const LV& right) {
-    if (left.is_list != right.is_list || left.atom_kind != right.atom_kind || left.atom != right.atom || left.items.size() != right.items.size()) return false;
-    for (std::size_t index = 0; index < left.items.size(); ++index) {
-        if (!same_list_value(left.items[index], right.items[index])) return false;
-    }
-    return true;
-}
 
 std::vector<std::uint8_t> decode_base64(std::string_view input, std::string_view path) {
     auto value_of = [](char ch) -> int {
@@ -4504,9 +4546,7 @@ LV encode_standard_button_picture(const model::metamodel::StandardPictureDescrip
 }
 
 std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, std::string_view path) {
-    if (same_list_value(value, canonical_button_picture())) return std::nullopt;
-    if (same_list_value(value, parse_constant("{3,0,{0},\"\",-1,-1,1,0}")))
-        return std::nullopt;
+    if (is_empty_picture_descriptor(value)) return std::nullopt;
     if (value.items.size() >= 2 && value.items[0].atom == "4" && value.items[1].atom == "1") {
         require_arity(value, 9, path);
         require_raw_constant(value.items[0], "4", child_path(path, 0));
@@ -13723,7 +13763,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         } else {
             require_arity(root_style, layout.value().page_style_section_arity, "$/13");
             caption_picture = decode_button_picture(root_style.items[2], "$/13/2");
-            auto normalized_root_style = root_style;
+            auto normalized_root_style = normalize_empty_picture_style(root_style);
             normalized_root_style.items[2] = canonical_button_picture();
             require_exact(normalized_root_style,
                 canonical_style_record(layout.value().page_style_section_version), "$/13",

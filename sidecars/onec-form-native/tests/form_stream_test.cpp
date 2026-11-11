@@ -3420,6 +3420,20 @@ void test_shared_action_metadata_policies_and_rejections() {
             list_stream::ListValue::raw_atom("42");
         expect(!form_stream::decode_document(legacy_picture, "Actions"),
             "unrepresented legacy action picture settings must be rejected");
+        const std::array picture_aliases{
+            list_stream::parse("{3,0,{0},\"\",-1,-1,0,0}"),
+            list_stream::parse("{4,0,{0},\"\",-1,-1,0,0,\"\"}")};
+        for (const auto& alias : picture_aliases) {
+            auto extended_empty_picture = encoded.value();
+            action_at(extended_empty_picture).items[2].items[5] = alias;
+            const auto extended_decoded = form_stream::decode_document(extended_empty_picture, "Actions");
+            expect(extended_decoded.ok(), "all action owners must accept empty picture aliases with transparency zero");
+            if (!extended_decoded) continue;
+            const auto extended_rebuilt = form_stream::encode_document(extended_decoded.value());
+            expect(extended_rebuilt.ok() && list_stream::dump_compact(extended_rebuilt.value()) ==
+                    list_stream::dump_compact(encoded.value()),
+                "empty action picture aliases must canonicalize without changing named action values");
+        }
         for (unsigned field = 0; field < 7; ++field) {
             auto bad = encoded.value();
             action_at(bad).items[2].items[field] = list_stream::ListValue::raw_atom("999");
@@ -5089,6 +5103,24 @@ void test_button_picture_enums_round_trip_and_validation() {
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
                list_stream::dump_compact(encoded.value()),
         "Button picture enums must re-encode without changing either property");
+    const std::array empty_picture_aliases{
+        list_stream::parse("{3,0,{0},\"\",-1,-1,0,0}"),
+        list_stream::parse("{4,0,{0},\"\",-1,-1,0,0,\"\"}")};
+    for (const auto& alias : empty_picture_aliases) {
+        auto aliased = encoded.value();
+        auto* first_button = const_cast<list_stream::ListValue*>(find_record_with_guid(
+            aliased, model::metamodel::descriptor_for(model::ControlKind::button).guid));
+        expect(first_button != nullptr, "Button Picture alias fixture must locate a concrete Button");
+        if (first_button == nullptr) continue;
+        first_button->items[2].items[1].items[8] = alias;
+        const auto alias_decoded = form_stream::decode_document(aliased, "PictureEnums");
+        expect(alias_decoded.ok(), "Button.Picture must accept the empty transparency-zero aliases");
+        if (!alias_decoded) continue;
+        const auto alias_rebuilt = form_stream::encode_document(alias_decoded.value());
+        expect(alias_rebuilt.ok() && list_stream::dump_compact(alias_rebuilt.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "empty Button.Picture aliases must rebuild as the current default without semantic drift");
+    }
 
     model::Form foreign_form;
     foreign_form.id = model::ObjectId{1};
@@ -7042,6 +7074,10 @@ void test_form_caption_picture() {
         expect(xml.ok() && source::parse_form_xml(xml.value()).ok(), "caption picture XML must roundtrip");
         auto malformed = encoded.value(); malformed.items[13].items[2].items[4] = list_stream::ListValue::raw_atom("0");
         expect(!form_stream::decode_document(malformed, "CaptionPicture").ok(), "malformed caption picture must fail");
+        auto dropped_nonempty_caption = encoded.value();
+        dropped_nonempty_caption.items[13].items[6] = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(dropped_nonempty_caption, "NonemptyCaptionFlagAlias").ok(),
+            "empty-picture flag alias must not discard a nonempty Form.CaptionPicture");
         expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{model::ObjectId{44}}}) == model::PropertyMutationStatus::invalid_value &&
             document.get_prop_val(owner, id).value == model::PropertyValue{picture}, "asset caption picture is rejected atomically");
         expect(document.set_prop_val(owner, id, model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Unknown"}}) == model::PropertyMutationStatus::invalid_reference &&
@@ -17818,40 +17854,67 @@ void test_root_pages_round_trip_with_page_local_control_order() {
     const auto batch_encoded = form_stream::encode_document(batch);
     expect(batch_encoded.ok(), batch_encoded ? "ten-control Page batch must encode" :
         batch_encoded.diagnostics().front().message);
-    for (const auto generation : {4U, 5U}) {
-        auto historical = batch_encoded.value();
-        auto& owner = historical.items[1].items[2].items[1].items[1];
+    const auto find_batch_page_row = [](auto& tree) -> auto& {
+        auto& owner = tree.items[1].items[2].items[1].items[1];
         std::size_t cursor = 2;
         for (std::size_t axis = 0; axis < 6; ++axis) {
             cursor += 1 + static_cast<std::size_t>(std::stoul(owner.items[cursor].atom));
         }
-        auto& page_row = owner.items[cursor + 3].items[2];
-        page_row.items[0] = list_stream::ListValue::raw_atom(std::to_string(generation));
-        page_row.items[2].items[0] = list_stream::ListValue::raw_atom("8");
-        page_row.items[2].items.resize(9);
-        page_row.items[8] = list_stream::parse("{3,4,{0}}");
-        page_row.items[9] = list_stream::parse("{3,4,{0}}");
-        page_row.items.resize(generation == 4 ? 10 : 11);
-        const auto restored = form_stream::decode_document(historical, "PageGenerations");
-        expect(restored.ok(), restored ? "ten-control historical Page batch must decode" :
-            restored.diagnostics().front().message);
-        expect(restored.value().collections().controls.size() == 10 &&
-                   restored.value().collections().pages.size() == 1,
-            "Page generations must retain ten control types and their owner Page");
-        const auto& restored_page = restored.value().collections().pages.front();
-        expect(restored_page.name == batch_page.name &&
-                   restored_page.title.value() == batch_page.title.value() &&
-                   !restored_page.visible.value() && !restored_page.enabled.value(),
-            "historical Page properties must survive with all ten child control types");
-        for (std::size_t index = 0; index < payloads.size(); ++index) {
-            const auto* control = restored.value().find_control(model::ObjectId{index + 2});
-            expect(control && model::payload_kind(control->payload) == model::payload_kind(payloads[index]),
-                "historical Page normalization must preserve each concrete child control type");
+        return owner.items[cursor + 3].items[2];
+    };
+    const auto empty_picture_descriptor = [](bool extended) {
+        return list_stream::parse(extended
+            ? "{4,0,{0},\"\",-1,-1,1,0,\"\"}"
+            : "{3,0,{0},\"\",-1,-1,0,0}");
+    };
+    for (const auto generation : {3U, 4U, 5U, 6U}) {
+        for (const auto style_version : {3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U}) {
+            for (const bool extended_picture : {false, true}) {
+                auto historical = batch_encoded.value();
+                auto& page_row = find_batch_page_row(historical);
+                page_row.items[0] = list_stream::ListValue::raw_atom(std::to_string(generation));
+                if (style_version == 3) {
+                    page_row.items[2] = list_stream::ListValue::list({
+                        list_stream::ListValue::raw_atom("3"),
+                        list_stream::ListValue::raw_atom("0"),
+                        empty_picture_descriptor(extended_picture),
+                    });
+                } else {
+                    auto& style = page_row.items[2];
+                    style.items[0] = list_stream::ListValue::raw_atom(std::to_string(style_version));
+                    style.items.resize(style_version + 1);
+                    const auto descriptor = empty_picture_descriptor(extended_picture);
+                    for (const auto slot : {2U, 3U, 4U}) style.items[slot] = descriptor;
+                    if (style_version >= 6) style.items[6] = list_stream::ListValue::raw_atom("2");
+                }
+                page_row.items.resize(generation == 3 ? 8 : generation == 4 ? 10 : generation == 5 ? 11 : 12);
+                if (generation >= 4) {
+                    page_row.items[8] = list_stream::parse("{3,4,{0}}");
+                    page_row.items[9] = list_stream::parse("{3,4,{0}}");
+                }
+                const auto restored = form_stream::decode_document(historical, "PageGenerations");
+                expect(restored.ok(), restored ? "ten-control aliased Page batch must decode" :
+                    restored.diagnostics().front().message);
+                if (!restored) continue;
+                expect(restored.value().collections().controls.size() == 10 &&
+                           restored.value().collections().pages.size() == 1,
+                    "Page generations must retain ten control types and their owner Page");
+                const auto& restored_page = restored.value().collections().pages.front();
+                expect(restored_page.name == batch_page.name &&
+                           restored_page.title.value() == batch_page.title.value() &&
+                           !restored_page.visible.value() && !restored_page.enabled.value(),
+                    "Page names, titles, and edited visibility properties must survive alias normalization");
+                for (std::size_t index = 0; index < payloads.size(); ++index) {
+                    const auto* control = restored.value().find_control(model::ObjectId{index + 2});
+                    expect(control && model::payload_kind(control->payload) == model::payload_kind(payloads[index]),
+                        "Page normalization must preserve each concrete child control type");
+                }
+                const auto rebuilt = form_stream::encode_document(restored.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                           list_stream::dump_compact(batch_encoded.value()),
+                    "aliased Page batches must rebuild through the current writer without control drift");
+            }
         }
-        const auto rebuilt = form_stream::encode_document(restored.value());
-        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
-                   list_stream::dump_compact(batch_encoded.value()),
-            "historical Page batches must rebuild through the current writer without control drift");
     }
 }
 
@@ -22816,6 +22879,21 @@ void test_supported_legacy_root_layout_decoding() {
     expect(legacy_picture_document.ok(), "legacy empty caption picture must decode");
     expect(source::serialize_form_xml(legacy_picture_document.value()).value() == modern_xml.value(),
         "legacy empty caption picture must preserve the named empty value");
+    for (const auto& descriptor : {
+             list_stream::parse("{3,0,{0},\"\",-1,-1,0,0}"),
+             list_stream::parse("{4,0,{0},\"\",-1,-1,0,0,\"\"}")}) {
+        auto alias = legacy23;
+        alias.items[13].items[2] = descriptor;
+        const auto decoded_alias = form_stream::decode_document(alias, "Empty");
+        expect(decoded_alias.ok() && source::serialize_form_xml(decoded_alias.value()).value() == modern_xml.value(),
+            "Form.CaptionPicture must preserve the named empty value across empty descriptor aliases");
+        if (!decoded_alias) continue;
+        const auto rebuilt_alias = form_stream::encode_document(decoded_alias.value());
+        const auto canonical = form_stream::encode_document(modern_document.value());
+        expect(rebuilt_alias.ok() && canonical.ok() && list_stream::dump_compact(rebuilt_alias.value()) ==
+                   list_stream::dump_compact(canonical.value()),
+            "empty Form.CaptionPicture aliases must rebuild through the current writer");
+    }
     legacy_empty_picture.items[13].items[2].items[5] = list_stream::ListValue::raw_atom("42");
     expect(!form_stream::decode_document(legacy_empty_picture, "UnknownLegacyPicture"),
         "legacy picture settings without a named representation must be rejected");
@@ -23478,6 +23556,55 @@ void test_page_table_codec() {
     nondefault_v5_font.items[2].items[10] = list_stream::parse("{8,2,0,{-20},1,100}");
     expect_failure(form_stream::decode_page_table(nondefault_v5_font, 40), "OOF1114", "$/Pages/2/10",
         "Page5 must reject nondefault font values");
+
+    const std::array<list_stream::ListValue, 7> malformed_empty_pictures{
+        list_stream::parse("{5,0,{0},\"\",-1,-1,1,0,\"\"}"),
+        list_stream::parse("{4,0,{1},\"\",-1,-1,1,0,\"\"}"),
+        list_stream::parse("{4,0,{0},\"unexpected\",-1,-1,1,0,\"\"}"),
+        list_stream::parse("{4,0,{0},\"\",20,-1,1,0,\"\"}"),
+        list_stream::parse("{4,0,{0},\"\",-1,20,1,0,\"\"}"),
+        list_stream::parse("{4,0,{0},\"\",-1,-1,2,0,\"\"}"),
+        list_stream::parse("{4,0,{0},\"\",-1,-1,1,0,\"\",0}"),
+    };
+    for (const auto& malformed_picture : malformed_empty_pictures) {
+        auto malformed_empty_style = expected;
+        for (const auto slot : {2U, 3U, 4U}) malformed_empty_style.items[2].items[2].items[slot] = malformed_picture;
+        expect_failure(form_stream::decode_page_table(malformed_empty_style, 40), "OOF1114", "$/Pages/2/2",
+            "Page style must reject every malformed or nonempty picture descriptor variant");
+    }
+    for (const auto flag : {"1", "3", "C0"}) {
+        auto unsupported_flag = expected;
+        unsupported_flag.items[2].items[2].items[6] = list_stream::ListValue::raw_atom(flag);
+        expect_failure(form_stream::decode_page_table(unsupported_flag, 40), "OOF1114", "$/Pages/2/2",
+            "Page style flags other than the proven empty-picture aliases must be rejected");
+    }
+
+    model::Form picture_form;
+    picture_form.id = model::ObjectId{1};
+    picture_form.name = "PagePictureProbe";
+    picture_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument picture_document(std::move(picture_form));
+    model::ControlNode picture_button{model::ObjectId{2}, "Picture", model::ButtonPayload{}};
+    picture_button.properties().set_explicit(model::PropertyId::from_name("Picture"),
+        model::PictureRef{model::PictureAssetRef{model::ObjectId{20}}});
+    picture_document.add_control(std::move(picture_button));
+    picture_document.add_asset(model::PictureAsset{model::ObjectId{20}, "Items/Picture/Picture.gif",
+        model::PictureFormat::gif, {'G','I','F','8','9','a',0,1,2}, false});
+    const auto picture_encoded = form_stream::encode_document(picture_document);
+    expect(picture_encoded.ok(), "Page Picture rejection probe must use a valid existing GIF asset shape");
+    if (picture_encoded) {
+        const auto* picture_record = find_record_with_guid(picture_encoded.value(),
+            model::metamodel::descriptor_for(model::ControlKind::button).guid);
+        expect(picture_record != nullptr, "Page Picture rejection probe must locate the encoded Button");
+        if (picture_record != nullptr) {
+            auto nonempty_page_picture = expected;
+            auto& style = nonempty_page_picture.items[2].items[2];
+            style.items[2] = picture_record->items[2].items[1].items[8];
+            style.items[6] = list_stream::ListValue::raw_atom("2");
+            expect_failure(form_stream::decode_page_table(nonempty_page_picture, 40), "OOF1114",
+                "$/Pages/2/2", "a nonempty image must not be dropped when style flag 2 is present");
+        }
+    }
 
     auto unobserved_legacy_style = legacy_v3;
     unobserved_legacy_style.items[2].items[2] = list_stream::parse("{3,0,0}");
