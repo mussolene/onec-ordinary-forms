@@ -1464,6 +1464,11 @@
           <Property name="AutoMarkIncomplete" apiName="AutoMarkIncomplete" russianName="АвтоОтметкаНезаполненного" russianType="Булево" valueCodec="boolean"/>
           <Property name="AutoChoiceIncomplete" apiName="AutoChoiceIncomplete" russianName="АвтоВыборНезаполненного" russianType="Булево" valueCodec="boolean"/>
           <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ListChoiceMode" apiName="ListChoiceMode" russianName="РежимВыбораИзСписка" russianType="Булево" valueCodec="boolean"/>
+          <Property name="MultiLine" apiName="MultiLine" russianName="МногострочныйРежим" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ExtendedEdit" apiName="ExtendedEdit" russianName="РасширенноеРедактирование" russianType="Булево" valueCodec="boolean"/>
+          <Property name="PasswordMode" apiName="PasswordMode" russianName="РежимПароля" russianType="Булево" valueCodec="boolean"/>
+          <Property name="TextEdit" apiName="TextEdit" russianName="РедактированиеТекста" russianType="Булево" valueCodec="boolean"/>
           <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
           <Property name="Caption" russianName="Заголовок"/>
           <Property name="ToolTip" russianName="Подсказка"/><Property name="Font" russianName="Шрифт"/>

@@ -2051,7 +2051,8 @@ void test_table_input_field_value_type_round_trip() {
     wrong_extension_columns[0].control->extension = model::InputFieldExtensionKind::catalog;
     expect(!wrong_extension.validate().ok(), "a reference editor extension must reject a scalar type");
     auto encoded = form_stream::encode_document(parsed.value());
-    expect(encoded.ok(), "fifteen named Table InputField ValueTypes must encode without a baseline");
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().path + ": " +
+        encoded.diagnostics().front().message + " actual=" + encoded.diagnostics().front().actual);
     const auto value_list_editor = table_column_editor_info(encoded.value(), 4);
     const auto expected_value_list_pair = list_stream::parse(
         std::string("{1,{") + "83a29520-06e8-4348-989c-abe69e8e33e2" + ",{0,{\"Pattern\"}}}}");
@@ -2119,6 +2120,44 @@ void test_table_input_field_value_type_round_trip() {
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
             list_stream::dump_compact(encoded.value()),
         "typed Table columns must re-encode without semantic drift");
+
+    auto runtime_editors = encoded.value();
+    auto& runtime_columns = find_record_with_guid(runtime_editors,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid)->items[2].items[2].items[1].items[23].items;
+    for (std::size_t index = 0; index < expected_types.size(); ++index) {
+        runtime_columns[index + 1].items[1].items[1].items[1].items[6] =
+            list_stream::ListValue::raw_atom(std::to_string((index + 7) % expected_types.size()));
+        auto editor = table_column_editor_info(runtime_editors, index);
+        editor.items[2].items[0].items[12] = list_stream::ListValue::raw_atom(
+            editor.items[5].atom == "0" ? "1" : "0");
+        if (editor.items[9].atom == "1")
+            editor.items[2].items[0].items[14] = list_stream::ListValue::raw_atom("255");
+        replace_table_column_editor_info(runtime_editors, index, editor);
+    }
+    const auto runtime_decoded = form_stream::decode_document(runtime_editors, "TypedTable");
+    expect(runtime_decoded.ok() && runtime_decoded.value().reconstruction_complete(),
+        "Вложенные InputField должны восстанавливать TextEdit из сохраняемой настройки, как платформа");
+    const auto runtime_rebuilt = form_stream::encode_document(runtime_decoded.value());
+    expect(runtime_rebuilt.ok() && list_stream::dump_compact(runtime_rebuilt.value()) ==
+        list_stream::dump_compact(encoded.value()),
+        "Временное состояние редактора не должно менять сохраняемые свойства колонки");
+    auto malformed_column_index = runtime_editors;
+    find_record_with_guid(malformed_column_index,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid)->items[2].items[2].items[1].items[23]
+            .items[1].items[1].items[1].items[1].items[6] = list_stream::ListValue::raw_atom("2147483648");
+    expect(!form_stream::decode_document(malformed_column_index, "InvalidColumnIndex"),
+        "Пересоздание индекса не должно скрывать переполнение int32");
+    auto malformed_length = runtime_editors;
+    auto malformed_length_editor = table_column_editor_info(malformed_length, 0);
+    malformed_length_editor.items[2].items[0].items[14] = list_stream::ListValue::raw_atom("-1");
+    replace_table_column_editor_info(malformed_length, 0, malformed_length_editor);
+    expect(!form_stream::decode_document(malformed_length, "InvalidListChoiceLength"),
+        "Нормализация длины редактора не должна скрывать поврежденный uint32");
+    auto malformed_runtime_editor = table_column_editor_info(runtime_editors, 0);
+    malformed_runtime_editor.items[2].items[0].items[12] = list_stream::ListValue::raw_atom("2");
+    replace_table_column_editor_info(runtime_editors, 0, malformed_runtime_editor);
+    expect(!form_stream::decode_document(runtime_editors, "InvalidEditorCache"),
+        "Нормализация редактора не должна скрывать поврежденный Boolean");
 
     auto scalar_without_pair = encoded.value();
     auto scalar_editor = table_column_editor_info(scalar_without_pair, 0);
@@ -3532,10 +3571,10 @@ void test_gantt_chart_named_storage_round_trip() {
 
     auto invalid_platform_layout = platform_layout;
     auto* invalid_layout_gantt = find_gantt_record(find_gantt_record, invalid_platform_layout);
-    invalid_layout_gantt->items[2].items[1].items[2].items[102] = list_stream::ListValue::raw_atom("1.01");
+    invalid_layout_gantt->items[2].items[1].items[2].items[102] = list_stream::ListValue::raw_atom("nan");
     expect_failure(form_stream::decode_document(invalid_platform_layout, "GanttInvalidPlatformLayout"),
-        "OOF1114", "$/1/2/2/1/2/1/2/102",
-        "Gantt runtime-adjusted layout leaves outside the verified range must be rejected");
+        "OOF1115", "$/1/2/2/1/2/1/2/102",
+        "Общий Chart codec должен отвергать нечисловое состояние кеша отрисовки");
 
     model::Form color_form;
     color_form.id = model::ObjectId{1};
@@ -6969,38 +7008,29 @@ void test_command_bar_border_named_round_trip_and_guards() {
     }
     auto invalid_width = canonical.value(); border_at(invalid_width).items[4] = list_stream::ListValue::raw_atom("6");
     expect(!form_stream::decode_document(invalid_width, "UnknownBorderWidth"), "width outside native range must reject");
-    for (const auto type : {model::ControlBorderType::underline, model::ControlBorderType::overline}) {
-        model::BorderValue named; named.border_type = type; named.width = 1;
+    // V8Border::operator== подставляет ControlsBorders для nil независимо от типа и ширины.
+    for (const auto& [type, code] : native_cases) for (const auto width : {0u, 1u, 2u, 5u}) {
+        if (type == model::ControlBorderType::without_border && width > 1) continue;
+        model::BorderValue named; named.border_type = type; named.width = width;
         const auto named_stream = form_stream::encode_document(make_document(named));
-        auto absent_factory = named_stream.value();
-        border_at(absent_factory).items[5] = list_stream::ListValue::raw_atom("0");
-        border_at(absent_factory).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
-        const auto restored = form_stream::decode_document(absent_factory, "XDTORestoredBorder");
-        expect(restored.ok(), "platform XDTO restores the observed named border with an absent factory");
-        const auto rebuilt = form_stream::encode_document(restored.value());
-        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(named_stream.value()),
-            "absent factory must rebuild from named semantics without source preservation");
+        expect(named_stream.ok(), "named Border must encode before factory substitution");
+        for (const auto state : {0u, 3u}) {
+            auto absent_factory = named_stream.value();
+            border_at(absent_factory).items[5] = list_stream::ListValue::raw_atom(std::to_string(state));
+            border_at(absent_factory).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+            const auto restored = form_stream::decode_document(absent_factory, "DefaultBorderFactory");
+            expect(restored.ok(), "nil factory must resolve to the standard Border family");
+            const auto xml = source::serialize_form_xml(restored.value());
+            expect(xml.ok(), "resolved Border must serialize as named XML");
+            const auto parsed = source::parse_form_xml(xml.value());
+            expect(parsed.ok(), "resolved Border XML must parse independently");
+            const auto rebuilt = form_stream::encode_document(parsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(named_stream.value()),
+                "nil factory must rebuild all named semantics without source preservation");
+        }
     }
-    auto unproven_state = canonical.value();
-    border_at(unproven_state).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
-    expect(!form_stream::decode_document(unproven_state, "UnprovenAbsentFactoryState"),
-        "absent factory must not expand beyond the accepted native creation state");
     auto invalid_factory = canonical.value(); border_at(invalid_factory).items[6] = list_stream::ListValue::raw_atom("11111111-1111-4111-8111-111111111111");
     expect(!form_stream::decode_document(invalid_factory, "UnknownBorderFactory"), "unknown nonnull Border factory must reject");
-    for (const auto width : {0u, 2u, 5u}) {
-        auto unproven_absent = canonical.value();
-        border_at(unproven_absent).items[5] = list_stream::ListValue::raw_atom("0");
-        border_at(unproven_absent).items[4] = list_stream::ListValue::raw_atom(std::to_string(width));
-        border_at(unproven_absent).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
-        expect(!form_stream::decode_document(unproven_absent, "UnprovenAbsentFactoryWidth"),
-            "absent factory must not expand to unproven widths");
-    }
-    auto unproven_type = canonical.value();
-    border_at(unproven_type).items[5] = list_stream::ListValue::raw_atom("0");
-    border_at(unproven_type).items[3] = list_stream::ListValue::raw_atom("1");
-    border_at(unproven_type).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
-    expect(!form_stream::decode_document(unproven_type, "UnprovenAbsentFactoryType"),
-        "absent factory must not expand to unproven named border types");
     for (unsigned mutation = 0; mutation < 4; ++mutation) {
         auto malformed = canonical.value();
         auto& native = border_at(malformed);
@@ -7427,17 +7457,39 @@ void test_button_menu_mode_round_trip_and_validation() {
         "unknown MenuMode enum members must be rejected");
 }
 
+std::vector<std::uint8_t> synthetic_dib_icon() {
+    std::vector<std::uint8_t> bytes(1150, 0);
+    const auto put = [&](std::size_t offset, std::uint32_t value, unsigned width) {
+        for (unsigned index = 0; index < width; ++index)
+            bytes[offset + index] = static_cast<std::uint8_t>(value >> (8 * index));
+    };
+    put(2, 1, 2); put(4, 1, 2);
+    bytes[6] = bytes[7] = 16;
+    put(10, 1, 2); put(12, 32, 2); put(14, 1128, 4); put(18, 22, 4);
+    put(22, 40, 4); put(26, 16, 4); put(30, 32, 4);
+    put(34, 1, 2); put(36, 32, 2); put(42, 1088, 4);
+    for (std::size_t pixel = 0; pixel < 256; ++pixel) {
+        bytes[62 + 4 * pixel] = 192;
+        bytes[62 + 4 * pixel + 1] = static_cast<std::uint8_t>(pixel % 16 * 16);
+        bytes[62 + 4 * pixel + 2] = static_cast<std::uint8_t>(pixel / 16 * 16);
+        bytes[62 + 4 * pixel + 3] = 255;
+    }
+    return bytes;
+}
+
 void test_button_external_picture_assets_round_trip() {
     const std::vector<std::vector<std::uint8_t>> bytes{
         {'G','I','F','8','9','a',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62},
         {137,80,78,71,13,10,26,10,9,8,7,6,5,4},
         {0xff,0xd8,0xff,1,2,3,4,5},
         {'B','M',1,2,3,4,5,6},
+        synthetic_dib_icon(),
     };
-    const std::array<model::PictureFormat, 4> formats{
+    const std::array<model::PictureFormat, 5> formats{
         model::PictureFormat::gif, model::PictureFormat::png,
-        model::PictureFormat::jpeg, model::PictureFormat::bmp};
-    const std::array<std::string_view, 4> names{"Gif", "Png", "Jpeg", "Bmp"};
+        model::PictureFormat::jpeg, model::PictureFormat::bmp, model::PictureFormat::ico};
+    const std::array<std::string_view, 5> names{"Gif", "Png", "Jpeg", "Bmp", "Ico"};
+    const std::array<std::string_view, 5> extensions{"gif", "png", "jpeg", "bmp", "ico"};
     model::Form form;
     form.id = model::ObjectId{1};
     form.name = "Pictures";
@@ -7449,9 +7501,7 @@ void test_button_external_picture_assets_round_trip() {
         const model::ObjectId button_id{static_cast<std::uint64_t>(index + 2)};
         const model::ObjectId asset_id{static_cast<std::uint64_t>(index + 20)};
         model::PictureAsset asset{asset_id, "Items/" + std::string(names[index]) + "/Picture." +
-            std::string(formats[index] == model::PictureFormat::jpeg ? "jpeg" :
-                formats[index] == model::PictureFormat::gif ? "gif" :
-                formats[index] == model::PictureFormat::png ? "png" : "bmp"), formats[index], bytes[index], index % 2 == 1};
+            std::string(extensions[index]), formats[index], bytes[index], index % 2 == 1};
         document.add_asset(std::move(asset));
         model::ControlNode button{button_id, std::string(names[index]), model::ButtonPayload{}};
         button.properties().set_explicit(model::PropertyId::from_name("Picture"),
@@ -7459,7 +7509,7 @@ void test_button_external_picture_assets_round_trip() {
         document.add_control(std::move(button));
     }
     const auto encoded = form_stream::encode_document(document);
-    expect(encoded.ok(), "named external GIF, PNG, JPEG, and BMP assets must encode");
+    expect(encoded.ok(), "named external GIF, PNG, JPEG, BMP, and ICO assets must encode");
     const auto decoded = form_stream::decode_document(encoded.value(), "Pictures");
     expect(decoded.ok(), "external Button picture descriptors must decode");
     expect(decoded.value().assets().size() == formats.size(), "each decoded button image must materialize one asset");
@@ -7473,14 +7523,36 @@ void test_button_external_picture_assets_round_trip() {
         expect(asset && asset->format == formats[index] && asset->bytes == bytes[index] && asset->transparent == (index % 2 == 1),
             "picture format, bytes, and transparency must survive independently");
         expect(asset->relative_path == "Items/" + std::string(names[index]) + "/Picture." +
-            std::string(formats[index] == model::PictureFormat::jpeg ? "jpeg" :
-                formats[index] == model::PictureFormat::gif ? "gif" :
-                formats[index] == model::PictureFormat::png ? "png" : "bmp"),
+            std::string(extensions[index]),
             "decoded asset must receive its named external package path");
     }
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
-        "all four external picture descriptors must re-encode without loss");
+        "all five external picture descriptors must re-encode without loss");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("format=\"ico\"") != std::string::npos,
+        "ICO must have a named external asset format in public XML");
+    auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "all five named picture asset formats must parse from XML");
+    for (const auto& asset : decoded.value().assets()) parsed.value().set_asset_bytes(asset.id, asset.bytes);
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "XML and separate image files must rebuild ICO and all existing formats exactly");
+    for (unsigned variant = 0; variant < 5; ++variant) {
+        auto invalid_icon = synthetic_dib_icon();
+        if (variant == 0) invalid_icon[2] = 2;
+        if (variant == 1) invalid_icon[4] = 0;
+        if (variant == 2) invalid_icon[18] = 255;
+        if (variant == 3) invalid_icon[14] = 255;
+        if (variant == 4) {
+            constexpr std::array<std::uint8_t, 8> png{137,80,78,71,13,10,26,10};
+            std::copy(png.begin(), png.end(), invalid_icon.begin() + 22);
+        }
+        auto invalid_document = document;
+        invalid_document.set_asset_bytes(model::ObjectId{24}, std::move(invalid_icon));
+        expect_failure(form_stream::encode_document(invalid_document), "OOF1122", "$/Button/Picture",
+            "malformed ICO directories, extents, and platform-unsupported PNG icons must be rejected");
+    }
 
     auto missing_bytes = document;
     missing_bytes.set_asset_bytes(model::ObjectId{20}, {});
@@ -7508,6 +7580,96 @@ void test_button_external_picture_assets_round_trip() {
         list_stream::ListValue::raw_atom("#base64:!!!!");
     expect_failure(form_stream::decode_document(invalid_base64, "Pictures"), "OOF1114", "$/1/2/2/1/2/1/8/7/0/0",
         "malformed Button image base64 must be rejected");
+}
+
+void test_picture_transparency_and_identity_round_trip() {
+    const std::string uuid = "11111111-2222-4333-8444-555555555555";
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "PictureTransparency";
+    for (std::uint64_t i = 0; i < 12; ++i)
+        form.children.push_back(model::ControlRef{model::ObjectId{i + 2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const std::string name = "Image" + std::to_string(i);
+        model::PictureAsset asset{model::ObjectId{100 + i}, "Items/" + name + "/Picture.gif",
+            model::PictureFormat::gif, {'G','I','F','8','9','a',static_cast<std::uint8_t>(i)}, i % 2 != 0};
+        if (i % 3 == 1) asset.transparent_x = asset.transparent_y = 12;
+        if (i % 3 == 2) { asset.transparent_x = 1; asset.transparent_y = 5; }
+        if (i >= 6) asset.uuid = model::UuidValue{i == 11 ? "00000000-0000-0000-0000-000000000000" : uuid};
+        if (i == 10) asset.transparent_x = std::numeric_limits<std::int64_t>::max();
+        document.add_asset(std::move(asset));
+        model::ControlNode control{model::ObjectId{i + 2}, name, model::ButtonPayload{}};
+        control.properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{model::ObjectId{100 + i}}});
+        document.add_control(std::move(control));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "twelve embedded picture identities and transparency points must encode");
+    auto legacy = encoded.value();
+    auto& controls = legacy.items[1].items[2].items[2];
+    for (std::size_t i = 1; i < controls.items.size(); i += 2) {
+        auto& picture = controls.items[i].items[2].items[1].items[8];
+        picture.items[0] = list_stream::ListValue::raw_atom("3");
+        picture.items.pop_back();
+    }
+    const auto decoded = form_stream::decode_document(legacy, "PictureTransparency");
+    expect(decoded.ok() && decoded.value().assets().size() == 12,
+        "mixed v3/v4 embedded pictures must decode as twelve named assets");
+    for (std::uint64_t i = 0; i < 12; ++i) {
+        const auto* control = decoded.value().find_control(model::ObjectId{i + 2});
+        const auto& reference = std::get<model::PictureRef>(control->properties().find(model::PropertyId::from_name("Picture"))->value);
+        const auto* asset = decoded.value().find_asset(reference.asset.id());
+        const auto* expected_asset = document.find_asset(model::ObjectId{100 + i});
+        expect(asset && asset->bytes == expected_asset->bytes && asset->transparent == expected_asset->transparent &&
+            asset->transparent_x == expected_asset->transparent_x && asset->transparent_y == expected_asset->transparent_y &&
+            asset->uuid == expected_asset->uuid,
+            "asset UUID, bytes, transparency, and both coordinates must survive independently");
+        expect(reference.transparent_x == -1 && reference.transparent_y == -1 && !reference.transparent,
+            "asset transparency must have one owner rather than duplicate reference state");
+    }
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "v3/v4 picture inputs must rebuild through the canonical v4 writer");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("transparentX=\"12\"") != std::string::npos &&
+        xml.value().find("uuid=\"" + uuid + "\"") != std::string::npos,
+        "PictureAsset XML must expose named transparency coordinates and UUID");
+    auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named picture asset XML must parse independently");
+    for (const auto& asset : decoded.value().assets()) parsed.value().set_asset_bytes(asset.id, asset.bytes);
+    const auto from_xml = form_stream::encode_document(parsed.value());
+    expect(from_xml.ok() && list_stream::dump_compact(from_xml.value()) == list_stream::dump_compact(encoded.value()),
+        "XML and external picture files must rebuild every embedded picture field");
+    auto invalid_identity = encoded.value();
+    invalid_identity.items[1].items[2].items[2].items[1].items[2].items[1].items[8].items[2] =
+        list_stream::parse("{9}");
+    expect_failure(form_stream::decode_document(invalid_identity, "PictureTransparency"), "OOF1114", "$/1/2/2/1/2/1/8/2",
+        "nonzero numeric embedded identities must remain explicitly unsupported");
+    auto invalid_coordinate = encoded.value();
+    invalid_coordinate.items[1].items[2].items[2].items[1].items[2].items[1].items[8].items[4] =
+        list_stream::ListValue::raw_atom("-2");
+    expect_failure(form_stream::decode_document(invalid_coordinate, "PictureTransparency"), "OOF1114", "$/1/2/2/1/2/1/8",
+        "transparency coordinates below -1 must be rejected");
+    auto invalid_model = document;
+    model::PictureRef duplicate_state{model::PictureAssetRef{model::ObjectId{100}}};
+    duplicate_state.transparent_x = 12;
+    expect(invalid_model.set_prop_val(model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{2}},
+        model::PropertyId::from_name("Picture"), duplicate_state) == model::PropertyMutationStatus::invalid_value,
+        "asset references must reject duplicate transparency metadata atomically");
+    auto invalid_xml = xml.value();
+    const auto position = invalid_xml.find("transparentX=\"12\"");
+    invalid_xml.replace(position, std::string("transparentX=\"12\"").size(), "transparentX=\"-2\"");
+    expect(!source::parse_form_xml(invalid_xml).ok(), "XML must reject negative transparency coordinates");
+    invalid_xml = xml.value();
+    invalid_xml.replace(position, std::string("transparentX=\"12\"").size(), "transparentX=\"9223372036854775808\"");
+    expect(!source::parse_form_xml(invalid_xml).ok(), "XML must reject int64 coordinate overflow");
+    invalid_xml = xml.value();
+    const auto uuid_position = invalid_xml.find("uuid=\"" + uuid + "\"");
+    invalid_xml.replace(uuid_position, std::string("uuid=\"" + uuid + "\"").size(), "uuid=\"invalid\"");
+    expect(!source::parse_form_xml(invalid_xml).ok(), "XML must reject malformed embedded picture UUIDs");
+    const std::string old_reference_xml = "<Form id=\"1\" name=\"OldPicture\" ordinaryFormVersion=\"2.1\"><CaptionPicture standardName=\"PictureLib.Write\" width=\"12\"/></Form>";
+    expect(!source::parse_form_xml(old_reference_xml).ok(), "old Picture width attributes must not be silently accepted");
 }
 
 void test_choice_and_input_field_picture_properties_round_trip() {
@@ -7820,7 +7982,7 @@ void test_all_standard_button_pictures_round_trip_without_assets() {
         const std::string kind = kinds[index % kinds.size()];
         xml += "<" + kind + " id=\"" + std::to_string(index + 2) + "\" name=\"Item" + std::to_string(index) +
             "\">" + (kind == "InputField" ? std::string("<ValueType><Entry term=\"string\" length=\"20\"/></ValueType>") : std::string{}) +
-            "<Position/><Picture width=\"14\" height=\"1\" transparent=\"true\" commonPicture=\"" + common_id + "\"/></" + kind + ">";
+            "<Position/><Picture transparentX=\"14\" transparentY=\"1\" transparent=\"true\" commonPicture=\"" + common_id + "\"/></" + kind + ">";
     }
     xml += "</ChildItems></Form>";
     const auto common = source::parse_form_xml(xml);
@@ -20253,14 +20415,20 @@ void test_embedded_chart_typed_variants_and_guards() {
         auto* record = find_record(find_record, variant, kind);
         expect(record != nullptr, "owner fixture must expose embedded Chart");
         record->items[2].items[1].items[2].items[49] = list_stream::parse("{8,2,0,{-20},1,100}");
-        const auto partial = form_stream::decode_document(variant, "Main");
-        expect(has_incomplete_warning(partial), "valid unrepresented embedded Chart Font must warn and mark owner incomplete");
-        const auto restored_xml = source::serialize_form_xml(partial.value());
-        expect(restored_xml.ok(), "embedded Font warning must allow named XML projection");
+        const auto loaded = form_stream::decode_document(variant, "Main");
+        expect(loaded.ok() && loaded.value().reconstruction_complete(),
+            "Общий Load должен сохранить именованное состояние агрегированного Chart");
+        const auto restored_xml = source::serialize_form_xml(loaded.value());
+        expect(restored_xml.ok() && restored_xml.value().find("<Chart>") != std::string::npos,
+            "Агрегированный Chart должен присутствовать в именованном XML");
         const auto restored = source::parse_form_xml(restored_xml.value());
-        expect(restored.ok() && !restored.value().reconstruction_complete(), "embedded Font warning must survive named XML cycle");
+        expect(restored.ok() && restored.value().reconstruction_complete(),
+            "Полный агрегированный Chart должен читаться из XML");
         const auto restored_binary = form_stream::encode_document(restored.value());
-        expect(!restored_binary.ok(), "Непредставленный шрифт вложенной диаграммы должен запрещать сборку");
+        expect(restored_binary.ok(), "Общий Save должен собрать агрегированный Chart из XML");
+        auto rebuilt = restored_binary.value();
+        expect(list_stream::dump_compact(find_record(find_record, rebuilt, kind)->items[2].items[1].items[2].items[49]) ==
+            "{8,2,0,{-20},1,100}", "Шрифт агрегированного Chart должен сохраниться после XML-only сборки");
         for (const auto mutation : {0, 1, 2}) {
             auto invalid = encoded.value();
             auto& chart = find_record(find_record, invalid, kind)->items[2].items[1].items[2];
@@ -27014,13 +27182,23 @@ void test_embedded_chart_dynamic_back_color() {
                 }
                 embedded = std::move(chart_info);
                 const auto decoded = form_stream::decode_document(encoded.value(), "Main");
-                expect(decoded.ok() && !decoded.value().reconstruction_complete(), decoded ?
-                    "nonempty embedded Chart must remain a partial projection" :
+                expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ?
+                    "Непустой агрегированный Chart должен полностью загружаться общим кодеком" :
                     decoded.diagnostics().front().code + ": " + decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
                 const auto* result = decoded.value().find_control(model::ObjectId{2});
                 const auto* back = result->properties().find(model::PropertyId::from_name("BackColor"));
                 expect(back && std::get<model::ColorValue>(back->value) == color && result->events.size() == (with_event ? 1U : 0U),
                     "dynamic embedded BackColor and owner event must survive");
+                const auto xml = source::serialize_form_xml(decoded.value());
+                expect(xml.ok(), "Агрегат с данными и событиями владельца должен сериализоваться в XML");
+                const auto parsed = source::parse_form_xml(xml.value());
+                expect(parsed.ok(), "Именованный агрегат должен читаться без исходного потока");
+                const auto rebuilt = form_stream::encode_document(parsed.value());
+                expect(rebuilt.ok(), "Общий Save должен сохранить данные и события владельца");
+                const auto reloaded = form_stream::decode_document(rebuilt.value(), "Main");
+                expect(reloaded.ok() && reloaded.value().reconstruction_complete() &&
+                    source::serialize_form_xml(reloaded.value()).value() == xml.value(),
+                    "Именованное состояние агрегата должно совпадать после полной обратной сборки");
                 auto bad_mirror = encoded.value();
                 find_record_with_guid(bad_mirror, guid)->items[2].items[1].items[2].items[mirror + (with_event ? 1 : 0)].items[1] = list_stream::ListValue::raw_atom("999");
                 expect(!form_stream::decode_document(bad_mirror, "Main"), "embedded Chart rejects a damaged Palette mirror");
@@ -27119,8 +27297,18 @@ void test_complex_chart_back_color_pairs() {
             const auto decoded = form_stream::decode_document(changed, "Main");
             expect(decoded.ok() && decoded.value().reconstruction_complete(), "complex chart BackColor pair must decode");
             const auto rebuilt = form_stream::encode_document(decoded.value());
-            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(changed),
-                "complex chart BackColor must rebuild from the named property");
+            expect(rebuilt.ok(), "complex chart BackColor must rebuild from the named property");
+            const auto& rebuilt_chart = find_record_with_guid(rebuilt.value(), guid)->items[2].items[1].items[2];
+            expect(list_stream::dump_compact(rebuilt_chart.items[first]) == color_record &&
+                list_stream::dump_compact(rebuilt_chart.items[second]) == color_record,
+                "complex chart BackColor must retain both persisted values");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            const auto repeated = form_stream::decode_document(rebuilt.value(), "Main");
+            expect(xml.ok() && repeated.ok() && repeated.value().reconstruction_complete(),
+                "complex chart named state must survive the rebuild");
+            const auto repeated_xml = source::serialize_form_xml(repeated.value());
+            expect(repeated_xml.ok() && repeated_xml.value() == xml.value(),
+                "complex chart properties must remain exact after derived render caches are recalculated");
             auto wrong = changed;
             find_record_with_guid(wrong, guid)->items[2].items[1].items[2].items[second] = list_stream::parse("{4,0,{123},0}");
             expect(!form_stream::decode_document(wrong, "Main"), "complex chart mismatched BackColor must fail");
@@ -27499,6 +27687,7 @@ int main() {
         test_caption_picture_asset_lifecycle();
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
+        test_picture_transparency_and_identity_round_trip();
         test_choice_and_input_field_picture_properties_round_trip();
         test_label_decoration_shared_attribute_links_round_trip();
         test_attribute_id_zero_form_bin_round_trip();

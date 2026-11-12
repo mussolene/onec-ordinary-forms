@@ -1072,7 +1072,7 @@ void append_value_types(std::string& output) {
     output +=
         "    </xs:restriction>\n  </xs:simpleType>\n"
         "  <xs:simpleType name=\"PictureReferenceContentType\"><xs:union memberTypes=\"ObjectIdType\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:enumeration value=\"\"/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>\n"
-        "  <xs:complexType name=\"PictureReferenceValueType\"><xs:simpleContent><xs:extension base=\"PictureReferenceContentType\"><xs:attribute name=\"standardName\" type=\"StandardPictureNameType\" use=\"optional\"/><xs:attribute name=\"commonPicture\" type=\"UuidValueType\" use=\"optional\"/><xs:attribute name=\"width\" type=\"xs:int\"/><xs:attribute name=\"height\" type=\"xs:int\"/><xs:attribute name=\"transparent\" type=\"xs:boolean\"/></xs:extension></xs:simpleContent></xs:complexType>\n";
+        "  <xs:complexType name=\"PictureReferenceValueType\"><xs:simpleContent><xs:extension base=\"PictureReferenceContentType\"><xs:attribute name=\"standardName\" type=\"StandardPictureNameType\" use=\"optional\"/><xs:attribute name=\"commonPicture\" type=\"UuidValueType\" use=\"optional\"/><xs:attribute name=\"transparentX\" type=\"xs:long\"/><xs:attribute name=\"transparentY\" type=\"xs:long\"/><xs:attribute name=\"transparent\" type=\"xs:boolean\"/></xs:extension></xs:simpleContent></xs:complexType>\n";
 }
 
 void append_document_types(std::string& output) {
@@ -1182,6 +1182,7 @@ void append_document_types(std::string& output) {
       <xs:enumeration value="png"/>
       <xs:enumeration value="jpeg"/>
       <xs:enumeration value="bmp"/>
+      <xs:enumeration value="ico"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -1190,6 +1191,9 @@ void append_document_types(std::string& output) {
     <xs:attribute name="relativePath" type="xs:string" use="required"/>
     <xs:attribute name="format" type="PictureFormatType" use="required"/>
     <xs:attribute name="transparent" type="xs:boolean" use="optional" default="false"/>
+    <xs:attribute name="transparentX" type="xs:long" use="optional" default="-1"/>
+    <xs:attribute name="transparentY" type="xs:long" use="optional" default="-1"/>
+    <xs:attribute name="uuid" type="UuidValueType" use="optional"/>
   </xs:complexType>
 
   <xs:complexType name="PictureAssetsType">
@@ -1569,6 +1573,41 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         output += " minOccurs=\"0\"/></xs:sequence></xs:complexType>\n";
     }
 
+    std::vector<model::metamodel::PropertyDescriptor> chart_before_color;
+    std::vector<model::metamodel::PropertyDescriptor> chart_after_color;
+    bool after_chart_color = false;
+    for (const auto& property : metamodel.properties_for(model::ControlKind::chart)) {
+        if (property.xml_name == "BackColor") { after_chart_color = true; continue; }
+        if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries" &&
+            property.api_name != "SeriesCount" && property.api_name != "PointCount" &&
+            property.api_name != "PlotArea" && property.api_name != "LegendArea" && property.api_name != "TitleArea" && property.xml_name != "Title")
+            (after_chart_color ? chart_after_color : chart_before_color).push_back(property);
+    }
+    output += "  <xs:group name=\"ChartPropertiesBeforeBackColor\"><xs:sequence>\n";
+    append_property_elements(output, chart_before_color, "      ", false);
+    output += "  </xs:sequence></xs:group>\n";
+    output += "  <xs:group name=\"ChartPropertiesAfterBackColor\"><xs:sequence>\n";
+    append_property_elements(output, chart_after_color, "      ", false);
+    output += "  </xs:sequence></xs:group>\n";
+    output += "  <xs:group name=\"ChartData\"><xs:sequence>\n";
+    output += "      <xs:element name=\"PlotArea\" type=\"ChartPlotAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+    output += "      <xs:element name=\"LegendArea\" type=\"ChartLegendAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+    output += "      <xs:element name=\"TitleArea\" type=\"ChartTitleAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+    output += "      <xs:element name=\"SummarySeries\" type=\"ChartSummarySeriesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+    output += "      <xs:element name=\"Series\" type=\"ChartSeriesCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+    output += "      <xs:element name=\"Points\" type=\"ChartPointCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+    output += "      <xs:element name=\"Values\" type=\"ChartValueCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+    output += "  </xs:sequence></xs:group>\n";
+    output += "  <xs:complexType name=\"OwnedChartType\">"
+        "<xs:annotation><xs:documentation xml:lang=\"ru\">"
+        "Сохраняемый агрегат Chart, созданный ChartExtensionBase для владельца. "
+        "Не является отдельным контролом и не объявляет свойство BSL API."
+        "</xs:documentation></xs:annotation><xs:sequence>"
+        "<xs:group ref=\"ChartPropertiesBeforeBackColor\"/>"
+        "<xs:group ref=\"ChartPropertiesAfterBackColor\"/>"
+        "<xs:group ref=\"ChartData\"/>"
+        "</xs:sequence></xs:complexType>\n";
+
     for (const auto& control : controls) {
         const std::string type_name = std::string(control.public_name) + "Type";
         output += "  <xs:complexType";
@@ -1594,20 +1633,12 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         output +=
             "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
         if (control.kind == model::ControlKind::chart) {
-            std::vector<model::metamodel::PropertyDescriptor> chart_properties;
-            for (const auto& property : metamodel.properties_for(control.kind)) {
-                if (property.api_name != "Series" && property.api_name != "Points" && property.api_name != "SummarySeries" &&
-                    property.api_name != "SeriesCount" && property.api_name != "PointCount" &&
-                    property.api_name != "PlotArea" && property.api_name != "LegendArea" && property.api_name != "TitleArea" && property.xml_name != "Title") chart_properties.push_back(property);
-            }
-            append_property_elements(output, chart_properties, "      ", false);
-            output += "      <xs:element name=\"PlotArea\" type=\"ChartPlotAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
-            output += "      <xs:element name=\"LegendArea\" type=\"ChartLegendAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
-            output += "      <xs:element name=\"TitleArea\" type=\"ChartTitleAreaType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
-            output += "      <xs:element name=\"SummarySeries\" type=\"ChartSummarySeriesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
-            output += "      <xs:element name=\"Series\" type=\"ChartSeriesCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
-            output += "      <xs:element name=\"Points\" type=\"ChartPointCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
-            output += "      <xs:element name=\"Values\" type=\"ChartValueCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+            output += "      <xs:group ref=\"ChartPropertiesBeforeBackColor\"/>\n";
+            const auto* back_color = metamodel.property(model::ControlKind::chart, "BackColor");
+            if (!back_color) throw std::logic_error("Chart BackColor descriptor is missing");
+            append_property_element(output, *back_color, "      ");
+            output += "      <xs:group ref=\"ChartPropertiesAfterBackColor\"/>\n"
+                "      <xs:group ref=\"ChartData\"/>\n";
         } else {
             if (control.kind == model::ControlKind::spreadsheet_document_field) {
                 output +=
@@ -1632,6 +1663,9 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
                 "      <xs:element name=\"Points\" type=\"GanttPointCollectionType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
                 "      <xs:element name=\"Intervals\" type=\"GanttIntervalCollectionType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
         }
+
+        if (control.kind == model::ControlKind::gantt_chart || control.kind == model::ControlKind::dendrogram)
+            output += "      <xs:element name=\"Chart\" type=\"OwnedChartType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
 
         if (control.kind == model::ControlKind::table) {
             for (const auto& extension : model::metamodel::table_source_extension_descriptors()) {

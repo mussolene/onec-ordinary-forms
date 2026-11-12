@@ -1501,9 +1501,9 @@ model::BorderValue decode_control_border(const LV& value, std::string_view path,
         (list_stream::dump_compact(value.items[2]) == "{0}" ||
          list_stream::dump_compact(value.items[2]) == "{-18}"))
         normalized.items[2] = expected.items[2];
-    // The platform XDTO reader restores these named enum values from an absent factory.
-    if (state == 0 && border.width == 1 &&
-        (border.border_type == model::ControlBorderType::underline || border.border_type == model::ControlBorderType::overline) &&
+    // V8Border::operator== трактует nil как kControlsBordersClass для абсолютной рамки.
+    // У другого семейства рамок, например UsualGroup, эта подстановка неприменима.
+    if (expected.items[6].atom == "48312c09-257f-4b29-b280-284dd89efc1e" &&
         !value.items[6].is_list && value.items[6].atom_kind == LV::AtomKind::raw &&
         value.items[6].atom == "00000000-0000-0000-0000-000000000000")
         normalized.items[6] = expected.items[6];
@@ -2565,6 +2565,19 @@ InputFieldFlagValues decode_input_field_flags(
         }
     }
     return flags;
+}
+
+// Временный редактор пересоздается из настроек поля и активного контекста.
+// В режиме выбора его длина не является квалификатором сохраняемого ValueType.
+void normalize_input_field_runtime_state(LV& info, const LV& expected, std::string_view path) {
+    auto& payload = info.items[2].items[0];
+    const auto payload_path = child_path(child_path(path, 2), 0);
+    static_cast<void>(bool_atom(payload.items[12], child_path(payload_path, 12)));
+    payload.items[12] = expected.items[2].items[0].items[12];
+    if (bool_atom(info.items[9], child_path(path, 9))) {
+        static_cast<void>(integer_atom<std::uint32_t>(payload.items[14], child_path(payload_path, 14)));
+        payload.items[14] = expected.items[2].items[0].items[14];
+    }
 }
 
 LV canonical_input_field_info(
@@ -4011,6 +4024,9 @@ struct DecodedPictureDescriptor {
     bool transparent = false;
     model::PictureFormat format = model::PictureFormat::gif;
     std::optional<model::PictureRef> reference;
+    std::int64_t transparent_x = -1;
+    std::int64_t transparent_y = -1;
+    std::optional<model::UuidValue> uuid;
 };
 
 
@@ -4020,6 +4036,7 @@ std::string_view picture_format_extension(model::PictureFormat format) {
         case model::PictureFormat::png: return "png";
         case model::PictureFormat::jpeg: return "jpeg";
         case model::PictureFormat::bmp: return "bmp";
+        case model::PictureFormat::ico: return "ico";
     }
     return {};
 }
@@ -4033,6 +4050,32 @@ std::optional<model::PictureFormat> picture_format_from_bytes(const std::vector<
     if (bytes.size() >= png.size() && std::equal(png.begin(), png.end(), bytes.begin())) return model::PictureFormat::png;
     if (bytes.size() >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return model::PictureFormat::jpeg;
     if (bytes.size() >= 2 && bytes[0] == 'B' && bytes[1] == 'M') return model::PictureFormat::bmp;
+    if (bytes.size() >= 22 && bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 1 && bytes[3] == 0) {
+        const auto uint16_le = [&](std::size_t offset) {
+            return static_cast<std::uint16_t>(bytes[offset] | (static_cast<unsigned>(bytes[offset + 1]) << 8));
+        };
+        const auto uint32_le = [&](std::size_t offset) {
+            return static_cast<std::uint32_t>(bytes[offset]) |
+                (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+                (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+                (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+        };
+        const std::size_t count = uint16_le(4);
+        const std::size_t directory_end = 6 + 16 * count;
+        if (count == 0 || directory_end > bytes.size()) return std::nullopt;
+        for (std::size_t index = 0; index < count; ++index) {
+            const std::size_t entry = 6 + 16 * index;
+            const std::size_t size = uint32_le(entry + 8);
+            const std::size_t offset = uint32_le(entry + 12);
+            if (bytes[entry + 3] != 0 || size < 40 || offset < directory_end ||
+                offset > bytes.size() || size > bytes.size() - offset) return std::nullopt;
+            // The target platform accepts DIB icons and excludes PNG images inside ICO.
+            const auto header_size = uint32_le(offset);
+            if ((header_size != 40 && header_size != 108 && header_size != 124) || header_size > size)
+                return std::nullopt;
+        }
+        return model::PictureFormat::ico;
+    }
     return std::nullopt;
 }
 
@@ -4441,13 +4484,15 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control,
         } else {
             info.items[2].items[0].items[14] = raw("0");
         }
-        if (value_type.entries.size() == 1 &&
-            value_type.entries.front().term == model::TypeDomainTerm::value_list) {
-            info.items[3] = canonical_table_value_list_type_pair(std::string(path) + "/ValueType");
-        } else if (!control.extension && (value_type.entries.empty() ||
-            ((value_type.entries.front().term == model::TypeDomainTerm::object ||
-              value_type.entries.front().term == model::TypeDomainTerm::reference) && value_type.entries.front().type_uuid))) {
-            info.items[3] = list({raw("0")});
+        if (!explicit_bool(control.properties, "ListChoiceMode", false)) {
+            if (value_type.entries.size() == 1 &&
+                value_type.entries.front().term == model::TypeDomainTerm::value_list) {
+                info.items[3] = canonical_table_value_list_type_pair(std::string(path) + "/ValueType");
+            } else if (!control.extension && (value_type.entries.empty() ||
+                ((value_type.entries.front().term == model::TypeDomainTerm::object ||
+                  value_type.entries.front().term == model::TypeDomainTerm::reference) && value_type.entries.front().type_uuid))) {
+                info.items[3] = list({raw("0")});
+            }
         }
         if (document) info.items[4] = encode_named_control_events(*document, owner, control.events,
             model::metamodel::event_descriptors(control.kind), "$/Table/Columns/Column/Control/Events");
@@ -5038,6 +5083,10 @@ LV canonical_table_control_info(
 
 LV encode_button_picture(const model::PictureAsset& asset, std::string_view path) {
     if (asset.bytes.empty()) fail("OOF1122", std::string(path), "non-empty external picture bytes", "empty", "Button picture asset has no bytes");
+    if (asset.transparent_x < -1 || asset.transparent_y < -1)
+        fail("OOF1122", std::string(path), "transparency coordinates at least -1", {}, "Invalid picture transparency coordinates");
+    LV identity = parse_constant("{0}");
+    if (asset.uuid) identity = list({raw("0"), raw(uuid_atom(raw(asset.uuid->canonical), path).canonical)});
     const auto actual_format = picture_format_from_bytes(asset.bytes);
     if (!actual_format || *actual_format != asset.format) {
         fail("OOF1122", std::string(path), std::string(picture_format_extension(asset.format)) + " image signature",
@@ -5050,7 +5099,8 @@ LV encode_button_picture(const model::PictureAsset& asset, std::string_view path
         const std::string chunk = base64.substr(begin, std::min<std::size_t>(64, base64.size() - begin));
         chunks.push_back(raw((begin == 0 ? "#base64:" : "") + chunk));
     }
-    return list({raw("4"), raw("3"), parse_constant("{0}"), string_value(""), raw("-1"), raw("-1"),
+    return list({raw("4"), raw("3"), std::move(identity), string_value(""),
+        raw(std::to_string(asset.transparent_x)), raw(std::to_string(asset.transparent_y)),
         raw(asset.transparent ? "1" : "0"), list({list(std::move(chunks))}), raw("0"), string_value("")});
 }
 
@@ -5077,20 +5127,20 @@ LV encode_picture_reference(const model::PictureRef& reference, std::string_view
         picture = list({raw("4"), raw("1"), list({raw("0"), raw(uuid.canonical)}), string_value(""),
             raw("-1"), raw("-1"), raw("0"), raw("0"), string_value("")});
     }
-    if (reference.width < -1 || reference.height < -1)
-        fail("OOF1122", std::string(path), "picture dimensions at least -1", {}, "Invalid picture dimensions");
-    picture.items[4] = raw(std::to_string(reference.width));
-    picture.items[5] = raw(std::to_string(reference.height));
+    if (reference.transparent_x < -1 || reference.transparent_y < -1)
+        fail("OOF1122", std::string(path), "transparency coordinates at least -1", {}, "Invalid picture transparency coordinates");
+    picture.items[4] = raw(std::to_string(reference.transparent_x));
+    picture.items[5] = raw(std::to_string(reference.transparent_y));
     picture.items[6] = raw(reference.transparent ? "1" : "0");
     return picture;
 }
 
 std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& source, std::string_view path) {
     std::optional<LV> upgraded;
-    if (source.is_list && source.items.size() >= 2 && source.items[0].atom == "3" && source.items[1].atom == "1") {
-        require_arity(source, 8, path);
+    if (source.is_list && source.items.size() >= 2 && source.items[0].atom == "3" &&
+        (source.items[1].atom == "1" || source.items[1].atom == "3")) {
+        require_arity(source, source.items[1].atom == "3" ? 9 : 8, path);
         require_raw_constant(source.items[0], "3", child_path(path, 0));
-        require_raw_constant(source.items[1], "1", child_path(path, 1));
         upgraded = source;
         upgraded->items[0] = raw("4");
         upgraded->items.push_back(string_value(""));
@@ -5124,28 +5174,40 @@ std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& source, 
             uuid_atom(identity.items[1], child_path(child_path(path, 2), 1)).canonical == null_uuid))
             fail("OOF1114", child_path(path, 2), "known library picture or nonzero CommonPicture UUID", "unknown", "Picture identity is unsupported");
         require_exact(value.items[3], string_value(""), child_path(path, 3), "Standard picture descriptor is unsupported");
-        const auto width = integer_atom<std::int32_t>(value.items[4], child_path(path, 4));
-        const auto height = integer_atom<std::int32_t>(value.items[5], child_path(path, 5));
+        const auto transparent_x = integer_atom<std::int64_t>(value.items[4], child_path(path, 4));
+        const auto transparent_y = integer_atom<std::int64_t>(value.items[5], child_path(path, 5));
         const auto transparent = bool_atom(value.items[6], child_path(path, 6));
-        if (width < -1 || height < -1) fail("OOF1114", std::string(path), "picture dimensions at least -1", {}, "Invalid picture dimensions");
+        if (transparent_x < -1 || transparent_y < -1) fail("OOF1114", std::string(path), "transparency coordinates at least -1", {}, "Invalid picture transparency coordinates");
         require_raw_constant(value.items[7], "0", child_path(path, 7));
         require_exact(value.items[8], string_value(""), child_path(path, 8), "Standard picture descriptor is unsupported");
         DecodedPictureDescriptor picture;
         if (descriptor) picture.reference = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{std::string(descriptor->runtime_name)}};
         else picture.reference = model::PictureRef{model::PictureAssetRef{}, std::nullopt,
             uuid_atom(identity.items[1], child_path(child_path(path, 2), 1))};
-        picture.reference->width = width;
-        picture.reference->height = height;
+        picture.reference->transparent_x = transparent_x;
+        picture.reference->transparent_y = transparent_y;
         picture.reference->transparent = transparent;
         return picture;
     }
     require_arity(value, 10, path);
     require_raw_constant(value.items[0], "4", child_path(path, 0));
     require_raw_constant(value.items[1], "3", child_path(path, 1));
-    require_exact(value.items[2], parse_constant("{0}"), child_path(path, 2), "Button picture descriptor is unsupported");
+    std::optional<model::UuidValue> uuid;
+    const auto& identity = value.items[2];
+    require_list(identity, child_path(path, 2));
+    if (identity.items.size() == 1) {
+        if (integer_atom<std::int64_t>(identity.items[0], child_path(child_path(path, 2), 0)) != 0)
+            fail("OOF1114", child_path(path, 2), "empty or UUID picture identity", {}, "Numeric embedded picture identity is unsupported");
+    } else {
+        require_arity(identity, 2, child_path(path, 2));
+        require_raw_constant(identity.items[0], "0", child_path(child_path(path, 2), 0));
+        uuid = uuid_atom(identity.items[1], child_path(child_path(path, 2), 1));
+    }
     require_exact(value.items[3], string_value(""), child_path(path, 3), "Button picture descriptor is unsupported");
-    require_raw_constant(value.items[4], "-1", child_path(path, 4));
-    require_raw_constant(value.items[5], "-1", child_path(path, 5));
+    const auto transparent_x = integer_atom<std::int64_t>(value.items[4], child_path(path, 4));
+    const auto transparent_y = integer_atom<std::int64_t>(value.items[5], child_path(path, 5));
+    if (transparent_x < -1 || transparent_y < -1)
+        fail("OOF1114", std::string(path), "transparency coordinates at least -1", {}, "Invalid picture transparency coordinates");
     const auto transparency = integer_atom<std::int32_t>(value.items[6], child_path(path, 6));
     if (transparency != 0 && transparency != 1) fail("OOF1114", child_path(path, 6), "transparency flag 0 or 1", std::to_string(transparency), "Button picture transparency is unsupported");
     const auto& outer_chunks = value.items[7];
@@ -5170,8 +5232,11 @@ std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& source, 
     DecodedPictureDescriptor picture;
     picture.bytes = decode_base64(base64, child_path(path, 7));
     picture.transparent = transparency == 1;
+    picture.transparent_x = transparent_x;
+    picture.transparent_y = transparent_y;
+    picture.uuid = std::move(uuid);
     const auto format = picture_format_from_bytes(picture.bytes);
-    if (!format) fail("OOF1114", child_path(path, 7), "GIF, PNG, JPEG, or BMP image bytes", "unknown signature", "Button picture format is unsupported");
+    if (!format) fail("OOF1114", child_path(path, 7), "GIF, PNG, JPEG, BMP, or DIB ICO image bytes", "unknown signature", "Button picture format is unsupported");
     picture.format = *format;
     return picture;
 }
@@ -5946,7 +6011,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 else {
                     decoded.assets.push_back(model::PictureAsset{model::ObjectId{decoded.assets.size() + 1},
                         asset_path + "/" + entry.name + "/Picture." + std::string(picture_format_extension(picture->format)),
-                        picture->format, picture->bytes, picture->transparent});
+                        picture->format, picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid});
                     entry.picture = model::PictureRef{model::PictureAssetRef{decoded.assets.back().id}};
                 }
             }
@@ -6056,16 +6121,16 @@ struct DecodedControl {
 
 struct DecodedChartInfo {
     model::ChartPayload payload;
-    model::PropertyValue title{std::string{}};
-    model::PropertySet properties;
     std::vector<DecodedControlEvent> events;
 };
 
 DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
-    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style = true, std::size_t* collection_items = nullptr);
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, std::size_t* collection_items = nullptr);
 std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path, std::size_t trendline_owners = 0, bool source_mode = false);
 std::size_t chart_data_end(std::size_t series_count, std::size_t point_count, std::string_view path, bool source_mode = false);
 static std::vector<ls::ListValue> canonical_chart_middle_defaults();
+LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValue& title,
+    const model::PropertySet& properties = {}, model::ObjectId owner = {});
 
 struct EmbeddedChartEvents {
     std::vector<DecodedControlEvent> events;
@@ -6107,23 +6172,55 @@ EmbeddedChartEvents extract_embedded_chart_events(
     return {std::move(events), first, second};
 }
 
-// Общий блок диаграммы проверяется тем же кодеком у всех его владельцев.
-void validate_embedded_chart_info(const LV& actual, const LV& expected,
-    const std::string& path, std::uint64_t owner_id, std::string_view owner_kind,
-    Diagnostics& warnings, bool& reconstruction_complete) {
+// ChartExtensionBase агрегирует Chart и делегирует ему IPersistableObject::Load/Save.
+model::ChartPayload decode_owned_chart(const LV& actual, const std::string& path,
+    std::uint64_t owner_id, Diagnostics& warnings, bool& reconstruction_complete,
+    std::size_t& collection_items) {
     require_arity(actual, 3, path);
-    require_exact(actual.items[0], expected.items[0], child_path(path, 0),
+    require_exact(actual.items[0], raw("0"), child_path(path, 0),
         "Embedded Chart marker is unsupported");
-    require_exact(actual.items[1], expected.items[1], child_path(path, 1),
+    require_exact(actual.items[1], list({raw("11")}), child_path(path, 1),
         "Embedded Chart geometry header is unsupported");
-    Diagnostics chart_warnings;
-    bool chart_complete = true;
-    // Embedded profiles have owner-specific area styles checked against the owner record below.
-    static_cast<void>(decode_chart_info(actual.items[2], child_path(path, 2), owner_id,
-        chart_warnings, chart_complete, false));
-    // Эти свойства еще не представлены у владельца, поэтому проекция неполна.
-    if (list_stream::dump_compact(actual) != list_stream::dump_compact(expected))
-        warn_incomplete_profile(warnings, reconstruction_complete, owner_id, path, owner_kind);
+    auto decoded = decode_chart_info(actual.items[2], child_path(path, 2), owner_id,
+        warnings, reconstruction_complete, &collection_items);
+    // События извлекает интерфейс владельца до загрузки агрегата.
+    if (!decoded.events.empty())
+        fail("OOF1114", path, "events on the owning control", "Chart events",
+            "Owned Chart events must belong to its control");
+    decoded.payload.properties.unset(model::PropertyId::from_name("BackColor"));
+    return std::move(decoded.payload);
+}
+
+LV encode_owned_chart(const std::optional<model::ChartPayload>& stored_chart,
+    const model::ControlNode& owner) {
+    model::ChartPayload defaults;
+    if (!stored_chart) {
+        if (owner.kind() == model::ControlKind::gantt_chart) {
+            defaults.plot_area.emplace();
+            defaults.legend_area.emplace();
+            for (const auto& field : model::metamodel::chart_area_property_descriptors()) {
+                if (field.coordinate == nullptr) continue;
+                (*defaults.plot_area).*(field.coordinate) = model::DecimalValue{std::string(field.plot_default)};
+                (*defaults.legend_area).*(field.coordinate) = model::DecimalValue{std::string(field.legend_default)};
+            }
+            model::BorderValue border;
+            border.border_type = model::ControlBorderType::single;
+            border.width = 1;
+            defaults.plot_area->border = border;
+            defaults.legend_area->scrolling = true;
+        } else {
+            defaults.properties.set_explicit(model::PropertyId::from_name("ShowLegend"), false);
+        }
+    }
+    const auto& chart = stored_chart ? *stored_chart : defaults;
+    auto properties = chart.properties;
+    if (properties.contains(model::PropertyId::from_name("BackColor")))
+        fail("OOF1122", "$/Chart/BackColor", "BackColor on the owning control", "duplicate property",
+            "Owned Chart BackColor belongs to its control");
+    if (const auto* color = owner.properties().find(model::PropertyId::from_name("BackColor")))
+        properties.set_explicit(color->id, color->value);
+    const auto title = explicit_localized_text(properties, "Title", "$/Chart");
+    return list({raw("0"), list({raw("11")}), encode_chart_info(chart, title, properties, owner.id)});
 }
 
 std::size_t control_geometry_slot(std::string_view guid) {
@@ -6254,7 +6351,7 @@ DecodedControl decode_default_complex_control(
 LV canonical_empty_gantt_info() {
     return list({
         raw("19"),
-        list({raw("0"), list({raw("11")}), list({raw("75"), raw("1"), raw("0"), raw("1"), raw("0"), list({raw("4"), raw("0"), list({raw("11837108")}), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("1"), raw("2"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}), raw("1"), list({raw("1"), raw("1"), list({string_value("ru"), string_value("Сводная")})}), raw("0"), raw("0"), raw("0"), raw("1"), list({string_value("U")}), list({string_value("U")}), raw("0"), raw("1"), raw("0"), raw("-1"), raw("0"), raw("4"), raw("0"), string_value(", "), raw("4"), list({raw("1"), raw("0")}), list({raw("1"), raw("0")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), raw("0"), raw("0"), list({raw("1"), raw("0")}), raw("1"), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("0"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("0"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), list({raw("3"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("00000000-0000-0000-0000-000000000000")}), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), raw("0"), list({raw("4"), raw("3"), list({raw("-1")}), raw("3")}), raw("1"), list({raw("4"), raw("3"), list({raw("-1")}), raw("3")}), raw("1"), list({raw("4"), raw("3"), list({raw("-1")}), raw("3")}), raw("0"), list({raw("4"), raw("0"), list({raw("16777215")}), raw("0")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), raw("1"), raw("1"), raw("1"), raw("1"), raw("1"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), raw("1"), raw("0"), raw("4"), raw("30"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"), raw("2"), list({raw("1"), raw("0")}), raw("1"), raw("0"), raw("0"), raw("1"), list({raw("4"), raw("0"), list({raw("169")}), raw("0")}), raw("0"), raw("0"), list({raw("1"), raw("0"), raw("0"), raw("0")}), raw("0"), raw("180"), raw("5"), raw("1"), raw("0"), raw("4"), list({raw("4"), raw("0"), list({raw("11119017")}), raw("0")}), raw("1"), raw("0"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("0"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), string_value(""), raw("0"), raw("1"), raw("14"), raw("2"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), raw("1"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("3"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), raw("1"), raw("1"), raw("0"), raw("0"), raw("95"), raw("1e-1"), raw("1e-1"), raw("3e-2"), list({raw("4"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")}), raw("2"), raw("255"), raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000"), raw("0"), list({raw("0"), raw("0")}), raw("0"), list({raw("0"), raw("0"), list({raw("0"), raw("1"), raw("0"), raw("1"), raw("0")}), raw("0"), raw("0")}), list({raw("0"), raw("0"), list({raw("0"), raw("1"), raw("0"), raw("1"), raw("0")}), raw("0"), raw("0")}), raw("0"), raw("0"), raw("2"), raw("-2"), raw("1"), raw("10"), raw("1"), raw("20"), raw("0"), raw("0"), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), list({list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("0"), raw("0"), raw("0"), string_value(""), list({raw("1"), raw("0")}), list({raw("1"), raw("0")}), list({raw("1"), raw("0")}), raw("0")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0.17"), raw("0"), raw("0.83"), raw("0.08"), raw("0"), raw("0"), raw("0.83"), raw("0"), raw("0"), raw("0.92"), list({raw("0"), raw("0")}), list({raw("0"), raw("0")}), list({raw("0"), raw("0")}), list({raw("0"), raw("0")}), list({raw("0"), raw("14"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0")}), list({raw("0"), raw("14"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0")}), raw("0"), raw("0"), list({raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("0"), raw("0"), raw("0"), raw("0")}), raw("0"), raw(""), raw("60"), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("0"), raw("0"), list({raw("0"), raw("1"), raw("0"), raw("1"), raw("0")}), raw("0"), raw("0")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")})})}),
+        list({}), // Агрегат создается общим encode_owned_chart.
         list({raw("1"), list({raw("3"), raw("0"), raw("1"), raw("0"), list({raw("2"), list({raw("8"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), list({string_value("U")}), list({raw("1"), raw("0")}), list({string_value("U")}), raw("0"), raw("4294901761")}), list({raw("4"), raw("0"), list({raw("0")}), string_value(""), raw("-1"), raw("-1"), raw("1"), raw("0"), string_value("")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")})}), list({raw("0"), raw("1"), list({raw("0"), list({raw("0"), list({raw("4"), raw("0"), list({raw("0")}), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")})}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")})})}), raw("1"), raw("0")})}),
         list({raw("0"), list({raw("3"), raw("0"), raw("1"), raw("0"), list({raw("3"), list({raw("8"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), list({string_value("U")}), list({raw("1"), raw("0")}), list({string_value("U")}), raw("0"), raw("4294901761")})}), list({raw("0"), raw("1"), list({raw("0"), list({raw("0"), list({raw("4"), raw("0"), list({raw("0")}), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")})}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")})})}), raw("1"), raw("0")})}),
         raw("0"),
@@ -6430,7 +6527,7 @@ LV encode_gantt_chart_info(const model::ControlNode& control) {
         u > (std::numeric_limits<std::size_t>::max() - 33 - 2 * n) / 2)
         fail("OOF1112", "$/GanttChart/Intervals", "safe dynamic count arithmetic", "overflow", "Gantt data is too large");
     LV base = canonical_empty_gantt_info();
-    encode_chart_back_color(base.items[1].items[2], 39, 214, control.properties(), "$/GanttChart/BackColor");
+    base.items[1] = encode_owned_chart(data->chart, control);
     require_arity(base, 33, "$/GanttChart/InfoDefaults");
     base.items[2] = gantt_dimension_table(*data, true);
     base.items[3] = gantt_dimension_table(*data, false);
@@ -6665,33 +6762,9 @@ void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
     }
 }
 
-void normalize_gantt_runtime_layout_values(const LV& actual, LV& normalized, std::string_view path) {
-    constexpr std::array<std::size_t, 8> platform_adjusted_slots{102, 104, 106, 107, 167, 169, 171, 172};
-    const std::string section_path = child_path(path, 1) + "/2";
-    const LV& actual_section = at(at(actual, 1, path), 2, child_path(path, 1));
-    LV& normalized_section = normalized.items.at(1).items.at(2);
-    require_arity(actual_section, 222, section_path);
-    require_arity(normalized_section, 222, section_path);
-    for (const std::size_t slot : platform_adjusted_slots) {
-        const auto slot_path = child_path(section_path, slot);
-        const std::string value = raw_atom(actual_section.items[slot], slot_path);
-        double parsed = 0.0;
-        const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed,
-            std::chars_format::general);
-        if (value.empty() || result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
-            !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0) {
-            fail("OOF1114", slot_path, "finite raw numeric layout value in [0,1]", value,
-                "Gantt platform-adjusted layout value is outside the verified numeric domain");
-        }
-        normalized_section.items[slot] = actual_section.items[slot];
-    }
-}
-
-
-
 DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
                                   const GeometryContext& context, Diagnostics& warnings,
-                                  bool& reconstruction_complete) {
+                                  bool& reconstruction_complete, std::size_t& collection_items) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6779,6 +6852,9 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
         control.properties().set_explicit(model::PropertyId::from_name("FullIntervalEnd"),
             model::DateValue{value_codec::date_from_platform(raw_atom(info.items[13 + shift], child_path(info_path, 13 + shift)))});
     }
+    std::get<model::GanttChartPayload>(control.payload).chart = decode_owned_chart(
+        event_normalized.items[1], child_path(info_path, 1), id, warnings,
+        reconstruction_complete, collection_items);
     const LV expected = encode_gantt_chart_info(control);
     require_gantt_dimension_table_match(info.items[2], expected.items[2], child_path(info_path, 2), id,
         warnings, reconstruction_complete);
@@ -6787,12 +6863,7 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     LV normalized = info;
     normalized.items[2] = expected.items[2];
     normalized.items[3] = expected.items[3];
-    LV expected_with_platform_layout = expected;
-    if (embedded.back_first == 39 && embedded.back_second == 214)
-        normalize_gantt_runtime_layout_values(event_normalized, expected_with_platform_layout, info_path);
-    validate_embedded_chart_info(event_normalized.items[1], expected_with_platform_layout.items[1],
-        child_path(info_path, 1), id, "GanttChart", warnings, reconstruction_complete);
-    normalized.items[1] = expected_with_platform_layout.items[1];
+    normalized.items[1] = expected.items[1];
     for (const auto offset : {std::size_t{12}, std::size_t{13}, std::size_t{14}}) {
         const auto index = offset + shift;
         static_cast<void>(value_codec::date_from_platform(raw_atom(info.items[index], child_path(info_path, index))));
@@ -6808,7 +6879,7 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(info_path, index), "GanttChart");
         }
     }
-    if (list_stream::dump_compact(expected_with_platform_layout) != list_stream::dump_compact(normalized))
+    if (list_stream::dump_compact(expected) != list_stream::dump_compact(normalized))
         fail("OOF1114", info_path, "canonical Gantt info generated from named data", "unsupported private settings or table fields", "Gantt info differs from the proven typed storage profile");
 
     const LV& metadata = record.items[4];
@@ -7183,7 +7254,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     if (picture && !picture->reference) {
         picture_asset = model::PictureAsset{
             {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
-            picture->format, picture->bytes, picture->transparent};
+            picture->format, picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid};
     }
     require_exact(
         record.items[5],
@@ -7383,7 +7454,7 @@ DecodedControl decode_picture_decoration(
     if (picture && !picture->reference) {
         picture_asset = model::PictureAsset{
             {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
-            picture->format, picture->bytes, picture->transparent};
+            picture->format, picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid};
     }
     model::ControlNode control{
         model::ObjectId{raw_id},
@@ -8020,7 +8091,7 @@ DecodedControl decode_label(
     if (picture && !picture->reference)
         decoded.picture_property_assets.push_back({"Picture", model::PictureAsset{
             {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
-            picture->format, picture->bytes, picture->transparent}});
+            picture->format, picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid}});
     return decoded;
 }
 
@@ -8721,7 +8792,7 @@ std::vector<model::ChartGaugeQualityBand> decode_chart_gauge_bands(
 }
 
 LV encode_chart_info(const model::ChartPayload& chart, const model::PropertyValue& title,
-    const model::PropertySet& properties = {}, model::ObjectId owner = {}) {
+    const model::PropertySet& properties, model::ObjectId owner) {
     int chart_type = 4;
     if (const auto* entry = properties.find(model::PropertyId::from_name("ChartType"))) {
         const auto* value = std::get_if<model::EnumerationValue>(&entry->value);
@@ -9204,7 +9275,7 @@ LV encode_chart(const model::OrdinaryFormDocument& document, const model::Contro
 }
 
 DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& info_path,
-    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, bool include_area_style, std::size_t* collection_items) {
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete, std::size_t* collection_items) {
     require_list(stored_info, info_path);
     if (stored_info.items.size() < 221) fail("OOF1102", info_path, "Chart info base and collection counts", describe(stored_info), "Chart Info is truncated");
     require_raw_constant(at(stored_info, 0, info_path), "75", child_path(info_path, 0));
@@ -9676,10 +9747,11 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
             if (value != default_value) area.*(descriptor.member) = value;
         }
         for (const auto& descriptor : model::metamodel::chart_area_style_descriptors()) {
-            if (descriptor.kind != kind || (!include_area_style && !descriptor.line)) continue;
+            if (descriptor.kind != kind) continue;
             const auto index = middle_start + descriptor.storage_offset;
             if (descriptor.border) {
                 auto value = decode_control_border(at(info, index, info_path), child_path(info_path, index), model::ControlKind::chart);
+                info.items[index] = encode_control_border(value, child_path(info_path, index), model::ControlKind::chart);
                 if (value != model::BorderValue{}) area.*(descriptor.border) = std::move(value);
             } else if (descriptor.font) {
                 auto value = decode_control_font(at(info, index, info_path), child_path(info_path, index));
@@ -9871,7 +9943,10 @@ DecodedChartInfo decode_chart_info(const LV& stored_info, const std::string& inf
     if (list_stream::dump_compact(scale_normalized_info) != list_stream::dump_compact(normalized_expected_info)) {
         warn_incomplete_profile(warnings, reconstruction_complete, id, info_path, "Chart");
     }
-    return {std::move(payload), title, std::move(properties), std::move(chart_events)};
+    payload.properties = std::move(properties);
+    if (!std::holds_alternative<std::string>(title) || !std::get<std::string>(title).empty())
+        payload.properties.set_explicit(model::PropertyId::from_name("Title"), title);
+    return {std::move(payload), std::move(chart_events)};
 }
 
 DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context,
@@ -9882,13 +9957,10 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
     require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
     const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
     auto decoded = decode_chart_info(at(record, 3, path), child_path(path, 3), id,
-        warnings, reconstruction_complete, true, &collection_items);
+        warnings, reconstruction_complete, &collection_items);
     model::ControlNode control{model::ObjectId{id},
         string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)),
         std::move(decoded.payload)};
-    control.properties() = std::move(decoded.properties);
-    if (!std::holds_alternative<std::string>(decoded.title) || !std::get<std::string>(decoded.title).empty())
-        control.properties().set_explicit(model::PropertyId::from_name("Title"), decoded.title);
     decode_control_metadata(at(record, 5, path), child_path(path, 5), control);
     const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);
     control.position = geometry.position;
@@ -10560,7 +10632,7 @@ DecodedControl decode_choice_field(
             decoded_picture_assets.push_back({std::string(property_name), model::PictureAsset{
                 {}, "Items/" + name + "/" + std::string(property_name) + "." +
                     std::string(picture_format_extension(picture->format)), picture->format,
-                picture->bytes, picture->transparent}});
+                picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid}});
         }
     }
     control.position = std::move(decoded_geometry.position);
@@ -10742,7 +10814,7 @@ DecodedControl decode_calendar_field(
 }
 
 LV canonical_dendrogram_data(std::int32_t orientation) {
-    static constexpr std::string_view defaults = R"OOFDEF({0,{0,{11},{75,1,0,1,0,{4,0,{11837108},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},1,{1,1,{"ru","Сводная"}},0,0,0,1,{"U"},{"U"},0,1,0,-1,0,4,0,", ",4,{1,0},{1,0},{4,3,{-3},3},0,0,{1,0},1,0,{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},0,{4,3,{-1},3},1,{4,3,{-1},3},1,{4,3,{-1},3},0,{4,0,{16777215},0},{4,3,{-3},3},{4,3,{-3},3},{4,3,{-3},3},{8,3,0,1,100},{8,3,0,1,100},{8,3,0,1,100},1,1,1,1,1,{1,0},0,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,4,{0},4},1,1,0,4,30,1,0,0,0,0,1,0,0,0,0,1,1,2,{1,0},1,0,0,0,{4,0,{169},0},0,0,{1,0,0,0},0,180,5,1,0,4,{4,0,{11119017},0},1,0,1,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,1,14,2,{8,3,0,1,100},1,{4,4,{0},4},{3,0,{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,0,{0},0},2,255,0,0,00000000-0000-0000-0000-000000000000,0,{0,0},0,{0,0,{0,1,0,1,0},0,0},{0,0,{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},0,0,{4,4,{0},4},{4,4,{0},4},0,{{4,4,{0},4},4,0,0,0,"",{1,0},{1,0},{1,0},0},0,0,0,0,0,0,1,1,0,0,1,1,0,6,0,0,0,0.17,0,0.83,0.08,0,0,0.83,0,0,0.92,{0,0},{0,0},{0,0},{0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},0,0,{0,0,0,0,0},{0,0,0,0},0,,60,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{0,0,{0,1,0,1,0},0,0},0,0,0,0,0,0,0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4}}},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761}},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761},0,0,0},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},0,1,6,12,{4,0,{8388608},0},{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},0})OOFDEF";
+    static constexpr std::string_view defaults = R"OOFDEF({0,{},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761}},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761},0,0,0},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},0,1,6,12,{4,0,{8388608},0},{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},0})OOFDEF";
     auto data = parse_constant(defaults);
     require_arity(data, 11, "$/Dendrogram/Data");
     data.items[4] = raw(std::to_string(orientation));
@@ -11115,7 +11187,7 @@ DecodedControl decode_dendrogram(
     std::string_view path,
     const GeometryContext& context,
     Diagnostics& warnings,
-    bool& reconstruction_complete) {
+    bool& reconstruction_complete, std::size_t& collection_items) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -11149,11 +11221,8 @@ DecodedControl decode_dendrogram(
     auto embedded = extract_embedded_chart_events(embedded_chart, embedded_path, model::ControlKind::dendrogram);
     auto named_events = std::move(embedded.events);
     const auto back_color = decode_chart_back_color(embedded_chart.items[2], embedded.back_first, embedded.back_second, child_path(embedded_path, 2));
-    model::PropertySet chart_properties;
-    if (back_color != chart_back_color_default()) chart_properties.set_explicit(model::PropertyId::from_name("BackColor"), back_color);
-    encode_chart_back_color(expected_data.items[1].items[2], 39, 214, chart_properties, "$/Dendrogram/BackColor");
-    validate_embedded_chart_info(embedded_chart, expected_data.items[1],
-        child_path(data_path, 1), raw_id, "Dendrogram", warnings, reconstruction_complete);
+    graph.chart = decode_owned_chart(embedded_chart, embedded_path, raw_id,
+        warnings, reconstruction_complete, collection_items);
     normalized_data.items[1] = expected_data.items[1];
     require_exact(normalized_data, expected_data, data_path,
         "Dendrogram contains unsupported tree style or extension values");
@@ -11786,7 +11855,6 @@ DecodedControl decode_input_field(
     if (list_choice_mode) input_extension.reset();
     LV normalized_info = info;
     normalized_info.items[2].items[0].items[0] = base_info;
-    normalized_info.items[2].items[0].items[12] = raw(bool_atom(info.items[5], child_path(info_path, 5)) ? "1" : "0");
     if (composite_reference) {
         normalized_info.items[2].items[0].items[14] = raw("0");
         normalized_info.items[2].items[0].items[15] = raw("0");
@@ -11811,9 +11879,10 @@ DecodedControl decode_input_field(
         child_path(child_path(child_path(info_path, 2), 0), 0));
     normalize_named_control_border(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
         child_path(child_path(child_path(info_path, 2), 0), 0));
-    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
-        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values,
-            &*common.font, &*common.border_color, shortcut, input_extension)))
+    const auto expected_info = canonical_input_field_info(control_type, enabled, read_only,
+        input_field_flags, text_values, layout_values, &*common.font, &*common.border_color, shortcut, input_extension);
+    normalize_input_field_runtime_state(normalized_info, expected_info, info_path);
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(expected_info))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
 
     const auto geometry_path = child_path(path, 3);
@@ -11886,7 +11955,7 @@ DecodedControl decode_input_field(
             decoded_picture_assets.push_back({std::string(property_name), model::PictureAsset{
                 {}, "Items/" + name + "/" + std::string(property_name) + "." +
                     std::string(picture_format_extension(picture->format)), picture->format,
-                picture->bytes, picture->transparent}});
+                picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid}});
         }
     }
     control.position = std::move(decoded_geometry.position);
@@ -11973,8 +12042,9 @@ model::TableColumn decode_table_column(
             column.source = model::TableMetadataColumnField{std::move(member)};
         }
         (void)integer_atom<std::uint32_t>(properties.items[5], child_path(properties_path, 5));
-        (void)integer_atom<std::int32_t>(properties.items[6], child_path(properties_path, 6));
     } else column.data_path = string_atom(body.items[2], child_path(body_path, 2));
+    // Владелец пересоздает индекс колонки при загрузке формы; DataPath хранится отдельно.
+    (void)integer_atom<std::int32_t>(properties.items[6], child_path(properties_path, 6));
     try {
         list_stream::ListInStream localized(properties.items[1]);
         column.header = value_codec::read_localized_string(localized);
@@ -12052,7 +12122,11 @@ model::TableColumn decode_table_column(
                     child_path(child_path(paired_path, 1), 0)).canonical;
                 const auto extension = std::ranges::find(model::metamodel::input_field_extensions, context_guid,
                     &model::metamodel::InputFieldExtensionDescriptor::guid);
-                if (extension != std::end(model::metamodel::input_field_extensions)) {
+                if (bool_atom(editor_info.items[9], child_path(editor_path, 9))) {
+                    require_exact(editor_info.items[3].items[1],
+                        parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}"),
+                        child_path(paired_path, 1), "Table Column list-choice context is unsupported");
+                } else if (extension != std::end(model::metamodel::input_field_extensions)) {
                     if (!is_concrete_input_reference_type(embedded_type) || embedded_type.entries.size() != 1)
                         fail("OOF1122", paired_path, "single nominal type for reference editor", "incompatible type",
                             "Table Column reference extension requires its named type");
@@ -12149,6 +12223,8 @@ model::TableColumn decode_table_column(
             }
         }
         const LV canonical_editor = canonical_table_column_editor_info(*column.control);
+        if (editor_kind == model::ControlKind::input_field)
+            normalize_input_field_runtime_state(editor_info, canonical_editor, editor_path);
         LV shape_editor = editor_info;
         if (input_field_pair_absent) shape_editor.items[3] = canonical_editor.items[3];
         require_list_stream_shape(shape_editor, canonical_editor, editor_path,
@@ -12171,10 +12247,9 @@ model::TableColumn decode_table_column(
         const auto physical_slot = table_column_property_slot(slot, has_editor);
         normalized.items[1].items[1].items[1].items[physical_slot] = canonical.items[1].items[1].items[1].items[physical_slot];
     }
-    if (metadata_column) {
+    normalized.items[1].items[1].items[1].items[6] = canonical.items[1].items[1].items[1].items[6];
+    if (metadata_column)
         normalized.items[1].items[1].items[1].items[5] = canonical.items[1].items[1].items[1].items[5];
-        normalized.items[1].items[1].items[1].items[6] = canonical.items[1].items[1].items[1].items[6];
-    }
     if (has_editor)
         normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
     require_list_stream_shape(normalized, canonical, path,
@@ -13443,10 +13518,11 @@ LV encode_dendrogram(const model::OrdinaryFormDocument& document, const model::C
     const auto& graph = std::get<model::DendrogramPayload>(control.payload);
     validate_dendrogram_graph(graph, "$/Dendrogram");
     LV data = canonical_dendrogram_data(orientation);
-    encode_chart_back_color(data.items[1].items[2], 39, 214, control.properties(), "$/Dendrogram/BackColor");
+    data.items[1] = encode_owned_chart(graph.chart, control);
     if (!control.events.empty()) {
         auto& info = data.items.at(1).items.at(2);
-        constexpr std::size_t flag = 112;
+        const auto& chart = graph.chart;
+        const std::size_t flag = 112 + (chart ? 11 * (chart->series.size() + chart->points.size()) : 0);
         require_raw_constant(info.items.at(flag), "0", "$/Dendrogram/Events");
         info.items.at(flag) = raw("1");
         info.items.insert(info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1),
@@ -14986,7 +15062,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                             fail("OOF1122", "$/2/3", "no DataPath link for Dendrogram",
                                 std::to_string(candidate_id), "Dendrogram DataPath storage is unsupported");
                         }
-                        child = decode_dendrogram(record, record_path, context, warnings, reconstruction_complete);
+                        child = decode_dendrogram(record, record_path, context, warnings, reconstruction_complete, decoded_chart_collection_items);
                     }
                     else if (guid == spreadsheet_descriptor.guid)
                         child = decode_spreadsheet_document_field(record, record_path, context, warnings, reconstruction_complete);
@@ -15126,7 +15202,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         }
                         if (binding) child.control.data_path = binding->data_path;
                     } else if (guid == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) {
-                        child = decode_gantt_chart(record, record_path, context, warnings, reconstruction_complete);
+                        child = decode_gantt_chart(record, record_path, context, warnings, reconstruction_complete, decoded_chart_collection_items);
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -15156,7 +15232,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                             panel.properties().set_explicit(model::PropertyId::from_name("Picture"), *picture->reference);
                         child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
                         if (picture && !picture->reference)
-                            child.picture_property_assets.push_back({"Picture", model::PictureAsset{{}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)), picture->format, picture->bytes, picture->transparent}});
+                            child.picture_property_assets.push_back({"Picture", model::PictureAsset{{}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)), picture->format, picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid}});
                     } else {
                         fail("OOF1122", record_path, "supported leaf controls or Panel", guid, "Control payload is unsupported");
                     }
@@ -15304,7 +15380,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             const model::ObjectId asset_id{event_id_base + ++synthetic_event_offset};
             decoded_picture_assets.push_back(model::PictureAsset{asset_id,
                 "CaptionPicture." + std::string(picture_format_extension(caption_picture->format)),
-                caption_picture->format, caption_picture->bytes, caption_picture->transparent});
+                caption_picture->format, caption_picture->bytes, caption_picture->transparent, caption_picture->transparent_x, caption_picture->transparent_y, caption_picture->uuid});
             form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"), model::PictureRef{model::PictureAssetRef{asset_id}});
         }
         for (const auto& named_event : form_named_events) {
@@ -15703,7 +15779,8 @@ Result<list_stream::ListValue> encode_document(
                     auto gantt_info = encode_gantt_chart_info(*control);
                     if (!control->events.empty()) {
                         auto& chart_info = gantt_info.items.at(1).items.at(2);
-                        constexpr std::size_t flag = 112;
+                        const auto& chart = std::get<model::GanttChartPayload>(control->payload).chart;
+                        const std::size_t flag = 112 + (chart ? 11 * (chart->series.size() + chart->points.size()) : 0);
                         require_raw_constant(chart_info.items.at(flag), "0", "$/GanttChart/Events");
                         chart_info.items.at(flag) = raw("1");
                         chart_info.items.insert(chart_info.items.begin() + static_cast<std::ptrdiff_t>(flag + 1),

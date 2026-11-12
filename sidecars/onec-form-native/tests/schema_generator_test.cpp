@@ -175,6 +175,34 @@ xmlNodePtr sequence_for_type(xmlNodePtr schema, std::string_view type_name) {
     return sequence;
 }
 
+std::vector<xmlNodePtr> sequence_elements(
+    xmlNodePtr schema,
+    xmlNodePtr sequence,
+    std::set<std::string> active_groups = {}
+) {
+    std::vector<xmlNodePtr> result;
+    for (xmlNodePtr node = sequence == nullptr ? nullptr : sequence->children; node != nullptr; node = node->next) {
+        if (is_element(node, "element")) {
+            result.push_back(node);
+        } else if (is_element(node, "group")) {
+            const auto reference = attribute(node, "ref");
+            expect(!reference.empty(), "sequence group must have a named reference");
+            expect(active_groups.insert(reference).second, "sequence group references must be acyclic");
+            expect((attribute(node, "minOccurs").empty() || attribute(node, "minOccurs") == "1") &&
+                   (attribute(node, "maxOccurs").empty() || attribute(node, "maxOccurs") == "1"),
+                "expanded sequence groups must occur exactly once");
+            auto* group = schema_component(schema, "group", reference);
+            expect(group != nullptr, "referenced sequence group must exist");
+            auto* nested = direct_child(group, "sequence");
+            expect(nested != nullptr, "referenced group must contain a sequence");
+            const auto elements = sequence_elements(schema, nested, active_groups);
+            result.insert(result.end(), elements.begin(), elements.end());
+            active_groups.erase(reference);
+        }
+    }
+    return result;
+}
+
 void expect_element_shape(
     xmlNodePtr element,
     std::string_view name,
@@ -449,7 +477,7 @@ void test_localized_text_schema(xmlNodePtr schema, xmlSchemaPtr compiled_schema)
 
 void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compiled_schema) {
     const auto element_type = [&](std::string_view owner, std::string_view element_name) {
-        for (xmlNodePtr element : direct_children(sequence_for_type(schema, owner), "element")) {
+        for (xmlNodePtr element : sequence_elements(schema, sequence_for_type(schema, owner))) {
             if (attribute(element, "name") == element_name) return attribute(element, "type");
         }
         return std::string{};
@@ -877,7 +905,7 @@ void test_document_package_types(
         "required");
     expect(
         enumeration_values(schema, "PictureFormatType") ==
-            std::vector<std::string>({"gif", "png", "jpeg", "bmp"}),
+            std::vector<std::string>({"gif", "png", "jpeg", "bmp", "ico"}),
         "picture format domain drift");
     const auto assets =
         direct_children(sequence_for_type(schema, "PictureAssetsType"), "element");
@@ -1007,7 +1035,7 @@ void test_control_surfaces_and_property_order(
 
     for (const auto& control : metamodel.controls()) {
         const std::string type_name = std::string(control.public_name) + "Type";
-        const auto elements = direct_children(sequence_for_type(schema, type_name), "element");
+        const auto elements = sequence_elements(schema, sequence_for_type(schema, type_name));
         std::size_t cursor = 0;
         expect_element_shape(elements[cursor++], "DataPath", "DataPathType", "0", "1");
         if (control.kind == oof::model::ControlKind::input_field)
@@ -1162,6 +1190,8 @@ void test_control_surfaces_and_property_order(
             expect_element_shape(elements[cursor++], "Points", "GanttPointCollectionType", "0", "1");
             expect_element_shape(elements[cursor++], "Intervals", "GanttIntervalCollectionType", "0", "1");
         }
+        if (control.kind == oof::model::ControlKind::gantt_chart || control.kind == oof::model::ControlKind::dendrogram)
+            expect_element_shape(elements[cursor++], "Chart", "OwnedChartType", "0", "1");
         if (control.kind == oof::model::ControlKind::table) {
             for (const auto& extension : oof::model::metamodel::table_source_extension_descriptors())
                 expect_element_shape(elements[cursor++], extension.xml_name, std::string(extension.xml_name) + "Type", "0", "1");
@@ -1225,13 +1255,15 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     xmlNodePtr type = schema_component(schema, "complexType", "TableColumnControlType");
     expect(type != nullptr, "Table Column Control must have its named type");
     const auto elements = direct_children(direct_child(type, "sequence"), "element");
-    const std::array<std::pair<std::string_view, std::string_view>, 19> expected{{
+    const std::array<std::pair<std::string_view, std::string_view>, 24> expected{{
         {"ValueType", "TypeDomainValueType"}, {"Enabled", "xs:boolean"},
         {"ReadOnly", "xs:boolean"}, {"Wrap", "xs:boolean"}, {"ChooseType", "xs:boolean"},
         {"ChoiceButton", "xs:boolean"}, {"OpenButton", "xs:boolean"}, {"ClearButton", "xs:boolean"},
         {"SpinButton", "xs:boolean"}, {"ChoiceListButton", "xs:boolean"}, {"MarkNegatives", "xs:boolean"},
         {"AutoMarkIncomplete", "xs:boolean"}, {"AutoChoiceIncomplete", "xs:boolean"},
-        {"Transparent", "xs:boolean"}, {"BorderColor", "ColorValueType"}, {"Caption", "xs:string"},
+        {"Transparent", "xs:boolean"}, {"ListChoiceMode", "xs:boolean"}, {"MultiLine", "xs:boolean"},
+        {"ExtendedEdit", "xs:boolean"}, {"PasswordMode", "xs:boolean"}, {"TextEdit", "xs:boolean"},
+        {"BorderColor", "ColorValueType"}, {"Caption", "xs:string"},
         {"ToolTip", "xs:string"}, {"Font", "FontValueType"}, {"Events", "InputFieldEventsType"},
     }};
     expect(elements.size() == expected.size(), "Table Column Control must expose only named properties");
@@ -1280,6 +1312,7 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     for (const auto owner : {std::string_view{},
              std::string_view{R"XML(<Control type="InputField"/>)XML"},
              std::string_view{R"XML(<Control type="InputField"><Wrap>false</Wrap><ChoiceButton>true</ChoiceButton></Control>)XML"},
+             std::string_view{R"XML(<Control type="InputField"><ListChoiceMode>true</ListChoiceMode><MultiLine>true</MultiLine><ExtendedEdit>true</ExtendedEdit><PasswordMode>true</PasswordMode><TextEdit>false</TextEdit></Control>)XML"},
              std::string_view{R"XML(<Control type="ChoiceField"/>)XML"},
              std::string_view{R"XML(<Control type="CheckBox"/>)XML"},
              std::string_view{R"XML(<Control type="InputField"><ValueType><Entry term="boolean"/></ValueType></Control>)XML"},
@@ -1291,7 +1324,6 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     for (const auto owner : {std::string_view{"<Control/>"},
              std::string_view{R"XML(<Control type="Button"/>)XML"},
              std::string_view{R"XML(<Control type="InputField"><Wrap>invalid</Wrap></Control>)XML"},
-             std::string_view{R"XML(<Control type="InputField"><TextEdit>true</TextEdit></Control>)XML"},
              std::string_view{R"XML(<Control type="InputField"/><ValueType/>)XML"},
              std::string_view{R"XML(<ValueType/><Control type="InputField"/>)XML"},
              std::string_view{R"XML(<ValueType><TypeDomain><Entry term="boolean"/></TypeDomain></ValueType>)XML"}}) {
@@ -1351,6 +1383,39 @@ void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
         "named typed Spreadsheet Cell must satisfy the public XSD");
     expect(validate_document(schema, false_contains_value) != 0,
         "typed Spreadsheet Cell must require ContainsValue=true in the public XSD");
+}
+
+void test_owned_chart_schema(xmlNodePtr schema) {
+    auto* type = schema_component(schema, "complexType", "OwnedChartType");
+    expect(type != nullptr && direct_children(type, "attribute").empty(),
+        "owned Chart aggregate must have no control identity attributes");
+    auto* documentation = direct_child(direct_child(type, "annotation"), "documentation");
+    expect(documentation != nullptr, "owned Chart aggregate must document its persistence role");
+    xmlChar* content = xmlNodeGetContent(documentation);
+    const std::string description = content == nullptr ? std::string{} : reinterpret_cast<const char*>(content);
+    xmlFree(content);
+    expect(description.find("ChartExtensionBase") != std::string::npos,
+        "owned Chart schema annotation must identify its platform construction mechanism");
+
+    const auto owned = sequence_elements(schema, sequence_for_type(schema, "OwnedChartType"));
+    const auto control = sequence_elements(schema, sequence_for_type(schema, "ChartType"));
+    std::vector<xmlNodePtr> expected;
+    bool in_content = false;
+    for (auto* element : control) {
+        const auto name = attribute(element, "name");
+        if (name == "Events") break;
+        if (in_content && name != "BackColor") expected.push_back(element);
+        if (name == "Position") in_content = true;
+    }
+    expect(in_content && !expected.empty() && owned.size() == expected.size(),
+        "owned Chart must retain the complete shared Chart content except the owner BackColor alias");
+    for (std::size_t index = 0; index < expected.size(); ++index)
+        for (const auto name : {"name", "type", "minOccurs", "maxOccurs"})
+            expect(attribute(owned[index], name) == attribute(expected[index], name),
+                "owned Chart must preserve shared property order, types, and occurrence constraints");
+    for (const auto name : {"DataPath", "Position", "Events", "ChildItems", "BackColor"})
+        expect(std::ranges::none_of(owned, [&](xmlNodePtr element) { return attribute(element, "name") == name; }),
+            "owned Chart must not introduce control surfaces or duplicate owner properties");
 }
 
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
@@ -1423,7 +1488,7 @@ void test_child_policy(const Metamodel& metamodel, xmlNodePtr schema) {
     std::size_t containers = 0;
     for (const auto& control : metamodel.controls()) {
         const std::string type_name = std::string(control.public_name) + "Type";
-        const auto elements = direct_children(sequence_for_type(schema, type_name), "element");
+        const auto elements = sequence_elements(schema, sequence_for_type(schema, type_name));
         xmlNodePtr child_items = nullptr;
         for (xmlNodePtr element : elements) {
             if (attribute(element, "name") == "ChildItems") {
@@ -1574,8 +1639,16 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
         "column edit mode must retain its own platform enumeration type");
     const auto editor = direct_child_with_attribute(palette, "NamedConcept", "name", "TableColumnControl");
     const auto editor_properties = direct_child(editor, "Properties");
-    expect(direct_children(editor_properties, "Property").size() == 19,
-        "editor palette must describe its type, value type, thirteen Booleans and four other named properties");
+    const auto editor_fields = direct_children(editor_properties, "Property");
+    constexpr std::array other_editor_fields{"Type", "ValueType", "Caption", "ToolTip", "Font"};
+    expect(editor_fields.size() == oof::model::metamodel::table_column_input_properties.size() + other_editor_fields.size(),
+        "editor palette must describe the full shared InputField editor contract and five named editor fields");
+    for (const auto name : other_editor_fields)
+        expect(std::ranges::count_if(editor_fields, [&](xmlNodePtr property) { return attribute(property, "name") == name; }) == 1,
+            "editor palette must expose each named editor field exactly once");
+    const auto editor_border = direct_child_with_attribute(editor_properties, "Property", "name", "BorderColor");
+    expect(editor_border && attribute(editor_border, "valueCodec") == "color",
+        "editor palette must retain the shared BorderColor descriptor");
     for (const auto name : oof::model::metamodel::table_column_input_boolean_properties) {
         const auto* descriptor = metamodel.property(oof::model::ControlKind::input_field, name);
         const auto property = direct_child_with_attribute(editor_properties, "Property", "name", name);
@@ -2287,6 +2360,7 @@ int main() {
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);
         test_control_surfaces_and_property_order(metamodel, form_schema);
+        test_owned_chart_schema(form_schema);
         test_spreadsheet_document_schema(form_schema);
         test_choice_field_schema_contract(compiled_form.get());
         test_table_column_editor_schema(form_schema, compiled_form.get());

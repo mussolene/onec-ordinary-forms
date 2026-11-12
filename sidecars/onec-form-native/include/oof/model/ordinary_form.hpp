@@ -527,6 +527,7 @@ enum class PictureFormat : std::uint8_t {
     png,
     jpeg,
     bmp,
+    ico,
 };
 
 struct PictureAsset {
@@ -535,14 +536,17 @@ struct PictureAsset {
     PictureFormat format = PictureFormat::gif;
     std::vector<std::uint8_t> bytes{};
     bool transparent = false;
+    std::int64_t transparent_x = -1;
+    std::int64_t transparent_y = -1;
+    std::optional<UuidValue> uuid = std::nullopt;
 };
 
 struct PictureRef {
     PictureAssetRef asset;
     std::optional<QualifiedName> standard_name = std::nullopt;
     std::optional<UuidValue> common_picture = std::nullopt;
-    std::int32_t width = -1;
-    std::int32_t height = -1;
+    std::int64_t transparent_x = -1;
+    std::int64_t transparent_y = -1;
     bool transparent = false;
 
     friend bool operator==(const PictureRef&, const PictureRef&) = default;
@@ -1218,6 +1222,9 @@ struct GanttChartPayload final : TypedControlPayload<ControlKind::gantt_chart> {
     std::vector<GanttSeries> series;
     std::vector<GanttPoint> points;
     std::vector<GanttInterval> intervals;
+    // Агрегированный Chart сохраняется платформой через собственный Load/Save.
+    // BackColor и события принадлежат интерфейсу владельца.
+    std::optional<ChartPayload> chart;
 };
 struct DendrogramItem {
     std::string value;
@@ -1238,6 +1245,7 @@ struct DendrogramLink {
 struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {
     std::vector<DendrogramItem> items;
     std::vector<DendrogramLink> links;
+    std::optional<ChartPayload> chart;
 };
 struct HtmlDocumentFieldPayload final
     : TypedControlPayload<ControlKind::html_document_field> {};

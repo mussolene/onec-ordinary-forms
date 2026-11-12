@@ -1088,12 +1088,15 @@ model::PictureRef parse_picture_reference(
     std::string_view property,
     std::string_view object_id
 ) {
-    const auto dimensions = [&](model::PictureRef reference) {
-        if (const auto width = optional_attribute(node, "width")) reference.width = parse_integer<std::int32_t>(*width, node, property, object_id);
-        if (const auto height = optional_attribute(node, "height")) reference.height = parse_integer<std::int32_t>(*height, node, property, object_id);
+    if (optional_attribute(node, "width") || optional_attribute(node, "height"))
+        fail("OOF2003", node, std::string(object_id), std::string(property),
+            "transparentX/transparentY coordinates", {}, "Picture width/height attributes are unsupported");
+    const auto transparency = [&](model::PictureRef reference) {
+        if (const auto x = optional_attribute(node, "transparentX")) reference.transparent_x = parse_integer<std::int64_t>(*x, node, property, object_id);
+        if (const auto y = optional_attribute(node, "transparentY")) reference.transparent_y = parse_integer<std::int64_t>(*y, node, property, object_id);
         if (const auto transparent = optional_attribute(node, "transparent")) reference.transparent = parse_boolean(*transparent, node, property, object_id);
-        if (reference.width < -1 || reference.height < -1)
-            fail("OOF2003", node, std::string(object_id), std::string(property), "picture dimensions at least -1", {}, "Invalid picture dimensions");
+        if (reference.transparent_x < -1 || reference.transparent_y < -1)
+            fail("OOF2003", node, std::string(object_id), std::string(property), "transparency coordinates at least -1", {}, "Invalid picture transparency coordinates");
         return reference;
     };
     if (const auto uuid = optional_attribute(node, "commonPicture")) {
@@ -1102,7 +1105,7 @@ model::PictureRef parse_picture_reference(
             canonical == "00000000-0000-0000-0000-000000000000")
             fail("OOF2003", node, std::string(object_id), std::string(property),
                 "one nonzero CommonPicture UUID", {}, "Picture reference has inconsistent targets");
-        return dimensions(model::PictureRef{model::PictureAssetRef{}, std::nullopt, model::UuidValue{canonical}});
+        return transparency(model::PictureRef{model::PictureAssetRef{}, std::nullopt, model::UuidValue{canonical}});
     }
     if (const auto standard_name = optional_attribute(node, "standardName")) {
         const std::string text = node_text(node);
@@ -1115,12 +1118,12 @@ model::PictureRef parse_picture_reference(
             fail("OOF2003", node, std::string(object_id), std::string(property),
                 "known PictureLib name", *standard_name, "Unknown standard picture name");
         }
-        return dimensions(model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+        return transparency(model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
             model::QualifiedName{*standard_name}});
     }
-    if (optional_attribute(node, "width") || optional_attribute(node, "height") || optional_attribute(node, "transparent"))
-        fail("OOF2003", node, std::string(object_id), std::string(property), "file asset reference without resource dimensions", {},
-            "File picture dimensions belong to the asset");
+    if (optional_attribute(node, "transparentX") || optional_attribute(node, "transparentY") || optional_attribute(node, "transparent"))
+        fail("OOF2003", node, std::string(object_id), std::string(property), "file asset reference without transparency coordinates", {},
+            "File picture transparency coordinates belong to the asset");
     return model::PictureRef{model::PictureAssetRef{
         parse_object_id(node_text(node), node, property, object_id)}, std::nullopt};
 }
@@ -1734,7 +1737,8 @@ model::PictureFormat parse_picture_format(std::string_view value, xmlNodePtr nod
     if (value == "png") return model::PictureFormat::png;
     if (value == "jpeg") return model::PictureFormat::jpeg;
     if (value == "bmp") return model::PictureFormat::bmp;
-    fail("OOF2003", node, {}, "format", "gif|png|jpeg|bmp", std::string(value), "Unknown picture format");
+    if (value == "ico") return model::PictureFormat::ico;
+    fail("OOF2003", node, {}, "format", "gif|png|jpeg|bmp|ico", std::string(value), "Unknown picture format");
 }
 
 std::string_view picture_format_name(model::PictureFormat format) {
@@ -1743,6 +1747,7 @@ std::string_view picture_format_name(model::PictureFormat format) {
         case model::PictureFormat::png: return "png";
         case model::PictureFormat::jpeg: return "jpeg";
         case model::PictureFormat::bmp: return "bmp";
+        case model::PictureFormat::ico: return "ico";
     }
     return {};
 }
@@ -1767,6 +1772,7 @@ bool valid_picture_path(std::string_view path, model::PictureFormat format) {
             case model::PictureFormat::png: return path == "CaptionPicture.png";
             case model::PictureFormat::jpeg: return path == "CaptionPicture.jpg" || path == "CaptionPicture.jpeg";
             case model::PictureFormat::bmp: return path == "CaptionPicture.bmp";
+            case model::PictureFormat::ico: return path == "CaptionPicture.ico";
         }
     }
     if (parts.size() < 3 || parts.size() % 2 == 0 || parts[0] != "Items") return false;
@@ -1783,6 +1789,7 @@ bool valid_picture_path(std::string_view path, model::PictureFormat format) {
         case model::PictureFormat::jpeg:
             return file == "Picture.jpg" || file == "Picture.jpeg";
         case model::PictureFormat::bmp: return file == "Picture.bmp";
+        case model::PictureFormat::ico: return file == "Picture.ico";
     }
     return false;
 }
@@ -2169,6 +2176,14 @@ private:
             if (const auto transparent = optional_attribute(asset_node, "transparent")) {
                 asset.transparent = parse_boolean(*transparent, asset_node, "transparent", id);
             }
+            if (const auto x = optional_attribute(asset_node, "transparentX"))
+                asset.transparent_x = parse_integer<std::int64_t>(*x, asset_node, "transparentX", id);
+            if (const auto y = optional_attribute(asset_node, "transparentY"))
+                asset.transparent_y = parse_integer<std::int64_t>(*y, asset_node, "transparentY", id);
+            if (asset.transparent_x < -1 || asset.transparent_y < -1)
+                fail("OOF2003", asset_node, id, "transparentX/transparentY", "coordinates at least -1", {}, "Invalid picture transparency coordinates");
+            if (const auto uuid = optional_attribute(asset_node, "uuid"))
+                asset.uuid = model::UuidValue{canonical_uuid(*uuid)};
             if (!valid_picture_path(asset.relative_path, asset.format)) {
                 fail(
                     "OOF2003",
@@ -2369,6 +2384,261 @@ private:
         return reference;
     }
 
+    struct ChartContentState {
+        bool chart_summary_series_seen = false;
+        bool chart_values_seen = false;
+        bool chart_gauge_quality_bands_seen = false;
+    };
+
+    bool parse_chart_content_item(xmlNodePtr child, model::ChartPayload& chart,
+        const std::string& id_text, ChartContentState& state) {
+        const std::string name = node_name(child);
+        if (name == "GaugeChartQualityBands") {
+            if (state.chart_gauge_quality_bands_seen)
+                fail("OOF2003", child, id_text, name, "one GaugeChartQualityBands collection", "duplicate", "Duplicate GaugeChartQualityBands");
+            state.chart_gauge_quality_bands_seen = true;
+            if (child->properties != nullptr)
+                fail("OOF2003", child, id_text, name, "collection without attributes", "present", "GaugeChartQualityBands does not accept attributes");
+            auto& bands = chart.gauge_quality_bands;
+            for (xmlNodePtr item : element_children(child)) {
+                if (node_name(item) != "GaugeChartQualityBand")
+                    fail("OOF2003", item, id_text, node_name(item), "GaugeChartQualityBand", node_name(item), "Unknown GaugeChartQualityBands item");
+                if (item->properties != nullptr)
+                    fail("OOF2003", item, id_text, "GaugeChartQualityBand", "item without attributes", "present", "GaugeChartQualityBand does not accept attributes");
+                consume_chart_budget(chart_budget_, 1, item, id_text);
+                const auto fields = element_children(item);
+                if (fields.size() != 5 || node_name(fields[0]) != "Begin" || node_name(fields[1]) != "End" ||
+                    node_name(fields[2]) != "BackColor" || node_name(fields[3]) != "Text" || node_name(fields[4]) != "ToolTip")
+                    fail("OOF2003", item, id_text, "GaugeChartQualityBand", "Begin, End, BackColor, Text, ToolTip in order", "invalid fields", "Invalid GaugeChartQualityBand fields");
+                for (xmlNodePtr decimal_node : {fields[0], fields[1]}) {
+                    if (decimal_node->properties != nullptr || !element_children(decimal_node).empty())
+                        fail("OOF2003", decimal_node, id_text, node_name(decimal_node), "plain decimal", "attributes or child elements", "Gauge quality band boundaries must be plain decimals");
+                }
+                model::ChartGaugeQualityBand band;
+                band.begin = model::DecimalValue{canonical_decimal(node_text(fields[0]), fields[0], "Begin", id_text)};
+                band.end = model::DecimalValue{canonical_decimal(node_text(fields[1]), fields[1], "End", id_text)};
+                if (!model::valid_chart_gauge_quality_band_range(band.begin, band.end))
+                    fail("OOF2003", item, id_text, "Begin/End", "Begin less than or equal to End", band.begin.canonical + ">" + band.end.canonical, "Invalid GaugeChartQualityBand range");
+                band.back_color = parse_color(fields[2]);
+                band.text = parse_property_value(fields[3], mm::ValueCodec::localized_text, id_text, typed_budget_);
+                band.tool_tip = parse_property_value(fields[4], mm::ValueCodec::localized_text, id_text, typed_budget_);
+                bands.push_back(std::move(band));
+            }
+            return true;
+        }
+        if ((name == "PlotArea" || name == "LegendArea" || name == "TitleArea")) {
+            const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
+            auto& area = name == "PlotArea" ? chart.plot_area : name == "TitleArea" ? chart.title_area : chart.legend_area;
+            if (area) fail("OOF2003", child, id_text, name, "one chart area", name, "Duplicate Chart area");
+            model::ChartArea parsed;
+            for (const auto& definition : mm::chart_area_property_descriptors()) {
+                if (definition.coordinate != nullptr)
+                    parsed.*(definition.coordinate) = model::DecimalValue{std::string(
+                        kind == model::ChartAreaKind::plot ? definition.plot_default :
+                        kind == model::ChartAreaKind::title ? definition.title_default : definition.legend_default)};
+            }
+            std::set<std::string> seen;
+            for (xmlNodePtr field : element_children(child)) {
+                const auto field_name = node_name(field);
+                if (!seen.insert(field_name).second)
+                    fail("OOF2003", field, id_text, field_name, "one area property", field_name, "Duplicate Chart area property");
+                const auto owners = mm::chart_scale_owner_descriptors();
+                const auto scale_owner = std::ranges::find(owners, field_name, &mm::ChartScaleOwnerDescriptor::name);
+                if (kind == model::ChartAreaKind::plot && scale_owner != owners.end()) {
+                    auto& scale = parsed.*(scale_owner->member);
+                    std::set<std::string> scale_seen;
+                    for (xmlNodePtr value_node : element_children(field)) {
+                        const auto value_name = node_name(value_node);
+                        if (value_name == "TitleArea") {
+                            if (!scale_seen.insert(value_name).second) fail("OOF2003", value_node, id_text, value_name, "one owned TitleArea", {}, "Duplicate ChartScale TitleArea");
+                            std::set<std::string> title_seen;
+                            for (xmlNodePtr title_node : element_children(value_node)) {
+                                const auto title_name = node_name(title_node);
+                                const auto fields = mm::chart_label_area_property_descriptors();
+                                const auto definition = std::ranges::find(fields, title_name, &mm::ChartScalePropertyDescriptor::name);
+                                if (definition == fields.end() || !title_seen.insert(title_name).second)
+                                    fail("OOF2003", title_node, id_text, title_name, "unique named ChartLabelArea property", {}, "Invalid ChartLabelArea property");
+                                auto value = parse_property_value(title_node, definition->value_codec, id_text, typed_budget_);
+                                mm::set_chart_scale_property_value(scale, *definition, std::move(value));
+                            }
+                            continue;
+                        }
+
+                        const auto fields = mm::chart_scale_property_descriptors();
+                        const auto definition = std::ranges::find(fields, value_name, &mm::ChartScalePropertyDescriptor::name);
+                        if (definition == fields.end() || !scale_seen.insert(value_name).second)
+                            fail("OOF2003", value_node, id_text, value_name, "unique named scale field", value_name, "Invalid Chart scale field");
+                        model::PropertyValue value;
+                        if (definition->value_codec == mm::ValueCodec::line) {
+                            const auto children = element_children(value_node);
+                            if (children.size() != 1) fail("OOF2003", value_node, id_text, value_name, "one Line or Undefined", {}, "Invalid nullable Line");
+                            if (node_name(children[0]) == "Line") value = parse_line(children[0]);
+                            else if (node_name(children[0]) == "Undefined" && node_text(children[0]) == "undefined") value = model::UndefinedValue{};
+                            else fail("OOF2003", value_node, id_text, value_name, "Line or Undefined", {}, "Invalid nullable Line");
+                        } else value = parse_property_value(value_node, definition->value_codec, id_text, typed_budget_);
+                        if (const auto* n = std::get_if<model::DecimalValue>(&value); n && definition->numeric_policy == mm::ChartScaleNumericPolicy::nonnegative_decimal && n->canonical.starts_with('-'))
+                            fail("OOF2003", value_node, id_text, value_name, "nonnegative decimal", n->canonical, "Negative ScaleStep");
+                        if (definition->value_codec == mm::ValueCodec::enumeration) {
+                            const auto* enumeration = std::get_if<model::EnumerationValue>(&value);
+                            if (!enumeration || enumeration->type_name != definition->enumeration_type ||
+                                std::ranges::find(definition->members, enumeration->member) == definition->members.end())
+                                fail("OOF2003", value_node, id_text, value_name, "valid scale enumeration", {}, "Invalid Chart scale enumeration");
+                        }
+                        mm::set_chart_scale_property_value(scale, *definition, std::move(value));
+                    }
+                } else if (kind == model::ChartAreaKind::title && field_name == "Text") {
+                    auto text = parse_property_value(field, mm::ValueCodec::localized_text, id_text, typed_budget_);
+                    chart.properties.set_explicit(model::PropertyId::from_name("Title"), std::move(text));
+                } else if (field_name == "Placement") {
+                    parsed.placement = node_text(field);
+                    parsed.explicit_geometry[0] = true;
+                    if (!valid_chart_area_placement(name, parsed.placement))
+                        fail("OOF2003", field, id_text, field_name, "valid area placement", parsed.placement, "Invalid Chart area placement");
+                } else {
+                    const auto id = model::PropertyId::from_name(field_name);
+                    if (const auto* boolean = mm::find_chart_area_boolean(kind, id)) {
+                        parsed.*(boolean->member) = parse_boolean(node_text(field), field, field_name, id_text);
+                    } else if (const auto* color = mm::find_chart_area_color(kind, id)) {
+                        parsed.*(color->member) = parse_color(field);
+                    } else if (const auto* style = mm::find_chart_area_style(kind, id)) {
+                        if (style->border) parsed.*(style->border) = parse_border(field);
+                        else if (style->font) parsed.*(style->font) = parse_font(field);
+                        else parsed.*(style->line) = parse_line(field);
+                    } else if (const auto* descriptor = mm::find_chart_area_property(id); descriptor && descriptor->coordinate) {
+                        (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
+                        parsed.explicit_geometry[1 + descriptor->coordinate_offset] = true;
+                    } else if (const auto* descriptor = kind == model::ChartAreaKind::plot ? mm::find_chart_plot_format(id) : nullptr) {
+                        auto value = parse_property_value(field, descriptor->value_codec, id_text, typed_budget_);
+                        if (descriptor->text) parsed.*(descriptor->text) = std::move(value);
+                        else {
+                            const auto& enumeration = std::get<model::EnumerationValue>(value);
+                            if (enumeration.type_name != descriptor->enumeration_type ||
+                                std::ranges::find(descriptor->members, enumeration.member) == descriptor->members.end())
+                                fail("OOF2003", field, id_text, field_name, "valid PlotArea enumeration", enumeration.member, "Invalid PlotArea enumeration");
+                            parsed.*(descriptor->enumeration) = enumeration;
+                        }
+                    } else fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
+                }
+            }
+            for (const auto* value : {&parsed.left, &parsed.top, &parsed.right, &parsed.bottom}) {
+                if (value->canonical != "0" && value->canonical != "1" && !value->canonical.starts_with("0."))
+                    fail("OOF2003", child, id_text, name, "bounds between 0 and 1", value->canonical, "Chart area bound is out of range");
+            }
+            area = std::move(parsed);
+        } else if (name == "SummarySeries") {
+            if (state.chart_summary_series_seen) fail("OOF2003", child, id_text, name, "one SummarySeries", name, "Duplicate SummarySeries");
+            state.chart_summary_series_seen = true;
+            auto& summary = chart.summary_series;
+            parse_chart_series_fields(child, mm::ChartSeriesObject{&summary}, id_text, chart_budget_, typed_budget_);
+        } else if (name == "Series" || name == "Points" || name == "Values") {
+            if (name == "Values") {
+                if (state.chart_values_seen)
+                    fail("OOF2003", child, id_text, name, "one Values collection", "duplicate", "Duplicate Chart Values");
+                state.chart_values_seen = true;
+                for (xmlAttrPtr attribute = child->properties; attribute != nullptr; attribute = attribute->next) {
+                    const std::string_view attribute_name(reinterpret_cast<const char*>(attribute->name));
+                    if (attribute_name != "dataMode" && attribute_name != "sourceDescription")
+                        fail("OOF2003", child, id_text, std::string(attribute_name), "dataMode and sourceDescription attributes", std::string(attribute_name), "Unknown Chart Values attribute");
+                }
+                if (const auto mode = optional_attribute(child, "dataMode")) {
+                    if (*mode == "Sample") chart.data_mode = model::ChartDataMode::sample;
+                    else if (*mode == "Explicit") chart.data_mode = model::ChartDataMode::explicit_values;
+                    else if (*mode == "Source") chart.data_mode = model::ChartDataMode::source;
+                    else fail("OOF2003", child, id_text, "dataMode", "Sample, Explicit, or Source", *mode, "Invalid Chart data mode");
+                }
+                if (const auto description = optional_attribute(child, "sourceDescription")) {
+                    if (chart.data_mode != model::ChartDataMode::source)
+                        fail("OOF2003", child, id_text, "sourceDescription", "attribute only in Source mode", *description, "Chart sourceDescription requires Source mode");
+                    chart.data_source_description = *description;
+                }
+            }
+            if (name == "Series" || name == "Points") {
+                if (const auto last = optional_attribute(child, "lastAssignedId")) {
+                    const auto id = parse_integer<std::uint64_t>(*last, child, "lastAssignedId", id_text);
+                    if (name == "Series") chart.last_series_id = id;
+                    else chart.last_point_id = id;
+                }
+            }
+            for (xmlNodePtr item : element_children(child)) {
+                if (name == "Series" && node_name(item) == "ChartSeries") {
+                    consume_chart_budget(chart_budget_, 1, item, id_text);
+                    model::ChartSeries series;
+                    series.id = parse_object_id(required_attribute(item, "id"), item);
+                    parse_chart_series_fields(item, mm::ChartSeriesObject{&series}, id_text, chart_budget_, typed_budget_);
+                    chart.series.push_back(std::move(series));
+                } else if (name == "Points" && node_name(item) == "ChartPoint") {
+                    consume_chart_budget(chart_budget_, 1, item, id_text);
+                    model::ChartPoint point;
+                    point.id = parse_object_id(required_attribute(item, "id"), item);
+                    for (xmlNodePtr field : element_children(item)) {
+                        const std::string field_name = node_name(field);
+                        if (field_name == "Text") point.text = node_text(field);
+                        else if (field_name == "Color") point.color = parse_color(field);
+                        else if (field_name == "Value") point.value = parse_typed_value(field, id_text, typed_budget_);
+                        else fail("OOF2003", field, id_text, field_name, "Text or Color", field_name, "Unknown ChartPoint field");
+                    }
+                    chart.points.push_back(std::move(point));
+                } else if (name == "Values" && node_name(item) == "ChartValue") {
+                    consume_chart_budget(chart_budget_, 1, item, id_text);
+                    if (chart.values.size() >= chart.series.size() * chart.points.size())
+                        fail("OOF2003", item, id_text, "ChartValue", "bounded dense Chart matrix", {}, "Chart Values exceed the declared Series by Point matrix");
+                    model::ChartValue value;
+                    value.series_ref = parse_object_id(required_attribute(item, "seriesRef"), item);
+                    value.point_ref = parse_object_id(required_attribute(item, "pointRef"), item);
+                    const auto fields = element_children(item);
+                    if (fields.empty())
+                        fail("OOF2003", item, id_text, "ChartValue", "typed value", "empty", "ChartValue requires a typed value");
+                    value.value = parse_typed_node(fields.front(), id_text, typed_budget_);
+                    for (std::size_t i = 1; i < fields.size(); ++i) {
+                        const auto field_name = node_name(fields[i]);
+                        if (field_name == "Details") value.details = parse_typed_value(fields[i], id_text, typed_budget_);
+                        else if (field_name == "ToolTip") value.tooltip = node_text(fields[i]);
+                        else fail("OOF2003", fields[i], id_text, field_name, "Details or ToolTip", field_name, "Unknown ChartValue field");
+                    }
+                    chart.values.push_back(std::move(value));
+                } else {
+                    fail("OOF2003", item, id_text, node_name(item), name == "Series" ? "ChartSeries" : name == "Points" ? "ChartPoint" : "ChartValue", node_name(item), "Unknown Chart collection item");
+                }
+            }
+            if (name == "Values" && chart.data_mode == model::ChartDataMode::source && !chart.values.empty())
+                fail("OOF2003", child, id_text, "Values", "no ChartValue cells in Source mode", std::to_string(chart.values.size()), "Source-mode Chart cannot contain dense Values cells");
+        } else {
+            const auto* property = metamodel_.property(model::ControlKind::chart, name);
+            if (!property || property->surface != mm::PropertySurface::control_payload) return false;
+            if (name == "Title")
+                fail("OOF2003", child, id_text, name, "TitleArea/Text", name, "Chart title text belongs to TitleArea");
+            if (property->persistence == mm::PersistenceClass::runtime_only ||
+                property->persistence == mm::PersistenceClass::unsupported_by_platform)
+                fail("OOF2003", child, id_text, name, "persisted Chart property", name, "Chart property cannot appear in public Form.xml");
+            auto value = parse_property_value(child, property->value_codec, id_text, typed_budget_);
+            if (!equals_descriptor_default(*property, value)) chart.properties.set_explicit(property->id, std::move(value));
+        }
+        return true;
+    }
+
+    void finish_chart_content(model::ChartPayload& chart) {
+        for (const auto [area, property] : {std::pair{&chart.legend_area, "ShowLegend"}, std::pair{&chart.title_area, "ShowTitle"}}) {
+            if (!*area || (*area)->explicit_geometry[0]) continue;
+            const auto* shown = chart.properties.find(model::PropertyId::from_name(property));
+            if (shown != nullptr && std::holds_alternative<bool>(shown->value) && !std::get<bool>(shown->value))
+                (*area)->placement = "None";
+        }
+    }
+
+    model::ChartPayload parse_owned_chart(xmlNodePtr node, const std::string& owner) {
+        if (node->properties != nullptr)
+            fail("OOF2003", node, owner, "Chart", "aggregate without identity attributes", "attributes", "Owned Chart has no control identity");
+        model::ChartPayload chart;
+        ChartContentState state;
+        for (auto* child : element_children(node)) {
+            const auto name = node_name(child);
+            if (name == "BackColor" || !parse_chart_content_item(child, chart, owner, state))
+                fail("OOF2003", child, owner, name, "owned Chart content", name, "Property does not belong to owned Chart content");
+        }
+        finish_chart_content(chart);
+        return chart;
+    }
+
     model::ControlRef parse_control(xmlNodePtr node) {
         const std::string type_name = node_name(node);
         const mm::ControlDescriptor* descriptor =
@@ -2399,9 +2669,7 @@ private:
         bool type_link_seen = false;
         bool control_events_seen = false;
         bool position_seen = false;
-        bool chart_summary_series_seen = false;
-        bool chart_values_seen = false;
-        bool chart_gauge_quality_bands_seen = false;
+        ChartContentState chart_state;
         bool gantt_series_seen = false;
         bool gantt_points_seen = false;
         bool gantt_intervals_seen = false;
@@ -2410,218 +2678,12 @@ private:
         bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
-            if (descriptor->kind == model::ControlKind::chart && name == "GaugeChartQualityBands") {
-                if (chart_gauge_quality_bands_seen)
-                    fail("OOF2003", child, id_text, name, "one GaugeChartQualityBands collection", "duplicate", "Duplicate GaugeChartQualityBands");
-                chart_gauge_quality_bands_seen = true;
-                if (child->properties != nullptr)
-                    fail("OOF2003", child, id_text, name, "collection without attributes", "present", "GaugeChartQualityBands does not accept attributes");
-                auto& bands = std::get<model::ChartPayload>(control.payload).gauge_quality_bands;
-                for (xmlNodePtr item : element_children(child)) {
-                    if (node_name(item) != "GaugeChartQualityBand")
-                        fail("OOF2003", item, id_text, node_name(item), "GaugeChartQualityBand", node_name(item), "Unknown GaugeChartQualityBands item");
-                    if (item->properties != nullptr)
-                        fail("OOF2003", item, id_text, "GaugeChartQualityBand", "item without attributes", "present", "GaugeChartQualityBand does not accept attributes");
-                    consume_chart_budget(chart_budget_, 1, item, id_text);
-                    const auto fields = element_children(item);
-                    if (fields.size() != 5 || node_name(fields[0]) != "Begin" || node_name(fields[1]) != "End" ||
-                        node_name(fields[2]) != "BackColor" || node_name(fields[3]) != "Text" || node_name(fields[4]) != "ToolTip")
-                        fail("OOF2003", item, id_text, "GaugeChartQualityBand", "Begin, End, BackColor, Text, ToolTip in order", "invalid fields", "Invalid GaugeChartQualityBand fields");
-                    for (xmlNodePtr decimal_node : {fields[0], fields[1]}) {
-                        if (decimal_node->properties != nullptr || !element_children(decimal_node).empty())
-                            fail("OOF2003", decimal_node, id_text, node_name(decimal_node), "plain decimal", "attributes or child elements", "Gauge quality band boundaries must be plain decimals");
-                    }
-                    model::ChartGaugeQualityBand band;
-                    band.begin = model::DecimalValue{canonical_decimal(node_text(fields[0]), fields[0], "Begin", id_text)};
-                    band.end = model::DecimalValue{canonical_decimal(node_text(fields[1]), fields[1], "End", id_text)};
-                    if (!model::valid_chart_gauge_quality_band_range(band.begin, band.end))
-                        fail("OOF2003", item, id_text, "Begin/End", "Begin less than or equal to End", band.begin.canonical + ">" + band.end.canonical, "Invalid GaugeChartQualityBand range");
-                    band.back_color = parse_color(fields[2]);
-                    band.text = parse_property_value(fields[3], mm::ValueCodec::localized_text, id_text, typed_budget_);
-                    band.tool_tip = parse_property_value(fields[4], mm::ValueCodec::localized_text, id_text, typed_budget_);
-                    bands.push_back(std::move(band));
-                }
-                continue;
-            }
-            if (descriptor->kind == model::ControlKind::chart && (name == "PlotArea" || name == "LegendArea" || name == "TitleArea")) {
-                auto& chart = std::get<model::ChartPayload>(control.payload);
-                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
-                auto& area = name == "PlotArea" ? chart.plot_area : name == "TitleArea" ? chart.title_area : chart.legend_area;
-                if (area) fail("OOF2003", child, id_text, name, "one chart area", name, "Duplicate Chart area");
-                model::ChartArea parsed;
-                for (const auto& definition : mm::chart_area_property_descriptors()) {
-                    if (definition.coordinate != nullptr)
-                        parsed.*(definition.coordinate) = model::DecimalValue{std::string(
-                            kind == model::ChartAreaKind::plot ? definition.plot_default :
-                            kind == model::ChartAreaKind::title ? definition.title_default : definition.legend_default)};
-                }
-                std::set<std::string> seen;
-                for (xmlNodePtr field : element_children(child)) {
-                    const auto field_name = node_name(field);
-                    if (!seen.insert(field_name).second)
-                        fail("OOF2003", field, id_text, field_name, "one area property", field_name, "Duplicate Chart area property");
-                    const auto owners = mm::chart_scale_owner_descriptors();
-                    const auto scale_owner = std::ranges::find(owners, field_name, &mm::ChartScaleOwnerDescriptor::name);
-                    if (kind == model::ChartAreaKind::plot && scale_owner != owners.end()) {
-                        auto& scale = parsed.*(scale_owner->member);
-                        std::set<std::string> scale_seen;
-                        for (xmlNodePtr value_node : element_children(field)) {
-                            const auto value_name = node_name(value_node);
-                            if (value_name == "TitleArea") {
-                                if (!scale_seen.insert(value_name).second) fail("OOF2003", value_node, id_text, value_name, "one owned TitleArea", {}, "Duplicate ChartScale TitleArea");
-                                std::set<std::string> title_seen;
-                                for (xmlNodePtr title_node : element_children(value_node)) {
-                                    const auto title_name = node_name(title_node);
-                                    const auto fields = mm::chart_label_area_property_descriptors();
-                                    const auto definition = std::ranges::find(fields, title_name, &mm::ChartScalePropertyDescriptor::name);
-                                    if (definition == fields.end() || !title_seen.insert(title_name).second)
-                                        fail("OOF2003", title_node, id_text, title_name, "unique named ChartLabelArea property", {}, "Invalid ChartLabelArea property");
-                                    auto value = parse_property_value(title_node, definition->value_codec, id_text, typed_budget_);
-                                    mm::set_chart_scale_property_value(scale, *definition, std::move(value));
-                                }
-                                continue;
-                            }
-
-                            const auto fields = mm::chart_scale_property_descriptors();
-                            const auto definition = std::ranges::find(fields, value_name, &mm::ChartScalePropertyDescriptor::name);
-                            if (definition == fields.end() || !scale_seen.insert(value_name).second)
-                                fail("OOF2003", value_node, id_text, value_name, "unique named scale field", value_name, "Invalid Chart scale field");
-                            model::PropertyValue value;
-                            if (definition->value_codec == mm::ValueCodec::line) {
-                                const auto children = element_children(value_node);
-                                if (children.size() != 1) fail("OOF2003", value_node, id_text, value_name, "one Line or Undefined", {}, "Invalid nullable Line");
-                                if (node_name(children[0]) == "Line") value = parse_line(children[0]);
-                                else if (node_name(children[0]) == "Undefined" && node_text(children[0]) == "undefined") value = model::UndefinedValue{};
-                                else fail("OOF2003", value_node, id_text, value_name, "Line or Undefined", {}, "Invalid nullable Line");
-                            } else value = parse_property_value(value_node, definition->value_codec, id_text, typed_budget_);
-                            if (const auto* n = std::get_if<model::DecimalValue>(&value); n && definition->numeric_policy == mm::ChartScaleNumericPolicy::nonnegative_decimal && n->canonical.starts_with('-'))
-                                fail("OOF2003", value_node, id_text, value_name, "nonnegative decimal", n->canonical, "Negative ScaleStep");
-                            if (definition->value_codec == mm::ValueCodec::enumeration) {
-                                const auto* enumeration = std::get_if<model::EnumerationValue>(&value);
-                                if (!enumeration || enumeration->type_name != definition->enumeration_type ||
-                                    std::ranges::find(definition->members, enumeration->member) == definition->members.end())
-                                    fail("OOF2003", value_node, id_text, value_name, "valid scale enumeration", {}, "Invalid Chart scale enumeration");
-                            }
-                            mm::set_chart_scale_property_value(scale, *definition, std::move(value));
-                        }
-                    } else if (kind == model::ChartAreaKind::title && field_name == "Text") {
-                        auto text = parse_property_value(field, mm::ValueCodec::localized_text, id_text, typed_budget_);
-                        control.properties().set_explicit(model::PropertyId::from_name("Title"), std::move(text));
-                    } else if (field_name == "Placement") {
-                        parsed.placement = node_text(field);
-                        parsed.explicit_geometry[0] = true;
-                        if (!valid_chart_area_placement(name, parsed.placement))
-                            fail("OOF2003", field, id_text, field_name, "valid area placement", parsed.placement, "Invalid Chart area placement");
-                    } else {
-                        const auto id = model::PropertyId::from_name(field_name);
-                        if (const auto* boolean = mm::find_chart_area_boolean(kind, id)) {
-                            parsed.*(boolean->member) = parse_boolean(node_text(field), field, field_name, id_text);
-                        } else if (const auto* color = mm::find_chart_area_color(kind, id)) {
-                            parsed.*(color->member) = parse_color(field);
-                        } else if (const auto* style = mm::find_chart_area_style(kind, id)) {
-                            if (style->border) parsed.*(style->border) = parse_border(field);
-                            else if (style->font) parsed.*(style->font) = parse_font(field);
-                            else parsed.*(style->line) = parse_line(field);
-                        } else if (const auto* descriptor = mm::find_chart_area_property(id); descriptor && descriptor->coordinate) {
-                            (parsed.*(descriptor->coordinate)).canonical = canonical_decimal(node_text(field), field, field_name, id_text);
-                            parsed.explicit_geometry[1 + descriptor->coordinate_offset] = true;
-                        } else if (const auto* descriptor = kind == model::ChartAreaKind::plot ? mm::find_chart_plot_format(id) : nullptr) {
-                            auto value = parse_property_value(field, descriptor->value_codec, id_text, typed_budget_);
-                            if (descriptor->text) parsed.*(descriptor->text) = std::move(value);
-                            else {
-                                const auto& enumeration = std::get<model::EnumerationValue>(value);
-                                if (enumeration.type_name != descriptor->enumeration_type ||
-                                    std::ranges::find(descriptor->members, enumeration.member) == descriptor->members.end())
-                                    fail("OOF2003", field, id_text, field_name, "valid PlotArea enumeration", enumeration.member, "Invalid PlotArea enumeration");
-                                parsed.*(descriptor->enumeration) = enumeration;
-                            }
-                        } else fail("OOF2003", field, id_text, field_name, "named Chart area property", field_name, "Unknown Chart area property");
-                    }
-                }
-                for (const auto* value : {&parsed.left, &parsed.top, &parsed.right, &parsed.bottom}) {
-                    if (value->canonical != "0" && value->canonical != "1" && !value->canonical.starts_with("0."))
-                        fail("OOF2003", child, id_text, name, "bounds between 0 and 1", value->canonical, "Chart area bound is out of range");
-                }
-                area = std::move(parsed);
-            } else if (descriptor->kind == model::ControlKind::chart && name == "SummarySeries") {
-                if (chart_summary_series_seen) fail("OOF2003", child, id_text, name, "one SummarySeries", name, "Duplicate SummarySeries");
-                chart_summary_series_seen = true;
-                auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
-                parse_chart_series_fields(child, mm::ChartSeriesObject{&summary}, id_text, chart_budget_, typed_budget_);
-            } else if (descriptor->kind == model::ControlKind::chart &&
-                       (name == "Series" || name == "Points" || name == "Values")) {
-                auto& chart = std::get<model::ChartPayload>(control.payload);
-                if (name == "Values") {
-                    if (chart_values_seen)
-                        fail("OOF2003", child, id_text, name, "one Values collection", "duplicate", "Duplicate Chart Values");
-                    chart_values_seen = true;
-                    for (xmlAttrPtr attribute = child->properties; attribute != nullptr; attribute = attribute->next) {
-                        const std::string_view attribute_name(reinterpret_cast<const char*>(attribute->name));
-                        if (attribute_name != "dataMode" && attribute_name != "sourceDescription")
-                            fail("OOF2003", child, id_text, std::string(attribute_name), "dataMode and sourceDescription attributes", std::string(attribute_name), "Unknown Chart Values attribute");
-                    }
-                    if (const auto mode = optional_attribute(child, "dataMode")) {
-                        if (*mode == "Sample") chart.data_mode = model::ChartDataMode::sample;
-                        else if (*mode == "Explicit") chart.data_mode = model::ChartDataMode::explicit_values;
-                        else if (*mode == "Source") chart.data_mode = model::ChartDataMode::source;
-                        else fail("OOF2003", child, id_text, "dataMode", "Sample, Explicit, or Source", *mode, "Invalid Chart data mode");
-                    }
-                    if (const auto description = optional_attribute(child, "sourceDescription")) {
-                        if (chart.data_mode != model::ChartDataMode::source)
-                            fail("OOF2003", child, id_text, "sourceDescription", "attribute only in Source mode", *description, "Chart sourceDescription requires Source mode");
-                        chart.data_source_description = *description;
-                    }
-                }
-                if (name == "Series" || name == "Points") {
-                    if (const auto last = optional_attribute(child, "lastAssignedId")) {
-                        const auto id = parse_integer<std::uint64_t>(*last, child, "lastAssignedId", id_text);
-                        if (name == "Series") chart.last_series_id = id;
-                        else chart.last_point_id = id;
-                    }
-                }
-                for (xmlNodePtr item : element_children(child)) {
-                    if (name == "Series" && node_name(item) == "ChartSeries") {
-                        consume_chart_budget(chart_budget_, 1, item, id_text);
-                        model::ChartSeries series;
-                        series.id = parse_object_id(required_attribute(item, "id"), item);
-                        parse_chart_series_fields(item, mm::ChartSeriesObject{&series}, id_text, chart_budget_, typed_budget_);
-                        chart.series.push_back(std::move(series));
-                    } else if (name == "Points" && node_name(item) == "ChartPoint") {
-                        consume_chart_budget(chart_budget_, 1, item, id_text);
-                        model::ChartPoint point;
-                        point.id = parse_object_id(required_attribute(item, "id"), item);
-                        for (xmlNodePtr field : element_children(item)) {
-                            const std::string field_name = node_name(field);
-                            if (field_name == "Text") point.text = node_text(field);
-                            else if (field_name == "Color") point.color = parse_color(field);
-                            else if (field_name == "Value") point.value = parse_typed_value(field, id_text, typed_budget_);
-                            else fail("OOF2003", field, id_text, field_name, "Text or Color", field_name, "Unknown ChartPoint field");
-                        }
-                        chart.points.push_back(std::move(point));
-                    } else if (name == "Values" && node_name(item) == "ChartValue") {
-                        consume_chart_budget(chart_budget_, 1, item, id_text);
-                        if (chart.values.size() >= chart.series.size() * chart.points.size())
-                            fail("OOF2003", item, id_text, "ChartValue", "bounded dense Chart matrix", {}, "Chart Values exceed the declared Series by Point matrix");
-                        model::ChartValue value;
-                        value.series_ref = parse_object_id(required_attribute(item, "seriesRef"), item);
-                        value.point_ref = parse_object_id(required_attribute(item, "pointRef"), item);
-                        const auto fields = element_children(item);
-                        if (fields.empty())
-                            fail("OOF2003", item, id_text, "ChartValue", "typed value", "empty", "ChartValue requires a typed value");
-                        value.value = parse_typed_node(fields.front(), id_text, typed_budget_);
-                        for (std::size_t i = 1; i < fields.size(); ++i) {
-                            const auto field_name = node_name(fields[i]);
-                            if (field_name == "Details") value.details = parse_typed_value(fields[i], id_text, typed_budget_);
-                            else if (field_name == "ToolTip") value.tooltip = node_text(fields[i]);
-                            else fail("OOF2003", fields[i], id_text, field_name, "Details or ToolTip", field_name, "Unknown ChartValue field");
-                        }
-                        chart.values.push_back(std::move(value));
-                    } else {
-                        fail("OOF2003", item, id_text, node_name(item), name == "Series" ? "ChartSeries" : name == "Points" ? "ChartPoint" : "ChartValue", node_name(item), "Unknown Chart collection item");
-                    }
-                }
-                if (name == "Values" && chart.data_mode == model::ChartDataMode::source && !chart.values.empty())
-                    fail("OOF2003", child, id_text, "Values", "no ChartValue cells in Source mode", std::to_string(chart.values.size()), "Source-mode Chart cannot contain dense Values cells");
+            if (auto* chart = std::get_if<model::ChartPayload>(&control.payload);
+                chart && parse_chart_content_item(child, *chart, id_text, chart_state)) continue;
+            if (name == "Chart" && (descriptor->kind == model::ControlKind::gantt_chart || dendrogram != nullptr)) {
+                auto& owned = dendrogram ? dendrogram->chart : std::get<model::GanttChartPayload>(control.payload).chart;
+                if (owned) fail("OOF2003", child, id_text, name, "one owned Chart", "duplicate", "Duplicate owned Chart");
+                owned = parse_owned_chart(child, id_text);
             }
             else if (name == "Document" && descriptor->kind == model::ControlKind::spreadsheet_document_field) {
                 if (spreadsheet_document_seen)
@@ -3015,14 +3077,7 @@ private:
                     fail("OOF2003", child, id_text, "Tree", "CatalogListTableExtension/Tree", "Table/Tree",
                         "CatalogList Tree belongs to its source extension");
         }
-        if (auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
-            for (const auto [area, property] : {std::pair{&chart->legend_area, "ShowLegend"}, std::pair{&chart->title_area, "ShowTitle"}}) {
-                if (!*area || (*area)->explicit_geometry[0]) continue;
-                const auto* shown = control.properties().find(model::PropertyId::from_name(property));
-                if (shown != nullptr && std::holds_alternative<bool>(shown->value) && !std::get<bool>(shown->value))
-                    (*area)->placement = "None";
-            }
-        }
+        if (auto* chart = std::get_if<model::ChartPayload>(&control.payload)) finish_chart_content(*chart);
         if (dendrogram != nullptr) validate_dendrogram_graph(*dendrogram, node, id_text);
         if (!position_seen) {
             fail("OOF2003", node, id_text, "Position", "required Position", "missing", "Control has no typed Position");
@@ -4175,10 +4230,10 @@ private:
         std::string_view object_id
     ) {
         XmlAttributes attributes;
-        if (reference.width < -1 || reference.height < -1)
-            serialization_fail(std::string(object_id), std::string(element_name), "picture dimensions at least -1", {}, "Invalid picture dimensions");
-        if (reference.width != -1) attributes.emplace_back("width", std::to_string(reference.width));
-        if (reference.height != -1) attributes.emplace_back("height", std::to_string(reference.height));
+        if (reference.transparent_x < -1 || reference.transparent_y < -1)
+            serialization_fail(std::string(object_id), std::string(element_name), "transparency coordinates at least -1", {}, "Invalid picture transparency coordinates");
+        if (reference.transparent_x != -1) attributes.emplace_back("transparentX", std::to_string(reference.transparent_x));
+        if (reference.transparent_y != -1) attributes.emplace_back("transparentY", std::to_string(reference.transparent_y));
         if (reference.transparent) attributes.emplace_back("transparent", "true");
         if (reference.common_picture) {
             const auto uuid = canonical_uuid(reference.common_picture->canonical);
@@ -4201,8 +4256,8 @@ private:
             return;
         }
         if (!attributes.empty())
-            serialization_fail(std::string(object_id), std::string(element_name), "file asset without resource dimensions", {},
-                "File picture dimensions belong to the asset");
+            serialization_fail(std::string(object_id), std::string(element_name), "file asset without transparency coordinates", {},
+                "File picture transparency coordinates belong to the asset");
         if (reference.asset.id().value() == 0) {
             serialization_fail(std::string(object_id), std::string(element_name),
                 "positive picture asset ID", "0", "Picture asset reference is empty");
@@ -4334,7 +4389,8 @@ private:
     void write_property(
         const mm::PropertyDescriptor& descriptor,
         const model::PropertyValue& value,
-        std::string_view object_id
+        std::string_view object_id,
+        const model::ChartPayload* chart_context = nullptr
     ) {
         const std::string_view name = descriptor.xml_name;
         switch (descriptor.value_codec) {
@@ -4482,7 +4538,7 @@ private:
                 if (object_id_text(reference.owner) != object_id)
                     serialization_fail(std::string(object_id), std::string(name), "series owned by Chart", "different owner", "Chart series reference has a different owner");
                 const auto* control = document_.find_control(reference.owner);
-                const auto* chart = control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
+                const auto* chart = chart_context ? chart_context : control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
                 if (!chart || std::ranges::none_of(chart->series, [&](const auto& series) { return series.id == reference.series; }))
                     serialization_fail(std::string(object_id), std::string(name), "existing Chart series", "missing", "Chart series reference does not exist");
                 writer_.text(name, object_id_text(reference.series));
@@ -4497,7 +4553,7 @@ private:
                 if (object_id_text(reference.owner) != object_id)
                     serialization_fail(std::string(object_id), std::string(name), "point owned by Chart", "different owner", "Chart point reference has a different owner");
                 const auto* control = document_.find_control(reference.owner);
-                const auto* chart = control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
+                const auto* chart = chart_context ? chart_context : control ? std::get_if<model::ChartPayload>(&control->payload) : nullptr;
                 if (!chart || std::ranges::none_of(chart->points, [&](const auto& point) { return point.id == reference.point; }))
                     serialization_fail(std::string(object_id), std::string(name), "existing Chart point", "missing", "Chart point reference does not exist");
                 writer_.text(name, object_id_text(reference.point));
@@ -4617,7 +4673,8 @@ private:
         std::span<const mm::PropertyDescriptor> descriptors,
         std::string_view object_id,
         bool skip_reserved_extensions = false,
-        std::optional<model::ControlKind> control_kind = std::nullopt
+        std::optional<model::ControlKind> control_kind = std::nullopt,
+        const model::ChartPayload* chart_context = nullptr
     ) {
         for (const auto& descriptor : descriptors) {
             if ((descriptor.control_kind == model::ControlKind::input_field ||
@@ -4663,7 +4720,7 @@ private:
                     "Runtime-only properties cannot be serialized into public Form.xml");
             }
             if (entry != nullptr && !equals_descriptor_default(descriptor, entry->value)) {
-                write_property(descriptor, entry->value, object_id);
+                write_property(descriptor, entry->value, object_id, chart_context);
             }
         }
     }
@@ -4785,12 +4842,18 @@ private:
             if (!valid_picture_path(asset.relative_path, asset.format)) {
                 serialization_fail(id, "relativePath", "CaptionPicture.<matching format> or Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>", asset.relative_path, "Picture asset path is outside the source package contract");
             }
-            writer_.empty("PictureAsset", {
+            if (asset.transparent_x < -1 || asset.transparent_y < -1)
+                serialization_fail(id, "transparentX/transparentY", "coordinates at least -1", {}, "Invalid picture transparency coordinates");
+            XmlAttributes attributes{
                 {"id", id},
                 {"relativePath", asset.relative_path},
                 {"format", std::string(picture_format_name(asset.format))},
                 {"transparent", asset.transparent ? "true" : "false"},
-            });
+            };
+            if (asset.transparent_x != -1) attributes.emplace_back("transparentX", std::to_string(asset.transparent_x));
+            if (asset.transparent_y != -1) attributes.emplace_back("transparentY", std::to_string(asset.transparent_y));
+            if (asset.uuid) attributes.emplace_back("uuid", canonical_uuid(asset.uuid->canonical));
+            writer_.empty("PictureAsset", attributes);
         }
         writer_.close("PictureAssets");
     }
@@ -5095,6 +5158,230 @@ private:
         }
     }
 
+    void write_chart_content(const model::ChartPayload& payload, const std::string& id, bool owned = false) {
+        const auto* chart = &payload;
+        if (owned && chart->properties.contains(model::PropertyId::from_name("BackColor")))
+            serialization_fail(id, "Chart/BackColor", "BackColor on the owning control", "duplicate alias", "Owned Chart BackColor belongs to its owner");
+        for (const auto& descriptor : metamodel_.properties_for(model::ControlKind::chart)) {
+            if (descriptor.xml_name == "Title" || (owned && descriptor.xml_name == "BackColor")) continue;
+            if (descriptor.api_name == "GaugeChartQualityBands") {
+                if (!chart->gauge_quality_bands.empty()) {
+                    writer_.open("GaugeChartQualityBands");
+                    for (const auto& band : chart->gauge_quality_bands) {
+                        if (!model::valid_chart_gauge_quality_band_range(band.begin, band.end))
+                            serialization_fail(id, "GaugeChartQualityBands", "Begin less than or equal to End", band.begin.canonical + ">" + band.end.canonical, "Invalid GaugeChartQualityBand range");
+                        writer_.open("GaugeChartQualityBand");
+                        writer_.text("Begin", canonical_decimal(band.begin.canonical, nullptr, "Begin", id));
+                        writer_.text("End", canonical_decimal(band.end.canonical, nullptr, "End", id));
+                        write_color("BackColor", band.back_color, id);
+                        for (const auto& [name, value] : {std::pair<std::string_view, const model::PropertyValue*>{"Text", &band.text},
+                                                          {"ToolTip", &band.tool_tip}}) {
+                            if (const auto* translations = std::get_if<model::LocalizedStringValue>(value))
+                                write_localized(name, *translations, id);
+                            else writer_.text(name, std::get<std::string>(*value));
+                        }
+                        writer_.close("GaugeChartQualityBand");
+                    }
+                    writer_.close("GaugeChartQualityBands");
+                }
+                continue;
+            }
+            write_property_set(chart->properties, std::span{&descriptor, 1}, id, false, std::nullopt, chart);
+        }
+        const auto write_area = [&](std::string_view name, const std::optional<model::ChartArea>& area) {
+            if (!area) return;
+            if (!valid_chart_area_placement(name, area->placement))
+                serialization_fail(id, std::string(name), "valid area placement", area->placement, "Invalid Chart area placement");
+            for (const auto* value : {&area->left, &area->top, &area->right, &area->bottom}) {
+                const auto bound = canonical_decimal(value->canonical, nullptr, name, id);
+                if (bound != "0" && bound != "1" && !bound.starts_with("0."))
+                    serialization_fail(id, std::string(name), "bounds between 0 and 1", bound, "Chart area bound is out of range");
+            }
+            writer_.open(name);
+            if (name == "TitleArea") {
+                const auto* text = chart->properties.find(model::PropertyId::from_name("Title"));
+                if (text != nullptr) {
+                    mm::PropertyDescriptor property;
+                    property.xml_name = "Text";
+                    property.value_codec = mm::ValueCodec::localized_text;
+                    write_property(property, text->value, id);
+                }
+            }
+            const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
+            const auto* shown = kind == model::ChartAreaKind::plot ? nullptr : chart->properties.find(
+                model::PropertyId::from_name(kind == model::ChartAreaKind::title ? "ShowTitle" : "ShowLegend"));
+            const bool visible = shown == nullptr || !std::holds_alternative<bool>(shown->value) || std::get<bool>(shown->value);
+            const std::string_view default_placement = kind != model::ChartAreaKind::plot && !visible ? "None" : "Auto";
+            if (area->explicit_geometry[0] || area->placement != default_placement)
+                writer_.text("Placement", area->placement);
+            for (const auto& descriptor : mm::chart_area_property_descriptors()) {
+                if (descriptor.coordinate == nullptr) continue;
+                const auto value = canonical_decimal(((*area).*(descriptor.coordinate)).canonical, nullptr, descriptor.name, id);
+                const auto default_value = kind == model::ChartAreaKind::plot ? descriptor.plot_default :
+                    kind == model::ChartAreaKind::title ? descriptor.title_default : descriptor.legend_default;
+                if (area->explicit_geometry[1 + descriptor.coordinate_offset] || value != default_value)
+                    writer_.text(descriptor.name, value);
+            }
+            for (const auto& descriptor : mm::chart_area_boolean_descriptors()) {
+                const auto& value = (*area).*(descriptor.member);
+                if (descriptor.kind == kind && value) writer_.text(descriptor.name, *value ? "true" : "false");
+                else if (descriptor.kind != kind && value && mm::find_chart_area_boolean(kind, descriptor.id) == nullptr)
+                    serialization_fail(id, std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
+            }
+            for (const auto& descriptor : mm::chart_area_color_descriptors()) {
+                const auto& value = (*area).*(descriptor.member);
+                if (descriptor.kind == kind && value) write_color(descriptor.name, *value, id);
+                else if (descriptor.kind != kind && value && mm::find_chart_area_color(kind, descriptor.id) == nullptr)
+                    serialization_fail(id, std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
+            }
+            for (const auto& descriptor : mm::chart_area_style_descriptors()) {
+                if (descriptor.kind != kind) continue;
+                if (descriptor.border && ((*area).*(descriptor.border)))
+                    write_border(descriptor.name, *((*area).*(descriptor.border)), id);
+                if (descriptor.font && ((*area).*(descriptor.font)))
+                    write_font(descriptor.name, *((*area).*(descriptor.font)), id);
+                if (descriptor.line && ((*area).*(descriptor.line)) && *((*area).*(descriptor.line)) != model::LineValue{})
+                    write_line(descriptor.name, *((*area).*(descriptor.line)), id);
+            }
+            for (const auto& descriptor : mm::chart_plot_format_descriptors()) {
+                if (descriptor.text) {
+                    const auto& value = (*area).*(descriptor.text);
+                    if (!value) continue;
+                    if (kind != model::ChartAreaKind::plot)
+                        serialization_fail(id, std::string(name), "PlotArea property", std::string(descriptor.name), "Chart area property belongs to another area");
+                    mm::PropertyDescriptor property;
+                    property.xml_name = descriptor.name;
+                    property.value_codec = descriptor.value_codec;
+                    write_property(property, *value, id);
+                } else {
+                    const auto& value = (*area).*(descriptor.enumeration);
+                    if (!value) continue;
+                    if (kind != model::ChartAreaKind::plot || value->type_name != descriptor.enumeration_type ||
+                        std::ranges::find(descriptor.members, value->member) == descriptor.members.end())
+                        serialization_fail(id, std::string(name), "valid PlotArea enumeration", value->member, "Invalid PlotArea enumeration");
+                    write_enumeration(descriptor.name, *value);
+                }
+            }
+            if (name == "PlotArea") for (const auto& owner : mm::chart_scale_owner_descriptors()) {
+                const auto& scale = (*area).*(owner.member);
+                bool present = false;
+                for (const auto& field : mm::chart_scale_property_descriptors()) present = present || mm::chart_scale_property_value(scale, field) != nullptr;
+                for (const auto& field : mm::chart_label_area_property_descriptors()) present = present || mm::chart_scale_property_value(scale, field) != nullptr;
+                if (!present) continue;
+                writer_.open(owner.name);
+                for (const auto& field : mm::chart_scale_property_descriptors()) if (const auto* value = mm::chart_scale_property_value(scale, field)) {
+                    mm::PropertyDescriptor property;
+                    property.xml_name = field.name;
+                    property.value_codec = field.value_codec;
+                    if (field.value_codec == mm::ValueCodec::line) {
+                        writer_.open(field.name);
+                        if (std::holds_alternative<model::UndefinedValue>(*value)) writer_.text("Undefined", "undefined");
+                        else write_line("Line", require_value<model::LineValue>(*value, id, field.name, "Line or Undefined"), id);
+                        writer_.close(field.name);
+                    } else write_property(property, *value, id);
+                }
+                bool title_present = false;
+                for (const auto& field : mm::chart_label_area_property_descriptors()) title_present = title_present || mm::chart_scale_property_value(scale, field) != nullptr;
+                if (title_present) {
+                    writer_.open("TitleArea");
+                    for (const auto& field : mm::chart_label_area_property_descriptors()) if (const auto* value = mm::chart_scale_property_value(scale, field)) {
+                        mm::PropertyDescriptor property;
+                        property.xml_name = field.name;
+                        property.value_codec = field.value_codec;
+                        write_property(property, *value, id);
+                    }
+                    writer_.close("TitleArea");
+                }
+                writer_.close(owner.name);
+            }
+            writer_.close(name);
+        };
+        write_area("PlotArea", chart->plot_area);
+        write_area("LegendArea", chart->legend_area);
+        auto title_area = chart->title_area;
+        if (!title_area && chart->properties.find(model::PropertyId::from_name("Title")) != nullptr) {
+            model::ChartArea defaults;
+            for (const auto& descriptor : mm::chart_area_property_descriptors())
+                if (descriptor.coordinate != nullptr)
+                    defaults.*(descriptor.coordinate) = model::DecimalValue{std::string(descriptor.title_default)};
+            const auto* show = chart->properties.find(model::PropertyId::from_name("ShowTitle"));
+            if (show != nullptr && std::holds_alternative<bool>(show->value) && !std::get<bool>(show->value))
+                defaults.placement = "None";
+            title_area = std::move(defaults);
+        }
+        write_area("TitleArea", title_area);
+        if (!chart->summary_series.properties.empty() || !chart->summary_series.trendlines.empty() || chart->summary_series.text || !std::holds_alternative<model::UndefinedValue>(chart->summary_series.value) ||
+            chart->summary_series.color != model::ColorValue{} ||
+            chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
+            writer_.open("SummarySeries");
+            write_chart_series_fields(mm::ConstChartSeriesObject{&chart->summary_series}, id);
+            writer_.close("SummarySeries");
+        }
+        const auto write_chart_key = [&](std::string_view name, const model::PropertyValue& value, std::string_view owner) {
+            if (std::holds_alternative<model::UndefinedValue>(value)) return;
+            writer_.open(name);
+            write_typed_value_node(value, owner);
+            writer_.close(name);
+        };
+        std::uint64_t max_series_id = 1;
+        for (const auto& item : chart->series) max_series_id = std::max(max_series_id, item.id.value());
+        std::uint64_t max_point_id = 0;
+        for (const auto& item : chart->points) max_point_id = std::max(max_point_id, item.id.value());
+        constexpr auto chart_id_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+        if (max_series_id > chart_id_limit || max_point_id > chart_id_limit ||
+            (chart->last_series_id && *chart->last_series_id > chart_id_limit) ||
+            (chart->last_point_id && *chart->last_point_id > chart_id_limit))
+            serialization_fail(id, "lastAssignedId", "signed 64-bit allocator IDs", "out of range", "Invalid Chart allocator history");
+        if (chart->last_series_id && *chart->last_series_id < max_series_id)
+            serialization_fail(id, "Series", "lastAssignedId at least the largest series ID", std::to_string(*chart->last_series_id), "Invalid Chart allocator history");
+        if (chart->last_point_id && *chart->last_point_id < max_point_id)
+            serialization_fail(id, "Points", "lastAssignedId at least the largest point ID", std::to_string(*chart->last_point_id), "Invalid Chart allocator history");
+        if (chart->last_series_id && *chart->last_series_id != max_series_id)
+            writer_.open("Series", {{"lastAssignedId", std::to_string(*chart->last_series_id)}});
+        else writer_.open("Series");
+        for (const auto& item : chart->series) {
+            writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
+            write_chart_series_fields(mm::ConstChartSeriesObject{&item}, object_id_text(item.id));
+            writer_.close("ChartSeries");
+        }
+        writer_.close("Series");
+        if (chart->last_point_id && *chart->last_point_id != max_point_id)
+            writer_.open("Points", {{"lastAssignedId", std::to_string(*chart->last_point_id)}});
+        else writer_.open("Points");
+        for (const auto& item : chart->points) {
+            writer_.open("ChartPoint", {{"id", object_id_text(item.id)}});
+            writer_.text("Text", item.text);
+            write_color("Color", item.color, object_id_text(item.id));
+            write_chart_key("Value", item.value, object_id_text(item.id));
+            writer_.close("ChartPoint");
+        }
+        writer_.close("Points");
+        const auto default_mode = chart->series.empty() || chart->points.empty() ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
+        if (chart->data_mode && *chart->data_mode != model::ChartDataMode::sample && *chart->data_mode != model::ChartDataMode::explicit_values &&
+            *chart->data_mode != model::ChartDataMode::source)
+            serialization_fail(id, "dataMode", "Sample, Explicit, or Source", "invalid enum", "Invalid Chart data mode");
+        if (chart->data_mode == model::ChartDataMode::source) {
+            if (!chart->values.empty()) serialization_fail(id, "Values", "no ChartValue cells in Source mode", std::to_string(chart->values.size()), "Source-mode Chart cannot contain dense Values cells");
+            XmlAttributes attributes{{"dataMode", "Source"}};
+            if (!chart->data_source_description.empty()) attributes.emplace_back("sourceDescription", chart->data_source_description);
+            writer_.open("Values", attributes);
+        } else {
+            if (!chart->data_source_description.empty())
+                serialization_fail(id, "sourceDescription", "empty outside Source mode", chart->data_source_description, "Chart sourceDescription requires Source mode");
+            if (chart->data_mode && *chart->data_mode != default_mode)
+                writer_.open("Values", {{"dataMode", *chart->data_mode == model::ChartDataMode::sample ? "Sample" : "Explicit"}});
+            else writer_.open("Values");
+        }
+        for (const auto& item : chart->values) {
+            writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
+            write_typed_value_node(item.value, object_id_text(item.series_ref));
+            write_chart_key("Details", item.details, object_id_text(item.series_ref));
+            if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
+            writer_.close("ChartValue");
+        }
+        writer_.close("Values");
+    }
+
     void write_control(const model::ControlNode& control) {
         const auto& descriptor = metamodel_.control(control.kind());
         const std::string id = object_id_text(control.id);
@@ -5206,233 +5493,21 @@ private:
             write_property_set(control.properties(), properties.subspan(offset, 2), id);
             write_dendrogram_payload(*dendrogram, id);
             write_property_set(control.properties(), properties.subspan(offset + 2), id);
-        } else if (control.kind() == model::ControlKind::chart) {
-            for (const auto& descriptor : metamodel_.properties_for(control.kind())) {
-                if (descriptor.xml_name == "Title") continue;
-                if (descriptor.api_name == "GaugeChartQualityBands") {
-                    if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload);
-                        chart != nullptr && !chart->gauge_quality_bands.empty()) {
-                        writer_.open("GaugeChartQualityBands");
-                        for (const auto& band : chart->gauge_quality_bands) {
-                            if (!model::valid_chart_gauge_quality_band_range(band.begin, band.end))
-                                serialization_fail(id, "GaugeChartQualityBands", "Begin less than or equal to End", band.begin.canonical + ">" + band.end.canonical, "Invalid GaugeChartQualityBand range");
-                            writer_.open("GaugeChartQualityBand");
-                            writer_.text("Begin", canonical_decimal(band.begin.canonical, nullptr, "Begin", id));
-                            writer_.text("End", canonical_decimal(band.end.canonical, nullptr, "End", id));
-                            write_color("BackColor", band.back_color, id);
-                            for (const auto& [name, value] : {std::pair<std::string_view, const model::PropertyValue*>{"Text", &band.text},
-                                                              {"ToolTip", &band.tool_tip}}) {
-                                if (const auto* translations = std::get_if<model::LocalizedStringValue>(value))
-                                    write_localized(name, *translations, id);
-                                else writer_.text(name, std::get<std::string>(*value));
-                            }
-                            writer_.close("GaugeChartQualityBand");
-                        }
-                        writer_.close("GaugeChartQualityBands");
-                    }
-                    continue;
-                }
-                write_property_set(control.properties(), std::span{&descriptor, 1}, id);
-            }
-        } else {
+        } else if (control.kind() != model::ControlKind::chart) {
             write_property_set(control.properties(), metamodel_.properties_for(control.kind()), id);
         }
         if (const auto* gantt = std::get_if<model::GanttChartPayload>(&control.payload)) {
             write_gantt_data(*gantt);
         }
-        if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
-            const auto write_area = [&](std::string_view name, const std::optional<model::ChartArea>& area) {
-                if (!area) return;
-                if (!valid_chart_area_placement(name, area->placement))
-                    serialization_fail(id, std::string(name), "valid area placement", area->placement, "Invalid Chart area placement");
-                for (const auto* value : {&area->left, &area->top, &area->right, &area->bottom}) {
-                    const auto bound = canonical_decimal(value->canonical, nullptr, name, id);
-                    if (bound != "0" && bound != "1" && !bound.starts_with("0."))
-                        serialization_fail(id, std::string(name), "bounds between 0 and 1", bound, "Chart area bound is out of range");
-                }
-                writer_.open(name);
-                if (name == "TitleArea") {
-                    const auto* text = control.properties().find(model::PropertyId::from_name("Title"));
-                    if (text != nullptr) {
-                        mm::PropertyDescriptor property;
-                        property.xml_name = "Text";
-                        property.value_codec = mm::ValueCodec::localized_text;
-                        write_property(property, text->value, id);
-                    }
-                }
-                const auto kind = name == "PlotArea" ? model::ChartAreaKind::plot : name == "TitleArea" ? model::ChartAreaKind::title : model::ChartAreaKind::legend;
-                const auto* shown = kind == model::ChartAreaKind::plot ? nullptr : control.properties().find(
-                    model::PropertyId::from_name(kind == model::ChartAreaKind::title ? "ShowTitle" : "ShowLegend"));
-                const bool visible = shown == nullptr || !std::holds_alternative<bool>(shown->value) || std::get<bool>(shown->value);
-                const std::string_view default_placement = kind != model::ChartAreaKind::plot && !visible ? "None" : "Auto";
-                if (area->explicit_geometry[0] || area->placement != default_placement)
-                    writer_.text("Placement", area->placement);
-                for (const auto& descriptor : mm::chart_area_property_descriptors()) {
-                    if (descriptor.coordinate == nullptr) continue;
-                    const auto value = canonical_decimal(((*area).*(descriptor.coordinate)).canonical, nullptr, descriptor.name, id);
-                    const auto default_value = kind == model::ChartAreaKind::plot ? descriptor.plot_default :
-                        kind == model::ChartAreaKind::title ? descriptor.title_default : descriptor.legend_default;
-                    if (area->explicit_geometry[1 + descriptor.coordinate_offset] || value != default_value)
-                        writer_.text(descriptor.name, value);
-                }
-                for (const auto& descriptor : mm::chart_area_boolean_descriptors()) {
-                    const auto& value = (*area).*(descriptor.member);
-                    if (descriptor.kind == kind && value) writer_.text(descriptor.name, *value ? "true" : "false");
-                    else if (descriptor.kind != kind && value && mm::find_chart_area_boolean(kind, descriptor.id) == nullptr)
-                        serialization_fail(id, std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
-                }
-                for (const auto& descriptor : mm::chart_area_color_descriptors()) {
-                    const auto& value = (*area).*(descriptor.member);
-                    if (descriptor.kind == kind && value) write_color(descriptor.name, *value, id);
-                    else if (descriptor.kind != kind && value && mm::find_chart_area_color(kind, descriptor.id) == nullptr)
-                        serialization_fail(id, std::string(name), "property supported by this area", std::string(descriptor.name), "Chart area property belongs to another area");
-                }
-                for (const auto& descriptor : mm::chart_area_style_descriptors()) {
-                    if (descriptor.kind != kind) continue;
-                    if (descriptor.border && ((*area).*(descriptor.border)))
-                        write_border(descriptor.name, *((*area).*(descriptor.border)), id);
-                    if (descriptor.font && ((*area).*(descriptor.font)))
-                        write_font(descriptor.name, *((*area).*(descriptor.font)), id);
-                    if (descriptor.line && ((*area).*(descriptor.line)) && *((*area).*(descriptor.line)) != model::LineValue{})
-                        write_line(descriptor.name, *((*area).*(descriptor.line)), id);
-                }
-                for (const auto& descriptor : mm::chart_plot_format_descriptors()) {
-                    if (descriptor.text) {
-                        const auto& value = (*area).*(descriptor.text);
-                        if (!value) continue;
-                        if (kind != model::ChartAreaKind::plot)
-                            serialization_fail(id, std::string(name), "PlotArea property", std::string(descriptor.name), "Chart area property belongs to another area");
-                        mm::PropertyDescriptor property;
-                        property.xml_name = descriptor.name;
-                        property.value_codec = descriptor.value_codec;
-                        write_property(property, *value, id);
-                    } else {
-                        const auto& value = (*area).*(descriptor.enumeration);
-                        if (!value) continue;
-                        if (kind != model::ChartAreaKind::plot || value->type_name != descriptor.enumeration_type ||
-                            std::ranges::find(descriptor.members, value->member) == descriptor.members.end())
-                            serialization_fail(id, std::string(name), "valid PlotArea enumeration", value->member, "Invalid PlotArea enumeration");
-                        write_enumeration(descriptor.name, *value);
-                    }
-                }
-                if (name == "PlotArea") for (const auto& owner : mm::chart_scale_owner_descriptors()) {
-                    const auto& scale = (*area).*(owner.member);
-                    bool present = false;
-                    for (const auto& field : mm::chart_scale_property_descriptors()) present = present || mm::chart_scale_property_value(scale, field) != nullptr;
-                    for (const auto& field : mm::chart_label_area_property_descriptors()) present = present || mm::chart_scale_property_value(scale, field) != nullptr;
-                    if (!present) continue;
-                    writer_.open(owner.name);
-                    for (const auto& field : mm::chart_scale_property_descriptors()) if (const auto* value = mm::chart_scale_property_value(scale, field)) {
-                        mm::PropertyDescriptor property;
-                        property.xml_name = field.name;
-                        property.value_codec = field.value_codec;
-                        if (field.value_codec == mm::ValueCodec::line) {
-                            writer_.open(field.name);
-                            if (std::holds_alternative<model::UndefinedValue>(*value)) writer_.text("Undefined", "undefined");
-                            else write_line("Line", require_value<model::LineValue>(*value, id, field.name, "Line or Undefined"), id);
-                            writer_.close(field.name);
-                        } else write_property(property, *value, id);
-                    }
-                    bool title_present = false;
-                    for (const auto& field : mm::chart_label_area_property_descriptors()) title_present = title_present || mm::chart_scale_property_value(scale, field) != nullptr;
-                    if (title_present) {
-                        writer_.open("TitleArea");
-                        for (const auto& field : mm::chart_label_area_property_descriptors()) if (const auto* value = mm::chart_scale_property_value(scale, field)) {
-                            mm::PropertyDescriptor property;
-                            property.xml_name = field.name;
-                            property.value_codec = field.value_codec;
-                            write_property(property, *value, id);
-                        }
-                        writer_.close("TitleArea");
-                    }
-                    writer_.close(owner.name);
-                }
-                writer_.close(name);
-            };
-            write_area("PlotArea", chart->plot_area);
-            write_area("LegendArea", chart->legend_area);
-            auto title_area = chart->title_area;
-            if (!title_area && control.properties().find(model::PropertyId::from_name("Title")) != nullptr) {
-                model::ChartArea defaults;
-                for (const auto& descriptor : mm::chart_area_property_descriptors())
-                    if (descriptor.coordinate != nullptr)
-                        defaults.*(descriptor.coordinate) = model::DecimalValue{std::string(descriptor.title_default)};
-                const auto* show = control.properties().find(model::PropertyId::from_name("ShowTitle"));
-                if (show != nullptr && std::holds_alternative<bool>(show->value) && !std::get<bool>(show->value))
-                    defaults.placement = "None";
-                title_area = std::move(defaults);
-            }
-            write_area("TitleArea", title_area);
-            if (!chart->summary_series.properties.empty() || !chart->summary_series.trendlines.empty() || chart->summary_series.text || !std::holds_alternative<model::UndefinedValue>(chart->summary_series.value) ||
-                chart->summary_series.color != model::ColorValue{} ||
-                chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
-                writer_.open("SummarySeries");
-                write_chart_series_fields(mm::ConstChartSeriesObject{&chart->summary_series}, id);
-                writer_.close("SummarySeries");
-            }
-            const auto write_chart_key = [&](std::string_view name, const model::PropertyValue& value, std::string_view owner) {
-                if (std::holds_alternative<model::UndefinedValue>(value)) return;
-                writer_.open(name);
-                write_typed_value_node(value, owner);
-                writer_.close(name);
-            };
-            std::uint64_t max_series_id = 1;
-            for (const auto& item : chart->series) max_series_id = std::max(max_series_id, item.id.value());
-            std::uint64_t max_point_id = 0;
-            for (const auto& item : chart->points) max_point_id = std::max(max_point_id, item.id.value());
-            constexpr auto chart_id_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
-            if (max_series_id > chart_id_limit || max_point_id > chart_id_limit ||
-                (chart->last_series_id && *chart->last_series_id > chart_id_limit) ||
-                (chart->last_point_id && *chart->last_point_id > chart_id_limit))
-                serialization_fail(id, "lastAssignedId", "signed 64-bit allocator IDs", "out of range", "Invalid Chart allocator history");
-            if (chart->last_series_id && *chart->last_series_id < max_series_id)
-                serialization_fail(id, "Series", "lastAssignedId at least the largest series ID", std::to_string(*chart->last_series_id), "Invalid Chart allocator history");
-            if (chart->last_point_id && *chart->last_point_id < max_point_id)
-                serialization_fail(id, "Points", "lastAssignedId at least the largest point ID", std::to_string(*chart->last_point_id), "Invalid Chart allocator history");
-            if (chart->last_series_id && *chart->last_series_id != max_series_id)
-                writer_.open("Series", {{"lastAssignedId", std::to_string(*chart->last_series_id)}});
-            else writer_.open("Series");
-            for (const auto& item : chart->series) {
-                writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
-                write_chart_series_fields(mm::ConstChartSeriesObject{&item}, object_id_text(item.id));
-                writer_.close("ChartSeries");
-            }
-            writer_.close("Series");
-            if (chart->last_point_id && *chart->last_point_id != max_point_id)
-                writer_.open("Points", {{"lastAssignedId", std::to_string(*chart->last_point_id)}});
-            else writer_.open("Points");
-            for (const auto& item : chart->points) {
-                writer_.open("ChartPoint", {{"id", object_id_text(item.id)}});
-                writer_.text("Text", item.text);
-                write_color("Color", item.color, object_id_text(item.id));
-                write_chart_key("Value", item.value, object_id_text(item.id));
-                writer_.close("ChartPoint");
-            }
-            writer_.close("Points");
-            const auto default_mode = chart->series.empty() || chart->points.empty() ? model::ChartDataMode::sample : model::ChartDataMode::explicit_values;
-            if (chart->data_mode && *chart->data_mode != model::ChartDataMode::sample && *chart->data_mode != model::ChartDataMode::explicit_values &&
-                *chart->data_mode != model::ChartDataMode::source)
-                serialization_fail(id, "dataMode", "Sample, Explicit, or Source", "invalid enum", "Invalid Chart data mode");
-            if (chart->data_mode == model::ChartDataMode::source) {
-                if (!chart->values.empty()) serialization_fail(id, "Values", "no ChartValue cells in Source mode", std::to_string(chart->values.size()), "Source-mode Chart cannot contain dense Values cells");
-                XmlAttributes attributes{{"dataMode", "Source"}};
-                if (!chart->data_source_description.empty()) attributes.emplace_back("sourceDescription", chart->data_source_description);
-                writer_.open("Values", attributes);
-            } else {
-                if (!chart->data_source_description.empty())
-                    serialization_fail(id, "sourceDescription", "empty outside Source mode", chart->data_source_description, "Chart sourceDescription requires Source mode");
-                if (chart->data_mode && *chart->data_mode != default_mode)
-                    writer_.open("Values", {{"dataMode", *chart->data_mode == model::ChartDataMode::sample ? "Sample" : "Explicit"}});
-                else writer_.open("Values");
-            }
-            for (const auto& item : chart->values) {
-                writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
-                write_typed_value_node(item.value, object_id_text(item.series_ref));
-                write_chart_key("Details", item.details, object_id_text(item.series_ref));
-                if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
-                writer_.close("ChartValue");
-            }
-            writer_.close("Values");
+        if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) write_chart_content(*chart, id);
+        const auto* gantt = std::get_if<model::GanttChartPayload>(&control.payload);
+        const auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
+        const auto* owned_chart = gantt && gantt->chart ? &*gantt->chart :
+            dendrogram && dendrogram->chart ? &*dendrogram->chart : nullptr;
+        if (owned_chart) {
+            writer_.open("Chart");
+            write_chart_content(*owned_chart, id, true);
+            writer_.close("Chart");
         }
         auto common_events = control.events;
         if (const auto* table = std::get_if<model::TablePayload>(&control.payload); table && table->source_extension) {

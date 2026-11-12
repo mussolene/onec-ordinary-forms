@@ -469,8 +469,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::shortcut &&
                        metamodel::find_shortcut_key(typed_value.key) != nullptr;
             } else if constexpr (std::is_same_v<Value, PictureRef>) {
-                return expected == metamodel::ValueCodec::picture && typed_value.width >= -1 && typed_value.height >= -1 &&
-                    (!typed_value.asset.id() || (typed_value.width == -1 && typed_value.height == -1 && !typed_value.transparent));
+                return expected == metamodel::ValueCodec::picture && typed_value.transparent_x >= -1 && typed_value.transparent_y >= -1 &&
+                    (!typed_value.asset.id() || (typed_value.transparent_x == -1 && typed_value.transparent_y == -1 && !typed_value.transparent));
             } else if constexpr (std::is_same_v<Value, ControlRef>) {
                 return expected == metamodel::ValueCodec::control_reference ||
                        expected == metamodel::ValueCodec::action_source_reference ||
@@ -1027,7 +1027,7 @@ bool validate_value_list_contents(const ValueListValue& value, TypedValueBudget&
         if (!validate_typed_value_node(item.value, budget, depth + 2) ||
             !validate_typed_value_node(item.presentation, budget, depth + 2)) return false;
         if (item.picture) {
-            if (budget.nodes >= max_typed_value_nodes || item.picture->width < -1 || item.picture->height < -1 || item.picture->asset.id() || (!item.picture->standard_name && !item.picture->common_picture) ||
+            if (budget.nodes >= max_typed_value_nodes || item.picture->transparent_x < -1 || item.picture->transparent_y < -1 || item.picture->asset.id() || (!item.picture->standard_name && !item.picture->common_picture) ||
                 (item.picture->standard_name && !metamodel::find_standard_picture(item.picture->standard_name->value)) ||
                 (item.picture->common_picture && (item.picture->standard_name ||
                     !valid_typed_uuid(item.picture->common_picture->canonical) ||
@@ -1783,6 +1783,15 @@ bool chart_area_visible(const ChartPayload& chart, ChartAreaKind kind) {
     return entry == nullptr || (std::get_if<bool>(&entry->value) && std::get<bool>(entry->value));
 }
 
+const ChartPayload* persisted_chart(const ControlNode& control) {
+    if (const auto* chart = std::get_if<ChartPayload>(&control.payload)) return chart;
+    if (const auto* gantt = std::get_if<GanttChartPayload>(&control.payload))
+        return gantt->chart ? &*gantt->chart : nullptr;
+    if (const auto* dendrogram = std::get_if<DendrogramPayload>(&control.payload))
+        return dendrogram->chart ? &*dendrogram->chart : nullptr;
+    return nullptr;
+}
+
 bool valid_chart_style(metamodel::ValueCodec codec, const PropertyValue& value) {
     try {
         if (codec == metamodel::ValueCodec::line) {
@@ -1856,9 +1865,9 @@ bool chart_budget_fits(const std::vector<ControlNode>& controls, ObjectId resize
         return true;
     };
     for (const auto& control : controls) {
-        const auto* chart = std::get_if<ChartPayload>(&control.payload);
+        const auto* chart = persisted_chart(control);
         if (!chart) continue;
-        const bool changed = resized && control.id == resized;
+        const bool changed = resized && control.id == resized && control.kind() == ControlKind::chart;
         const auto series = changed ? new_series : chart->series.size();
         const auto points = changed ? new_points : chart->points.size();
         const bool source_mode = chart->data_mode == ChartDataMode::source;
@@ -3369,7 +3378,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
         const auto resolve = [&](PropertyId id) { return metamodel::find_property(control, id); };
         check_property_values(control.properties(), resolve);
         check_property_values(control.extension_properties, resolve);
-        if (const auto* chart = std::get_if<ChartPayload>(&control.payload)) {
+        if (const auto* chart = persisted_chart(control)) {
+            if (control.kind() != ControlKind::chart)
+                check_property_values(chart->properties, [](PropertyId id) {
+                    return metamodel::find_property(ControlKind::chart, id);
+                });
             const auto check_series = [&](const auto& series) {
                 check_typed_value(series.value);
                 const auto fields = metamodel::chart_series_property_descriptors();
@@ -3503,6 +3516,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
     for (const auto& asset : assets_) {
         record_id(asset.id, ObjectCategory::picture_asset);
+        if (asset.transparent_x < -1 || asset.transparent_y < -1 ||
+            (asset.uuid && !valid_typed_uuid(asset.uuid->canonical)))
+            add_violation(report, InvariantCode::invalid_property, asset.id, {},
+                "Invalid picture asset transparency coordinates or UUID");
     }
 
     const auto require_control = [&](ObjectId source, ControlRef reference) {
@@ -3599,9 +3616,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
     };
     const auto require_picture = [&](ObjectId source, const PictureRef& reference) {
-        if (reference.width < -1 || reference.height < -1 ||
-            (reference.asset.id() && (reference.width != -1 || reference.height != -1 || reference.transparent)))
-            add_violation(report, InvariantCode::invalid_property, source, {}, "Invalid picture reference dimensions");
+        if (reference.transparent_x < -1 || reference.transparent_y < -1 ||
+            (reference.asset.id() && (reference.transparent_x != -1 || reference.transparent_y != -1 || reference.transparent)))
+            add_violation(report, InvariantCode::invalid_property, source, {}, "Invalid picture transparency coordinates");
         if (reference.common_picture) {
             if (reference.asset.id() || reference.standard_name || !valid_typed_uuid(reference.common_picture->canonical) ||
                 reference.common_picture->canonical == "00000000-0000-0000-0000-000000000000")
@@ -4564,10 +4581,18 @@ ValidationReport OrdinaryFormDocument::validate() const {
             [](const metamodel::PropertyDescriptor& descriptor) {
                 return descriptor.surface == metamodel::PropertySurface::control_payload;
             });
-        if (const auto* chart = std::get_if<ChartPayload>(&control.payload)) {
+        if (const auto* chart = persisted_chart(control)) {
             const auto invalid_chart = [&](std::string reason) {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
+            if (control.kind() != ControlKind::chart) {
+                validate_property_set(control.id, chart->properties,
+                    [](PropertyId id) { return metamodel::find_property(ControlKind::chart, id); },
+                    [](const metamodel::PropertyDescriptor& descriptor) {
+                        return descriptor.surface == metamodel::PropertySurface::control_payload &&
+                            descriptor.api_name != "BackColor";
+                    });
+            }
             for (const auto& band : chart->gauge_quality_bands) {
                 bool valid_text = false;
                 bool valid_tool_tip = false;
@@ -4603,7 +4628,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 catch (const std::exception&) { invalid_chart("ScaleLines contains invalid line"); }
             }
             for (const auto& owner : metamodel::chart_scale_owner_descriptors()) {
-                if (control.properties().contains(owner.id)) invalid_chart("Chart scales cannot be stored in scalar property bags");
+                if (chart->properties.contains(owner.id)) invalid_chart("Chart scales cannot be stored in scalar property bags");
                 for (const auto* area : {chart->plot_area ? &*chart->plot_area : nullptr, chart->title_area ? &*chart->title_area : nullptr, chart->legend_area ? &*chart->legend_area : nullptr}) {
                     if (!area) continue;
                     const auto& scale = area->*(owner.member);
@@ -4617,7 +4642,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     });
                     for (const auto fields : {metamodel::chart_scale_property_descriptors(), metamodel::chart_label_area_property_descriptors()})
                     for (const auto& field : fields) {
-                        if (control.properties().contains(field.id) && metamodel::find_property(ControlKind::chart, field.id) == nullptr) invalid_chart("Chart scale fields cannot be stored in scalar property bags");
+                        if (chart->properties.contains(field.id) && metamodel::find_property(ControlKind::chart, field.id) == nullptr) invalid_chart("Chart scale fields cannot be stored in scalar property bags");
                         const auto* value = metamodel::chart_scale_property_value(scale, field);
                         if (!value) continue;
                         if (area != (chart->plot_area ? &*chart->plot_area : nullptr)) invalid_chart("Chart scales belong only to PlotArea");
@@ -4627,17 +4652,14 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
             }
-            if (control.properties().contains(PropertyId::from_name("Series")) ||
-                control.properties().contains(PropertyId::from_name("Points")) ||
-                control.properties().contains(PropertyId::from_name("SummarySeries")) ||
-                control.properties().contains(PropertyId::from_name("GaugeChartQualityBands")))
+            if (chart->properties.contains(PropertyId::from_name("Series")) ||
+                chart->properties.contains(PropertyId::from_name("Points")) ||
+                chart->properties.contains(PropertyId::from_name("SummarySeries")) ||
+                chart->properties.contains(PropertyId::from_name("GaugeChartQualityBands")))
                 invalid_chart("Chart collections are owned objects and cannot be stored as properties");
-            if (control.properties().contains(PropertyId::from_name("SeriesCount")) ||
-                control.properties().contains(PropertyId::from_name("PointCount")))
+            if (chart->properties.contains(PropertyId::from_name("SeriesCount")) ||
+                chart->properties.contains(PropertyId::from_name("PointCount")))
                 invalid_chart("Chart counts are derived from collections and cannot be stored as properties");
-            if (control.kind() != ControlKind::chart) {
-                invalid_chart("Chart payload is attached to a non-Chart control");
-            }
             const bool source_mode = chart->data_mode == ChartDataMode::source;
             if (source_mode) {
                 if (!chart->values.empty()) invalid_chart("Source-mode Chart cannot contain dense Values cells");
@@ -4723,7 +4745,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     invalid_chart("Chart Point Color must be automatic or an absolute opaque RGB value");
                 }
             }
-            if (const auto* active_point = control.properties().find(PropertyId::from_name("ActivePoint")); active_point != nullptr) {
+            if (const auto* active_point = chart->properties.find(PropertyId::from_name("ActivePoint")); active_point != nullptr) {
                 if (std::holds_alternative<UndefinedValue>(active_point->value)) {
                     // Explicit Undefined is a valid persisted ActivePoint value.
                 } else if (const auto* reference = std::get_if<ChartPointRef>(&active_point->value)) {

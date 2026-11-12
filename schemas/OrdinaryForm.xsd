@@ -1491,7 +1491,7 @@
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="PictureReferenceContentType"><xs:union memberTypes="ObjectIdType"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value=""/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>
-  <xs:complexType name="PictureReferenceValueType"><xs:simpleContent><xs:extension base="PictureReferenceContentType"><xs:attribute name="standardName" type="StandardPictureNameType" use="optional"/><xs:attribute name="commonPicture" type="UuidValueType" use="optional"/><xs:attribute name="width" type="xs:int"/><xs:attribute name="height" type="xs:int"/><xs:attribute name="transparent" type="xs:boolean"/></xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="PictureReferenceValueType"><xs:simpleContent><xs:extension base="PictureReferenceContentType"><xs:attribute name="standardName" type="StandardPictureNameType" use="optional"/><xs:attribute name="commonPicture" type="UuidValueType" use="optional"/><xs:attribute name="transparentX" type="xs:long"/><xs:attribute name="transparentY" type="xs:long"/><xs:attribute name="transparent" type="xs:boolean"/></xs:extension></xs:simpleContent></xs:complexType>
 
   <xs:complexType name="DataPathMemberType" mixed="true">
     <xs:sequence>
@@ -1598,6 +1598,7 @@
       <xs:enumeration value="png"/>
       <xs:enumeration value="jpeg"/>
       <xs:enumeration value="bmp"/>
+      <xs:enumeration value="ico"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -1606,6 +1607,9 @@
     <xs:attribute name="relativePath" type="xs:string" use="required"/>
     <xs:attribute name="format" type="PictureFormatType" use="required"/>
     <xs:attribute name="transparent" type="xs:boolean" use="optional" default="false"/>
+    <xs:attribute name="transparentX" type="xs:long" use="optional" default="-1"/>
+    <xs:attribute name="transparentY" type="xs:long" use="optional" default="-1"/>
+    <xs:attribute name="uuid" type="UuidValueType" use="optional"/>
   </xs:complexType>
 
   <xs:complexType name="PictureAssetsType">
@@ -2114,6 +2118,11 @@
       <xs:element name="AutoMarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoChoiceIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ListChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ExtendedEdit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PasswordMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextEdit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
@@ -2216,6 +2225,68 @@
     <xs:element name="Autonumeration" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
     <xs:element name="Bindings" type="CatalogTableSourceBindingsType" minOccurs="0"/>
     <xs:element name="Events" type="CatalogListTableExtensionEventsType" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:group name="ChartPropertiesBeforeBackColor"><xs:sequence>
+      <xs:element name="AutoMaxValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoMinValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoSeriesSeparation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoTransposition" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoSeriesText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoPointText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActiveSeries" type="ObjectIdType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActivePoint" type="NullableObjectIdValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BaseValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Gradient" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EndGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeries" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeriesCount" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeriesPercent" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeginGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Outline" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowLegend" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartValueRepresentation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ColorPalette" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartValuesScaleLabelsArcDirection" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartValuesScaleLabelsLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartQualityBands" type="GaugeChartQualityBandsType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TransparentLabel" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HideBaseValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelDelimiter" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelBorder" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SpaceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Light" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SeriesInRows" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeBushThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueLabelFormat" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PercentLabelFormat" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeBushColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelBorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+  </xs:sequence></xs:group>
+  <xs:group name="ChartPropertiesAfterBackColor"><xs:sequence>
+      <xs:element name="LabelBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+  </xs:sequence></xs:group>
+  <xs:group name="ChartData"><xs:sequence>
+      <xs:element name="PlotArea" type="ChartPlotAreaType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LegendArea" type="ChartLegendAreaType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TitleArea" type="ChartTitleAreaType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SummarySeries" type="ChartSummarySeriesType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Series" type="ChartSeriesCollectionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Points" type="ChartPointCollectionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Values" type="ChartValueCollectionType" minOccurs="1" maxOccurs="1"/>
+  </xs:sequence></xs:group>
+  <xs:complexType name="OwnedChartType"><xs:annotation><xs:documentation xml:lang="ru">Сохраняемый агрегат Chart, созданный ChartExtensionBase для владельца. Не является отдельным контролом и не объявляет свойство BSL API.</xs:documentation></xs:annotation><xs:sequence><xs:group ref="ChartPropertiesBeforeBackColor"/><xs:group ref="ChartPropertiesAfterBackColor"/><xs:group ref="ChartData"/></xs:sequence></xs:complexType>
   <xs:complexType name="PanelType">
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
@@ -2579,62 +2650,10 @@
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
-      <xs:element name="AutoMaxValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AutoMinValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AutoSeriesSeparation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AutoTransposition" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AutoSeriesText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="AutoPointText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ActiveSeries" type="ObjectIdType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ActivePoint" type="NullableObjectIdValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="BaseValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Gradient" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="EndGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxSeries" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxSeriesCount" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxSeriesPercent" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="BeginGaugeAngle" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Outline" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ShowTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ShowLegend" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeChartValueRepresentation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ColorPalette" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeChartValuesScaleLabelsArcDirection" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeChartValuesScaleLabelsLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeChartQualityBands" type="GaugeChartQualityBandsType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="TransparentLabel" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="HideBaseValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelDelimiter" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelBorder" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="SpaceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Light" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="SeriesInRows" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeBushThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeThickness" type="xs:int" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ValueLabelFormat" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="PercentLabelFormat" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="GaugeBushColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelBorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:group ref="ChartPropertiesBeforeBackColor"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="PlotArea" type="ChartPlotAreaType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LegendArea" type="ChartLegendAreaType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="TitleArea" type="ChartTitleAreaType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="SummarySeries" type="ChartSummarySeriesType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Series" type="ChartSeriesCollectionType" minOccurs="1" maxOccurs="1"/>
-      <xs:element name="Points" type="ChartPointCollectionType" minOccurs="1" maxOccurs="1"/>
-      <xs:element name="Values" type="ChartValueCollectionType" minOccurs="1" maxOccurs="1"/>
+      <xs:group ref="ChartPropertiesAfterBackColor"/>
+      <xs:group ref="ChartData"/>
       <xs:element name="Events" type="ChartEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
@@ -2680,6 +2699,7 @@
       <xs:element name="Series" type="GanttSeriesCollectionType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Points" type="GanttPointCollectionType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Intervals" type="GanttIntervalCollectionType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Chart" type="OwnedChartType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="GanttChartEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
@@ -2701,6 +2721,7 @@
       <xs:element name="Items" type="DendrogramItemsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Links" type="DendrogramLinksType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Chart" type="OwnedChartType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="DendrogramEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

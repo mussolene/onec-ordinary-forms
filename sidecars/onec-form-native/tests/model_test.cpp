@@ -6798,6 +6798,20 @@ void test_chart_document_resource_budget() {
     expect(summary.trendlines.empty() && summary.next_trendline_id == 1,
         "rejected Add preserves the collection and its next identity");
 
+    Form aggregated_form; aggregated_form.id = ObjectId{1}; aggregated_form.name = "AggregatedBudget";
+    aggregated_form.children = {ControlRef{ObjectId{2}}, ControlRef{ObjectId{3}}};
+    OrdinaryFormDocument aggregated(std::move(aggregated_form));
+    GanttChartPayload gantt; gantt.chart.emplace();
+    gantt.chart->series.resize(600); gantt.chart->points.resize(1000);
+    DendrogramPayload tree; tree.chart.emplace();
+    tree.chart->series.resize(600); tree.chart->points.resize(1000);
+    aggregated.add_control(ControlNode{ObjectId{2}, "Schedule", std::move(gantt)});
+    aggregated.add_control(ControlNode{ObjectId{3}, "Tree", std::move(tree)});
+    const auto aggregated_report = aggregated.validate();
+    expect(std::ranges::any_of(aggregated_report.violations, [](const auto& violation) {
+        return violation.message == "Chart collections exceed the document resource budget";
+    }), "Агрегированные Chart должны разделять общий бюджет документа");
+
     Form degree_form; degree_form.id = ObjectId{1}; degree_form.name = "Degree";
     degree_form.children = {ControlRef{ObjectId{2}}};
     OrdinaryFormDocument degree_document(std::move(degree_form));

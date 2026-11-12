@@ -30,6 +30,41 @@ void expect(bool condition, std::string_view message) {
     }
 }
 
+void test_owned_chart_xml_contract() {
+    const std::string chart = R"XML(<Chart><TitleArea><Text>Owned title</Text></TitleArea><Series><ChartSeries id="2"><Text>Series</Text><Color kind="automatic"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>Point</Text><Color kind="automatic"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>7.5</Number></ChartValue></Values></Chart>)XML";
+    const std::string prefix = R"XML(<Form id="1" name="OwnedCharts" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    const std::string suffix = "</ChildItems></Form>";
+    const std::string xml = prefix + "<GanttChart id=\"2\" name=\"Gantt\"><Position/>" + chart +
+        "</GanttChart><Dendrogram id=\"3\" name=\"Tree\"><Position/>" + chart + "</Dendrogram>" + suffix;
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "owned Chart values must parse" : parsed.diagnostics().front().message);
+    const auto& gantt = std::get<model::GanttChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload);
+    const auto& tree = std::get<model::DendrogramPayload>(parsed.value().find_control(model::ObjectId{3})->payload);
+    expect(gantt.chart && tree.chart && gantt.chart->series.size() == 1 && tree.chart->points.size() == 1 &&
+        gantt.chart->values.front().value == model::PropertyValue{model::DecimalValue{"7.5"}},
+        "both owners must retain the typed Chart aggregate and its local collection identities");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), serialized.ok() ? "owned Chart values must serialize" : serialized.diagnostics().front().message);
+    auto restored = source::parse_form_xml(serialized.value());
+    expect(restored.ok(), restored.ok() ? "owned Chart values must reparse" : restored.diagnostics().front().message);
+    auto repeated = source::serialize_form_xml(restored.value());
+    expect(repeated.ok() && repeated.value() == serialized.value(), "owned Chart XML must be canonical and stable");
+
+    for (const auto& content : {
+        std::string{R"XML(<Chart id="9"><Series/><Points/><Values/></Chart>)XML"},
+        std::string{R"XML(<Chart name="Nested"><Series/><Points/><Values/></Chart>)XML"},
+        std::string{"<Chart><Position/><Series/><Points/><Values/></Chart>"},
+        std::string{"<Chart><Series/><Points/><Values/><Events/></Chart>"},
+        std::string{R"XML(<Chart><BackColor kind="automatic"/><Series/><Points/><Values/></Chart>)XML"},
+        chart + chart}) {
+        expect(!source::parse_form_xml(prefix + "<GanttChart id=\"2\" name=\"Gantt\"><Position/>" + content +
+            "</GanttChart>" + suffix), "owned Chart must reject identity, geometry, events, BackColor aliases, and duplicates");
+    }
+    auto legacy = source::parse_form_xml(prefix + "<GanttChart id=\"2\" name=\"Gantt\"><Position/></GanttChart>" + suffix);
+    expect(legacy.ok() && !std::get<model::GanttChartPayload>(legacy.value().find_control(model::ObjectId{2})->payload).chart,
+        "an omitted owned Chart must retain the constructor-default contract");
+}
+
 void test_value_list_xml_contract() {
     const std::string first = R"XML(<Item id="0"><Value><String>Первый</String></Value><Presentation><String>Строка</String></Presentation><Check>true</Check></Item>)XML";
     const std::string second = R"XML(<Item id="1"><Value><Number>42.5</Number></Value><Presentation><String>Число</String></Presentation></Item>)XML";
@@ -5147,6 +5182,7 @@ int main() {
         test_button_menu_model_roundtrip_and_rejections();
         test_client_interface_variant_xml_contract();
         test_gantt_named_collections_roundtrip_and_rejections();
+        test_owned_chart_xml_contract();
         test_label_horizontal_align_xml_roundtrip();
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();

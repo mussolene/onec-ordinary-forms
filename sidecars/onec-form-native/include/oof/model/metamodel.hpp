@@ -703,7 +703,8 @@ private:
 // Настройки редактора ячейки с подтвержденным общим кодеком InputField.
 inline constexpr std::initializer_list<std::string_view> table_column_input_boolean_properties{
     "Enabled", "ReadOnly", "Wrap", "ChooseType", "ChoiceButton", "OpenButton", "ClearButton",
-    "SpinButton", "ChoiceListButton", "MarkNegatives", "AutoMarkIncomplete", "AutoChoiceIncomplete", "Transparent"};
+    "SpinButton", "ChoiceListButton", "MarkNegatives", "AutoMarkIncomplete", "AutoChoiceIncomplete", "Transparent",
+    "ListChoiceMode", "MultiLine", "ExtendedEdit", "PasswordMode", "TextEdit"};
 
 inline constexpr auto table_column_input_properties = [] {
     std::array<std::string_view, table_column_input_boolean_properties.size() + 1> names{};
