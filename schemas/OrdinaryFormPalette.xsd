@@ -193,6 +193,8 @@
               <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
             </Properties>
             <Events>
               <Event name="Click" apiName="Click" russianName="Нажатие"/>
@@ -351,6 +353,8 @@
               <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
               <Property name="TypeLinkItem" apiName="TypeLinkItem" russianName="ЭлементСвязиПоТипу" russianType="" valueCodec="integer32"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
             </Properties>
             <Events>
               <Event name="AutoCompleteText" apiName="AutoCompleteText" russianName="АвтоПодборТекста"/>

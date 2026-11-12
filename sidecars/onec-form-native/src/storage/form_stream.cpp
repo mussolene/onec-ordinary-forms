@@ -1283,21 +1283,14 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
     require_raw_constant(value.items[0], legacy_v3 ? "3" : "4", child_path(path, 0));
     const auto kind = integer_atom<std::int32_t>(value.items[1], child_path(path, 1));
     if (kind == 4) {
-        if (legacy_v3) {
-            require_exact(value, list({raw("3"), raw("4"), list({raw("0")})}),
-                path, "Legacy control automatic color record is malformed");
-        } else {
-            require_exact(value, list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
-                path, "Control automatic color record is malformed");
-        }
+        if (!legacy_v3) require_raw_constant(value.items[3], "4", child_path(path, 3));
+        require_arity(value.items[2], 1, child_path(path, 2));
+        // Native getters return automatic kind and RGB=-1 regardless of this inactive numeric payload.
+        static_cast<void>(integer_atom<std::int32_t>(value.items[2].items[0], child_path(child_path(path, 2), 0)));
         return model::ColorValue{};
     }
-    if (legacy_v3 && kind != 3) {
-        fail("OOF1114", child_path(path, 1), "legacy Color kind 3 or 4", std::to_string(kind),
-            "Legacy control color kind is unsupported");
-    }
     if (kind == 0) {
-        require_raw_constant(value.items[3], "0", child_path(path, 3));
+        if (!legacy_v3) require_raw_constant(value.items[3], "0", child_path(path, 3));
         require_arity(value.items[2], 1, child_path(path, 2));
         const auto packed = integer_atom<std::int64_t>(value.items[2].items[0], child_path(path, 2) + "/0");
         if (packed < 0 || packed > 0x00ffffff) {
@@ -1519,6 +1512,10 @@ struct ControlColorPropertySpec {
 };
 
 constexpr ControlColorPropertySpec base_color_properties[]{
+    {model::ControlKind::button, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::button, "BackColor", 2, ControlColorDefault::automatic},
+    {model::ControlKind::input_field, "TextColor", 3, ControlColorDefault::automatic},
+    {model::ControlKind::input_field, "BackColor", 2, ControlColorDefault::automatic},
     {model::ControlKind::check_box, "TextColor", 3, ControlColorDefault::automatic},
     {model::ControlKind::check_box, "FieldTextColor", 8, ControlColorDefault::automatic},
     {model::ControlKind::check_box, "BackColor", 2, ControlColorDefault::automatic},
@@ -1620,7 +1617,8 @@ void normalize_common_base_value_encodings(LV& base, std::string_view path) {
         for (const auto slot : common_color_slots) {
             const auto& color = base.items[slot];
             if (color.is_list && !color.items.empty() && !color.items[0].is_list &&
-                color.items[0].atom_kind == LV::AtomKind::raw && color.items[0].atom == "3") {
+                color.items[0].atom_kind == LV::AtomKind::raw &&
+                (color.items[0].atom == "3" || (color.items.size() == 4 && color.items[0].atom == "4" && color.items[1].atom == "4"))) {
                 const auto color_path = child_path(path, slot);
                 base.items[slot] = encode_control_color(decode_control_color(color, color_path), color_path);
             }
@@ -6611,7 +6609,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     read_common_control_base(base, base_path, [&] {
         return canonical_button_base(true);
     }, {warnings, raw_id, "Button", CommonControlBaseStatePolicy::strict_default_layouts});
-    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true, model::ControlKind::button});
     const bool enabled = common.enabled;
     const auto& tool_tip = common.tool_tip;
     const auto& border_color = *common.border_color;
@@ -6625,6 +6623,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     // Это внутреннее состояние, его общая семантика не установлена.
     auto normalized_base = base;
     normalized_base.items[17] = raw("2");
+    normalize_control_base_appearance(normalized_base, model::ControlKind::button, base_path);
     if (list_stream::dump_compact(normalized_base) != list_stream::dump_compact(
         canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, base_path, "Button");
@@ -12015,7 +12014,7 @@ LV encode_button(
     }
     require_allowed_properties(control.properties(),
         {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
-            "PictureLocation", "PictureSize", "MenuMode", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font", "Shortcut", "Picture"}, "$/Button");
+            "PictureLocation", "PictureSize", "MenuMode", "BorderColor", "ButtonTextColor", "ButtonBackColor", "BackColor", "TextColor", "Font", "Shortcut", "Picture"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const auto caption = explicit_localized_text(control.properties(), "Caption", "$/Button");
     const auto tool_tip = explicit_localized_text(control.properties(), "ToolTip", "$/Button");
@@ -12042,6 +12041,7 @@ LV encode_button(
     auto button_properties = canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
         picture_location, picture_size, menu_mode, multi_line, tool_tip,
         border_color, button_text_color, button_back_color, font, shortcut);
+    encode_named_control_colors(button_properties.items[0], model::ControlKind::button, control.properties(), "$/Button");
     button_properties.items[5] = raw(explicit_bool(control.extension_properties, "DefaultButton", false) ? "1" : "0");
     button_properties.items[8] = encode_named_control_picture(document, control, "Picture", "$/Button/Picture");
     const auto& menu_entries = std::get<model::ButtonPayload>(control.payload).buttons;
@@ -12958,7 +12958,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask", "TypeLinkItem"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "BackColor", "TextColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask", "TypeLinkItem"}, "$/InputField");
     const auto attribute = control.data_path ? resolve_attribute_reference(document, *control.data_path) : std::nullopt;
     if (control.data_path && !attribute) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -14152,7 +14152,41 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(root_panel.items[0], root_panel_guid, "$/1/2/0");
         const auto& root_panel_envelope = root_panel.items[1];
         require_arity(root_panel_envelope, 3, "$/1/2/1");
-        std::uint64_t next_page_id = stored_max_id + 1;
+        const auto attributes_result = decode_attributes(payload.items[2]);
+        if (!attributes_result) {
+            throw DecodeFailure(attributes_result.diagnostics().front());
+        }
+        const auto& attributes = attributes_result.value();
+
+        std::uint64_t declared_id_bound = 1;
+        for (const auto& attribute : attributes.attributes)
+            if (attribute.id.object_id >= 0)
+                declared_id_bound = std::max(declared_id_bound, static_cast<std::uint64_t>(attribute.id.object_id));
+        const auto reserve_control_ids = [&](const auto& self, const LV& table, std::string_view path) -> void {
+            require_list(table, path);
+            const auto count = integer_atom<std::uint32_t>(at(table, 0, path), child_path(path, 0));
+            if (table.items.size() != static_cast<std::size_t>(count) + 1)
+                fail("OOF1102", std::string(path), "control count matching records", {},
+                    "Control table count does not match its records");
+            for (std::size_t index = 1; index < table.items.size(); ++index) {
+                const auto record_path = child_path(path, index);
+                const auto& record = table.items[index];
+                const auto guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
+                const auto id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
+                declared_id_bound = std::max(declared_id_bound, id);
+                if (guid == model::metamodel::descriptor_for(model::ControlKind::panel).guid) {
+                    require_arity(record, 6, record_path);
+                    self(self, record.items[5], child_path(record_path, 5));
+                }
+            }
+        };
+        reserve_control_ids(reserve_control_ids, root_panel.items[2], "$/1/2/2");
+        if (declared_id_bound >= std::numeric_limits<std::uint32_t>::max())
+            fail("OOF1120", "$/1/1/1", "declared object IDs below uint32 max", std::to_string(declared_id_bound),
+                "Declared form object IDs exceed the supported allocator range");
+        // The stored allocation counter can lag behind existing objects or retain deleted IDs.
+        // Synthetic pages are allocated after every declared identity, independently of that history.
+        std::uint64_t next_page_id = declared_id_bound + 1;
         auto root_owner = decode_owner_pages(root_panel_envelope, layout.value(), next_page_id, std::nullopt, false,
             1, warnings, reconstruction_complete, "$/1/2/1");
         auto root_pages = std::move(root_owner.pages);
@@ -14176,12 +14210,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                     !anchors[index].proportional;
             }
         }
-
-        const auto attributes_result = decode_attributes(payload.items[2]);
-        if (!attributes_result) {
-            throw DecodeFailure(attributes_result.diagnostics().front());
-        }
-        const auto& attributes = attributes_result.value();
 
         model::Form form;
         form.id = model::ObjectId{1};
@@ -14684,42 +14712,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                 std::to_string(attributes.slot_count),
                 "Attribute slot count disagrees with the platform object-ID allocator");
         }
-        if (stored_max_id < actual_max_id) {
-            fail(
-                "OOF1114",
-                "$/1/1/1",
-                std::to_string(actual_max_id),
-                std::to_string(stored_max_id),
-                "Form header object-ID bound is below a decoded object ID");
-        }
-        if (stored_max_id > actual_max_id) {
-            const auto delta = stored_max_id - actual_max_id;
-            std::unordered_map<std::uint64_t, model::ObjectId> page_ids;
-            const auto renumber_page = [&](model::Page& page) {
-                const auto old_id = page.id.value();
-                if (old_id <= stored_max_id || old_id >= next_page_id ||
-                    !page_ids.emplace(old_id, model::ObjectId{old_id - delta}).second)
-                    fail("OOF1123", "$/1/1/1", "unique synthetic Page IDs above the stored bound", "invalid Page ID",
-                        "Synthetic Page allocation is inconsistent");
-                page.id = page_ids.at(old_id);
-            };
-            for (auto& page : root_pages) renumber_page(page);
-            for (auto& page : nested_pages) renumber_page(page);
-            const auto remap_page_refs = [&](std::vector<model::ChildItemRef>& children) {
-                for (auto& child : children) if (auto* reference = std::get_if<model::PageRef>(&child)) {
-                    const auto found = page_ids.find(reference->id().value());
-                    if (found == page_ids.end())
-                        fail("OOF1123", "$/1/1/1", "resolved synthetic Page reference", "missing Page ID",
-                            "Synthetic Page reference is inconsistent");
-                    *reference = model::PageRef{found->second};
-                }
-            };
-            for (auto& page : root_pages) remap_page_refs(page.children);
-            for (auto& page : nested_pages) remap_page_refs(page.children);
-            for (auto& child : pending_controls) remap_page_refs(child.control.children);
-            next_page_id -= delta;
-            warn_incomplete_profile(warnings, reconstruction_complete, form.id.value(), "$/1/1/1", "Form");
-        }
+        if (actual_max_id != declared_id_bound)
+            fail("OOF1123", "$/1/1/1", "reserved IDs matching decoded form objects", {},
+                "Declared object ID reservation differs from the decoded object graph");
         if (implicit_default_page) {
             for (const auto& child : root_pages[0].children) form.children.push_back(child);
         } else {

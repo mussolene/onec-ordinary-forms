@@ -837,6 +837,20 @@ void apply_proven_storage_overrides(
     std::vector<PropertyDescriptor>& panel_placement_properties,
     std::vector<PropertyDescriptor>& form_properties,
     std::array<std::vector<EventDescriptor>, control_kind_count>& events) {
+    // Native window properties inherited by these controls are absent from the extracted help member lists.
+    const auto& window_properties = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
+    for (const auto kind : {ControlKind::button, ControlKind::input_field}) {
+        auto& target = properties[static_cast<std::size_t>(kind)];
+        for (const auto name : {"BackColor", "TextColor"}) {
+            if (std::ranges::find(target, name, &PropertyDescriptor::api_name) != target.end()) continue;
+            const auto inherited = std::ranges::find(window_properties, name, &PropertyDescriptor::api_name);
+            if (inherited == window_properties.end()) throw std::logic_error("missing inherited window color descriptor");
+            auto descriptor = *inherited;
+            descriptor.control_kind = kind;
+            descriptor.order = target.size();
+            target.push_back(descriptor);
+        }
+    }
     const auto classify_shared_control_property = [&](std::string_view name,
                                                       StorageCodec storage_codec,
                                                       DefaultKind default_kind,
@@ -993,13 +1007,13 @@ void apply_proven_storage_overrides(
             ControlKind::html_document_field, ControlKind::geographical_schema_field,
             ControlKind::graphical_schema_field});
     classify_shared_control_property("TextColor", StorageCodec::control_base, DefaultKind::color,
-        "automatic", {ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
+        "automatic", {ControlKind::button, ControlKind::input_field, ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
             ControlKind::picture_decoration, ControlKind::radio_button, ControlKind::track_bar});
     classify_shared_control_property("FieldTextColor", StorageCodec::control_base, DefaultKind::color,
         "automatic", {ControlKind::check_box, ControlKind::choice_field, ControlKind::input_field,
             ControlKind::list_box, ControlKind::radio_button, ControlKind::calendar_field});
     classify_shared_control_property("BackColor", StorageCodec::control_base, DefaultKind::color,
-        "automatic", {ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
+        "automatic", {ControlKind::button, ControlKind::input_field, ControlKind::check_box, ControlKind::usual_group, ControlKind::label_decoration,
             ControlKind::picture_decoration, ControlKind::progress_bar, ControlKind::radio_button,
             ControlKind::track_bar});
     classify_shared_control_property("BackColor", StorageCodec::control_base, DefaultKind::color,

@@ -83,21 +83,19 @@ void expect_header_bound_projection(const list_stream::ListValue& encoded, std::
     const auto baseline_xml = source::serialize_form_xml(baseline.value());
     expect(baseline_xml.ok(), "canonical model must serialize");
     const auto actual_max = std::stoull(encoded.items[1].items[1].items[1].atom);
-    for (const auto stored_bound : {actual_max + 1,
+    for (const auto stored_bound : {0ULL, 1ULL, actual_max - 1, actual_max, actual_max + 1,
              static_cast<unsigned long long>(std::numeric_limits<std::uint32_t>::max() - 1)}) {
         auto larger = encoded;
         larger.items[1].items[1].items[1] = list_stream::ListValue::raw_atom(std::to_string(stored_bound));
         auto decoded = form_stream::decode_document(larger, form_name);
-        expect(decoded.ok() && !decoded.value().reconstruction_complete() &&
-                   std::any_of(decoded.diagnostics().begin(), decoded.diagnostics().end(), [](const auto& item) {
+        expect(decoded.ok() && decoded.value().reconstruction_complete() == baseline.value().reconstruction_complete() &&
+                   std::none_of(decoded.diagnostics().begin(), decoded.diagnostics().end(), [](const auto& item) {
                        return item.code == "OOF1140" && item.path == "$/1/1/1";
-                   }), "a larger valid header bound must warn about incomplete reconstruction");
+                   }), "allocation history must not change completeness of the declared object graph");
         expect(decoded.value().validate().ok(), "synthetic identities and references must remain valid");
         const auto rebuilt = form_stream::encode_document(decoded.value());
         expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded),
             "the canonical writer must derive the header from declared object identities");
-        // Compare all named identities independently of the already asserted provenance flag.
-        decoded.value().set_reconstruction_complete(baseline.value().reconstruction_complete());
         const auto normalized_xml = source::serialize_form_xml(decoded.value());
         expect(normalized_xml.ok() && normalized_xml.value() == baseline_xml.value(),
             "root and nested Page IDs, event IDs and all references must be independent of unused header capacity");
@@ -107,12 +105,12 @@ void expect_header_bound_projection(const list_stream::ListValue& encoded, std::
         expect(repeated_xml.ok() && repeated_xml.value() == baseline_xml.value(),
             "repeated named XML must preserve the canonical synthetic identities");
     }
-    for (const auto& bad_bound : {std::to_string(actual_max - 1), std::string("4294967295"),
+    for (const auto& bad_bound : {std::string("4294967295"),
                                 std::string("18446744073709551615"), std::string("invalid")}) {
         auto invalid = encoded;
         invalid.items[1].items[1].items[1] = list_stream::ListValue::raw_atom(bad_bound);
         expect(!form_stream::decode_document(invalid, form_name),
-            "too-small, overflowing and malformed object-ID bounds must be rejected");
+            "overflowing and malformed object-ID bounds must be rejected");
     }
 }
 
@@ -7382,6 +7380,7 @@ void test_all_standard_button_pictures_round_trip_without_assets() {
     expect(common.ok(), "CommonPicture references must parse for twelve controls and form caption");
     const auto common_stream = form_stream::encode_document(common.value());
     expect(common_stream.ok(), "CommonPicture references must encode without metadata or file assets");
+    expect_header_bound_projection(common_stream.value(), "CommonPictures");
     const auto common_decoded = form_stream::decode_document(common_stream.value(), "CommonPictures");
     expect(common_decoded.ok() && common_decoded.value().reconstruction_complete() && common_decoded.value().assets().empty(),
         "CommonPicture references must decode as named properties without file assets");
@@ -12341,6 +12340,10 @@ void test_all_named_base_color_pairs_public_xml_round_trip() {
         std::string_view default_style;
     };
     constexpr std::array cases{
+        Case{model::ControlKind::button, "Button", "TextColor", 3, ""},
+        Case{model::ControlKind::button, "Button", "BackColor", 2, ""},
+        Case{model::ControlKind::input_field, "InputField", "TextColor", 3, ""},
+        Case{model::ControlKind::input_field, "InputField", "BackColor", 2, ""},
         Case{model::ControlKind::check_box, "CheckBox", "TextColor", 3, ""},
         Case{model::ControlKind::check_box, "CheckBox", "FieldTextColor", 8, ""},
         Case{model::ControlKind::check_box, "CheckBox", "BackColor", 2, ""},
@@ -12454,6 +12457,43 @@ void test_all_named_base_color_pairs_public_xml_round_trip() {
             expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(metadata_style_stream.value()),
                 "metadata style colors must rebuild through existing XML without the source stream");
         }
+        for (const auto native_kind : {1, 2, 3, 4}) {
+            model::ColorValue color;
+            if (native_kind != 4) {
+                const auto palette = model::metamodel::named_colors();
+                const auto descriptor = std::ranges::find(palette, native_kind, &model::metamodel::NamedColorDescriptor::native_kind);
+                expect(descriptor != palette.end(), "every named native color kind must have a descriptor");
+                color.kind = model::ColorKind::style_reference;
+                color.style = model::QualifiedName{std::string(descriptor->name)};
+            }
+            auto document = absent_xml.value();
+            const_cast<model::ControlNode*>(document.find_control(model::ObjectId{2}))->properties().set_explicit(
+                model::PropertyId::from_name(test_case.property), color);
+            const auto current = form_stream::encode_document(document);
+            expect(current.ok(), "native color kinds must encode on every named base-color owner");
+            for (const bool legacy : {false, true}) {
+                for (const auto cached : {std::int32_t{0}, std::int32_t{27}, std::int32_t{-7},
+                        std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()}) {
+                    if (native_kind != 4 && cached != 0) continue;
+                    auto stored = current.value();
+                    auto& value = base_for(stored, test_case)->items[test_case.slot];
+                    if (native_kind == 4) value.items[2].items[0] = list_stream::ListValue::raw_atom(std::to_string(cached));
+                    if (legacy) {value.items[0] = list_stream::ListValue::raw_atom("3");value.items.pop_back();}
+                    const auto decoded = form_stream::decode_document(stored, "LegacyNamedColor");
+                    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                        "all legacy named kinds and inactive automatic payloads must decode completely");
+                    const auto actual = decoded.value().get_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
+                        model::PropertyId::from_name(test_case.property));
+                    expect(actual.value && *actual.value == model::PropertyValue{color},
+                        "native kind and named color identity must survive while automatic caches stay inactive");
+                    const auto xml = source::serialize_form_xml(decoded.value());
+                    const auto parsed = source::parse_form_xml(xml.value());
+                    const auto rebuilt = form_stream::encode_document(parsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+                        "all native color kinds must rebuild current records from named XML only");
+                }
+            }
+        }
         const auto* control = absent_xml.value().find_control(model::ObjectId{2});
         expect(control && control->properties().find(model::PropertyId::from_name(test_case.property)) == nullptr,
             "absent named base colors must remain implicit properties");
@@ -12511,16 +12551,16 @@ void test_all_named_base_color_pairs_public_xml_round_trip() {
         expect(base && list_stream::dump_compact(base->items[test_case.slot]) ==
                 "{4,0,{" + std::to_string(packed_rgb) + "},0}",
             "RGB values must use the proven base19 slot and packed BGR codec");
-        if (!test_case.default_style.empty()) {
-            auto unproven_absolute_color3 = encoded.value();
-            auto* absolute_base = base_for(unproven_absolute_color3, test_case);
-            if (absolute_base != nullptr) {
-                absolute_base->items[test_case.slot].items[0] = list_stream::ListValue::raw_atom("3");
-                absolute_base->items[test_case.slot].items.pop_back();
-            }
-            expect(!form_stream::decode_document(unproven_absolute_color3, "UnprovenAbsoluteColor3"),
-                "unproven absolute Color3 kind must remain rejected");
-        }
+        auto legacy_absolute = encoded.value();
+        auto* absolute_base = base_for(legacy_absolute, test_case);
+        absolute_base->items[test_case.slot].items[0] = list_stream::ListValue::raw_atom("3");
+        absolute_base->items[test_case.slot].items.pop_back();
+        const auto absolute_read = form_stream::decode_document(legacy_absolute, "LegacyAbsoluteColor3");
+        expect(absolute_read.ok() && absolute_read.value().reconstruction_complete(),
+            "native-confirmed absolute Color3 must decode on every named base color property");
+        const auto absolute_written = form_stream::encode_document(absolute_read.value());
+        expect(absolute_written.ok() && list_stream::dump_compact(absolute_written.value()) == list_stream::dump_compact(encoded.value()),
+            "legacy absolute colors must rebuild canonical current records");
         const auto decoded = form_stream::decode_document(encoded.value(), "NamedBaseColorPublicXml");
         const auto* decoded_control = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
         const auto* decoded_color = decoded_control ? decoded_control->properties().find(
@@ -12538,7 +12578,7 @@ void test_all_named_base_color_pairs_public_xml_round_trip() {
         const auto reencoded = form_stream::encode_document(reparsed.value());
         expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
                 list_stream::dump_compact(encoded.value()),
-            "all 32 named colors must survive public XML serialization and rebuild");
+            "all 36 named colors must survive public XML serialization and rebuild");
     }
 
     auto style_xml = source::parse_form_xml(

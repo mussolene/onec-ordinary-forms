@@ -3129,7 +3129,7 @@ void test_help_metamodel() {
         "coverage target must explicitly exclude ActiveX without changing the help catalog");
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 424,
+        coverage.control_property_occurrences == 428,
         "executable metamodel must include Chart and spreadsheet properties");
     expect(
         coverage.unique_control_property_names == 207,
@@ -3164,8 +3164,16 @@ void test_help_metamodel() {
         "release coverage is blocked by 14 unclassified live value codecs");
 
     expect(
-        property_descriptors(ControlKind::input_field).size() == 45,
-        "InputField must retain the exact 45-property TextBox surface");
+        property_descriptors(ControlKind::input_field).size() == 47,
+        "InputField must include its documented surface and two native inherited window colors");
+    for (const auto kind : {ControlKind::button, ControlKind::input_field})
+        for (const auto name : {"BackColor", "TextColor"}) {
+            const auto* field = find_property(kind, name);
+            expect(field && field->value_codec == ValueCodec::color && field->api_access == ApiAccess::read_write &&
+                field->storage_codec == StorageCodec::control_base && field->persistence == PersistenceClass::persisted_editable &&
+                field->default_value.kind == DefaultKind::color && field->default_value.canonical == "automatic",
+                "native inherited window colors must remain editable named descriptors with automatic defaults");
+        }
     const auto* choice_enabled = find_property(ControlKind::choice_field, "Enabled");
     const auto* choice_tool_tip = find_property(ControlKind::choice_field, "ToolTip");
     const auto* choice_border_color = find_property(ControlKind::choice_field, "BorderColor");

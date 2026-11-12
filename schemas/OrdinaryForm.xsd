@@ -2263,6 +2263,8 @@
       <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="ButtonEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
@@ -2461,6 +2463,8 @@
       <xs:element name="ChoiceListWidth" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TypeLinkItem" type="TypeLinkItemValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="InputFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
