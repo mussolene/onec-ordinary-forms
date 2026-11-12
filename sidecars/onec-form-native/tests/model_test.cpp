@@ -1,5 +1,6 @@
 #include "../src/model/chart_type.hpp"
 #include "../src/model/table_properties.hpp"
+#include <algorithm>
 #include <array>
 #include <exception>
 #include <iostream>
