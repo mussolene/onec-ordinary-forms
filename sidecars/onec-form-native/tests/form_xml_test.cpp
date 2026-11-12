@@ -1455,7 +1455,7 @@ void test_choice_field_static_xml_profile_and_runtime_list_rejection() {
         "runtime-only InputField ChoiceList must not be accepted as stored XML state");
 }
 
-void test_check_box_font_xml_round_trip() {
+void test_control_font_xml_round_trip() {
     const auto make_document = [](std::optional<model::FontValue> font) {
         model::Form form;
         form.id = model::ObjectId{1};
@@ -1546,6 +1546,47 @@ void test_check_box_font_xml_round_trip() {
         control->properties().find(model::PropertyId::from_name("Font"));
     expect(parsed_font && std::get<model::FontValue>(parsed_font->value) == font,
         "absolute CheckBox Font XML must round-trip as FontValue");
+
+    constexpr std::array kinds{"Button", "LabelDecoration", "PictureDecoration", "InputField", "CheckBox",
+        "ChoiceField", "CommandBar", "RadioButton", "CalendarField", "UsualGroup", "ProgressBar",
+        "TextDocumentField", "Button", "LabelDecoration", "InputField"};
+    const auto styles = model::metamodel::named_fonts();
+    expect(styles.size() == kinds.size(), "the native batch must cover every standard Font style");
+    std::string batch = R"XML(<Form id="1" name="ControlFonts" ordinaryFormVersion="2.1"><Attributes><Attribute id="17" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
+    for (std::size_t index = 0; index < kinds.size(); ++index) {
+        const auto kind = std::string(kinds[index]);
+        batch += "<" + kind + " id=\"" + std::to_string(index + 2) + "\" name=\"Item" + std::to_string(index) + "\">";
+        if (kind == "CheckBox") batch += R"XML(<DataPath attributeId="17"/>)XML";
+        if (kind == "InputField") batch += R"XML(<ValueType><Entry term="string" length="20"/></ValueType>)XML";
+        batch += "<Position/><Font kind=\"styleReference\" styleName=\"" + std::string(styles[index].name) +
+            "\" height=\"12\" bold=\"true\" italic=\"false\" underline=\"false\" strikeout=\"false\"/></" + kind + ">";
+    }
+    batch += "</ChildItems></Form>";
+    const auto mixed = source::parse_form_xml(batch);
+    expect(mixed.ok(), "fifteen standard Font styles across twelve control types must parse as named XML");
+    const auto encoded = oof::storage::form_stream::encode_document(mixed.value());
+    expect(encoded.ok(), "the shared Font codec must encode every standard style across twelve control types");
+    const auto decoded = oof::storage::form_stream::decode_document(encoded.value(), "ControlFonts");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "the standard style batch must decode completely without baseline data");
+    for (std::size_t index = 0; index < kinds.size(); ++index) {
+        const auto* item = decoded.value().find_control(model::ObjectId{index + 2});
+        const auto* entry = item ? item->properties().find(model::PropertyId::from_name("Font")) : nullptr;
+        auto expected = font;
+        expected.kind = model::FontKind::style_reference; expected.face_name.reset();
+        expected.style = model::QualifiedName{std::string(styles[index].name)};
+        expected.italic = false; expected.underline = false; expected.strikeout = false;
+        expect(entry && std::get<model::FontValue>(entry->value) == expected,
+            "each control must retain its named style, size, bold and explicit false overrides");
+    }
+    const auto named = source::serialize_form_xml(decoded.value());
+    expect(named.ok(), "standard styles must serialize using the existing Font XML attributes");
+    const auto reopened = source::parse_form_xml(named.value());
+    expect(reopened.ok(), "the standard style batch must reopen from named XML");
+    const auto rebuilt = oof::storage::form_stream::encode_document(reopened.value());
+    expect(rebuilt.ok() && oof::storage::list_stream::dump_compact(rebuilt.value()) ==
+        oof::storage::list_stream::dump_compact(encoded.value()),
+        "all fifteen styles across twelve control types must rebuild the canonical stream only from XML");
 }
 
 void test_input_field_layout_xml_round_trip() {
@@ -4740,7 +4781,7 @@ int main() {
         test_spreadsheet_document_cells_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
         test_choice_field_static_xml_profile_and_runtime_list_rejection();
-        test_check_box_font_xml_round_trip();
+        test_control_font_xml_round_trip();
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
         test_form_style_xml_roundtrip_and_rejections();

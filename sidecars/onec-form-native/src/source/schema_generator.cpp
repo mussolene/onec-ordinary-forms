@@ -1824,6 +1824,14 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         output += "/>\n";
     }
     output += "        </NamedColors>\n";
+    output += "        <NamedFonts>\n";
+    for (const auto& font : model::metamodel::named_fonts()) {
+        output += "          <Font";
+        append_attribute(output, "name", font.name);
+        append_attribute(output, "russianName", as_utf8(font.russian_name));
+        output += "/>\n";
+    }
+    output += "        </NamedFonts>\n";
     output += "        <NamedConcept name=\"Line\" russianName=\"Линия\" evidenceRefs=\"ev_d45a32e3b4cc4df1a1d06be5612b9233\"><Properties>\n";
     output += "          <Property name=\"LineType\" apiName=\"LineType\" russianName=\"ТипЛинии\" russianType=\"Перечисление\"/>\n";
     output += "          <Property name=\"Width\" apiName=\"Width\" russianName=\"Толщина\" russianType=\"Число\"/>\n";

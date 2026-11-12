@@ -1480,6 +1480,18 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     xmlNodePtr appinfo = direct_child(annotation, "appinfo");
     xmlNodePtr palette = direct_child(appinfo, "Palette");
     expect(palette != nullptr, "palette appinfo must exist");
+    const auto fonts = direct_children(direct_child(palette, "NamedFonts"), "Font");
+    const auto descriptors = oof::model::metamodel::named_fonts();
+    expect(fonts.size() == descriptors.size() && fonts.size() == 15,
+        "palette must expose all fifteen standard Font names");
+    for (std::size_t index = 0; index < fonts.size(); ++index) {
+        const auto& descriptor = descriptors[index];
+        const std::string localized(reinterpret_cast<const char*>(descriptor.russian_name.data()), descriptor.russian_name.size());
+        expect(attribute(fonts[index], "name") == descriptor.name && attribute(fonts[index], "russianName") == localized,
+            "palette standard Font names must use the shared English and Russian descriptors");
+        expect(attribute(fonts[index], "storageId").empty(), "public Font palette must not expose codec indices");
+    }
+
     expect(
         attribute(palette, "ordinaryFormVersion") == "2.1",
         "palette version must be 2.1");

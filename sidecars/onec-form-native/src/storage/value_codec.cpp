@@ -746,8 +746,8 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
                 throw std::runtime_error("Windows font requires a known named selector");
         } else if (value.kind == model::FontKind::style_reference) {
             const auto* style = std::get_if<model::QualifiedName>(&value.style);
-            if (!style || style->value != "StyleFonts.TextFont")
-                throw std::runtime_error("only StyleFonts.TextFont is supported");
+            if (!style || !model::metamodel::find_named_font(style->value))
+                throw std::runtime_error("Font requires a known named platform style reference");
         } else if (value.kind != model::FontKind::automatic || has_style) {
             throw std::runtime_error("unsupported Font kind or style reference");
         }
@@ -755,7 +755,8 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
         if (value.kind == model::FontKind::windows_font) {
             out.begin_list(); out.write_uint32(static_cast<std::uint32_t>(*value.windows_font)); out.end_list();
         } else if (value.kind == model::FontKind::style_reference) {
-            out.begin_list(); out.write_int64(-20); out.end_list();
+            const auto& name = std::get<model::QualifiedName>(value.style).value;
+            out.begin_list(); out.write_int64(model::metamodel::find_named_font(name)->native_id); out.end_list();
         }
         if (value.height) out.write_uint32(height);
         if (value.bold) out.write_uint32(*value.bold ? 700 : 400);
@@ -804,8 +805,9 @@ model::FontValue read_font(list_stream::ListInStream& in) {
             in.end_list(); value.windows_font = static_cast<model::WindowsFont>(selector);
         } else if (value.kind == model::FontKind::style_reference) {
             in.begin_list();
-            if (in.read_int64() != -20 || in.has_next()) throw std::runtime_error("style Font is not TextFont");
-            in.end_list(); value.style = model::QualifiedName{"StyleFonts.TextFont"};
+            const auto* style = model::metamodel::find_named_font(in.read_int64());
+            if (!style || in.has_next()) throw std::runtime_error("Font style identifier is unsupported");
+            in.end_list(); value.style = model::QualifiedName{std::string(style->name)};
         } else if (value.kind != model::FontKind::automatic) {
             throw std::runtime_error("unsupported Font kind");
         }

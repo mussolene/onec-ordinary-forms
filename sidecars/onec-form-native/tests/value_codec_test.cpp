@@ -544,6 +544,33 @@ void test_font() {
     style.style = model::QualifiedName{"StyleFonts.TextFont"};
     expect(codec::encode_font(style) == "{8,2,0,{-20},1,100}", "TextFont must use its observed reference tuple");
     expect(codec::decode_font(codec::encode_font(style)) == style, "style font must round-trip");
+    const auto styles = model::metamodel::named_fonts();
+    expect(styles.size() == 15, "all fifteen native standard font styles must be registered");
+    for (const auto& descriptor : styles) {
+        expect(model::metamodel::find_named_font(descriptor.name) == &descriptor &&
+               model::metamodel::find_named_font(descriptor.native_id) == &descriptor && !descriptor.russian_name.empty(),
+            "standard Font names, numeric identities and localized names must resolve uniquely");
+        auto named = style;
+        named.style = model::QualifiedName{std::string(descriptor.name)};
+        named.height = 12; named.bold = true; named.italic = false;
+        named.underline = false; named.strikeout = false;
+        const auto current = "{8,2,62,{" + std::to_string(descriptor.native_id) + "},120,700,0,0,0,1,100}";
+        expect(codec::encode_font(named) == current, "standard style Font overrides must use the native tuple");
+        for (const auto version : {6, 7, 8}) {
+            const auto source = "{" + std::to_string(version) + ",2,62,{" + std::to_string(descriptor.native_id) +
+                "},120,700,0,0,0,1" + (version == 6 ? "}" : ",100}");
+            expect(codec::decode_font(source) == named && codec::encode_font(codec::decode_font(source)) == current,
+                "all fifteen standard Font styles and their explicit overrides must survive generations6,7,8");
+        }
+    }
+    expect(!model::metamodel::find_named_font("StyleFonts.Unknown") &&
+           !model::metamodel::find_named_font(std::int64_t{-21}) &&
+           !model::metamodel::find_named_font(std::numeric_limits<std::int64_t>::min()),
+        "unknown or out-of-range style Font identities must not resolve");
+    auto unknown_style = style; unknown_style.style = model::QualifiedName{"StyleFonts.Unknown"};
+    expect_rejected([&] { static_cast<void>(codec::encode_font(unknown_style)); },
+        "unknown standard Font names must remain rejected");
+
 
     expect_rejected(
         [] { static_cast<void>(codec::decode_font("{8,0,1024,0,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,100,0}")); },

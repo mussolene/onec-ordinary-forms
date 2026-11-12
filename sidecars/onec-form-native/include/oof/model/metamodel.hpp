@@ -731,4 +731,14 @@ struct NamedColorDescriptor {
 [[nodiscard]] const NamedColorDescriptor* find_named_color(std::string_view name) noexcept;
 [[nodiscard]] const NamedColorDescriptor* find_named_color(std::int32_t native_kind, std::int32_t native_id) noexcept;
 
+struct NamedFontDescriptor {
+    std::string_view name;
+    std::u8string_view russian_name;
+    std::int32_t native_id;
+};
+
+[[nodiscard]] std::span<const NamedFontDescriptor> named_fonts() noexcept;
+[[nodiscard]] const NamedFontDescriptor* find_named_font(std::string_view name) noexcept;
+[[nodiscard]] const NamedFontDescriptor* find_named_font(std::int64_t native_id) noexcept;
+
 }  // namespace oof::model::metamodel

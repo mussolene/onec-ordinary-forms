@@ -3452,4 +3452,37 @@ const NamedColorDescriptor* find_named_color(std::int32_t native_kind, std::int3
     return found == colors.end() ? nullptr : &*found;
 }
 
+std::span<const NamedFontDescriptor> named_fonts() noexcept {
+    static constexpr std::array fonts{
+        NamedFontDescriptor{"StyleFonts.TextFont", u8"ШрифтыСтиля.ШрифтТекста", -20},
+        NamedFontDescriptor{"StyleFonts.SmallTextFont", u8"ШрифтыСтиля.МелкийШрифтТекста", -30},
+        NamedFontDescriptor{"StyleFonts.NormalTextFont", u8"ШрифтыСтиля.ОбычныйШрифтТекста", -31},
+        NamedFontDescriptor{"StyleFonts.LargeTextFont", u8"ШрифтыСтиля.КрупныйШрифтТекста", -32},
+        NamedFontDescriptor{"StyleFonts.ExtraLargeTextFont", u8"ШрифтыСтиля.ОченьКрупныйШрифтТекста", -33},
+        NamedFontDescriptor{"StyleFonts.TitleLevel1", u8"ШрифтыСтиля.ЗаголовокПервогоУровня", -48},
+        NamedFontDescriptor{"StyleFonts.TitleLevel2", u8"ШрифтыСтиля.ЗаголовокВторогоУровня", -59},
+        NamedFontDescriptor{"StyleFonts.TitleLevel3", u8"ШрифтыСтиля.ЗаголовокТретьегоУровня", -50},
+        NamedFontDescriptor{"StyleFonts.TitleLevel4", u8"ШрифтыСтиля.ЗаголовокЧетвертогоУровня", -51},
+        NamedFontDescriptor{"StyleFonts.TitleLevel5", u8"ШрифтыСтиля.ЗаголовокПятогоУровня", -52},
+        NamedFontDescriptor{"StyleFonts.TextLevel1", u8"ШрифтыСтиля.ТекстПервогоУровня", -53},
+        NamedFontDescriptor{"StyleFonts.TextLevel2", u8"ШрифтыСтиля.ТекстВторогоУровня", -54},
+        NamedFontDescriptor{"StyleFonts.TextLevel3", u8"ШрифтыСтиля.ТекстТретьегоУровня", -55},
+        NamedFontDescriptor{"StyleFonts.SubtitleLevel1", u8"ШрифтыСтиля.ПодзаголовокПервогоУровня", -56},
+        NamedFontDescriptor{"StyleFonts.SubtitleLevel2", u8"ШрифтыСтиля.ПодзаголовокВторогоУровня", -57},
+    };
+    return fonts;
+}
+
+const NamedFontDescriptor* find_named_font(std::string_view name) noexcept {
+    const auto fonts = named_fonts();
+    const auto found = std::ranges::find(fonts, name, &NamedFontDescriptor::name);
+    return found == fonts.end() ? nullptr : &*found;
+}
+
+const NamedFontDescriptor* find_named_font(std::int64_t native_id) noexcept {
+    const auto fonts = named_fonts();
+    const auto found = std::ranges::find(fonts, native_id, &NamedFontDescriptor::native_id);
+    return found == fonts.end() ? nullptr : &*found;
+}
+
 }  // namespace oof::model::metamodel

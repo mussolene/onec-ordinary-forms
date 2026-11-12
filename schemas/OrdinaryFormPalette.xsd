@@ -1273,6 +1273,23 @@
           <Color name="StyleColors.FieldSelectedTextColor" russianName="ЦветаСтиля.ЦветТекстаВыделенияПоля"/>
           <Color name="StyleColors.FieldAlternativeBackColor" russianName="ЦветаСтиля.АльтернативныйЦветФонаПоля"/>
         </NamedColors>
+        <NamedFonts>
+          <Font name="StyleFonts.TextFont" russianName="ШрифтыСтиля.ШрифтТекста"/>
+          <Font name="StyleFonts.SmallTextFont" russianName="ШрифтыСтиля.МелкийШрифтТекста"/>
+          <Font name="StyleFonts.NormalTextFont" russianName="ШрифтыСтиля.ОбычныйШрифтТекста"/>
+          <Font name="StyleFonts.LargeTextFont" russianName="ШрифтыСтиля.КрупныйШрифтТекста"/>
+          <Font name="StyleFonts.ExtraLargeTextFont" russianName="ШрифтыСтиля.ОченьКрупныйШрифтТекста"/>
+          <Font name="StyleFonts.TitleLevel1" russianName="ШрифтыСтиля.ЗаголовокПервогоУровня"/>
+          <Font name="StyleFonts.TitleLevel2" russianName="ШрифтыСтиля.ЗаголовокВторогоУровня"/>
+          <Font name="StyleFonts.TitleLevel3" russianName="ШрифтыСтиля.ЗаголовокТретьегоУровня"/>
+          <Font name="StyleFonts.TitleLevel4" russianName="ШрифтыСтиля.ЗаголовокЧетвертогоУровня"/>
+          <Font name="StyleFonts.TitleLevel5" russianName="ШрифтыСтиля.ЗаголовокПятогоУровня"/>
+          <Font name="StyleFonts.TextLevel1" russianName="ШрифтыСтиля.ТекстПервогоУровня"/>
+          <Font name="StyleFonts.TextLevel2" russianName="ШрифтыСтиля.ТекстВторогоУровня"/>
+          <Font name="StyleFonts.TextLevel3" russianName="ШрифтыСтиля.ТекстТретьегоУровня"/>
+          <Font name="StyleFonts.SubtitleLevel1" russianName="ШрифтыСтиля.ПодзаголовокПервогоУровня"/>
+          <Font name="StyleFonts.SubtitleLevel2" russianName="ШрифтыСтиля.ПодзаголовокВторогоУровня"/>
+        </NamedFonts>
         <NamedConcept name="Line" russianName="Линия" evidenceRefs="ev_d45a32e3b4cc4df1a1d06be5612b9233"><Properties>
           <Property name="LineType" apiName="LineType" russianName="ТипЛинии" russianType="Перечисление"/>
           <Property name="Width" apiName="Width" russianName="Толщина" russianType="Число"/>
