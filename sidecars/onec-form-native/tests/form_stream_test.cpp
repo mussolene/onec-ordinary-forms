@@ -4972,7 +4972,7 @@ void test_radio_input_list_common_font_border_color_round_trip() {
 
 void test_named_platform_colors_registry_round_trip() {
     const auto descriptors = model::metamodel::named_colors();
-    expect(descriptors.size() == 182, "observed named platform colors and existing style colors are registered");
+    expect(descriptors.size() == 199, "observed platform colors include all twenty-eight standard styles");
     const auto* field_back = model::metamodel::find_named_color("StyleColors.FieldBackColor");
     expect(field_back && field_back->native_kind == 3 && field_back->native_id == -10 &&
         model::metamodel::find_named_color(3, -10) == field_back,
@@ -4994,8 +4994,14 @@ void test_named_platform_colors_registry_round_trip() {
         control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), color);
         document.add_control(std::move(control));
     }
+    const auto named_xml = oof::source::serialize_form_xml(document);
+    expect(named_xml.ok(), "every named platform color must serialize as editable XML");
+    const auto parsed_xml = oof::source::parse_form_xml(named_xml.value());
+    expect(parsed_xml.ok(), "every named platform color must parse from editable XML");
+    const auto rebuilt_xml = oof::save_form_bin(parsed_xml.value());
     const auto binary = oof::save_form_bin(document);
-    expect(binary.ok(), "all observed named platform colors must build");
+    expect(binary.ok() && rebuilt_xml.ok() && rebuilt_xml.value() == binary.value(),
+        "all named colors must rebuild the same binary from XML without a baseline");
     const auto decoded = oof::load_form_bin(binary.value(), "NamedColors");
     expect(decoded.ok() && decoded.value().reconstruction_complete(), "all observed named platform colors must decode");
     for (std::size_t n = 0; n < descriptors.size(); ++n) {

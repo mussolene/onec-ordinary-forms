@@ -1273,6 +1273,23 @@
           <Color name="StyleColors.FieldSelectionBackColor" russianName="ЦветаСтиля.ЦветФонаВыделенияПоля"/>
           <Color name="StyleColors.FieldSelectedTextColor" russianName="ЦветаСтиля.ЦветТекстаВыделенияПоля"/>
           <Color name="StyleColors.FieldAlternativeBackColor" russianName="ЦветаСтиля.АльтернативныйЦветФонаПоля"/>
+          <Color name="StyleColors.AccentColor" russianName="ЦветаСтиля.ЦветАкцента"/>
+          <Color name="StyleColors.ToolTipTextColor" russianName="ЦветаСтиля.ЦветТекстаПодсказки"/>
+          <Color name="StyleColors.ToolTipBackColor" russianName="ЦветаСтиля.ЦветФонаПодсказки"/>
+          <Color name="StyleColors.NegativeTextColor" russianName="ЦветаСтиля.ЦветОтрицательногоЧисла"/>
+          <Color name="StyleColors.FieldTextColor" russianName="ЦветаСтиля.ЦветТекстаПоля"/>
+          <Color name="StyleColors.NavigationColor" russianName="ЦветаСтиля.ЦветНавигации"/>
+          <Color name="StyleColors.AuxiliaryNavigationColor" russianName="ЦветаСтиля.ЦветДополнительнойНавигации"/>
+          <Color name="StyleColors.TableFooterBackColor" russianName="ЦветаСтиля.ЦветФонаПодвалаТаблицы"/>
+          <Color name="StyleColors.TableFooterTextColor" russianName="ЦветаСтиля.ЦветТекстаПодвалаТаблицы"/>
+          <Color name="StyleColors.TableHeaderBackColor" russianName="ЦветаСтиля.ЦветФонаШапкиТаблицы"/>
+          <Color name="StyleColors.TableHeaderTextColor" russianName="ЦветаСтиля.ЦветТекстаШапкиТаблицы"/>
+          <Color name="StyleColors.ActivityColor" russianName="ЦветаСтиля.ЦветАктивности"/>
+          <Color name="StyleColors.ReportLineColor" russianName="ЦветаСтиля.ЦветЛинииОтчета"/>
+          <Color name="StyleColors.ReportHeaderBackColor" russianName="ЦветаСтиля.ЦветФонаШапкиОтчета"/>
+          <Color name="StyleColors.ImportantColor" russianName="ЦветаСтиля.ЦветВажного"/>
+          <Color name="StyleColors.ReportGroup1BackColor" russianName="ЦветаСтиля.ЦветФонаГруппировкиОтчета1"/>
+          <Color name="StyleColors.ReportGroup2BackColor" russianName="ЦветаСтиля.ЦветФонаГруппировкиОтчета2"/>
         </NamedColors>
         <NamedFonts>
           <Font name="StyleFonts.TextFont" russianName="ШрифтыСтиля.ШрифтТекста"/>

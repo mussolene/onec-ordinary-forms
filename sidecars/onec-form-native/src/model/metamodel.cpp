@@ -3435,6 +3435,23 @@ std::span<const NamedColorDescriptor> named_colors() noexcept {
         NamedColorDescriptor{"StyleColors.FieldSelectionBackColor", u8"ЦветаСтиля.ЦветФонаВыделенияПоля", 3, -14},
         NamedColorDescriptor{"StyleColors.FieldSelectedTextColor", u8"ЦветаСтиля.ЦветТекстаВыделенияПоля", 3, -15},
         NamedColorDescriptor{"StyleColors.FieldAlternativeBackColor", u8"ЦветаСтиля.АльтернативныйЦветФонаПоля", 3, -13},
+        NamedColorDescriptor{"StyleColors.AccentColor", u8"ЦветаСтиля.ЦветАкцента", 3, -46},
+        NamedColorDescriptor{"StyleColors.ToolTipTextColor", u8"ЦветаСтиля.ЦветТекстаПодсказки", 3, -24},
+        NamedColorDescriptor{"StyleColors.ToolTipBackColor", u8"ЦветаСтиля.ЦветФонаПодсказки", 3, -23},
+        NamedColorDescriptor{"StyleColors.NegativeTextColor", u8"ЦветаСтиля.ЦветОтрицательногоЧисла", 3, -17},
+        NamedColorDescriptor{"StyleColors.FieldTextColor", u8"ЦветаСтиля.ЦветТекстаПоля", 3, -11},
+        NamedColorDescriptor{"StyleColors.NavigationColor", u8"ЦветаСтиля.ЦветНавигации", 3, -42},
+        NamedColorDescriptor{"StyleColors.AuxiliaryNavigationColor", u8"ЦветаСтиля.ЦветДополнительнойНавигации", 3, -43},
+        NamedColorDescriptor{"StyleColors.TableFooterBackColor", u8"ЦветаСтиля.ЦветФонаПодвалаТаблицы", 3, -37},
+        NamedColorDescriptor{"StyleColors.TableFooterTextColor", u8"ЦветаСтиля.ЦветТекстаПодвалаТаблицы", 3, -38},
+        NamedColorDescriptor{"StyleColors.TableHeaderBackColor", u8"ЦветаСтиля.ЦветФонаШапкиТаблицы", 3, -35},
+        NamedColorDescriptor{"StyleColors.TableHeaderTextColor", u8"ЦветаСтиля.ЦветТекстаШапкиТаблицы", 3, -36},
+        NamedColorDescriptor{"StyleColors.ActivityColor", u8"ЦветаСтиля.ЦветАктивности", 3, -44},
+        NamedColorDescriptor{"StyleColors.ReportLineColor", u8"ЦветаСтиля.ЦветЛинииОтчета", 3, -28},
+        NamedColorDescriptor{"StyleColors.ReportHeaderBackColor", u8"ЦветаСтиля.ЦветФонаШапкиОтчета", 3, -25},
+        NamedColorDescriptor{"StyleColors.ImportantColor", u8"ЦветаСтиля.ЦветВажного", 3, -47},
+        NamedColorDescriptor{"StyleColors.ReportGroup1BackColor", u8"ЦветаСтиля.ЦветФонаГруппировкиОтчета1", 3, -26},
+        NamedColorDescriptor{"StyleColors.ReportGroup2BackColor", u8"ЦветаСтиля.ЦветФонаГруппировкиОтчета2", 3, -27},
     };
     return colors;
 }
