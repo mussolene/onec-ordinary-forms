@@ -6806,7 +6806,17 @@ DecodedControl decode_picture_decoration(
     require_raw_constant(info.items[0], "1", child_path(info_path, 0));
     auto picture_properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
-    require_arity(picture_properties, 15, properties_path);
+    const auto properties_generation = raw_atom(at(picture_properties, 1, properties_path), child_path(properties_path, 1));
+    if (properties_generation == "19") {
+        require_arity(picture_properties, 14, properties_path);
+        auto current = canonical_picture_properties(true);
+        std::copy(picture_properties.items.begin(), picture_properties.items.end(), current.items.begin());
+        current.items[1] = raw("20");
+        picture_properties = std::move(current);
+    } else {
+        require_raw_constant(picture_properties.items[1], "20", child_path(properties_path, 1));
+        require_arity(picture_properties, 15, properties_path);
+    }
     const auto& old_style = picture_properties.items[4];
     const auto style_path = child_path(properties_path, 4);
     const auto generation = picture_style_version(old_style);

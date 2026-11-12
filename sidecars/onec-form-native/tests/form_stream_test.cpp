@@ -7732,7 +7732,7 @@ void test_button_then_label_decoration_round_trip() {
         "unsupported LabelDecoration storage leaves must fail closed");
 }
 
-void test_label_property_and_picture_generations() {
+void test_decoration_property_and_picture_generations() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "LabelGenerations";
     for (std::uint64_t id = 2; id < 12; ++id) form.children.push_back(model::ControlRef{model::ObjectId{id}});
     model::OrdinaryFormDocument document(std::move(form));
@@ -7812,6 +7812,61 @@ void test_label_property_and_picture_generations() {
                 expect(partial.ok() && !partial.value().reconstruction_complete(),
                     "upgrading a known old picture must not hide unrepresented modern Label fields");
             }
+        }
+    }
+
+    model::Form picture_form; picture_form.id = model::ObjectId{1}; picture_form.name = "PictureGenerations";
+    for (unsigned i = 0; i < 12; ++i) picture_form.children.push_back(model::ControlRef{model::ObjectId{i + 2}});
+    model::OrdinaryFormDocument pictures(std::move(picture_form));
+    for (unsigned i = 0; i < 12; ++i) {
+        model::ControlNode picture{model::ObjectId{i + 2}, "Picture" + std::to_string(i), model::PictureDecorationPayload{}};
+        picture.properties().set_explicit(model::PropertyId::from_name("Hyperlink"), i % 2 != 0);
+        picture.properties().set_explicit(model::PropertyId::from_name("UseContextMenu"), i % 3 == 0);
+        picture.properties().set_explicit(model::PropertyId::from_name("Zoomable"), i % 4 == 0);
+        picture.properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+        pictures.add_control(std::move(picture));
+    }
+    const auto current_pictures = form_stream::encode_document(pictures);
+    expect(current_pictures.ok(), "twelve varied PictureDecoration controls must encode");
+    const auto picture_guid = model::metamodel::descriptor_for(model::ControlKind::picture_decoration).guid;
+    for (const bool old_properties : {false, true}) {
+        for (unsigned version = 3; version <= 10; ++version) {
+            auto stream = current_pictures.value();
+            unsigned changed = 0;
+            for (auto& record : stream.items[1].items[2].items[2].items) {
+                if (!record.is_list || record.items.size() != 6 || record.items[0].atom != picture_guid) continue;
+                auto& properties = record.items[2].items[1];
+                if (old_properties) { properties.items.resize(14); properties.items[1] = list_stream::ListValue::raw_atom("19"); }
+                properties.items[4].items.resize(version == 3 ? 3 : version + 1);
+                properties.items[4].items[0] = list_stream::ListValue::raw_atom(std::to_string(version));
+                ++changed;
+            }
+            expect(changed == 12, "each PictureDecoration layout must cover twelve controls");
+            const auto decoded = form_stream::decode_document(stream, "PictureGenerations");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                decoded ? "known PictureDecoration layouts must decode completely" : decoded.diagnostics().front().message);
+            const auto xml = source::serialize_form_xml(decoded.value());
+            const auto parsed = xml ? source::parse_form_xml(xml.value()) : source::parse_form_xml("");
+            const auto rebuilt = parsed ? form_stream::encode_document(parsed.value()) : form_stream::encode_document(pictures);
+            expect(parsed.ok() && rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current_pictures.value()),
+                "independent PictureDecoration property and picture layouts must rebuild the current stream from named XML");
+            for (unsigned corruption = 0; corruption < 5; ++corruption) {
+                auto malformed = stream;
+                auto& properties = find_record_with_guid(malformed, picture_guid)->items[2].items[1];
+                if (corruption == 0) properties.items[1] = list_stream::ListValue::raw_atom("18");
+                if (corruption == 1) properties.items.push_back(list_stream::ListValue::raw_atom("0"));
+                if (corruption == 2) properties.items.pop_back();
+                if (corruption == 3) properties.items[4].items[0] = list_stream::ListValue::raw_atom("11");
+                if (corruption == 4) properties.items[4].items[1] = list_stream::ListValue::raw_atom("7");
+                expect(!form_stream::decode_document(malformed, "PictureGenerations"),
+                    "unknown, inconsistent and malformed PictureDecoration generations must reject");
+            }
+            auto unrepresented = stream;
+            find_record_with_guid(unrepresented, picture_guid)->items[2].items[1].items[13] = list_stream::ListValue::raw_atom("0");
+            const auto partial = form_stream::decode_document(unrepresented, "PictureGenerations");
+            expect(partial.ok() && !partial.value().reconstruction_complete(),
+                "known generation upgrade must not hide unrepresented PictureDecoration fields");
         }
     }
 }
@@ -8861,7 +8916,7 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
 
     auto unsupported_picture_tail = implicit_default.value();
     unsupported_picture_tail.items[1].items[2].items[2].items[1].items[2].items[1].items[1] =
-        list_stream::ListValue::raw_atom("19");
+        list_stream::ListValue::raw_atom("18");
     expect_failure(form_stream::decode_document(unsupported_picture_tail, "PictureDecorationCodec"), "OOF1106",
         "$/1/2/2/1/2/1/1", "PictureDecoration properties version header must remain strict");
 
@@ -26401,7 +26456,7 @@ int main() {
         test_attribute_id_zero_form_bin_round_trip();
         test_metadata_member_binding_shared_round_trip();
         test_button_then_label_decoration_round_trip();
-        test_label_property_and_picture_generations();
+        test_decoration_property_and_picture_generations();
         test_label_decoration_click_event_round_trip_and_guards();
         test_label_border_color_round_trip();
         test_label_font_round_trip_and_validation();
