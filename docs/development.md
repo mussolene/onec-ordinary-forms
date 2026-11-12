@@ -23,7 +23,7 @@ build/sidecars/onec-form-native/oof --coverage --json
 
 `dump` и `build` принимают необязательные `--type-schema <types.xsd>` и `--metadata <configuration-root>`. Первый параметр предоставляет декларации имен типов, второй читает XML выгрузки метаданных для разрешения имен и идентификаторов ссылок. Эти параметры необязательны и дополняют разрешение имен и ссылок. UUID и `typeName` типов берутся из XML; основной writer не зависит от полной конфигурации. Исходный BIN, база 1С и платформа для `build` не нужны.
 
-Проверяйте код завершения и массив `diagnostics` в JSON, включая предупреждения успешной команды. Код `0` означает успешную операцию, `1` означает ошибку обработки или параметров, `64` означает неизвестную команду или неверное число операндов. Флаг полноты чтения находится в `Form.xml`; JSON `ok=true` не обещает полного восстановления исходной формы.
+Проверяйте код завершения и массив `diagnostics` в JSON, включая предупреждения успешной команды. Код `0` означает успешную операцию, `1` означает ошибку обработки или параметров, `64` означает неизвестную команду или неверное число операндов. Библиотечная диагностика может содержать неполную модель, но CLI ее не выпускает. JSON `ok=true` означает успех команды, а не независимую нативную приемку формы.
 
 ## Подключение библиотеки C++
 
@@ -33,13 +33,13 @@ build/sidecars/onec-form-native/oof --coverage --json
 
 | Заголовок | Вызов и контракт |
 | --- | --- |
-| [`oof/form_bin.hpp`](https://github.com/mussolene/onec-ordinary-forms/blob/v1.0.0-rc.1/sidecars/onec-form-native/include/oof/form_bin.hpp) | `oof::load_form_bin(bytes, form_name, metadata_context)` возвращает `Result<model::OrdinaryFormDocument>`; `oof::save_form_bin(document)` возвращает `Result<std::vector<std::uint8_t>>`. |
-| [`oof/source/form_xml.hpp`](https://github.com/mussolene/onec-ordinary-forms/blob/v1.0.0-rc.1/sidecars/onec-form-native/include/oof/source/form_xml.hpp) | `oof::source::parse_form_xml(xml, metadata_context, types)` и `serialize_form_xml(document, types)` преобразуют именованный XML и модель. Версия задана `ordinary_form_xml_version = "2.1"`. |
-| [`oof/model/ordinary_form.hpp`](https://github.com/mussolene/onec-ordinary-forms/blob/v1.0.0-rc.1/sidecars/onec-form-native/include/oof/model/ordinary_form.hpp) | `OrdinaryFormDocument::get_prop_val`, `set_prop_val`, `reset_prop_val` работают с `ObjectKey`, `PropertyId` и типизированным `PropertyValue`; `validate()` проверяет инварианты. `module()`, `set_module()`, `assets()` и `add_asset()` предоставляют модуль и ресурсы. |
-| [`oof/source/metadata_xml.hpp`](https://github.com/mussolene/onec-ordinary-forms/blob/v1.0.0-rc.1/sidecars/onec-form-native/include/oof/source/metadata_xml.hpp) | `parse_configuration_type_schema(xsd)` строит `ConfigurationTypeSchema`; `parse_metadata_context(xml_documents)` строит `MetadataContext`. Это необязательный контекст, а не исходная форма для пересборки. |
-| [`oof/result.hpp`](https://github.com/mussolene/onec-ordinary-forms/blob/v1.0.0-rc.1/sidecars/onec-form-native/include/oof/result.hpp) | `Result<T>::ok()`, `value()`/`take_value()` и `diagnostics()` передают результат и диагностику. Предупреждения могут сопровождать успешный результат. |
+| [`oof/form_bin.hpp`](../sidecars/onec-form-native/include/oof/form_bin.hpp) | `oof::load_form_bin(bytes, form_name, metadata_context)` возвращает `Result<model::OrdinaryFormDocument>`; `oof::save_form_bin(document)` возвращает `Result<std::vector<std::uint8_t>>`. |
+| [`oof/source/form_xml.hpp`](../sidecars/onec-form-native/include/oof/source/form_xml.hpp) | `oof::source::parse_form_xml(xml, metadata_context, types)` и `serialize_form_xml(document, types)` преобразуют именованный XML и модель. Версия задана `ordinary_form_xml_version = "2.1"`. |
+| [`oof/model/ordinary_form.hpp`](../sidecars/onec-form-native/include/oof/model/ordinary_form.hpp) | `OrdinaryFormDocument::get_prop_val`, `set_prop_val`, `reset_prop_val` работают с `ObjectKey`, `PropertyId` и типизированным `PropertyValue`; `validate()` проверяет инварианты. `module()`, `set_module()`, `assets()` и `add_asset()` предоставляют модуль и ресурсы. |
+| [`oof/source/metadata_xml.hpp`](../sidecars/onec-form-native/include/oof/source/metadata_xml.hpp) | `parse_configuration_type_schema(xsd)` строит `ConfigurationTypeSchema`; `parse_metadata_context(xml_documents)` строит `MetadataContext`. Это необязательный контекст, а не исходная форма для пересборки. |
+| [`oof/result.hpp`](../sidecars/onec-form-native/include/oof/result.hpp) | `Result<T>::ok()`, `value()`/`take_value()` и `diagnostics()` передают результат и диагностику. Предупреждения могут сопровождать успешный результат. |
 
-Библиотечные функции XML обрабатывают текст и объектную модель. Чтение и запись соседних файлов модуля и ресурсов организует вызывающая программа; готовый пример находится в [`src/cli/main.cpp`](https://github.com/mussolene/onec-ordinary-forms/blob/v1.0.0-rc.1/sidecars/onec-form-native/src/cli/main.cpp). Не вызывайте `value()` при неуспешном результате.
+Библиотечные функции XML обрабатывают текст и объектную модель. Чтение и запись соседних файлов модуля и ресурсов организует вызывающая программа; готовый пример находится в [`src/cli/main.cpp`](../sidecars/onec-form-native/src/cli/main.cpp). Не вызывайте `value()` при неуспешном результате.
 
 ## Контракт исходного пакета
 
@@ -57,7 +57,7 @@ Forms/<FormName>/Ext/Form/Items/<ElementName>/Picture.gif
 
 Перед добавлением свойства найдите существующего владельца в модели, дескрипторах, XML и сериализации. Установите публичное имя, применимость, доступность, сохраняемость, тип, значение по умолчанию и платформенный кодек. Расширяйте существующие дескрипторы и общие кодеки, когда совпадает семантика. Недостающее сохраняемое значение получает именованное понятие модели и схему.
 
-Для каждой новой пары контроль/свойство проверьте default, допустимые варианты, границы и отказ на неправильном типе. Явно классифицируйте свойства состояния выполнения, которые не должны попадать в XML/BIN. Не маскируйте неизвестное поле сырым потоком и не объявляйте неполную проекцию полной. Остатки, включая старые варианты колонок `Table` и кодеки состояния выполнения, перечисляются в [контракте](ordinary-form-target-contract.md) и [плане](repository-target-state.md).
+Завершайте семейство сохраняемых объектов одновременно в reader и writer. Для применимых пар контроль/свойство проверяйте default, допустимые варианты, границы и отказ на неправильном типе. Общую нативную проверку объединяйте в один пакет минимум с десятью контролами; полный корпус выполняйте после завершения семейства, а не каждого свойства. Явно классифицируйте свойства состояния выполнения, которые не должны попадать в XML/BIN. Не маскируйте неизвестное поле сырым потоком и не объявляйте неполную проекцию полной. Остатки, включая старые варианты колонок `Table` и кодеки состояния выполнения, перечисляются в [контракте](ordinary-form-target-contract.md) и [плане](repository-target-state.md).
 
 ## Проверка результата
 
@@ -74,7 +74,7 @@ OOF_PLATFORM_CONTAINER=licensed-container \
 
 `oof --coverage --json` учитывает классификацию дескрипторов. Даже нулевые остатки и `descriptorCoverageComplete=true` не заменяют независимые платформенные проверки и проверку реального корпуса. Кандидат выпуска с ограниченным покрытием должен явно указывать оставшиеся границы.
 
-Держите частные EPF/ERF, клиентские дампы, лицензии, секреты и локальные пути за пределами Git и OACS. Временные данные размещайте в игнорируемых `work/`, `scan-output/` или системном временном каталоге. CLI не исполняет BSL и требует доверенного локального каталога; пределы файлов и правила путей приведены в [контракте](ordinary-form-target-contract.md#актуальное-состояние-и-границы-cli-2026-10-05).
+Держите частные EPF/ERF, клиентские дампы, лицензии, секреты и локальные пути за пределами Git и OACS. Временные данные размещайте в игнорируемых `work/`, `scan-output/` или системном временном каталоге. CLI не исполняет BSL и требует доверенного локального каталога; пределы файлов и правила путей приведены в [контракте](ordinary-form-target-contract.md#границы-cli).
 
 ## Проверка кандидата выпуска
 
@@ -82,7 +82,9 @@ OOF_PLATFORM_CONTAINER=licensed-container \
 
 ```sh
 python3 tools/release_gate.py --source-digest
-make release-gate RELEASE_TAG=v1.0.0-rc.1
+make release-gate RELEASE_TAG=vX.Y.Z-rc.N
 ```
 
-Проверка сопоставляет версию CLI, исходники, покрытие и доказательства манифеста, запускает CTest и отличает кандидата с явными ограничениями от полного выпуска. Workflow [Release](https://github.com/mussolene/onec-ordinary-forms/blob/v1.0.0-rc.1/.github/workflows/release.yml) выполняет ту же проверку перед упаковкой. Архив Linux x86_64 содержит `oof`, схемы, документацию, минимальный пример и скрипт строгой проверки Designer; рядом публикуются манифест и `SHA256SUMS`.
+Замените `vX.Y.Z-rc.N` фактической версией кандидата, согласованной с `OOF_VERSION` и манифестом. Текущий манифест исторический, поэтому проверка свежего main должна отказать до получения нового подтверждения. Не обновляйте только digest ради прохождения gate.
+
+Проверка сопоставляет версию CLI, исходники, покрытие и доказательства манифеста, запускает CTest и отличает кандидата с явными ограничениями от полного выпуска. Workflow [Release](../.github/workflows/release.yml) выполняет ту же проверку перед упаковкой. Архив Linux x86_64 содержит `oof`, схемы, документацию, минимальный пример и скрипт строгой проверки Designer; рядом публикуются манифест и `SHA256SUMS`.
