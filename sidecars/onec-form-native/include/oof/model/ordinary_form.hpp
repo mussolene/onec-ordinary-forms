@@ -561,6 +561,8 @@ enum class CommandBarButtonKind : std::uint8_t { action, submenu, separator };
 enum class CommandBarButtonOrder : std::uint8_t { none, ascending, descending };
 enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, picture_text };
 enum class ClientInterfaceVariant : std::uint8_t { version8_0, version8_2, version8_2_ordinary_app };
+enum class ClientInterfaceTheme : std::uint8_t { light, dark };
+enum class CommandControlKind : std::uint8_t { from_source, button };
 enum class StandardMenuCommand : std::uint8_t {
     close, save_values, restore_values, finish_editing, sort_descending, sort_ascending,
     move_down, move_up, change, delete_item, add,
@@ -586,6 +588,18 @@ struct CommandBarAction {
     friend bool operator==(const CommandBarAction&, const CommandBarAction&) = default;
 };
 
+struct AutomaticButtonsPlacement {
+    std::optional<std::string> before_button;
+    friend bool operator==(const AutomaticButtonsPlacement&, const AutomaticButtonsPlacement&) = default;
+};
+
+struct CommandBarButtonsState {
+    bool auto_fill = false;
+    std::optional<AutomaticButtonsPlacement> placement;
+    std::vector<std::string> included_buttons;
+    friend bool operator==(const CommandBarButtonsState&, const CommandBarButtonsState&) = default;
+};
+
 struct CommandBarButton {
     std::string name;
     CommandBarButtonKind type = CommandBarButtonKind::action;
@@ -599,11 +613,16 @@ struct CommandBarButton {
     ButtonRepresentation representation = ButtonRepresentation::automatic;
     ShortcutValue shortcut{};
     std::optional<PictureRef> picture;
+    bool clear_picture = false;
     std::optional<CommandBarAction> action;
     std::optional<StandardMenuAction> standard_action;
     std::vector<CommandBarButton> buttons;
+    CommandBarButtonsState buttons_state;
+    std::uint64_t automatic_insertion_locks = 1;
     bool default_button = false;
     ClientInterfaceVariant client_interface_variant = ClientInterfaceVariant::version8_2_ordinary_app;
+    std::optional<ClientInterfaceTheme> client_interface_theme;
+    CommandControlKind command_control_kind = CommandControlKind::from_source;
     friend bool operator==(const CommandBarButton&, const CommandBarButton&) = default;
 };
 
@@ -1024,9 +1043,11 @@ struct PanelPayload final : TypedControlPayload<ControlKind::panel> {
 };
 struct CommandBarPayload final : TypedControlPayload<ControlKind::command_bar> {
     std::vector<CommandBarButton> buttons;
+    CommandBarButtonsState buttons_state;
 };
 struct ButtonPayload final : TypedControlPayload<ControlKind::button> {
     std::vector<CommandBarButton> buttons;
+    CommandBarButtonsState buttons_state;
 };
 struct PictureDecorationPayload final
     : TypedControlPayload<ControlKind::picture_decoration> {};

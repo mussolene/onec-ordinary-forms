@@ -3966,15 +3966,35 @@ ValidationReport OrdinaryFormDocument::validate() const {
             }
         }
         const std::vector<CommandBarButton>* owned_buttons = nullptr;
-        if (const auto* button = std::get_if<ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
-        if (const auto* command_bar = std::get_if<CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;
+        const CommandBarButtonsState* owned_buttons_state = nullptr;
+        if (const auto* button = std::get_if<ButtonPayload>(&control.payload)) {
+            owned_buttons = &button->buttons;
+            owned_buttons_state = &button->buttons_state;
+        }
+        if (const auto* command_bar = std::get_if<CommandBarPayload>(&control.payload)) {
+            owned_buttons = &command_bar->buttons;
+            owned_buttons_state = &command_bar->buttons_state;
+        }
         if (owned_buttons != nullptr) {
-            const auto validate_buttons = [&](const auto& self, const std::vector<CommandBarButton>& items, std::size_t depth) -> void {
+            const auto validate_buttons = [&](const auto& self, const std::vector<CommandBarButton>& items,
+                                              const CommandBarButtonsState& state, std::size_t depth) -> void {
                 if (depth > 256) {
                     add_violation(report, InvariantCode::invalid_property, control.id, {}, "button menu nesting is too deep");
                     return;
                 }
                 std::set<std::string> names;
+                for (const auto& item : items) names.insert(item.name);
+                const auto invalid_state = [&](std::string reason) {
+                    add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+                };
+                if (state.placement && state.placement->before_button &&
+                    (state.placement->before_button->empty() || !names.contains(*state.placement->before_button)))
+                    invalid_state("AutomaticButtons BeforeButton must name a sibling button");
+                std::set<std::string> included;
+                for (const auto& name : state.included_buttons)
+                    if (name.empty() || !names.contains(name) || !included.insert(name).second)
+                        invalid_state("AutomaticButtons ButtonRef names must be non-empty, unique sibling references");
+                names.clear();
                 for (const auto& item : items) {
                     const auto invalid = [&](std::string reason) {
                         add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
@@ -3989,8 +4009,12 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                     if (item.type != CommandBarButtonKind::action && item.type != CommandBarButtonKind::submenu && item.type != CommandBarButtonKind::separator) invalid("unknown menu item type");
                     if (item.representation != ButtonRepresentation::automatic && item.representation != ButtonRepresentation::picture && item.representation != ButtonRepresentation::text && item.representation != ButtonRepresentation::picture_text) invalid("unknown menu representation");
+                    if (item.client_interface_theme && *item.client_interface_theme != ClientInterfaceTheme::light &&
+                        *item.client_interface_theme != ClientInterfaceTheme::dark) invalid("unknown client interface theme");
+                    if (item.command_control_kind != CommandControlKind::from_source &&
+                        item.command_control_kind != CommandControlKind::button) invalid("unknown command control kind");
                     if (item.name.empty() || !names.insert(item.name).second) invalid("button menu item names must be non-empty and unique within each collection");
-                    if (item.type == CommandBarButtonKind::action && (item.action.has_value() == item.standard_action.has_value())) invalid("Action menu item requires exactly one Action or StandardAction value");
+                    if (item.action && item.standard_action) invalid("Action menu item cannot combine Action and StandardAction");
                     if (item.action && item.action->handler.empty()) invalid("Action menu item requires a handler");
                     if (item.type != CommandBarButtonKind::action && (item.action || item.standard_action)) invalid("only Action menu items may have an Action or StandardAction value");
                     if (item.standard_action) {
@@ -4029,15 +4053,16 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                     if (item.order != CommandBarButtonOrder::none && item.order != CommandBarButtonOrder::ascending && item.order != CommandBarButtonOrder::descending) invalid("unknown menu order");
                     if (item.type != CommandBarButtonKind::submenu && item.order != CommandBarButtonOrder::none) invalid("only Submenu menu items may have an order");
-                    if (item.type != CommandBarButtonKind::submenu && !item.buttons.empty()) invalid("only Submenu items may contain buttons");
+                    if (item.type != CommandBarButtonKind::submenu && (!item.buttons.empty() || item.buttons_state != CommandBarButtonsState{})) invalid("only Submenu items may contain buttons or automatic collection state");
                     if (item.type == CommandBarButtonKind::separator &&
-                        (item.text || item.explanation || item.tooltip || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.action || item.standard_action)) invalid("Separator cannot have properties");
+                        (item.text || item.explanation || item.tooltip || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.clear_picture || item.action || item.standard_action)) invalid("Separator cannot have properties");
                     if (metamodel::find_shortcut_key(item.shortcut.key) == nullptr) invalid("button menu Shortcut has unsupported key");
+                    if (item.picture && item.clear_picture) invalid("Picture cannot be both cleared and assigned");
                     if (item.picture) require_picture(control.id, *item.picture);
-                    self(self, item.buttons, depth + 1);
+                    self(self, item.buttons, item.buttons_state, depth + 1);
                 }
             };
-            validate_buttons(validate_buttons, *owned_buttons, 0);
+            validate_buttons(validate_buttons, *owned_buttons, *owned_buttons_state, 0);
         }
         const auto& descriptor = metamodel::descriptor_for(control.kind());
         if (const auto* input = std::get_if<InputFieldPayload>(&control.payload)) {

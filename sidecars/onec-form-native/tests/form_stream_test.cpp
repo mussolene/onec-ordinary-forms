@@ -5595,6 +5595,99 @@ void test_button_picture_enums_round_trip_and_validation() {
         "$/1/2/2/1/2/1/6", "unsupported Button.PictureLocation storage values must be rejected");
 }
 
+void test_menu_collection_state_round_trip_and_invalid_membership() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "AutomaticMenus";
+    for (std::uint64_t index = 0; index < 12; ++index)
+        form.children.emplace_back(model::ControlRef{model::ObjectId{index + 2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto id = model::ObjectId{index + 2};
+        model::ControlNode control{id, "Menu" + std::to_string(index),
+            index % 2 ? model::ControlPayload{model::ButtonPayload{}} : model::ControlPayload{model::CommandBarPayload{}}};
+        if (index % 2)
+            control.properties().set_explicit(model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "UseExtra"});
+        std::vector<model::CommandBarButton>* buttons;
+        model::CommandBarButtonsState* state;
+        if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) {
+            buttons = &payload->buttons; state = &payload->buttons_state;
+        } else {
+            auto& bar_payload = std::get<model::CommandBarPayload>(control.payload);
+            buttons = &bar_payload.buttons; state = &bar_payload.buttons_state;
+        }
+        state->auto_fill = index % 3 != 0;
+        if (index < 10) {
+            model::CommandBarButton first;
+            first.name = "First";
+            first.command_control_kind = index % 2 ? model::CommandControlKind::from_source : model::CommandControlKind::button;
+            first.action = model::CommandBarAction{"ExecuteFirst", "", {}, {}, {}};
+            if (index % 3 == 1) first.action.reset();
+            first.automatic_insertion_locks = index + 1;
+            first.clear_picture = index % 2 == 0;
+            model::CommandBarButton second = first;
+            second.name = "Second";
+            second.command_control_kind = index % 2 ? model::CommandControlKind::button : model::CommandControlKind::from_source;
+            second.clear_picture = false;
+            second.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.ActivateTask"}};
+            second.automatic_insertion_locks = std::numeric_limits<std::uint64_t>::max();
+            model::CommandBarButton nested;
+            nested.name = "Nested"; nested.type = model::CommandBarButtonKind::submenu;
+            nested.automatic_insertion_locks = index == 0 ? 0 : 3;
+            nested.clear_picture = index % 2 != 0;
+            nested.buttons = {first, second};
+            nested.buttons_state.auto_fill = true;
+            nested.buttons_state.placement = model::AutomaticButtonsPlacement{"Second"};
+            *buttons = {first, second, nested};
+            if (index % 3 == 2) state->included_buttons = {"First", "Nested"};
+            if (index != 0 && index % 3 == 0) state->placement = model::AutomaticButtonsPlacement{"Second"};
+            else if (index % 3 == 1) state->placement.emplace();
+        } else state->placement.emplace();
+        document.add_control(std::move(control));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "automatic menu state encodes" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "AutomaticMenus");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "automatic menu state must be a complete named model");
+    const auto before_xml = source::serialize_form_xml(document);
+    const auto after_xml = source::serialize_form_xml(decoded.value());
+    expect(before_xml.ok() && after_xml.ok() && before_xml.value() == after_xml.value(),
+        "all twelve root and nested menu states and suppression counts survive storage");
+    expect(after_xml.value().find("<Picture/>") != std::string::npos,
+        "explicit empty menu Picture must remain distinct from an inherited picture");
+    const auto xml_only = source::parse_form_xml(after_xml.value());
+    expect(xml_only.ok(), "automatic menu XML is standalone");
+    const auto rebuilt = form_stream::encode_document(xml_only.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "XML-only menu state builds the same logical stream without a baseline");
+    auto disabled = document;
+    (void)disabled.set_prop_val({model::ObjectCategory::control, model::ObjectId{13}},
+        model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "DontUse"});
+    expect(!form_stream::encode_document(disabled), "empty collection state cannot be silently dropped with DontUse");
+
+    const auto menu_at = [](auto& root) -> auto& {
+        return root.items[1].items[2].items[2].items[1].items[2].items[1].items[7];
+    };
+    auto dangling = encoded.value();
+    auto& menu = menu_at(dangling);
+    const auto action_count = static_cast<std::size_t>(std::stoul(menu.items[4].atom));
+    auto& footer = menu.items[6 + action_count].items.back();
+    footer.items[3] = list_stream::ListValue::raw_atom("999999");
+    expect(!form_stream::decode_document(dangling, "AutomaticMenus"), "stored automatic member must resolve by complete sibling identity");
+    auto generated = encoded.value();
+    auto& generated_menu = menu_at(generated);
+    generated_menu.items[6 + action_count].items[6].items[3] = list_stream::ListValue::raw_atom("0");
+    const auto transient = form_stream::decode_document(generated, "AutomaticMenus");
+    expect(transient.ok() && !transient.value().reconstruction_complete() && !form_stream::encode_document(transient.value()),
+        "source-generated Action cannot claim a lossless rebuild when native Save omits it");
+    auto unknown_action = encoded.value();
+    auto& unknown_menu = menu_at(unknown_action);
+    auto& unknown_record = unknown_menu.items[5];
+    unknown_record.items[3] = list_stream::ListValue::raw_atom("abde0c9a-18a6-4e0c-bbaa-af26b911b3e6");
+    unknown_record.items[4] = list_stream::parse("{1,357c6a54-357d-425d-a2bd-22f4f6e86c87,123}");
+    expect(!form_stream::decode_document(unknown_action, "AutomaticMenus"),
+        "an unknown command reference cannot become an unassigned menu action");
+}
+
 void test_named_button_menu_round_trip_and_invalid_references() {
     model::Form form;
     form.id = model::ObjectId{1}; form.name = "Menu";
@@ -5681,6 +5774,7 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
     nested_action.action = model::CommandBarAction{"NestedHandler", "", {}, {}, {}};
     model::CommandBarButton nested_separator; nested_separator.name = "NestedSeparator";
     nested_separator.type = model::CommandBarButtonKind::separator;
+    nested_separator.command_control_kind = model::CommandControlKind::button;
     nested_separator.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
     model::CommandBarButton submenu; submenu.name = "More";
     submenu.type = model::CommandBarButtonKind::submenu;
@@ -5742,24 +5836,27 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
     menu_at(nested_value).items[5].items[6] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("2")});
     expect(!form_stream::decode_document(nested_value, "ListedClientInterfaceVariant"),
         "list-valued client interface variants must be rejected");
-    auto wrong_second_tail = encoded.value();
-    menu_at(wrong_second_tail).items[5].items[7] = list_stream::ListValue::raw_atom("2");
-    const auto partial_second_tail = form_stream::decode_document(wrong_second_tail,
-        "WrongClientInterfaceVariantSecondTail");
-    expect(partial_second_tail.ok() && !partial_second_tail.value().reconstruction_complete() &&
-               std::any_of(partial_second_tail.diagnostics().begin(), partial_second_tail.diagnostics().end(),
-                   [](const auto& diagnostic) {
-                       return diagnostic.code == "OOF1140" &&
-                           diagnostic.severity == oof::DiagnosticSeverity::warning &&
-                           diagnostic.path == "$/1/2/2/1/2/1/12/5/7";
-                   }),
-        "valid unknown second menu tail value must warn at its record slot and preserve the model");
-    const auto* partial_menu_button = partial_second_tail.value().find_control(model::ObjectId{2});
-    expect(partial_menu_button != nullptr && std::get<model::ButtonPayload>(partial_menu_button->payload).buttons.size() ==
-               std::get<model::ButtonPayload>(document.find_control(model::ObjectId{2})->payload).buttons.size(),
-        "known menu entries and client interface variants must survive an unknown second tail value");
-    const auto partial_menu_reencoded = form_stream::encode_document(partial_second_tail.value());
-    expect(!partial_menu_reencoded.ok(), "Неполное меню должно запрещать сборку");
+    for (int theme = 0; theme <= 2; ++theme) {
+        auto themed = encoded.value();
+        menu_at(themed).items[5].items[7] = list_stream::ListValue::raw_atom(std::to_string(theme));
+        const auto decoded_theme = form_stream::decode_document(themed, "IndependentTheme");
+        expect(decoded_theme.ok() && decoded_theme.value().reconstruction_complete(),
+            "тема должна читаться независимо от варианта интерфейса");
+        const auto xml = source::serialize_form_xml(decoded_theme.value());
+        const auto parsed = xml ? source::parse_form_xml(xml.value()) : source::parse_form_xml("");
+        expect(parsed.ok(), "тема должна проходить именованный XML");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(themed),
+            "XML должен самостоятельно восстановить независимую тему без изменения других полей");
+    }
+    for (const auto& invalid : {"-1", "3"}) {
+        auto malformed = encoded.value();
+        menu_at(malformed).items[5].items[7] = list_stream::ListValue::raw_atom(invalid);
+        const auto rejected = form_stream::decode_document(malformed, "InvalidTheme");
+        expect(!rejected && rejected.diagnostics().front().code == "OOF1114" &&
+                   rejected.diagnostics().front().path == "$/1/2/2/1/2/1/12/5/7",
+            "неизвестная тема должна отклоняться в своем поле");
+    }
 
     auto invalid_model = document.form();
     model::OrdinaryFormDocument invalid_document(std::move(invalid_model));
@@ -5780,6 +5877,7 @@ void test_menu_action_generations_share_named_model() {
                 model::OrdinaryFormDocument document(std::move(form));
                 model::CommandBarButton entry;
                 entry.name = "Entry"; entry.type = kind;
+                entry.client_interface_theme = model::ClientInterfaceTheme::light;
                 entry.client_interface_variant = command_bar ? model::ClientInterfaceVariant::version8_2_ordinary_app
                     : model::ClientInterfaceVariant::version8_2;
                 if (kind != model::CommandBarButtonKind::separator) {
@@ -5796,6 +5894,7 @@ void test_menu_action_generations_share_named_model() {
                     model::CommandBarButton separator;
                     separator.name = "Separator"; separator.type = model::CommandBarButtonKind::separator;
                     separator.client_interface_variant = entry.client_interface_variant;
+                    separator.client_interface_theme = entry.client_interface_theme;
                     entry.buttons.push_back(std::move(separator));
                 }
                 model::ControlNode control{model::ObjectId{2}, "Probe", command_bar
@@ -5822,14 +5921,14 @@ void test_menu_action_generations_share_named_model() {
                 for (std::size_t index = 0; index < count; ++index) {
                     auto& action = menu.items[5 + index];
                     expect(action.items[action.items.size() - 2].atom == (command_bar ? "2" : "1") &&
-                           action.items.back().atom == (command_bar ? "0" : "1"),
+                           action.items.back().atom == "1",
                         "modern fixture must encode its represented context pair");
                     action.items.resize(action.items.size() - 2);
                     action.items[0] = list_stream::ListValue::raw_atom("6");
                 }
                 const auto decoded = form_stream::decode_document(legacy, "MenuGenerations");
-                expect(decoded.ok() && decoded.value().reconstruction_complete() == !command_bar,
-                    decoded ? "old CommandBar context must remain incomplete until independently represented"
+                expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                    decoded ? "старый контекст должен полностью восстанавливаться с независимой темой"
                             : decoded.diagnostics().front().message);
                 const auto* result = decoded.value().find_control(model::ObjectId{2});
                 const auto& entries = command_bar ? std::get<model::CommandBarPayload>(result->payload).buttons
@@ -5840,14 +5939,8 @@ void test_menu_action_generations_share_named_model() {
                 const auto parsed = xml ? source::parse_form_xml(xml.value()) : source::parse_form_xml("");
                 expect(parsed.ok(), "old generation must serialize as valid named XML");
                 const auto rebuilt = form_stream::encode_document(parsed.value());
-                if (command_bar) {
-                    expect(!rebuilt.ok() && std::ranges::any_of(rebuilt.diagnostics(), [](const auto& diagnostic) {
-                        return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::error;
-                    }), "unrepresented old CommandBar context must prevent a lossy build");
-                } else {
-                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
-                        "XML-only rebuild of complete old Button menu must equal the current named-model encoding");
-                }
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+                    "XML старого поколения должен собираться в текущем поколении с тем же состоянием");
                 for (int variant = 0; variant < 3; ++variant) {
                     auto generation7 = legacy;
                     auto& older_menu = menu_at(generation7);
@@ -5857,13 +5950,14 @@ void test_menu_action_generations_share_named_model() {
                         action.items.push_back(list_stream::ListValue::raw_atom(std::to_string(variant)));
                     }
                     const auto older = form_stream::decode_document(generation7, "MenuGenerations");
-                    expect(older.ok() && older.value().reconstruction_complete() == (variant == 1),
+                    expect(older.ok() && older.value().reconstruction_complete(),
                         "generation7 implicit second context1 must not be inferred from explicit first context");
                     const auto* older_control = older.value().find_control(model::ObjectId{2});
                     const auto& older_entries = command_bar
                         ? std::get<model::CommandBarPayload>(older_control->payload).buttons
                         : std::get<model::ButtonPayload>(older_control->payload).buttons;
-                    expect(older_entries.front().client_interface_variant == static_cast<model::ClientInterfaceVariant>(variant),
+                    expect(older_entries.front().client_interface_variant == static_cast<model::ClientInterfaceVariant>(variant) &&
+                           older_entries.front().client_interface_theme == model::ClientInterfaceTheme::light,
                         "generation7 must retain its explicit first context for either owner");
                 }
                 for (const auto version : {"5", "9"}) {
@@ -5880,11 +5974,10 @@ void test_menu_action_generations_share_named_model() {
                 auto unknown_mask = legacy;
                 menu_at(unknown_mask).items[5].items[5] = list_stream::ListValue::raw_atom("16");
                 expect(!form_stream::decode_document(unknown_mask, "MenuGenerations"), "old action flags must remain bounded");
-                auto unknown_context = current.value();
-                menu_at(unknown_context).items[5].items.back() = list_stream::ListValue::raw_atom(command_bar ? "1" : "0");
-                const auto partial = form_stream::decode_document(unknown_context, "MenuGenerations");
-                expect(partial.ok() && !partial.value().reconstruction_complete(),
-                    "unexplained Version8_2 context must not be silently declared complete");
+                auto unknown_theme = current.value();
+                menu_at(unknown_theme).items[5].items.back() = list_stream::ListValue::raw_atom("3");
+                expect(!form_stream::decode_document(unknown_theme, "MenuGenerations"),
+                    "неизвестная тема не должна теряться при чтении любого поколения");
             }
         }
     }
@@ -6085,8 +6178,8 @@ void test_command_bar_owner_pair_and_strict_profile() {
         "native zero footer of an empty CommandBar root must decode into empty named buttons");
     const auto empty_rebuilt = form_stream::encode_document(empty_decoded.value());
     expect(empty_rebuilt.ok() && list_stream::dump_compact(empty_rebuilt.value()) ==
-        list_stream::dump_compact(empty_owner_four.value()),
-        "empty root footer variant must rebuild from named state without source preservation");
+        list_stream::dump_compact(empty_zero_footer),
+        "empty automatic placement must rebuild exactly from named state without source preservation");
     auto wrong_empty_footer = empty_zero_footer;
     wrong_empty_footer.items[1].items[2].items[2].items[1].items[2].items[1].items[7].items.back().items.back().items[1] =
         list_stream::ListValue::raw_atom("1");
@@ -6102,13 +6195,16 @@ void test_command_bar_owner_pair_and_strict_profile() {
     const auto nonempty_decoded = form_stream::decode_document(nonempty_zero_footer, "NonemptyCommandBarZeroFooter");
     const auto* nonempty_bar = nonempty_decoded ? nonempty_decoded.value().find_control(model::ObjectId{4}) : nullptr;
     const auto* nonempty_payload = nonempty_bar ? std::get_if<model::CommandBarPayload>(&nonempty_bar->payload) : nullptr;
-    expect(nonempty_decoded.ok() && !nonempty_decoded.value().reconstruction_complete() &&
+    expect(nonempty_decoded.ok() && nonempty_decoded.value().reconstruction_complete() &&
                nonempty_payload && nonempty_payload->buttons.size() == 1 &&
                nonempty_payload->buttons.front().action &&
                nonempty_payload->buttons.front().action->handler == "OnlyHandler" &&
-               std::any_of(nonempty_decoded.diagnostics().begin(), nonempty_decoded.diagnostics().end(),
-                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
-        "observed nonempty zero footer must warn while retaining the named action");
+               nonempty_payload->buttons_state.placement &&
+               nonempty_payload->buttons_state.placement->before_button == "Only",
+        "nonempty automatic placement must resolve to the named sibling without a partial projection");
+    const auto nonempty_rebuilt = form_stream::encode_document(nonempty_decoded.value());
+    expect(nonempty_rebuilt.ok() && list_stream::dump_compact(nonempty_rebuilt.value()) ==
+        list_stream::dump_compact(nonempty_zero_footer), "named placement before the first button must rebuild exactly");
     auto invalid_footer = nonempty_zero_footer;
     invalid_footer.items[1].items[2].items[2].items[1].items[2].items[1].items[7].items.back().items.back().items[0] =
         list_stream::ListValue::raw_atom("7");
@@ -27393,6 +27489,7 @@ int main() {
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
+        test_menu_collection_state_round_trip_and_invalid_membership();
         test_named_button_menu_round_trip_and_invalid_references();
         test_button_menu_client_interface_variant_round_trip_and_validation();
         test_menu_action_generations_share_named_model();

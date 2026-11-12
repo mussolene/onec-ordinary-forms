@@ -4,6 +4,7 @@
 #include <array>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -3195,7 +3196,7 @@ void test_button_menu_model_roundtrip_and_rejections() {
     auto malformed_path = std::string(picture_xml);
     malformed_path.replace(malformed_path.find("Buttons/More"), 12, "Other/More");
     expect(!source::parse_form_xml(malformed_path).ok(), "menu paths may only use named Buttons ownership segments");
-    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"/></Buttons></Button></ChildItems></Form>)XML").ok(), "Action requires handler");
+    expect(source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"/></Buttons></Button></ChildItems></Form>)XML").ok(), "a new menu Action may have no assigned handler");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action>RunHandler</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "legacy text-only Action must be rejected");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action handler="RunHandler" name=""><Text/><ToolTip/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Action requires all localized metadata fields");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action handler="RunHandler" name="">unexpected<Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Action mixed text content must be rejected by schema validation");
@@ -3207,18 +3208,35 @@ void test_button_menu_model_roundtrip_and_rejections() {
 }
 
 void test_client_interface_variant_xml_contract() {
-    const auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="zero" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="version8_2" type="Action"><ClientInterfaceVariant>Version8_2</ClientInterfaceVariant><Action handler="Version82" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="default" type="Action"><Action handler="Default" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML");
+    const auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="zero" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><ClientInterfaceTheme>Dark</ClientInterfaceTheme><CommandControlKind>Button</CommandControlKind><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="version8_2" type="Action"><ClientInterfaceVariant>Version8_2</ClientInterfaceVariant><ClientInterfaceTheme>Light</ClientInterfaceTheme><Action handler="Version82" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="default" type="Action"><Action handler="Default" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML");
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
     const auto& buttons = std::get<model::ButtonPayload>(parsed.value().find_control(model::ObjectId{2})->payload).buttons;
     expect(buttons[0].client_interface_variant == model::ClientInterfaceVariant::version8_0 &&
                buttons[1].client_interface_variant == model::ClientInterfaceVariant::version8_2 &&
                buttons[2].client_interface_variant == model::ClientInterfaceVariant::version8_2_ordinary_app,
         "explicit Version8_0 and Version8_2, and the omitted Version8_2_OrdinaryApp default must map to named variants");
+    expect(buttons[0].client_interface_theme == model::ClientInterfaceTheme::dark &&
+               buttons[1].client_interface_theme == model::ClientInterfaceTheme::light &&
+               !buttons[2].client_interface_theme,
+        "XML должен различать две именованные темы и отсутствие настройки");
+    expect(buttons[0].command_control_kind == model::CommandControlKind::button &&
+               buttons[1].command_control_kind == model::CommandControlKind::from_source,
+        "вид визуального элемента команды должен быть независимым");
     const auto xml = source::serialize_form_xml(parsed.value());
     expect(xml.ok() && xml.value().find("<ClientInterfaceVariant>Version8_0</ClientInterfaceVariant>") != std::string::npos &&
                xml.value().find("<ClientInterfaceVariant>Version8_2</ClientInterfaceVariant>") != std::string::npos &&
                xml.value().find("<ClientInterfaceVariant>Version8_2_OrdinaryApp</ClientInterfaceVariant>") == std::string::npos,
         "XML must write explicit Version8_0 and Version8_2, and omit the Version8_2_OrdinaryApp default");
+    const auto repeated = xml ? source::parse_form_xml(xml.value()) : source::parse_form_xml("");
+    expect(repeated.ok() && std::get<model::ButtonPayload>(repeated.value().find_control(model::ObjectId{2})->payload).buttons == buttons,
+        "независимые тема и вариант должны сохраняться в XML");
+    for (const auto& invalid_theme : {"Auto", "0", "Unknown", "Light</ClientInterfaceTheme><ClientInterfaceTheme>Dark"}) {
+        auto invalid_xml = xml.value();
+        const auto theme_start = invalid_xml.find("<ClientInterfaceTheme>Dark</ClientInterfaceTheme>");
+        invalid_xml.replace(theme_start, std::string("<ClientInterfaceTheme>Dark</ClientInterfaceTheme>").size(),
+            std::string("<ClientInterfaceTheme>") + invalid_theme + "</ClientInterfaceTheme>");
+        expect(!source::parse_form_xml(invalid_xml), "неизвестные и повторные темы должны отклоняться");
+    }
     expect(source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><ClientInterfaceVariant>Unsupported</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok() == false,
         "unsupported client interface variant names must be rejected");
     expect(source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><ClientInterfaceVariant>Version8_2_OrdinaryApp</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok() == false,
@@ -3795,6 +3813,88 @@ void test_command_bar_buttons_xml_only_contract() {
         std::get<model::CommandBarPayload>(reparsed.value().find_control(model::ObjectId{4})->payload).buttons ==
             std::get<model::CommandBarPayload>(bar->payload).buttons,
         "CommandBar typed Buttons and Actions must survive XML-only round-trip");
+}
+
+void test_automatic_buttons_xml_contract() {
+    const auto parse_buttons = [](std::string_view buttons, bool bar_auto_fill = false) {
+        return source::parse_form_xml(std::string(R"XML(<Form id="1" name="AutomaticButtons" ordinaryFormVersion="2.1"><ChildItems><CommandBar id="2" name="Tools"><Position/>)XML") +
+            (bar_auto_fill ? "<AutoFill>true</AutoFill>" : "") + std::string(buttons) + "</CommandBar></ChildItems></Form>");
+    };
+    const std::string items = R"XML(<CommandBarButton name="Manual" type="Separator"/><CommandBarButton name="Automatic" type="Submenu"><AutomaticInsertionLocks>0</AutomaticInsertionLocks><Buttons autoFill="true"><AutomaticButtons><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons></CommandBarButton>)XML";
+    const std::vector<std::string> variants{
+        "<Buttons autoFill=\"true\"/>",
+        "<Buttons><AutomaticButtons><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons>",
+        "<Buttons autoFill=\"true\"><AutomaticButtons><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons>",
+        "<Buttons>" + items + "</Buttons>",
+        "<Buttons><AutomaticButtons><ButtonRef name=\"Manual\"/></AutomaticButtons>" + items + "</Buttons>",
+        "<Buttons><AutomaticButtons><Placement><BeforeButton name=\"Automatic\"/></Placement></AutomaticButtons>" + items + "</Buttons>",
+        "<Buttons autoFill=\"true\"><AutomaticButtons><Placement><BeforeButton name=\"Manual\"/></Placement><ButtonRef name=\"Manual\"/><ButtonRef name=\"Automatic\"/></AutomaticButtons>" + items + "</Buttons>"};
+    for (const auto& buttons : variants) {
+        const auto parsed = parse_buttons(buttons);
+        expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+        if (!parsed) continue;
+        const auto& expected = std::get<model::CommandBarPayload>(parsed.value().find_control(model::ObjectId{2})->payload);
+        const auto xml = source::serialize_form_xml(parsed.value());
+        expect(xml.ok(), "automatic collection state must serialize without a baseline");
+        if (!xml) continue;
+        const auto roundtrip = source::parse_form_xml(xml.value());
+        expect(roundtrip.ok(), "automatic collection state must parse from canonical XML");
+        if (!roundtrip) continue;
+        const auto& actual = std::get<model::CommandBarPayload>(roundtrip.value().find_control(model::ObjectId{2})->payload);
+        expect(actual.buttons_state == expected.buttons_state && actual.buttons == expected.buttons,
+            "placement, membership, nested state and individual insertion lock counters must roundtrip independently");
+        expect(xml.value().find("<AutomaticInsertionLocks>1</AutomaticInsertionLocks>") == std::string::npos && xml.value().find("autoFill=\"false\"") == std::string::npos,
+            "default insertion lock counter and false collection default must be omitted");
+    }
+    for (const auto locks : {std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{2}, std::numeric_limits<std::uint64_t>::max()}) {
+        for (const auto kind : {"Separator", "Submenu", "Action"}) {
+            const auto parsed = parse_buttons(std::string("<Buttons><CommandBarButton name=\"Counted\" type=\"") + kind +
+                "\"><AutomaticInsertionLocks>" + std::to_string(locks) + "</AutomaticInsertionLocks>" +
+                (std::string_view(kind) == "Action" ? "<Action handler=\"Run\" name=\"\"><Text/><ToolTip/><Description/></Action>" : "") +
+                "</CommandBarButton></Buttons>");
+            expect(parsed.ok(), "all menu item kinds must accept the full uint64 insertion lock counter");
+            if (!parsed) continue;
+            const auto xml = source::serialize_form_xml(parsed.value());
+            expect(xml.ok(), "insertion lock counter must serialize without deriving a boolean");
+            if (!xml) continue;
+            expect((xml.value().find("<AutomaticInsertionLocks>") == std::string::npos) == (locks == 1),
+                "only the default counter value 1 may be omitted");
+            const auto roundtrip = source::parse_form_xml(xml.value());
+            expect(roundtrip.ok() && std::get<model::CommandBarPayload>(roundtrip.value().find_control(model::ObjectId{2})->payload).buttons.front().automatic_insertion_locks == locks,
+                "zero, multiple holds and UINT64_MAX must survive XML roundtrip exactly");
+        }
+    }
+    const auto independent = parse_buttons("<Buttons autoFill=\"true\"/>");
+    expect(independent.ok() && !independent.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("AutoFill")),
+        "Buttons autoFill must not assign CommandBar AutoFill");
+    const auto reverse = parse_buttons("<Buttons/>", true);
+    expect(reverse.ok() && !std::get<model::CommandBarPayload>(reverse.value().find_control(model::ObjectId{2})->payload).buttons_state.auto_fill,
+        "CommandBar AutoFill must not assign Buttons autoFill");
+    const std::vector<std::string> invalid{
+        "<Buttons><AutomaticButtons><ButtonRef name=\"Missing\"/></AutomaticButtons>" + items + "</Buttons>",
+        "<Buttons><AutomaticButtons><ButtonRef name=\"Manual\"/><ButtonRef name=\"Manual\"/></AutomaticButtons>" + items + "</Buttons>",
+        "<Buttons><AutomaticButtons><ButtonRef name=\"\"/></AutomaticButtons>" + items + "</Buttons>",
+        "<Buttons><AutomaticButtons><Placement><BeforeButton name=\"Missing\"/></Placement></AutomaticButtons>" + items + "</Buttons>",
+        "<Buttons><AutomaticButtons><Placement><AfterLastButton/><AfterLastButton/></Placement></AutomaticButtons></Buttons>",
+        "<Buttons><AutomaticButtons><ButtonRef name=\"Manual\"/><Placement><AfterLastButton/></Placement></AutomaticButtons>" + items + "</Buttons>",
+        "<Buttons>" + items + "<AutomaticButtons/></Buttons>",
+        "<Buttons><AutomaticButtons/><AutomaticButtons/></Buttons>",
+        "<Buttons><AutomaticButtons unknown=\"true\"/></Buttons>",
+        "<Buttons><AutomaticButtons><Unknown/></AutomaticButtons></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Separator\"><Buttons autoFill=\"true\"/></CommandBarButton></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Action\"><Action handler=\"Run\" name=\"\"><Text/><ToolTip/><Description/></Action><Buttons><AutomaticButtons><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons></CommandBarButton></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Separator\" automatic=\"true\"/></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Separator\"><AutomaticInsertionLocks>-1</AutomaticInsertionLocks></CommandBarButton></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Separator\"><AutomaticInsertionLocks>18446744073709551616</AutomaticInsertionLocks></CommandBarButton></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Separator\"><AutomaticInsertionLocks>true</AutomaticInsertionLocks></CommandBarButton></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Separator\"><AutomaticInsertionLocks/></CommandBarButton></Buttons>",
+        "<Buttons><CommandBarButton name=\"Bad\" type=\"Separator\"><AutomaticInsertionLocks>0</AutomaticInsertionLocks><AutomaticInsertionLocks>2</AutomaticInsertionLocks></CommandBarButton></Buttons>"};
+    const auto before = source::serialize_form_xml(independent.value());
+    for (const auto& buttons : invalid) expect(!parse_buttons(buttons), "invalid automatic collection relationships must reject atomically");
+    const auto after = source::serialize_form_xml(independent.value());
+    expect(before.ok() && after.ok() && before.value() == after.value(), "failed XML candidates must not change an existing document");
+    const auto button = source::parse_form_xml(R"XML(<Form id="1" name="ButtonMenu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons autoFill="true"><AutomaticButtons><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons><MenuMode type="MenuMode" member="Use"/></Button></ChildItems></Form>)XML");
+    expect(button.ok() && source::serialize_form_xml(button.value()).ok(), "Button payload must share automatic empty collection state");
 }
 
 void test_standard_menu_action_xml_contract() {
@@ -5051,6 +5151,7 @@ int main() {
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();
         test_command_bar_buttons_xml_only_contract();
+        test_automatic_buttons_xml_contract();
         test_standard_menu_action_xml_contract();
         test_standard_save_restore_action_xml_contract();
         test_command_bar_action_source_xml_contract();

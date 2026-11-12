@@ -2785,8 +2785,11 @@ private:
                 continue;
             }
             else if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
-                if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) payload->buttons = parse_command_bar_buttons(child, id_text);
-                else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
+                if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) payload->buttons = parse_command_bar_buttons(child, id_text, payload->buttons_state);
+                else {
+                    auto& bar_payload = std::get<model::CommandBarPayload>(control.payload);
+                    bar_payload.buttons = parse_command_bar_buttons(child, id_text, bar_payload.buttons_state);
+                }
             } else if (name == "Columns" && descriptor->kind == model::ControlKind::table) {
                 std::get<model::TablePayload>(control.payload).columns = parse_table_columns(child, id_text);
             } else if (descriptor->kind == model::ControlKind::table && std::ranges::any_of(mm::table_source_extension_descriptors(),
@@ -3271,7 +3274,8 @@ private:
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
             if (!seen.insert(name).second) fail("OOF2003", child, std::string(owner), name, "field at most once", name, "Duplicate button menu field");
-            if (name == "Text") item.text = node_text(child);
+            if (name == "AutomaticInsertionLocks") item.automatic_insertion_locks = parse_integer<std::uint64_t>(node_text(child), child, name, owner);
+            else if (name == "Text") item.text = node_text(child);
             else if (name == "Explanation") item.explanation = node_text(child);
             else if (name == "ToolTip") item.tooltip = node_text(child);
             else if (name == "Enabled") item.enabled = parse_boolean(node_text(child), child, "Enabled", owner);
@@ -3291,8 +3295,22 @@ private:
                 else if (variant == "Version8_2") item.client_interface_variant = model::ClientInterfaceVariant::version8_2;
                 else if (variant == "Version8_2_OrdinaryApp") item.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
                 else fail("OOF2003", child, std::string(owner), name, "Version8_0, Version8_2, or Version8_2_OrdinaryApp", variant, "Unknown client interface variant");
+            } else if (name == "ClientInterfaceTheme") {
+                const auto theme = node_text(child);
+                if (theme == "Light") item.client_interface_theme = model::ClientInterfaceTheme::light;
+                else if (theme == "Dark") item.client_interface_theme = model::ClientInterfaceTheme::dark;
+                else fail("OOF2003", child, std::string(owner), name, "Light or Dark", theme, "Unknown client interface theme");
+            } else if (name == "CommandControlKind") {
+                const auto kind = node_text(child);
+                if (kind == "FromSource") item.command_control_kind = model::CommandControlKind::from_source;
+                else if (kind == "Button") item.command_control_kind = model::CommandControlKind::button;
+                else fail("OOF2003", child, std::string(owner), name, "FromSource or Button", kind, "Unknown command control kind");
             } else if (name == "Shortcut") item.shortcut = parse_shortcut(child);
-            else if (name == "Picture") item.picture = parse_picture_reference(child, "Picture", owner);
+            else if (name == "Picture") {
+                if (child->properties == nullptr && element_children(child).empty() && node_text(child).empty())
+                    item.clear_picture = true;
+                else item.picture = parse_picture_reference(child, "Picture", owner);
+            }
             else if (name == "Action") {
                 for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
                     const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
@@ -3345,24 +3363,24 @@ private:
                 else if (order == "Descending") item.order = model::CommandBarButtonOrder::descending;
                 else fail("OOF2003", child, std::string(owner), name, "DontOrder, Ascending, or Descending", order, "Unknown submenu order");
             }
-            else if (name == "Buttons") item.buttons = parse_command_bar_buttons(child, owner);
+            else if (name == "Buttons") item.buttons = parse_command_bar_buttons(child, owner, item.buttons_state);
             else fail("OOF2003", child, std::string(owner), name, "declared button menu field", name, "Unknown button menu field");
         }
-        if (item.type == model::CommandBarButtonKind::action && (item.action.has_value() == item.standard_action.has_value()))
-            fail("OOF2003", node, std::string(owner), "Action", "exactly one Action or StandardAction", "missing or duplicated", "Action item requires exactly one action value");
+        if (item.action && item.standard_action)
+            fail("OOF2003", node, std::string(owner), "Action", "at most one Action or StandardAction", "duplicated", "Action item cannot combine action values");
         if (item.action && item.action->handler.empty())
             fail("OOF2003", node, std::string(owner), "Action", "non-empty action handler", "empty", "Action requires a handler");
         if (item.type != model::CommandBarButtonKind::action && (item.action || item.standard_action))
             fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare an action value");
         if (item.type != model::CommandBarButtonKind::submenu && has_order)
             fail("OOF2003", node, std::string(owner), "Order", "Submenu only", "present", "Only Submenu items may declare an order");
-        if (item.type != model::CommandBarButtonKind::submenu && !item.buttons.empty())
+        if (item.type != model::CommandBarButtonKind::submenu && (!item.buttons.empty() || item.buttons_state != model::CommandBarButtonsState{}))
             fail("OOF2003", node, std::string(owner), "Buttons", "Submenu only", "present", "Only Submenu items may contain buttons");
         if (item.type == model::CommandBarButtonKind::separator &&
             std::any_of(seen.begin(), seen.end(), [](const auto& field) {
-                return field != "ClientInterfaceVariant";
+                return field != "ClientInterfaceVariant" && field != "ClientInterfaceTheme" && field != "CommandControlKind" && field != "AutomaticInsertionLocks";
             }))
-            fail("OOF2003", node, std::string(owner), "fields", "ClientInterfaceVariant only", "unsupported field",
+            fail("OOF2003", node, std::string(owner), "fields", "command interface settings or AutomaticInsertionLocks only", "unsupported field",
                 "Separator contains an unsupported field");
         return item;
     }
@@ -3446,14 +3464,62 @@ private:
         }
     }
 
-    std::vector<model::CommandBarButton> parse_command_bar_buttons(xmlNodePtr node, std::string_view owner) {
+    std::vector<model::CommandBarButton> parse_command_bar_buttons(xmlNodePtr node, std::string_view owner, model::CommandBarButtonsState& state) {
+        state = {};
+        for (xmlAttrPtr attr = node->properties; attr != nullptr; attr = attr->next) {
+            const std::string name(reinterpret_cast<const char*>(attr->name));
+            if (name != "autoFill")
+                fail("OOF2003", node, std::string(owner), name, "autoFill attribute", name, "Unknown Buttons attribute");
+            state.auto_fill = parse_boolean(required_attribute(node, "autoFill", owner), node, "autoFill", owner);
+        }
         std::vector<model::CommandBarButton> result;
         std::set<std::string> names;
+        bool has_automatic = false;
         for (xmlNodePtr child : element_children(node)) {
+            if (node_name(child) == "AutomaticButtons") {
+                if (has_automatic || !result.empty())
+                    fail("OOF2003", child, std::string(owner), "AutomaticButtons", "at most once before buttons", "out of order or duplicate", "AutomaticButtons must be the first Buttons element");
+                has_automatic = true;
+                if (child->properties != nullptr)
+                    fail("OOF2003", child, std::string(owner), "AutomaticButtons", "no attributes", "attribute", "Unknown AutomaticButtons attribute");
+                std::set<std::string> included;
+                for (xmlNodePtr automatic_child : element_children(child)) {
+                    const auto name = node_name(automatic_child);
+                    if (name == "Placement") {
+                        if (state.placement || !state.included_buttons.empty() || automatic_child->properties != nullptr)
+                            fail("OOF2003", automatic_child, std::string(owner), name, "one Placement before ButtonRef without attributes", "invalid Placement", "Invalid AutomaticButtons Placement");
+                        const auto choices = element_children(automatic_child);
+                        if (choices.size() != 1 || (node_name(choices.front()) != "BeforeButton" && node_name(choices.front()) != "AfterLastButton"))
+                            fail("OOF2003", automatic_child, std::string(owner), name, "exactly one BeforeButton or AfterLastButton", "invalid choice", "Invalid AutomaticButtons Placement choice");
+                        const auto choice = choices.front();
+                        model::AutomaticButtonsPlacement placement;
+                        if (node_name(choice) == "BeforeButton") placement.before_button = required_attribute(choice, "name", owner);
+                        for (xmlAttrPtr attr = choice->properties; attr != nullptr; attr = attr->next)
+                            if (node_name(choice) != "BeforeButton" || std::string_view(reinterpret_cast<const char*>(attr->name)) != "name")
+                                fail("OOF2003", choice, std::string(owner), "Placement", "declared placement attributes", "unknown attribute", "Unknown placement attribute");
+                        if (!element_children(choice).empty() || !node_text(choice).empty())
+                            fail("OOF2003", choice, std::string(owner), "Placement", "empty placement target", "content", "Placement target cannot contain content");
+                        state.placement = std::move(placement);
+                    } else if (name == "ButtonRef") {
+                        const auto target = required_attribute(automatic_child, "name", owner);
+                        for (xmlAttrPtr attr = automatic_child->properties; attr != nullptr; attr = attr->next)
+                            if (std::string_view(reinterpret_cast<const char*>(attr->name)) != "name")
+                                fail("OOF2003", automatic_child, std::string(owner), name, "name attribute", "unknown attribute", "Unknown ButtonRef attribute");
+                        if (target.empty() || !included.insert(target).second || !element_children(automatic_child).empty() || !node_text(automatic_child).empty())
+                            fail("OOF2003", automatic_child, std::string(owner), name, "unique non-empty name without content", "invalid reference", "Invalid AutomaticButtons ButtonRef");
+                        state.included_buttons.push_back(target);
+                    } else fail("OOF2003", automatic_child, std::string(owner), name, "Placement or ButtonRef", name, "Unknown AutomaticButtons field");
+                }
+                continue;
+            }
             auto item = parse_command_bar_button(child, owner);
             if (!names.insert(item.name).second) fail("OOF2003", child, std::string(owner), item.name, "unique item name in collection", item.name, "Duplicate button menu item name");
             result.push_back(std::move(item));
         }
+        if (state.placement && state.placement->before_button && !names.contains(*state.placement->before_button))
+            fail("OOF2003", node, std::string(owner), "BeforeButton", "existing sibling name", *state.placement->before_button, "Dangling AutomaticButtons placement");
+        for (const auto& name : state.included_buttons)
+            if (!names.contains(name)) fail("OOF2003", node, std::string(owner), "ButtonRef", "existing sibling name", name, "Dangling AutomaticButtons reference");
         return result;
     }
 
@@ -4851,13 +4917,27 @@ private:
         writer_.close("Page");
     }
 
-    void write_command_bar_buttons(const std::vector<model::CommandBarButton>& buttons, std::string_view owner) {
-        if (buttons.empty()) return;
-        writer_.open("Buttons");
+    void write_command_bar_buttons(const std::vector<model::CommandBarButton>& buttons, std::string_view owner, const model::CommandBarButtonsState& state) {
+        if (buttons.empty() && state == model::CommandBarButtonsState{}) return;
+        if (state.auto_fill) writer_.open("Buttons", {{"autoFill", "true"}});
+        else writer_.open("Buttons");
+        if (state.placement || !state.included_buttons.empty()) {
+            writer_.open("AutomaticButtons");
+            if (state.placement) {
+                writer_.open("Placement");
+                if (state.placement->before_button) writer_.empty("BeforeButton", {{"name", *state.placement->before_button}});
+                else writer_.empty("AfterLastButton");
+                writer_.close("Placement");
+            }
+            for (const auto& name : state.included_buttons) writer_.empty("ButtonRef", {{"name", name}});
+            writer_.close("AutomaticButtons");
+        }
         for (const auto& item : buttons) {
             const char* type = item.type == model::CommandBarButtonKind::action ? "Action" :
                 item.type == model::CommandBarButtonKind::submenu ? "Submenu" : "Separator";
             writer_.open("CommandBarButton", {{"name", item.name}, {"type", type}});
+            if (item.automatic_insertion_locks != 1)
+                writer_.text("AutomaticInsertionLocks", std::to_string(item.automatic_insertion_locks));
             if (item.text) writer_.text("Text", *item.text);
             if (item.explanation) writer_.text("Explanation", *item.explanation);
             if (item.tooltip) writer_.text("ToolTip", *item.tooltip);
@@ -4882,13 +4962,30 @@ private:
                 default:
                     throw std::invalid_argument("Unknown CommandBarButton ClientInterfaceVariant");
             }
+            if (item.client_interface_theme) {
+                switch (*item.client_interface_theme) {
+                    case model::ClientInterfaceTheme::light:
+                        writer_.text("ClientInterfaceTheme", "Light");
+                        break;
+                    case model::ClientInterfaceTheme::dark:
+                        writer_.text("ClientInterfaceTheme", "Dark");
+                        break;
+                    default:
+                        throw std::invalid_argument("Unknown CommandBarButton ClientInterfaceTheme");
+                }
+            }
+            if (item.command_control_kind == model::CommandControlKind::button)
+                writer_.text("CommandControlKind", "Button");
+            else if (item.command_control_kind != model::CommandControlKind::from_source)
+                throw std::invalid_argument("Unknown CommandBarButton CommandControlKind");
             if (item.shortcut != model::ShortcutValue{}) {
                 writer_.open("Shortcut", {{"Alt", item.shortcut.alt ? "true" : "false"},
                     {"Ctrl", item.shortcut.ctrl ? "true" : "false"}, {"Shift", item.shortcut.shift ? "true" : "false"}});
                 writer_.text("Key", item.shortcut.key);
                 writer_.close("Shortcut");
             }
-            if (item.picture) write_picture_reference("Picture", *item.picture, owner);
+            if (item.clear_picture) writer_.empty("Picture");
+            else if (item.picture) write_picture_reference("Picture", *item.picture, owner);
             if (item.action) {
                 writer_.open("Action", {{"handler", item.action->handler}, {"name", item.action->name}});
                 write_localized("Text", item.action->text, owner);
@@ -4902,7 +4999,7 @@ private:
             if (item.type == model::CommandBarButtonKind::submenu && item.order != model::CommandBarButtonOrder::none) {
                 writer_.text("Order", item.order == model::CommandBarButtonOrder::ascending ? "Ascending" : "Descending");
             }
-            write_command_bar_buttons(item.buttons, owner);
+            write_command_bar_buttons(item.buttons, owner, item.buttons_state);
             writer_.close("CommandBarButton");
         }
         writer_.close("Buttons");
@@ -5074,11 +5171,18 @@ private:
             writer_.close("Document");
         }
         const std::vector<model::CommandBarButton>* owned_buttons = nullptr;
-        if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
-        if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;
+        const model::CommandBarButtonsState* buttons_state = nullptr;
+        if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) {
+            owned_buttons = &button->buttons;
+            buttons_state = &button->buttons_state;
+        }
+        if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) {
+            owned_buttons = &command_bar->buttons;
+            buttons_state = &command_bar->buttons_state;
+        }
         if (owned_buttons != nullptr) {
             for (const auto& property : metamodel_.properties_for(control.kind())) {
-                if (property.api_name == "Buttons") write_command_bar_buttons(*owned_buttons, id);
+                if (property.api_name == "Buttons") write_command_bar_buttons(*owned_buttons, id, *buttons_state);
                 else if (const auto* entry = control.properties().find(property.id);
                     entry != nullptr && !equals_descriptor_default(property, entry->value))
                     write_property(property, entry->value, id);

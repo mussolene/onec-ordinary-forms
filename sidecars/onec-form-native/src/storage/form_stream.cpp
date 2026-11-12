@@ -1965,7 +1965,7 @@ LV canonical_command_bar_base(bool enabled, model::PropertyValue tool_tip,
 
 LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
                       const model::OrdinaryFormDocument& document, std::uint64_t control_id,
-                      std::string_view root_marker, std::uint64_t root_group_id);
+                      std::string_view root_marker, std::uint64_t root_group_id, const model::CommandBarButtonsState& state);
 
 // Menu item IDs are assigned in preorder by encode_button_menu, including submenus.
 std::uint64_t default_menu_item_id(const std::vector<model::CommandBarButton>& entries) {
@@ -2022,7 +2022,7 @@ LV canonical_command_bar_properties(bool enabled, model::PropertyValue tool_tip,
                                      bool transparent = false, std::int32_t orientation = 2,
                                      std::int32_t buttons_alignment = 0,
                                      const model::ColorValue* button_back_color = nullptr,
-                                     const model::FontValue* font = nullptr) {
+                                     const model::FontValue* font = nullptr, const model::CommandBarButtonsState& buttons_state = {}) {
     std::vector<LV> properties(14, raw("0"));
     properties[0] = canonical_command_bar_base(enabled, tool_tip, border_color, button_text_color,
         back_color, border, transparent, button_back_color, font);
@@ -2046,7 +2046,7 @@ LV canonical_command_bar_properties(bool enabled, model::PropertyValue tool_tip,
     // Slot 8 is the observed stable root-owner marker.
     properties[8] = raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79");
     const auto collection_id = command_bar_collection_id(document, control_id);
-    properties[7] = encode_button_menu(buttons, document, control_id, command_bar_root_marker, collection_id);
+    properties[7] = encode_button_menu(buttons, document, control_id, command_bar_root_marker, collection_id, buttons_state);
     properties[9] = raw(std::to_string(collection_id));
     const auto selected = default_menu_item_id(buttons);
     if (selected != 0) {
@@ -5472,13 +5472,11 @@ LV menu_entry_properties(const model::CommandBarButton& entry, std::string_view 
     const auto representation = entry.representation == model::ButtonRepresentation::automatic ? 0 :
         entry.representation == model::ButtonRepresentation::text ? 1 :
         entry.representation == model::ButtonRepresentation::picture ? 2 : 3;
-    const bool native_standard_command = entry.standard_action &&
-        entry.standard_action->command != model::StandardMenuCommand::close;
-    return list({raw("8"), string_value(entry.name), raw(entry.changes_data ? "1" : "0"), raw("1"),
+    return list({raw("8"), string_value(entry.name), raw(entry.changes_data ? "1" : "0"), raw(std::to_string(entry.automatic_insertion_locks)),
         encoded_localized(entry.text.value_or(std::string{})), raw(entry.text ? "1" : "0"), raw(std::string(owner)),
         raw(std::to_string(id)), raw("1e2"), raw(std::to_string(type)), raw(std::to_string(representation)),
         raw(entry.enabled ? "1" : "0"), raw(entry.checked ? "1" : "0"),
-        raw(entry.type == model::CommandBarButtonKind::separator || native_standard_command ? "0" : "1"), raw("0"), raw("0")});
+        raw(entry.command_control_kind == model::CommandControlKind::from_source ? "0" : "1"), raw("0"), raw("0")});
 }
 
 LV menu_picture(const model::PictureRef& reference, const model::OrdinaryFormDocument& document) {
@@ -5495,7 +5493,7 @@ std::string menu_group_key(std::string_view marker, std::uint64_t id) {
 
 LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
                       const model::OrdinaryFormDocument& document, std::uint64_t control_id,
-                      std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0) {
+                      std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0, const model::CommandBarButtonsState& state = {}) {
     const auto owner = menu_identity(control_id | 0x8000000000000000ULL, 0);
     struct Item { const model::CommandBarButton* entry; std::uint64_t id; std::string action_id; };
     std::vector<Item> items;
@@ -5504,6 +5502,9 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
     collect = [&](const auto& collection, std::size_t depth) {
         if (depth > 256) fail("OOF1122", "$/Button/Buttons", "menu depth at most 256", "too deep", "Menu nesting is too deep");
         for (const auto& entry : collection) {
+            if (entry.automatic_insertion_locks == 0 && entry.type != model::CommandBarButtonKind::submenu)
+                fail("OOF1122", "$/Button/Buttons/AutomaticInsertionLocks", "persisted manual button or submenu", {},
+                    "Source-generated actions and separators are not persisted by Designer");
             const auto id = items.size() + 1;
             ids.emplace(&entry, id);
             items.push_back({&entry, id, menu_identity(control_id, id)});
@@ -5517,11 +5518,13 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         const auto& entry = *it->entry;
         LV action = entry.type == model::CommandBarButtonKind::action
             ? entry.standard_action ? encode_standard_menu_action(*entry.standard_action, document, "$/Button/Buttons/StandardAction")
-                : encode_menu_action(*entry.action, "$/Button/Buttons/Action")
+                : entry.action ? encode_menu_action(*entry.action, "$/Button/Buttons/Action")
+                    : list({raw("1"), raw(std::string(standard_menu_default_context_marker)),
+                        raw(std::to_string(std::numeric_limits<std::int32_t>::max()))})
             : entry.type == model::CommandBarButtonKind::submenu
                 ? list({raw("1"), raw(owner), raw(std::to_string(it->id))})
                 : parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}");
-        unsigned mask = (entry.picture ? 1 : 0) | (entry.tooltip ? 2 : 0) |
+        unsigned mask = (entry.picture || entry.clear_picture ? 1 : 0) | (entry.tooltip ? 2 : 0) |
             (entry.explanation ? 4 : 0) | (entry.shortcut != model::ShortcutValue{} ? 8 : 0);
         std::int32_t client_interface_variant = 0;
         switch (entry.client_interface_variant) {
@@ -5541,22 +5544,25 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         }
         std::vector<LV> record{raw("8"), raw(it->action_id), raw("1"),
             raw(std::string(entry.type == model::CommandBarButtonKind::action
-                ? (entry.standard_action ? standard_menu_action_guid : menu_action_guid) : menu_reference_guid)),
+                ? (entry.standard_action ? standard_menu_action_guid : entry.action ? menu_action_guid : menu_reference_guid) : menu_reference_guid)),
             std::move(action), raw(std::to_string(mask))};
         if (entry.tooltip) record.push_back(encoded_localized(*entry.tooltip));
         if (entry.explanation) record.push_back(encoded_localized(*entry.explanation));
-        if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
+        if (entry.clear_picture) record.push_back(canonical_button_picture());
+        else if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
         if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_named_shortcut(entry.shortcut, "$/Button/Shortcut"));
         record.push_back(raw(std::to_string(client_interface_variant)));
-        record.push_back(raw(client_interface_variant == 1 ? "1" : "0"));
+        // IClientInterfaceForCommand хранит вариант и тему независимо.
+        record.push_back(raw(!entry.client_interface_theme ? "0" :
+            *entry.client_interface_theme == model::ClientInterfaceTheme::light ? "1" : "2"));
         result.push_back(list(std::move(record)));
     }
     result.push_back(raw(std::to_string(1 + std::count_if(items.begin(), items.end(), [](const auto& item) {
         return item.entry->type == model::CommandBarButtonKind::submenu;
     }))));
-    const auto group = [&](const auto& collection, std::string_view marker, std::uint64_t id) {
+    const auto group = [&](const auto& collection, std::string_view marker, std::uint64_t id, const model::CommandBarButtonsState& collection_state) {
         std::vector<LV> value{raw("5"), raw(std::string(marker)), raw(std::to_string(id)),
-            raw("0"), raw(std::to_string(collection.size()))};
+            raw(collection_state.auto_fill ? "1" : "0"), raw(std::to_string(collection.size()))};
         for (const auto& entry : collection) {
             const auto entry_id = ids.at(&entry);
             value.push_back(raw(items[entry_id - 1].action_id));
@@ -5571,16 +5577,56 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
             submenu_refs.push_back(raw(entry.order == model::CommandBarButtonOrder::ascending ? "1" :
                 entry.order == model::CommandBarButtonOrder::descending ? "2" : "0"));
         }
-        value.push_back(list({raw("-1"), raw("0"), list(std::move(submenu_refs))}));
+        std::int32_t automatic_position = -1;
+        if (collection_state.placement) {
+            auto position = collection.end();
+            if (collection_state.placement->before_button) {
+                position = std::ranges::find(collection, *collection_state.placement->before_button,
+                    &model::CommandBarButton::name);
+                if (position == collection.end())
+                    fail("OOF1123", "$/Buttons/AutomaticButtons/Placement", "existing sibling button", {},
+                        "Automatic buttons placement references a missing button");
+            }
+            automatic_position = static_cast<std::int32_t>(std::distance(collection.begin(), position));
+        }
+        std::set<std::uint64_t> included;
+        for (const auto& name : collection_state.included_buttons) {
+            const auto entry = std::ranges::find(collection, name, &model::CommandBarButton::name);
+            if (entry == collection.end() || !included.insert(ids.at(&*entry)).second)
+                fail("OOF1123", "$/Buttons/AutomaticButtons", "unique existing sibling buttons", {},
+                    "Automatic button membership is missing or duplicated");
+        }
+        // Load выводит это членство из IAutomaticDesignObject. Save сохраняет
+        // автоматическое подменю с ручными дочерними элементами и его членство.
+        for (const auto& entry : collection)
+            if (entry.automatic_insertion_locks == 0) included.insert(ids.at(&entry));
+        if (!included.empty()) {
+            const auto first_automatic = std::ranges::find(collection, std::uint64_t{0},
+                &model::CommandBarButton::automatic_insertion_locks);
+            const auto derived_position = first_automatic == collection.end() ? -1 :
+                static_cast<std::int32_t>(std::distance(collection.begin(), first_automatic));
+            if (collection_state.placement && automatic_position != derived_position)
+                fail("OOF1123", "$/Buttons/AutomaticButtons/Placement", "placement derived from included automatic buttons", {},
+                    "Explicit automatic placement conflicts with persisted membership");
+            automatic_position = derived_position;
+        }
+        std::vector<LV> footer{raw(std::to_string(automatic_position)), raw(std::to_string(included.size()))};
+        for (const auto member_id : included) {
+            footer.push_back(raw(owner));
+            footer.push_back(raw(std::to_string(member_id)));
+        }
+        footer.push_back(list(std::move(submenu_refs)));
+        value.push_back(list(std::move(footer)));
         return list(std::move(value));
     };
-    result.push_back(group(entries, root_marker, root_group_id));
+    result.push_back(group(entries, root_marker, root_group_id, state));
     for (const auto& item : items) if (item.entry->type == model::CommandBarButtonKind::submenu)
-        result.push_back(group(item.entry->buttons, owner, item.id));
+        result.push_back(group(item.entry->buttons, owner, item.id, item.entry->buttons_state));
     return list(std::move(result));
 }
 
 struct DecodedMenu {
+    model::CommandBarButtonsState state;
     std::unordered_map<std::string, std::vector<std::string>> paths;
     std::vector<model::CommandBarButton> entries;
     std::vector<model::PictureAsset> assets;
@@ -5658,21 +5704,18 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         require_raw_constant(group.items[0], "5", path);
         const auto id = integer_atom<std::uint64_t>(group.items[2], path);
         const auto marker = uuid_atom(group.items[1], path).canonical;
-        const bool root_group = marker == root_marker && id == root_group_id;
-        require_raw_constant(group.items[3], "0", path);
+        (void)bool_atom(group.items[3], child_path(path, 3));
         const auto key = menu_group_key(marker, id);
         if (!groups.emplace(key, &group).second) fail("OOF1114", std::string(path), "unique owner/ID collection pairs", std::to_string(id), "Duplicate menu collection");
         const auto& footer = group.items.back();
-        require_arity(footer, 3, path);
-        const bool command_bar_root = root_group && root_marker == command_bar_root_marker;
-        if (command_bar_root && raw_atom(footer.items[0], path) == "0") {
-            if (integer_atom<std::size_t>(group.items[4], path) != 0)
-                warn_incomplete_profile(warnings, reconstruction_complete, root_group_id,
-                    std::string(path), "CommandBarMenu");
-        } else require_raw_constant(footer.items[0], "-1", path);
-        require_raw_constant(footer.items[1], "0", path);
-        require_list(footer.items[2], path);
-        const auto& refs = footer.items[2];
+        require_list(footer, path);
+        if (footer.items.size() < 3)
+            fail("OOF1102", std::string(path), "automatic buttons state and submenu orders", {}, "Menu footer is incomplete");
+        const auto member_count = integer_atom<std::size_t>(footer.items[1], path);
+        if (member_count > (footer.items.size() - 3) / 2 || footer.items.size() != 3 + 2 * member_count)
+            fail("OOF1102", std::string(path), "exact automatic membership size", {}, "Menu automatic membership count is inconsistent");
+        const auto& refs = footer.items.back();
+        require_list(refs, path);
         const auto ref_count = integer_atom<std::size_t>(at(refs, 0, path), path);
         if (ref_count > (refs.items.size() - 1) / 3 || refs.items.size() != 1 + 3 * ref_count)
             fail("OOF1114", std::string(path), "exact submenu order footer size", describe(refs), "Menu order footer count is inconsistent");
@@ -5714,15 +5757,27 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         }
     }
     std::unordered_set<std::string> consumed_actions;
-    std::function<std::vector<model::CommandBarButton>(std::string, std::uint64_t, std::string, std::size_t)> visit;
-    visit = [&](std::string group_marker, std::uint64_t group_id, std::string asset_path, std::size_t depth) {
+    std::function<std::vector<model::CommandBarButton>(std::string, std::uint64_t, std::string, std::size_t, model::CommandBarButtonsState&)> visit;
+    visit = [&](std::string group_marker, std::uint64_t group_id, std::string asset_path, std::size_t depth, model::CommandBarButtonsState& collection_state) {
         const auto group_key = menu_group_key(group_marker, group_id);
         if (depth > 256 || !consumed_groups.insert(group_key).second || !groups.contains(group_key))
             fail("OOF1114", std::string(path), "existing acyclic owned collections", std::to_string(group_id), "Menu ownership is invalid");
         const auto& group = *groups.at(group_key);
+        collection_state.auto_fill = bool_atom(group.items[3], child_path(path, 3));
         const auto count = integer_atom<std::size_t>(group.items[4], path);
         if (count > (group.items.size() - 6) / 2 || group.items.size() != 6 + 2 * count)
             fail("OOF1102", std::string(path), "exact collection size", describe(group), "Menu item count is inconsistent");
+        const auto& footer = group.items.back();
+        const auto automatic_position = integer_atom<std::int32_t>(footer.items[0], path);
+        if (automatic_position < -1 || (automatic_position >= 0 && static_cast<std::size_t>(automatic_position) > count))
+            fail("OOF1122", std::string(path), "automatic placement within the named collection", {},
+                "Automatic buttons placement is outside the named collection");
+        if (automatic_position >= 0) {
+            collection_state.placement.emplace();
+            if (static_cast<std::size_t>(automatic_position) < count)
+                collection_state.placement->before_button = string_atom(at(group.items[6 + 2 * automatic_position], 1, path), path);
+        }
+        std::unordered_map<std::string, std::string> names_by_identity;
         std::vector<LV> submenu_refs{raw("0")};
         std::size_t submenu_count = 0;
         std::vector<model::CommandBarButton> entries;
@@ -5747,6 +5802,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             entry.name = string_atom(props.items[1], path);
             if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
             entry.changes_data = bool_atom(props.items[2], path);
+            entry.automatic_insertion_locks = integer_atom<std::uint64_t>(props.items[3], child_path(path, 3));
             const bool text_present = bool_atom(props.items[5], path);
             model::LocalizedStringValue automatic_text;
             if (text_present) {
@@ -5765,6 +5821,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             }
             const auto id = integer_atom<std::uint64_t>(props.items[7], path);
             const auto item_key = menu_group_key(item_owner, id);
+            names_by_identity.emplace(item_key, entry.name);
             if (id == 0 || (item_owner == owner && id > max_id) ||
                 id > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) || !entry_ids.insert(item_key).second)
                 fail("OOF1114", std::string(path), "positive unique item ID within maximum", std::to_string(id), "Menu identity is invalid");
@@ -5773,6 +5830,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto type = integer_atom<unsigned>(props.items[9], path);
             if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
             entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
+            if (entry.automatic_insertion_locks == 0 && entry.type != model::CommandBarButtonKind::submenu)
+                warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 3), "SourceGeneratedButton");
             if (default_item_id != 0 && item_key == default_item_key) {
                 if (type != 0 || depth != 0)
                     fail("OOF1122", std::string(path), "top-level Action for DefaultButton", entry.name, "Unsupported default menu action");
@@ -5821,6 +5880,10 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                             child_path(action_path, 4), "StandardAction", "canonical SaveValues tuple",
                             "verified SaveValues tuple alias", "SaveValues tuple alias is named but its general storage equivalence is not established; it is canonicalized on write."});
                     }
+                } else if (raw_atom(action.items[3], child_path(action_path, 3)) == menu_reference_guid) {
+                    require_exact(action.items[4], list({raw("1"), raw(std::string(standard_menu_default_context_marker)),
+                        raw(std::to_string(std::numeric_limits<std::int32_t>::max()))}),
+                        child_path(action_path, 4), "Unassigned menu action has an unsupported source reference");
                 } else {
                     require_raw_constant(action.items[3], menu_action_guid, child_path(action_path, 3));
                     entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
@@ -5846,6 +5909,14 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
                     describe(props.items[4]), "Automatic button Text needs a named localized representation for this action kind");
             }
+            const auto command_control_kind = integer_atom<std::int32_t>(normalized.items[13], child_path(path, 13));
+            switch (command_control_kind) {
+                case 0: entry.command_control_kind = model::CommandControlKind::from_source; break;
+                case 1: entry.command_control_kind = model::CommandControlKind::button; break;
+                default:
+                    fail("OOF1114", child_path(path, 13), "command control FromSource or Button",
+                        std::to_string(command_control_kind), "Command control kind is unsupported");
+            }
             const auto expected_properties = menu_entry_properties(entry, item_owner, id);
             const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
                 expected_properties.items.begin(), expected_properties.items.end(), [](const auto& left, const auto& right) {
@@ -5870,8 +5941,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             if (mask & 1) {
                 const auto slot = cursor;
                 const auto picture = decode_button_picture(take(), child_path(action_path, slot));
-                if (!picture) fail("OOF1114", child_path(action_path, slot), "nonempty picture", "empty", "Menu picture flag is inconsistent");
-                if (picture->reference) entry.picture = *picture->reference;
+                if (!picture) entry.clear_picture = true;
+                else if (picture->reference) entry.picture = *picture->reference;
                 else {
                     decoded.assets.push_back(model::PictureAsset{model::ObjectId{decoded.assets.size() + 1},
                         asset_path + "/" + entry.name + "/Picture." + std::string(picture_format_extension(picture->format)),
@@ -5901,15 +5972,17 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     fail("OOF1114", child_path(action_path, variant_slot), "client interface variant 0, 1 or 2",
                         std::to_string(client_interface_variant), "Client interface variant is unsupported");
             }
-            const auto second_tail_slot = cursor;
-            // В поколениях 6 и 7 отсутствующее второе поле получает значение 1.
-            const auto second_tail_value = action_record.layout->arity == 8
-                ? integer_atom<std::int32_t>(take(), child_path(action_path, second_tail_slot)) : 1;
-            const auto represented_tail = client_interface_variant == 1 ? 1 : 0;
-            if (second_tail_value != represented_tail) {
-                warn_incomplete_profile(warnings, reconstruction_complete, id,
-                    action_record.layout->arity == 8 ? child_path(action_path, second_tail_slot) : action_path,
-                    "MenuAction");
+            const auto theme_slot = cursor;
+            // Load старых поколений сохраняет Light, заданную владельцем до чтения.
+            const auto theme = action_record.layout->arity == 8
+                ? integer_atom<std::int32_t>(take(), child_path(action_path, theme_slot)) : 1;
+            switch (theme) {
+                case 0: break;
+                case 1: entry.client_interface_theme = model::ClientInterfaceTheme::light; break;
+                case 2: entry.client_interface_theme = model::ClientInterfaceTheme::dark; break;
+                default:
+                    fail("OOF1114", child_path(action_path, theme_slot), "client interface theme 0, 1 or 2",
+                        std::to_string(theme), "Client interface theme is unsupported");
             }
             require_arity(action, cursor, action_path);
             if (type == 1) {
@@ -5917,17 +5990,40 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 submenu_refs.push_back(raw(item_owner)); submenu_refs.push_back(raw(std::to_string(id)));
                 submenu_refs.push_back(raw(entry.order == model::CommandBarButtonOrder::ascending ? "1" :
                     entry.order == model::CommandBarButtonOrder::descending ? "2" : "0"));
-                entry.buttons = visit(target_marker, target_id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
+                entry.buttons = visit(target_marker, target_id, asset_path + "/" + entry.name + "/Buttons", depth + 1, entry.buttons_state);
             }
             entries.push_back(std::move(entry));
             current_names.pop_back();
         }
         submenu_refs[0] = raw(std::to_string(submenu_count));
-        require_exact(group.items.back(), list({group.items.back().items[0], raw("0"), list(std::move(submenu_refs))}),
-            path, "Menu submenu references are inconsistent");
+        require_exact(footer.items.back(), list(std::move(submenu_refs)), path, "Menu submenu references are inconsistent");
+        std::unordered_set<std::string> included;
+        const auto member_count = integer_atom<std::size_t>(footer.items[1], path);
+        for (std::size_t index = 0; index < member_count; ++index) {
+            const auto member = menu_group_key(uuid_atom(footer.items[2 + 2 * index], path).canonical,
+                integer_atom<std::uint64_t>(footer.items[3 + 2 * index], path));
+            const auto found = names_by_identity.find(member);
+            if (found == names_by_identity.end() || !included.insert(found->second).second)
+                fail("OOF1123", std::string(path), "unique named sibling buttons", {},
+                    "Automatic membership cannot resolve to a named sibling button");
+        }
+        // Нулевой счетчик уже задает членство. В XML нужны только дополнительные
+        // включения ручных кнопок, в порядке именованной коллекции.
+        for (const auto& entry : entries)
+            if (entry.automatic_insertion_locks != 0 && included.contains(entry.name))
+                collection_state.included_buttons.push_back(entry.name);
+        const auto first_automatic = std::ranges::find(entries, std::uint64_t{0},
+            &model::CommandBarButton::automatic_insertion_locks);
+        if (!included.empty() || first_automatic != entries.end()) {
+            const auto derived_position = first_automatic == entries.end() ? -1 :
+                static_cast<std::int32_t>(std::distance(entries.begin(), first_automatic));
+            if (automatic_position != derived_position)
+                warn_incomplete_profile(warnings, reconstruction_complete, group_id, path, "AutomaticButtonsPlacement");
+            else collection_state.placement.reset();
+        }
         return entries;
     };
-    decoded.entries = visit(std::string(root_marker), root_group_id, "Items/" + std::string(control_name) + "/Buttons", 0);
+    decoded.entries = visit(std::string(root_marker), root_group_id, "Items/" + std::string(control_name) + "/Buttons", 0, decoded.state);
     if (default_item_id != 0 && !entry_ids.contains(default_item_key))
         fail("OOF1114", std::string(path), "existing default menu item", std::to_string(default_item_id), "DefaultButton references a missing menu item");
     if (consumed_groups.size() != groups.size() || consumed_actions.size() != actions.size())
@@ -6881,6 +6977,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (back_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
     if (border != model::BorderValue{}) control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
     std::get<model::CommandBarPayload>(control.payload).buttons = std::move(menu.entries);
+    std::get<model::CommandBarPayload>(control.payload).buttons_state = std::move(menu.state);
     control.position = geometry.position;
     DecodedControl result{std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
     result.menu_root_id = root_group_id;
@@ -7164,6 +7261,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     if (menu_mode != 0) {
         menu = decode_button_menu(properties.items[12], child_path(properties_path, 12), name, warnings, reconstruction_complete);
         std::get<model::ButtonPayload>(control.payload).buttons = std::move(menu.entries);
+        std::get<model::ButtonPayload>(control.payload).buttons_state = std::move(menu.state);
     }
     DecodedControl result{std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
     result.menu_paths = std::move(menu.paths);
@@ -12481,9 +12579,10 @@ LV encode_button(
     button_properties.items[5] = raw(explicit_bool(control.extension_properties, "DefaultButton", false) ? "1" : "0");
     button_properties.items[8] = encode_named_control_picture(document, control, "Picture", "$/Button/Picture");
     const auto& menu_entries = std::get<model::ButtonPayload>(control.payload).buttons;
-    if (!menu_entries.empty()) {
+    const auto& menu_state = std::get<model::ButtonPayload>(control.payload).buttons_state;
+    if (!menu_entries.empty() || menu_state != model::CommandBarButtonsState{}) {
         if (menu_mode == 0) fail("OOF1122", "$/Button/Buttons", "enabled MenuMode", "DontUse", "Menu entries require MenuMode");
-        button_properties.items[12] = encode_button_menu(menu_entries, document, control.id.value());
+        button_properties.items[12] = encode_button_menu(menu_entries, document, control.id.value(), menu_owner_guid, 0, menu_state);
     }
 
     return list({
@@ -12553,7 +12652,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
     }
     const auto properties = canonical_command_bar_properties(enabled, tool_tip, payload->buttons, document, control.id.value(),
         explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color,
-        &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color, &font);
+        &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color, &font, payload->buttons_state);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     const auto info = list({raw("2"), properties});
     const auto metadata = encode_control_metadata(control, "$/CommandBar", action_source);

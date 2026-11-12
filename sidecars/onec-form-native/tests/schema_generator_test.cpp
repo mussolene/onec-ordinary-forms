@@ -466,6 +466,15 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
         variant_members.push_back(attribute(item, "value"));
     expect(variant_members == std::vector<std::string>{"Version8_0", "Version8_2", "Version8_2_OrdinaryApp"},
         "client interface variant schema must expose exactly the three supported names");
+    expect(element_type("CommandBarButtonType", "CommandControlKind") == "CommandControlKindType",
+        "вид элемента команды должен иметь отдельный именованный контракт");
+    expect(element_type("CommandBarButtonType", "ClientInterfaceTheme") == "ClientInterfaceThemeType",
+        "тема должна иметь собственный тип, независимый от варианта интерфейса");
+    std::vector<std::string> theme_members;
+    for (xmlNodePtr item : direct_children(direct_child(schema_component(schema, "simpleType", "ClientInterfaceThemeType"), "restriction"), "enumeration"))
+        theme_members.push_back(attribute(item, "value"));
+    expect(theme_members == std::vector<std::string>{"Light", "Dark"},
+        "темы должны соответствовать платформенному XDTO");
     expect(element_type("SplitterType", "Orientation") == "EnumerationValueType",
         "other controls must keep the shared generic Orientation value type");
 
@@ -593,6 +602,14 @@ void test_fixed_control_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr comp
         "Version8_2 client interface variant must validate in its generated sequence position");
     expect(validate_document(compiled_schema, variant_form + "Unsupported" + variant_suffix) != 0,
         "generated XSD must reject unsupported client interface variant names");
+    for (const auto& theme : {"Light", "Dark", "Auto", "1"}) {
+        auto themed_suffix = variant_suffix;
+        themed_suffix.insert(std::string("</ClientInterfaceVariant>").size(),
+            std::string("<ClientInterfaceTheme>") + theme + "</ClientInterfaceTheme>");
+        expect((validate_document(compiled_schema, variant_form + "Version8_2_OrdinaryApp" + themed_suffix) == 0) ==
+                   (std::string_view(theme) == "Light" || std::string_view(theme) == "Dark"),
+            "схема должна принимать только именованные темы");
+    }
 }
 
 void expect_property_element(
@@ -2000,6 +2017,40 @@ void test_form_designer_grid_schema(xmlNodePtr form_schema, xmlSchemaPtr schema,
             "XSD должна отклонять неверные типы, переполнение, неизвестные и повторные параметры");
 }
 
+void test_automatic_buttons_schema(xmlSchemaPtr schema) {
+    const auto wrap = [](std::string_view buttons) {
+        return std::string(R"XML(<Form id="1" name="AutomaticButtons" ordinaryFormVersion="2.1"><ChildItems><CommandBar id="2" name="Tools"><Position/>)XML") +
+            std::string(buttons) + "</CommandBar></ChildItems></Form>";
+    };
+    for (const auto buttons : {
+        R"XML(<Buttons autoFill="true"/>)XML",
+        R"XML(<Buttons><AutomaticButtons><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><ButtonRef name="First"/></AutomaticButtons><CommandBarButton name="First" type="Separator"/></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><Placement><BeforeButton name="First"/></Placement><ButtonRef name="First"/></AutomaticButtons><CommandBarButton name="First" type="Separator"><AutomaticInsertionLocks>0</AutomaticInsertionLocks></CommandBarButton></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator"><AutomaticInsertionLocks>2</AutomaticInsertionLocks></CommandBarButton></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator"><AutomaticInsertionLocks>18446744073709551615</AutomaticInsertionLocks></CommandBarButton></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="More" type="Submenu"><Buttons autoFill="true"><AutomaticButtons><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons></CommandBarButton></Buttons>)XML"})
+        expect(validate_document(schema, wrap(buttons)) == 0, "XSD must expose named automatic placement, membership and uint64 insertion lock state");
+    for (const auto buttons : {
+        R"XML(<Buttons><AutomaticButtons/><AutomaticButtons/></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator"/><AutomaticButtons/></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><Placement><BeforeButton name="First"/><AfterLastButton/></Placement></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><Placement/></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><ButtonRef name="First"/><Placement><AfterLastButton/></Placement></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><ButtonRef name=""/></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><Placement><BeforeButton/></Placement></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><Placement><AfterLastButton name="First"/></Placement></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons unknown="true"/></Buttons>)XML",
+        R"XML(<Buttons><AutomaticButtons><Unknown/></AutomaticButtons></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator" automatic="true"/></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator"><AutomaticInsertionLocks>-1</AutomaticInsertionLocks></CommandBarButton></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator"><AutomaticInsertionLocks>18446744073709551616</AutomaticInsertionLocks></CommandBarButton></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator"><AutomaticInsertionLocks>true</AutomaticInsertionLocks></CommandBarButton></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Separator"><AutomaticInsertionLocks/></CommandBarButton></Buttons>)XML",
+        R"XML(<Buttons><CommandBarButton name="First" type="Submenu"><Text>Title</Text><AutomaticInsertionLocks>0</AutomaticInsertionLocks></CommandBarButton></Buttons>)XML"})
+        expect(validate_document(schema, wrap(buttons)) != 0, "XSD must reject malformed automatic collection shapes and unknown fields");
+}
+
 void test_standard_menu_action_schema(xmlSchemaPtr schema) {
     const auto make_xml = [](std::string_view attributes) {
         return std::string("<Form id=\"1\" name=\"StandardSchema\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
@@ -2256,6 +2307,7 @@ int main() {
             metamodel,
             compiled_form.get());
         test_standard_menu_action_schema(compiled_form.get());
+        test_automatic_buttons_schema(compiled_form.get());
         test_form_designer_grid_schema(form_schema, compiled_form.get(), palette_schema);
         test_input_field_type_link_schema(schemas, compiled_form.get());
         test_attribute_id_zero_schema(compiled_form.get(), form_schema);

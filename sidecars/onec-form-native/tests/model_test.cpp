@@ -2134,6 +2134,55 @@ void test_command_bar_property_descriptors() {
         "CommandBar Orientation must reject an unknown enumeration member");
 }
 
+void test_automatic_buttons_state_model() {
+    const auto validate = [](CommandBarPayload payload) {
+        Form form; form.id = ObjectId{1}; form.name = "AutomaticButtons";
+        form.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument document(std::move(form));
+        document.add_control(ControlNode{ObjectId{2}, "Tools", std::move(payload)});
+        return document.validate();
+    };
+    CommandBarPayload payload;
+    payload.buttons_state.auto_fill = true;
+    expect(validate(payload).ok(), "empty Buttons collection may independently enable autoFill");
+    payload.buttons_state.placement = AutomaticButtonsPlacement{};
+    expect(validate(payload).ok(), "empty Buttons collection may retain AfterLastButton placement");
+    CommandBarButton first; first.name = "First"; first.type = CommandBarButtonKind::separator;
+    CommandBarButton second; second.name = "Second"; second.type = CommandBarButtonKind::submenu;
+    second.automatic_insertion_locks = 0;
+    second.buttons_state.placement = AutomaticButtonsPlacement{};
+    payload.buttons = {first, second};
+    payload.buttons_state.placement->before_button = "Second";
+    payload.buttons_state.included_buttons = {"First"};
+    expect(validate(payload).ok(), "manual included sibling and automatic non-member must be independent");
+    for (const auto locks : {std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{2}, std::numeric_limits<std::uint64_t>::max()}) {
+        auto counted = payload;
+        counted.buttons[0].automatic_insertion_locks = locks;
+        counted.buttons[1].automatic_insertion_locks = locks;
+        expect(validate(counted).ok(), "Separator and Submenu must accept the full independent uint64 insertion lock counter");
+    }
+    auto invalid = payload;
+    invalid.buttons_state.included_buttons = {"First", "First"};
+    expect(validate(invalid).has(InvariantCode::invalid_property), "duplicate automatic membership must reject");
+    invalid = payload; invalid.buttons_state.included_buttons = {"Missing"};
+    expect(validate(invalid).has(InvariantCode::invalid_property), "dangling automatic membership must reject");
+    invalid = payload; invalid.buttons_state.included_buttons = {""};
+    expect(validate(invalid).has(InvariantCode::invalid_property), "empty automatic membership must reject");
+    invalid = payload; invalid.buttons_state.placement->before_button = "Missing";
+    expect(validate(invalid).has(InvariantCode::invalid_property), "dangling placement must reject");
+    invalid = payload; invalid.buttons_state.placement->before_button = "";
+    expect(validate(invalid).has(InvariantCode::invalid_property), "empty placement target must reject");
+    invalid = payload; invalid.buttons[0].buttons_state.auto_fill = true;
+    expect(validate(invalid).has(InvariantCode::invalid_property), "Separator cannot own automatic collection state");
+    invalid = payload; invalid.buttons[1].buttons_state.included_buttons = {"First"};
+    expect(validate(invalid).has(InvariantCode::invalid_property), "nested membership cannot reference a parent's sibling");
+    invalid = payload; invalid.buttons[0].type = CommandBarButtonKind::action;
+    invalid.buttons[0].action = CommandBarAction{}; invalid.buttons[0].action->handler = "Run";
+    invalid.buttons[0].buttons_state.placement = AutomaticButtonsPlacement{};
+    expect(validate(invalid).has(InvariantCode::invalid_property), "Action cannot own placement even with empty child collection");
+    expect(validate(payload).ok(), "rejected candidate validation must leave the original collection state intact");
+}
+
 void test_default_button_model() {
     using namespace oof::model::metamodel;
     const auto property = PropertyId::from_name("DefaultButton");
@@ -6881,6 +6930,7 @@ int main() {
         test_tab_order_reorders_siblings();
         test_z_order_reorders_siblings();
         test_command_bar_property_descriptors();
+        test_automatic_buttons_state_model();
         test_command_bar_action_source_model();
         test_standard_menu_command_registry_and_runtime_contracts();
         test_default_button_model();
