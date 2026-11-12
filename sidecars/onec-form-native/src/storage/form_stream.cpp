@@ -3293,7 +3293,7 @@ DecodedOwnerPages decode_owner_pages(
         canonical_base.items[4] = encode_control_font(decode_control_font(source_base.items[4], font_path), font_path);
 
         const auto legacy_style = parse_constant("{3,1,{3,0,{0},\"\",-1,-1,1,0}}");
-        require_exact(legacy_root_owner18 ? normalize_empty_picture_style(normalized.items[2]) : normalized.items[2],
+        require_exact(normalize_empty_picture_style(normalized.items[2]),
             legacy_style, child_path(child_path(path, 1), 2),
             "Legacy root owner style contains unsupported settings");
         normalized.items[0] = std::move(canonical_base);

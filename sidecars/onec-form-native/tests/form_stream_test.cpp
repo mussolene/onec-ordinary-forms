@@ -24241,6 +24241,45 @@ void test_legacy_root_owner21_decoding() {
         canonical_layout.value().form_section_version == 18 && canonical_layout.value().root_arity == 20,
         "legacy owner21 rebuild must use canonical root layout");
 
+    constexpr std::array unused_picture_dimensions{
+        std::pair{-1, -1}, std::pair{0, 0}, std::pair{4, 147},
+        std::pair{-673720361, -673720361},
+        std::pair{std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()},
+        std::pair{58, 72}};
+    for (const auto owner_version : {20U, 21U}) {
+        for (std::size_t index = 0; index < unused_picture_dimensions.size(); ++index) {
+            auto variant = legacy_payload;
+            auto& variant_owner = variant.items[1].items[2].items[1].items[1];
+            variant_owner.items[1] = list_stream::ListValue::raw_atom(std::to_string(owner_version));
+            variant_owner.items.resize(owner_version == 20 ? 24 : 25);
+            auto& empty_picture = variant_owner.items[8].items[2];
+            empty_picture.items[4] = list_stream::ListValue::raw_atom(std::to_string(unused_picture_dimensions[index].first));
+            empty_picture.items[5] = list_stream::ListValue::raw_atom(std::to_string(unused_picture_dimensions[index].second));
+            empty_picture.items[6] = list_stream::ListValue::raw_atom(index % 2 ? "0" : "1");
+            const auto loaded = form_stream::decode_document(variant, "Empty");
+            expect(loaded.ok() && loaded.value().reconstruction_complete(),
+                "Старые владельцы должны использовать общий кодек пустой картинки независимо от неактивных размеров");
+            const auto xml = source::serialize_form_xml(loaded.value());
+            expect(xml.ok() && xml.value() == modern_xml.value(),
+                "Неактивные размеры пустой картинки не должны становиться свойствами формы");
+            const auto from_xml = source::parse_form_xml(xml.value());
+            expect(from_xml.ok(), "Полный именованный XML должен читаться без старого потока");
+            const auto normalized = form_stream::encode_document(from_xml.value());
+            expect(normalized.ok() && list_stream::dump_compact(normalized.value()) == list_stream::dump_compact(rebuilt.value()),
+                "Общий кодек пустой картинки должен приводить к той же самостоятельной сборке");
+        }
+    }
+    for (const auto bad : {"2147483648", "1.5"}) {
+        auto invalid = legacy_payload;
+        invalid.items[1].items[2].items[1].items[1].items[8].items[2].items[4] = list_stream::ListValue::raw_atom(bad);
+        expect(!form_stream::decode_document(invalid, "Empty"),
+            "Даже неактивный размер должен иметь допустимый тип платформенного int32");
+    }
+    auto nonempty_picture = legacy_payload;
+    nonempty_picture.items[1].items[2].items[1].items[1].items[8].items[2].items[1] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(nonempty_picture, "Empty"),
+        "Содержимое непустой картинки нельзя отбросить как неактивные размеры");
+
     auto styled_back_color = legacy_payload;
     styled_back_color.items[1].items[2].items[1].items[1].items[0].items[2] =
         list_stream::parse("{3,3,{-7}}");
