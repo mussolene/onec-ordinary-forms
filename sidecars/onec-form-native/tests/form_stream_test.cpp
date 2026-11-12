@@ -23650,6 +23650,126 @@ void test_legacy_root_owner20_decoding() {
         "legacy root owner20 must reject an unproven outer tuple");
 }
 
+void test_legacy_panel_owner_generations() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "LegacyPanelOwners";
+    for (unsigned i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{i + 2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    constexpr std::array sizes{"RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "ByFontSize"};
+    constexpr std::array locations{"Left", "Top", "Right", "Bottom", "Center"};
+    std::uint64_t child_id = 1000;
+    for (unsigned i = 0; i < 12; ++i) {
+        const auto id = model::ObjectId{i + 2};
+        model::ControlNode panel{id, "Item" + std::to_string(i), model::PanelPayload{}};
+        auto& props = panel.properties();
+        props.set_explicit(model::PropertyId::from_name("Enabled"), i % 2 == 0);
+        props.set_explicit(model::PropertyId::from_name("SeparateByPage"), i % 2 == 0);
+        props.set_explicit(model::PropertyId::from_name("Transparent"), i % 3 != 0);
+        props.set_explicit(model::PropertyId::from_name("ToolTip"), "Own panel " + std::to_string(i));
+        props.set_explicit(model::PropertyId::from_name("ShowTabs"), model::EnumerationValue{"ShowTabs", i % 2 ? "Bottom" : "Top"});
+        props.set_explicit(model::PropertyId::from_name("PictureSize"), model::EnumerationValue{"PictureSize", sizes[i % sizes.size()]});
+        props.set_explicit(model::PropertyId::from_name("PanelPictureLocation"), model::EnumerationValue{"PanelPictureLocation", locations[i % locations.size()]});
+        if (i % 2) props.set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.Write"}});
+        for (const auto& [name, red] : {std::pair{"BorderColor", 20U + i}, std::pair{"TextColor", 40U + i}, std::pair{"BackColor", 60U + i}})
+            props.set_explicit(model::PropertyId::from_name(name), model::ColorValue{model::ColorKind::absolute,
+                static_cast<std::uint8_t>(red), 84, 201, 255, std::monostate{}});
+        model::FontValue font; font.kind = model::FontKind::style_reference;
+        font.style = model::QualifiedName{"StyleFonts.NormalTextFont"}; font.height = 12; font.bold = true;
+        props.set_explicit(model::PropertyId::from_name("Font"), font);
+        model::BorderValue border; border.border_type = model::ControlBorderType::single; border.width = 2;
+        props.set_explicit(model::PropertyId::from_name("Border"), border);
+        panel.position.left.set(4 * (i % 4)); panel.position.top.set(5 * (i / 4));
+        panel.position.width.set(160); panel.position.height.set(110);
+        for (unsigned j = 0; j < 1 + i % 3; ++j) {
+            model::Page page; page.id = model::ObjectId{100 + i * 3 + j};
+            page.name = "Page" + std::to_string(i) + "_" + std::to_string(j);
+            page.title.set(model::LocalizedStringValue{{{"ru", "Own tab " + std::to_string(i) + "/" + std::to_string(j)}}});
+            model::Position position; position.left.set(4); position.top.set(5);
+            position.width.set(140); position.height.set(80);
+            for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+                model::AnchorBinding binding; binding.coordinate = edge; binding.target_coordinate = edge;
+                binding.target = model::ControlRef{id}; binding.offset.set(edge == model::BindingCoordinate::right ? -4 : -5);
+                position.bindings.anchors.push_back(std::move(binding));
+            }
+            page.position.set(std::move(position));
+            panel.children.push_back(model::PageRef{page.id});
+            model::ControlNode child{model::ObjectId{child_id++}, "Child" + std::to_string(i) + "_" + std::to_string(j), model::ButtonPayload{}};
+            child.properties().set_explicit(model::PropertyId::from_name("Caption"), "Own child " + std::to_string(i) + "/" + std::to_string(j));
+            page.children.push_back(model::ControlRef{child.id});
+            document.add_page(std::move(page)); document.add_control(std::move(child));
+        }
+        document.add_control(std::move(panel));
+    }
+    const auto current = form_stream::encode_document(document);
+    expect(current.ok(), "twelve varied Panels with twenty-four Pages and Buttons must encode");
+    const auto current_model = form_stream::decode_document(current.value(), "LegacyPanelOwners");
+    expect(current_model.ok() && current_model.value().reconstruction_complete(), "the current Panel matrix must decode completely");
+    const auto expected_xml = source::serialize_form_xml(current_model.value());
+    expect(expected_xml.ok(), "the current Panel matrix must serialize as named XML");
+    for (const auto owner_version : {20U, 21U}) for (const auto base_version : {10U, 16U, 19U}) {
+        auto old = current.value(); unsigned count = 0;
+        for (auto& record : old.items[1].items[2].items[2].items) {
+            if (!record.is_list || record.items.size() != 6) continue;
+            auto& owner = record.items[2].items[1];
+            std::size_t incoming_end = 2;
+            for (int axis = 0; axis < 6; ++axis) incoming_end += 1 + std::stoul(owner.items[incoming_end].atom);
+            std::vector<list_stream::ListValue> incoming(owner.items.begin() + 2, owner.items.begin() + static_cast<std::ptrdiff_t>(incoming_end));
+            owner.items.erase(owner.items.begin() + 2, owner.items.begin() + static_cast<std::ptrdiff_t>(incoming_end));
+            auto& base = owner.items[0];
+            for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
+                base.items[slot].items[0] = list_stream::ListValue::raw_atom("3"); base.items[slot].items.pop_back();
+            }
+            base.items[4].items[0] = list_stream::ListValue::raw_atom("6"); base.items[4].items.pop_back();
+            base.items[0] = list_stream::ListValue::raw_atom(std::to_string(base_version));
+            base.items.resize(base_version == 10 ? 13 : base_version == 16 ? 18 : 21);
+            owner.items[1] = list_stream::ListValue::raw_atom(std::to_string(owner_version));
+            auto& style = owner.items[2]; style.items.resize(3); style.items[0] = list_stream::ListValue::raw_atom("3");
+            style.items[2].items.resize(8); style.items[2].items[0] = list_stream::ListValue::raw_atom("3");
+            owner.items.resize(owner.items.size() - (owner_version == 20 ? 7 : 6));
+            owner.items.insert(owner.items.begin() + 2, incoming.begin(), incoming.end()); ++count;
+        }
+        expect(count == 12, "every owner/base combination must cover all twelve Panels");
+        const auto decoded = form_stream::decode_document(old, "LegacyPanelOwners");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            decoded ? "old Panel owners must decode completely" : decoded.diagnostics().front().message);
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value() == expected_xml.value(), "old Panel owners must preserve all named properties, Pages, geometry and children");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "old Panel owners must reopen only from named XML");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+            "old Panel owners must XML-only rebuild the current stream with a dynamic page-dependent tail");
+        for (unsigned corruption = 0; corruption < 4; ++corruption) {
+            auto invalid = old;
+            auto& owner = invalid.items[1].items[2].items[2].items[1].items[2].items[1];
+            if (corruption == 0) owner.items.push_back(list_stream::ListValue::raw_atom("0"));
+            if (corruption == 1) owner.items.pop_back();
+            if (corruption == 2) owner.items[1] = list_stream::ListValue::raw_atom("22");
+            if (corruption == 3) owner.items[0].items[0] = list_stream::ListValue::raw_atom("15");
+            expect(!form_stream::decode_document(invalid, "LegacyPanelOwners"), "unknown or malformed Panel owner/base layouts must reject");
+        }
+        auto unrepresented = old;
+        auto& owner = unrepresented.items[1].items[2].items[2].items[1].items[2].items[1];
+        owner.items[owner.items.size() - (owner_version == 20 ? 1 : 2)] = list_stream::ListValue::raw_atom("63");
+        const auto partial = form_stream::decode_document(unrepresented, "LegacyPanelOwners");
+        expect(partial.ok() && !partial.value().reconstruction_complete(), "upgrading known Panel generations must not hide unknown provided values");
+    }
+    auto automatic_mirrors = current.value();
+    for (auto& record : automatic_mirrors.items[1].items[2].items[2].items) if (record.is_list && record.items.size() == 6) {
+        auto& owner = record.items[2].items[1]; owner.items[owner.items.size() - 6] = list_stream::parse("{4,4,{0},4}");
+    }
+    const auto normalized = form_stream::decode_document(automatic_mirrors, "LegacyPanelOwners");
+    expect(normalized.ok() && normalized.value().reconstruction_complete() &&
+        std::ranges::count_if(normalized.diagnostics(), [](const auto& d) { return d.code == "OOF1146"; }) == 12,
+        "all twelve native automatic background mirrors must normalize with information diagnostics");
+    expect(source::serialize_form_xml(normalized.value()).value() == expected_xml.value(), "automatic mirrors must preserve the full named Panel model");
+    auto wrong_mirror = automatic_mirrors;
+    auto& owner = wrong_mirror.items[1].items[2].items[2].items[1].items[2].items[1];
+    owner.items[owner.items.size() - 6] = list_stream::parse("{4,0,{1},0}");
+    const auto partial = form_stream::decode_document(wrong_mirror, "LegacyPanelOwners");
+    expect(partial.ok() && !partial.value().reconstruction_complete(), "a different explicit background mirror must remain unrepresented");
+}
+
 void test_legacy_root_owner21_decoding() {
     auto modern_payload = platform_empty_document_payload();
     auto legacy_payload = modern_payload;
@@ -26598,6 +26718,7 @@ int main() {
         test_legacy_root_named_navigation_properties();
         test_legacy_root_owner20_decoding();
         test_legacy_root_owner21_decoding();
+        test_legacy_panel_owner_generations();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

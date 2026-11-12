@@ -3217,6 +3217,27 @@ DecodedOwnerPages decode_owner_pages(
         layout.kind == LayoutKind::form_section_16 && layout.page_style_section_version == 3 &&
         normalized.items.size() == 18 && owner_version20;
     const bool legacy_root_owner21 = outer27_legacy_tuple && owner_version21 && normalized.items.size() == 19;
+    if (panel && (owner_version20 || owner_version21)) {
+        const auto omitted_count = owner_version20 ? 7U : 6U;
+        require_arity(normalized, expected.items[1].items.size() - omitted_count, child_path(path, 1));
+        const auto base_path = child_path(child_path(path, 1), 0);
+        read_common_control_base(normalized.items[0], base_path, [&] {
+            return expected.items[1].items[0];
+        }, {warnings, owner_id, "Panel"});
+        const auto style_path = child_path(child_path(path, 1), 2);
+        require_arity(normalized.items[2], 3, style_path);
+        require_raw_constant(normalized.items[2].items[0], "3", child_path(style_path, 0));
+        auto current_style = expected.items[1].items[2];
+        std::copy(normalized.items[2].items.begin() + 1, normalized.items[2].items.end(),
+            current_style.items.begin() + 1);
+        normalized.items[1] = expected.items[1].items[1];
+        normalized.items[2] = std::move(current_style);
+        const auto provided_count = normalized.items.size();
+        normalized.items.insert(normalized.items.end(),
+            expected.items[1].items.begin() + static_cast<std::ptrdiff_t>(provided_count),
+            expected.items[1].items.end());
+        normalized.items[normalized.items.size() - 6] = normalized.items[0].items[2];
+    }
     if (legacy_root_owner20 || legacy_root_owner21) {
         if (pages.size() != 1)
             fail("OOF1114", child_path(path, 5), "one Page for the proven legacy root-owner layout",
@@ -3335,7 +3356,19 @@ DecodedOwnerPages decode_owner_pages(
         const auto color = decode_control_color(normalized.items[0].items[slot], color_path);
         if (color != model::ColorValue{}) decoded_panel.properties.set_explicit(model::PropertyId::from_name(name), color);
         expected.items[1].items[0].items[slot] = encode_control_color(color, color_path);
-        if (name == "BackColor") expected.items[1].items[expected.items[1].items.size() - 6] = encode_control_color(color, color_path);
+        if (name == "BackColor") {
+            const auto repeat_index = normalized.items.size() - 6;
+            expected.items[1].items[repeat_index] = encode_control_color(color, color_path);
+            if (panel && color != model::ColorValue{} &&
+                list_stream::dump_compact(normalized.items[repeat_index]) ==
+                    list_stream::dump_compact(encode_control_color(model::ColorValue{}, color_path))) {
+                normalized.items[repeat_index] = expected.items[1].items[repeat_index];
+                warnings.push_back({"OOF1146", DiagnosticSeverity::info, std::to_string(owner_id),
+                    child_path(child_path(path, 1), repeat_index + incoming_end - 2), "BackColor",
+                    "native-confirmed automatic background mirror", "named BackColor",
+                    "Panel automatic background mirror is normalized to its named BackColor."});
+            }
+        }
     }
     const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
         expected.items[1].items.begin(), expected.items[1].items.end(), [](const auto& left, const auto& right) {
