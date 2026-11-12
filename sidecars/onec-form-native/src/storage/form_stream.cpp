@@ -5686,9 +5686,10 @@ DecodedControl decode_default_complex_control(
     std::int32_t pivot_chart_type = 1;
     if (kind == model::ControlKind::graphical_schema_field) {
         require_arity(record.items[2], 6, child_path(path, 2));
-        require_arity(record.items[2].items[0], 21, child_path(child_path(path, 2), 0));
-        require_raw_constant(record.items[2].items[0].items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
         auto normalized_info = record.items[2];
+        read_common_control_base(normalized_info.items[0], child_path(child_path(path, 2), 0), [] {
+            return canonical_graphical_schema_field_info().items[0];
+        }, {warnings, id, "GraphicalSchemaField", CommonControlBaseStatePolicy::strict_default_layouts});
         border_color = decode_control_color(normalized_info.items[0].items[6], child_path(child_path(child_path(path, 2), 0), 6));
         normalized_info.items[0].items[6] = canonical_graphical_schema_field_info().items[0].items[6];
         named_events = decode_control_event_collection(normalized_info.items[3], child_path(child_path(path, 2), 3), kind);
@@ -5719,9 +5720,10 @@ DecodedControl decode_default_complex_control(
         if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_default_pivot_chart_info()))
             warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "PivotChart");
     } else {
-        require_arity(record.items[2], 21, child_path(path, 2));
-        require_raw_constant(record.items[2].items[0], "19", child_path(child_path(path, 2), 0));
         auto normalized_info = record.items[2];
+        read_common_control_base(normalized_info, child_path(path, 2), [] {
+            return canonical_geographical_schema_field_info();
+        }, {warnings, id, "GeographicalSchemaField", CommonControlBaseStatePolicy::strict_default_layouts});
         border_color = decode_control_color(normalized_info.items[6], child_path(child_path(path, 2), 6));
         normalized_info.items[6] = canonical_geographical_schema_field_info().items[6];
         if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_geographical_schema_field_info()))
@@ -10097,11 +10099,13 @@ DecodedControl decode_text_document_field(
     const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
     if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", child_path(path, 1), "positive int64 TextDocumentField ID", std::to_string(raw_id), "TextDocumentField ID is invalid");
-    const auto& info = record.items[2];
+    auto info = record.items[2];
     require_arity(info, 7, child_path(path, 2));
-    const auto& base = info.items[0];
-    require_arity(base, 21, child_path(child_path(path, 2), 0));
-    require_raw_constant(base.items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
+    auto& base = info.items[0];
+    read_common_control_base(base, child_path(child_path(path, 2), 0), [] {
+        return canonical_text_document_field_info(true, {}, {},
+            control_border_default(model::ControlKind::text_document_field)).items[0];
+    }, {warnings, raw_id, "TextDocumentField", CommonControlBaseStatePolicy::strict_default_layouts});
     const bool enabled = bool_atom(base.items[1], child_path(child_path(path, 2), 0) + "/1");
     const auto border_color = decode_control_color(base.items[6], child_path(child_path(path, 2), 0) + "/6");
     const auto font = decode_control_font(base.items[4], child_path(child_path(path, 2), 0) + "/4");

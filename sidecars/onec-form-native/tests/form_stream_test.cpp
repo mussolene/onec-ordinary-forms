@@ -178,7 +178,8 @@ list_stream::ListValue* find_chart_record(list_stream::ListValue& value) {
 
 template <typename Value>
 Value* find_record_with_guid(Value& value, std::string_view guid) {
-    if (value.is_list && value.items.size() == 6 && !value.items[0].is_list && value.items[0].atom == guid) {
+    if (value.is_list && (value.items.size() == 6 || value.items.size() == 7) &&
+        !value.items[0].is_list && value.items[0].atom == guid) {
         return &value;
     }
     if (!value.is_list) return nullptr;
@@ -4971,7 +4972,11 @@ void test_radio_input_list_common_font_border_color_round_trip() {
 
 void test_named_platform_colors_registry_round_trip() {
     const auto descriptors = model::metamodel::named_colors();
-    expect(descriptors.size() == 181, "observed named platform colors and existing style colors are registered");
+    expect(descriptors.size() == 182, "observed named platform colors and existing style colors are registered");
+    const auto* field_back = model::metamodel::find_named_color("StyleColors.FieldBackColor");
+    expect(field_back && field_back->native_kind == 3 && field_back->native_id == -10 &&
+        model::metamodel::find_named_color(3, -10) == field_back,
+        "native FieldBackColor must resolve by its named standard style and storage identity");
     expect(!model::metamodel::find_named_color("WebColors.Unknown") &&
         !model::metamodel::find_named_color(2, 10000), "unknown named colors must not acquire a synthetic name");
     model::Form form; form.id = model::ObjectId{1}; form.name = "NamedColors";
@@ -11797,10 +11802,16 @@ void test_legacy_common_control_base10_batch() {
         model::ControlKind::track_bar, model::ControlKind::usual_group,
         model::ControlKind::command_bar, model::ControlKind::panel,
         model::ControlKind::radio_button, model::ControlKind::table,
+        model::ControlKind::text_document_field, model::ControlKind::graphical_schema_field,
+        model::ControlKind::geographical_schema_field,
     };
     const auto base_for = [](auto& stream, model::ControlKind kind) -> auto& {
         auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(kind).guid);
         expect(record != nullptr, "batch common-base control must exist");
+        if (kind == model::ControlKind::geographical_schema_field)
+            return record->items[2];
+        if (kind == model::ControlKind::text_document_field || kind == model::ControlKind::graphical_schema_field)
+            return record->items[2].items[0];
         if (kind == model::ControlKind::table)
             return record->items[2].items[2].items[0];
         if (kind == model::ControlKind::input_field || kind == model::ControlKind::radio_button)
@@ -11840,8 +11851,8 @@ void test_legacy_common_control_base10_batch() {
             expect(document.value().set_prop_val(key, model::PropertyId::from_name(property), value) ==
                     model::PropertyMutationStatus::applied, name + " named common property must apply");
         };
-        set("Enabled", false);
-        set("ToolTip", std::string("legacy common base"));
+        if (model::metamodel::find_property(kind, "Enabled")) set("Enabled", false);
+        if (model::metamodel::find_property(kind, "ToolTip")) set("ToolTip", std::string("legacy common base"));
         set("BorderColor", color);
         const bool supports_font = model::metamodel::find_property(kind, "Font") != nullptr;
         if (supports_font) set("Font", font);

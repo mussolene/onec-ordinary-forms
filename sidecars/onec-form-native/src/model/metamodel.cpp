@@ -3425,6 +3425,7 @@ std::span<const NamedColorDescriptor> named_colors() noexcept {
         NamedColorDescriptor{"WindowsColors.WindowFrame", u8"WindowsЦвета.РамкаОкна", 1, 6},
         NamedColorDescriptor{"WindowsColors.WindowText", u8"WindowsЦвета.ТекстОкна", 1, 8},
         NamedColorDescriptor{"StyleColors.FormBackColor", u8"ЦветаСтиля.ЦветФонаФормы", 3, -1},
+        NamedColorDescriptor{"StyleColors.FieldBackColor", u8"ЦветаСтиля.ЦветФонаПоля", 3, -10},
         NamedColorDescriptor{"StyleColors.FormTextColor", u8"ЦветаСтиля.ЦветТекстаФормы", 3, -3},
         NamedColorDescriptor{"StyleColors.ButtonTextColor", u8"ЦветаСтиля.ЦветТекстаКнопки", 3, -21},
         NamedColorDescriptor{"StyleColors.ButtonBackColor", u8"ЦветаСтиля.ЦветФонаКнопки", 3, -7},

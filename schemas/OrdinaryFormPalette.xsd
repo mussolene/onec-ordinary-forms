@@ -1263,6 +1263,7 @@
           <Color name="WindowsColors.WindowFrame" russianName="WindowsЦвета.РамкаОкна"/>
           <Color name="WindowsColors.WindowText" russianName="WindowsЦвета.ТекстОкна"/>
           <Color name="StyleColors.FormBackColor" russianName="ЦветаСтиля.ЦветФонаФормы"/>
+          <Color name="StyleColors.FieldBackColor" russianName="ЦветаСтиля.ЦветФонаПоля"/>
           <Color name="StyleColors.FormTextColor" russianName="ЦветаСтиля.ЦветТекстаФормы"/>
           <Color name="StyleColors.ButtonTextColor" russianName="ЦветаСтиля.ЦветТекстаКнопки"/>
           <Color name="StyleColors.ButtonBackColor" russianName="ЦветаСтиля.ЦветФонаКнопки"/>
