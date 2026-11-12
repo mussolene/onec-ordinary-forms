@@ -347,6 +347,7 @@ inline constexpr std::array standard_menu_commands{
     StandardMenuCommandDescriptor{StandardMenuCommand::change, "Change", u8"Изменить", 88},
     StandardMenuCommandDescriptor{StandardMenuCommand::delete_item, "Delete", u8"Удалить", 89},
     StandardMenuCommandDescriptor{StandardMenuCommand::add, "Add", u8"Добавить", 94},
+    StandardMenuCommandDescriptor{StandardMenuCommand::help, "Help", u8"Справка", 300},
 };
 inline constexpr StandardMenuCommandDescriptor standard_menu_close = standard_menu_commands[0];
 

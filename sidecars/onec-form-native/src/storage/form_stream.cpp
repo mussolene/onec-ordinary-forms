@@ -5402,9 +5402,9 @@ LV encode_standard_menu_action(const model::StandardMenuAction& action,
     const auto* descriptor = model::metamodel::find_standard_menu_command(action.command);
     if (descriptor == nullptr)
         fail("OOF1122", std::string(path), "known standard menu command", "unknown", "Standard command is unsupported");
-    if (action.command != model::StandardMenuCommand::close) {
-        if (action.context != model::StandardMenuActionContext::default_context ||
-            action.command_bar.id().value() != 0 || action.source != model::StandardMenuActionSource::form ||
+    if (action.command != model::StandardMenuCommand::close &&
+        action.context == model::StandardMenuActionContext::default_context) {
+        if (action.command_bar.id().value() != 0 || action.source != model::StandardMenuActionSource::form ||
             action.source_control.id().value() != 0)
             fail("OOF1123", std::string(path), "Default context and Form source", "inconsistent", "Standard command contract is invalid");
         return list({raw("6"), raw(std::to_string(std::numeric_limits<std::uint32_t>::max())),
@@ -5473,7 +5473,8 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
     require_raw_constant(value.items[6], "1", child_path(path, 6));
     model::StandardMenuAction action;
     action.command = descriptor->kind;
-    if (descriptor->kind != model::StandardMenuCommand::close) {
+    if (descriptor->kind != model::StandardMenuCommand::close &&
+        raw_atom(context.items[4], child_path(context_path, 4)) != "0") {
         require_raw_constant(value.items[1], std::to_string(std::numeric_limits<std::uint32_t>::max()), child_path(path, 1));
         require_raw_constant(context.items[1], "99", child_path(context_path, 1));
         require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
@@ -5481,7 +5482,7 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
         const auto flag = raw_atom(context.items[4], child_path(context_path, 4));
         const bool canonical = target == "4" && flag == "1";
         const bool save_alias = descriptor->kind == model::StandardMenuCommand::save_values &&
-            ((target == "4" && flag == "0") || (target == "55" && flag == "1"));
+            target == "55" && flag == "1";
         if (!canonical && !save_alias)
             fail("OOF1123", context_path, "canonical Default factory tuple", describe(context), "Standard command context is unsupported");
         save_values_alias = save_alias;
@@ -5492,6 +5493,9 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
     require_raw_constant(context.items[4], "0", child_path(context_path, 4));
     const auto kind = integer_atom<std::uint64_t>(context.items[1], child_path(context_path, 1));
     if (kind == 0) {
+        if (descriptor->kind != model::StandardMenuCommand::close)
+            fail("OOF1123", context_path, "named Form or CommandBar context", {},
+                "Default context representation is unsupported for this command");
         require_raw_constant(context.items[2], standard_menu_default_context_marker, child_path(context_path, 2));
         require_raw_constant(context.items[3], std::to_string(std::numeric_limits<std::int32_t>::max()), child_path(context_path, 3));
         action.context = model::StandardMenuActionContext::default_context;

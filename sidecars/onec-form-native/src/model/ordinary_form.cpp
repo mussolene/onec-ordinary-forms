@@ -4038,13 +4038,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         const auto& standard = *item.standard_action;
                         if (metamodel::find_standard_menu_command(standard.command) == nullptr) {
                             invalid("unknown StandardAction command");
-                        } else if (standard.command != StandardMenuCommand::close) {
-                            if (standard.context != StandardMenuActionContext::default_context ||
-                                standard.command_bar.id().value() != 0)
-                                invalid("SaveValues and RestoreValues require Default context without commandBarId");
+                        } else if (standard.command != StandardMenuCommand::close &&
+                                   standard.context == StandardMenuActionContext::default_context) {
+                            if (standard.command_bar.id().value() != 0)
+                                invalid("Default standard command context cannot have commandBarId");
                             if (standard.source != StandardMenuActionSource::form ||
                                 standard.source_control.id().value() != 0)
-                                invalid("SaveValues and RestoreValues require Form source without sourceControlId");
+                                invalid("Default standard command context requires Form source without sourceControlId");
                         } else {
                             if (standard.context == StandardMenuActionContext::command_bar) {
                                 const ControlNode* command_bar = find_control(standard.command_bar.id());

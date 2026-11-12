@@ -4023,7 +4023,8 @@ void test_standard_menu_action_xml_contract() {
 void test_standard_save_restore_action_xml_contract() {
     for (const auto [command, expected] : {
              std::pair{"SaveValues", model::StandardMenuCommand::save_values},
-             std::pair{"RestoreValues", model::StandardMenuCommand::restore_values}}) {
+             std::pair{"RestoreValues", model::StandardMenuCommand::restore_values},
+             std::pair{"Help", model::StandardMenuCommand::help}}) {
         const std::string xml = std::string("<Form id=\"1\" name=\"RuntimeCommands\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
             "<CommandBar id=\"42\" name=\"Tools\"><Position/><Buttons><CommandBarButton name=\"Runtime\" type=\"Action\">"
             "<StandardAction command=\"" + command + "\" context=\"Default\" source=\"Form\"/>"
@@ -4050,7 +4051,22 @@ void test_standard_save_restore_action_xml_contract() {
         auto command_bar_context = invalid_context;
         command_bar_context.replace(command_bar_context.find("context=\"Default\" source"),
             std::string("context=\"Default\" source").size(), "context=\"CommandBar\" commandBarId=\"42\" source");
-        expect(!source::parse_form_xml(command_bar_context), "runtime standard command must reject CommandBar context");
+        const auto explicit_context = source::parse_form_xml(command_bar_context);
+        expect(explicit_context.ok() &&
+            std::get<model::CommandBarPayload>(explicit_context.value().find_control(model::ObjectId{42})->payload)
+                .buttons.front().standard_action->command_bar.id().value() == 42,
+            "registered standard commands must preserve an explicit CommandBar context");
+        auto all_sources = command_bar_context;
+        all_sources.replace(all_sources.find("source=\"Form\""), std::string("source=\"Form\"").size(), "source=\"AllSources\"");
+        expect(source::parse_form_xml(all_sources).ok(), "explicit command context must support AllSources independently");
+        auto control_source = command_bar_context;
+        control_source.replace(control_source.find("source=\"Form\""), std::string("source=\"Form\"").size(),
+            "source=\"Control\" sourceControlId=\"42\"");
+        const auto explicit_source = source::parse_form_xml(control_source);
+        expect(explicit_source.ok() &&
+            std::get<model::CommandBarPayload>(explicit_source.value().find_control(model::ObjectId{42})->payload)
+                .buttons.front().standard_action->source_control.id().value() == 42,
+            "explicit command context and source references must remain independent");
         auto invalid_source = invalid_context;
         invalid_source.replace(invalid_source.find("source=\"Form\""), std::string("source=\"Form\"").size(), "source=\"AllSources\"");
         expect(!source::parse_form_xml(invalid_source), "runtime standard command must reject non-Form source");

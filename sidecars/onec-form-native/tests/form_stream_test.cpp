@@ -6628,7 +6628,8 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
         model::StandardMenuCommand::finish_editing, model::StandardMenuCommand::sort_descending,
         model::StandardMenuCommand::sort_ascending, model::StandardMenuCommand::move_down,
         model::StandardMenuCommand::move_up, model::StandardMenuCommand::change,
-        model::StandardMenuCommand::delete_item, model::StandardMenuCommand::add};
+        model::StandardMenuCommand::delete_item, model::StandardMenuCommand::add,
+        model::StandardMenuCommand::help};
     model::Form form; form.id = model::ObjectId{1}; form.name = "RuntimeStandardActions";
     for (std::uint64_t index = 0; index < commands.size() * 2; ++index)
         form.children.push_back(model::ControlRef{model::ObjectId{100 + index}});
@@ -6651,7 +6652,7 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
         document.add_control(std::move(control));
     }
     const auto encoded = form_stream::encode_document(document);
-    expect(encoded.ok(), "28 CommandBar and Button owners must encode runtime standard command families");
+    expect(encoded.ok(), "CommandBar and Button owners must encode runtime standard command families");
     const auto action_payload = [](const list_stream::ListValue& record, bool command_bar) -> const list_stream::ListValue& {
         const auto& properties = record.items.at(2).items.at(1);
         const auto& menu = properties.items.at(command_bar ? 7 : 12);
@@ -6683,6 +6684,54 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     expect(reparsed.ok() && rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
         "batch named XML must rebuild canonical runtime command storage");
 
+    // ControlCommandHandler keeps the explicit context independently of the command ID.
+    for (const auto context : {model::StandardMenuActionContext::form, model::StandardMenuActionContext::command_bar}) {
+        for (const auto source : {model::StandardMenuActionSource::form,
+                                  model::StandardMenuActionSource::all_sources,
+                                  model::StandardMenuActionSource::control}) {
+            model::OrdinaryFormDocument explicit_document(document.form());
+            for (std::uint64_t index = 0; index < commands.size() * 2; ++index) {
+                auto control = *document.find_control(model::ObjectId{100 + index});
+                auto& buttons = index % 2 == 0 ? std::get<model::CommandBarPayload>(control.payload).buttons
+                                               : std::get<model::ButtonPayload>(control.payload).buttons;
+                auto& action = *buttons.front().standard_action;
+                action.context = context;
+                action.command_bar = context == model::StandardMenuActionContext::command_bar
+                    ? model::ControlRef{model::ObjectId{100}} : model::ControlRef{};
+                action.source = source;
+                action.source_control = source == model::StandardMenuActionSource::control
+                    ? model::ControlRef{model::ObjectId{100}} : model::ControlRef{};
+                explicit_document.add_control(std::move(control));
+            }
+            const auto validation = explicit_document.validate();
+            expect(validation.ok(), validation.ok() ? "explicit command contexts must satisfy the named model"
+                : validation.violations.front().message);
+            const auto stored = form_stream::encode_document(explicit_document);
+            expect(stored.ok(), stored ? "All owners must preserve explicit context and source for every registered command family"
+                : stored.diagnostics().front().code + ": " + stored.diagnostics().front().message);
+            const auto restored = form_stream::decode_document(stored.value(), "RuntimeStandardActions");
+            expect(restored.ok() && restored.value().reconstruction_complete(),
+                "explicit command contexts must not be downgraded to partial Default aliases");
+            for (std::uint64_t index = 0; index < commands.size() * 2; ++index) {
+                const auto& control = *restored.value().find_control(model::ObjectId{100 + index});
+                const auto& buttons = index % 2 == 0 ? std::get<model::CommandBarPayload>(control.payload).buttons
+                                                     : std::get<model::ButtonPayload>(control.payload).buttons;
+                const auto& action = *buttons.front().standard_action;
+                expect(action.command == commands[index / 2] && action.context == context && action.source == source &&
+                    action.command_bar.id().value() == (context == model::StandardMenuActionContext::command_bar ? 100 : 0) &&
+                    action.source_control.id().value() == (source == model::StandardMenuActionSource::control ? 100 : 0),
+                    "command identity, explicit context and source references must remain independent");
+            }
+            const auto named = source::serialize_form_xml(restored.value());
+            expect(named.ok(), "explicit command contexts must have a named XML representation");
+            const auto loaded = source::parse_form_xml(named.value());
+            expect(loaded.ok(), "explicit command context XML must parse without a baseline");
+            const auto written = form_stream::encode_document(loaded.value());
+            expect(written.ok() && list_stream::dump_compact(written.value()) == list_stream::dump_compact(stored.value()),
+                "explicit context flag and targets must survive XML-only rebuild exactly");
+        }
+    }
+
     for (const std::string generation : {"5", "7"}) {
         auto legacy = encoded.value();
         unsigned changed = 0;
@@ -6697,7 +6746,7 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
             for (auto& child : value.items) downgrade(child);
         };
         downgrade(legacy);
-        expect(changed == 28, "legacy menu generations must cover all 28 independent command owners");
+        expect(changed == commands.size() * 2, "legacy menu generations must cover every independent command owner");
         const auto restored = form_stream::decode_document(legacy, "RuntimeStandardActions");
         expect(restored.ok() && restored.value().reconstruction_complete(),
             "native-confirmed menu generations 5/13 and 7/13 must decode completely");
@@ -6727,10 +6776,10 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
         mutate(payload);
         return changed;
     };
-    for (const auto [target, flag] : {std::pair{"4", "0"}, std::pair{"55", "1"}}) {
+    {
         const auto alias = mutate_first_action([&](auto& payload) {
-            payload.items.at(4).items.at(3) = list_stream::ListValue::raw_atom(target);
-            payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom(flag);
+            payload.items.at(4).items.at(3) = list_stream::ListValue::raw_atom("55");
+            payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1");
         });
         const auto alias_decoded = form_stream::decode_document(alias, "SaveValuesAlias");
         expect(alias_decoded.ok() && !alias_decoded.value().reconstruction_complete() &&
@@ -6759,12 +6808,20 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     auto* restore_record = const_cast<list_stream::ListValue*>(find_control_record(restore_alias, 102));
     auto& restore_payload = const_cast<list_stream::ListValue&>(action_payload(*restore_record, true));
     restore_payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("0");
-    expect(!form_stream::decode_document(restore_alias, "InvalidRestoreValuesAlias"),
-        "RestoreValues must reject the SaveValues-only 4/0 alias");
+    const auto explicit_restore = form_stream::decode_document(restore_alias, "ExplicitRestoreValues");
+    expect(explicit_restore.ok() && explicit_restore.value().reconstruction_complete() &&
+        std::get<model::CommandBarPayload>(explicit_restore.value().find_control(model::ObjectId{102})->payload)
+            .buttons.front().standard_action->context == model::StandardMenuActionContext::form,
+        "RestoreValues context 4/0 must preserve the explicit Form context");
     restore_payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1");
     restore_payload.items.at(4).items.at(3) = list_stream::ListValue::raw_atom("55");
     expect(!form_stream::decode_document(restore_alias, "InvalidRestoreValuesAlias"),
         "RestoreValues must reject the SaveValues-only 55/1 alias");
+    rejects([](auto& payload) {
+        payload.items.at(4) = list_stream::parse("{1,0,357c6a54-357d-425d-a2bd-22f4f6e86c87,2147483647,0}");
+    }, "unrepresented kind0 Default context for non-Close commands must still reject");
+    rejects([](auto& payload) { payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("2"); },
+        "unknown command context flag must still reject");
 }
 
 void test_command_bar_legacy8_and_base10_batch() {

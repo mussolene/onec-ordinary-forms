@@ -2390,10 +2390,11 @@ void test_command_bar_action_source_model() {
 void test_standard_menu_command_registry_and_runtime_contracts() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
-    expect(standard_menu_commands.size() == 11 &&
+    expect(standard_menu_commands.size() == 12 &&
         find_standard_menu_command(StandardMenuCommand::close) == &standard_menu_commands[0] &&
         find_standard_menu_command("SaveValues") == &standard_menu_commands[1] &&
         find_standard_menu_command(144) == &standard_menu_commands[2] &&
+        find_standard_menu_command(300)->kind == StandardMenuCommand::help &&
         standard_menu_close.kind == standard_menu_commands[0].kind &&
         standard_menu_close.public_name == standard_menu_commands[0].public_name &&
         standard_menu_close.storage_id == standard_menu_commands[0].storage_id,
@@ -2404,7 +2405,8 @@ void test_standard_menu_command_registry_and_runtime_contracts() {
     OrdinaryFormDocument document(std::move(form));
     ControlNode bar{ObjectId{42}, "Tools", CommandBarPayload{}};
     auto& buttons = std::get<CommandBarPayload>(bar.payload).buttons;
-    for (const auto command : {StandardMenuCommand::save_values, StandardMenuCommand::restore_values}) {
+    for (const auto command : {StandardMenuCommand::save_values, StandardMenuCommand::restore_values,
+                               StandardMenuCommand::help}) {
         CommandBarButton item; item.name = std::string(find_standard_menu_command(command)->public_name);
         item.standard_action = StandardMenuAction{command, {}, StandardMenuActionSource::form,
             StandardMenuActionContext::default_context, {}};
@@ -2413,22 +2415,22 @@ void test_standard_menu_command_registry_and_runtime_contracts() {
     document.add_control(std::move(bar));
     expect(document.validate().ok(), "SaveValues and RestoreValues use Form source and command-owned Default context");
 
-    auto invalid = document;
-    auto invalid_bar = *invalid.find_control(ObjectId{42});
+    OrdinaryFormDocument invalid(document.form());
+    auto invalid_bar = *document.find_control(ObjectId{42});
     auto& invalid_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons.front().standard_action;
     invalid_action.command = static_cast<StandardMenuCommand>(255);
     invalid.add_control(std::move(invalid_bar));
     expect(invalid.validate().has(InvariantCode::invalid_property), "unknown standard menu command enum must reject");
 
-    invalid = document;
-    invalid_bar = *invalid.find_control(ObjectId{42});
+    invalid = OrdinaryFormDocument(document.form());
+    invalid_bar = *document.find_control(ObjectId{42});
     auto& save_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons.front().standard_action;
     save_action.command_bar = ControlRef{ObjectId{42}};
     invalid.add_control(std::move(invalid_bar));
     expect(invalid.validate().has(InvariantCode::invalid_property), "runtime standard command must reject commandBarId");
 
-    invalid = document;
-    invalid_bar = *invalid.find_control(ObjectId{42});
+    invalid = OrdinaryFormDocument(document.form());
+    invalid_bar = *document.find_control(ObjectId{42});
     auto& restore_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons.back().standard_action;
     restore_action.source = StandardMenuActionSource::all_sources;
     invalid.add_control(std::move(invalid_bar));
