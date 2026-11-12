@@ -7,6 +7,7 @@
 #include <tuple>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "oof/storage/value_codec.hpp"
 #include "oof/model/metamodel.hpp"
@@ -57,11 +58,51 @@ void test_line() {
     for (const auto* text : {
         "{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0,0}",
         "{4,1,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0}",
-        "{4,0,{0},1,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+        "{4,0,{0},1,1,4294967296,e5cabe59-d992-4d31-8086-3116931aff81,0}",
         "{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,2}",
         "{4,0,{0},50,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
         "{4,0,{0},1,1,0,00000000-0000-0000-0000-000000000000,0}"})
         expect_rejected([&] { (void)codec::decode_line(text); }, "malformed line must fail");
+}
+
+void test_absolute_line_override_flags() {
+    struct LineCase { model::LineValue value; std::string_view guid; unsigned ordinal; };
+    const std::array<LineCase, 12> cases{{
+        {{{"ChartLineType", "Solid"}, 1, false}, "e5cabe59-d992-4d31-8086-3116931aff81", 1},
+        {{{"ChartLineType", "Dashed"}, 50, false}, "e5cabe59-d992-4d31-8086-3116931aff81", 3},
+        {{{"ChartLineType", "Dotted"}, 0, false}, "e5cabe59-d992-4d31-8086-3116931aff81", 2},
+        {{{"SpreadsheetDocumentDrawingLineType", "Solid"}, 3, false}, "b7438842-27cc-42a3-846f-2250cd9c1bc3", 1},
+        {{{"SpreadsheetDocumentDrawingLineType", "Dotted"}, 2, false}, "b7438842-27cc-42a3-846f-2250cd9c1bc3", 3},
+        {{{"SpreadsheetDocumentDrawingLineType", "None"}, -1, false}, "b7438842-27cc-42a3-846f-2250cd9c1bc3", 0},
+        {{{"SpreadsheetDocumentCellLineType", "Double"}, 1, true}, "f527dc88-1d39-40b3-bcbb-d98b690ead68", 3},
+        {{{"SpreadsheetDocumentCellLineType", "ThickDashed"}, 3, false}, "f527dc88-1d39-40b3-bcbb-d98b690ead68", 5},
+        {{{"SpreadsheetDocumentCellLineType", "Solid"}, -2, true}, "f527dc88-1d39-40b3-bcbb-d98b690ead68", 1},
+        {{{"GeographicalSchemaLineType", "Solid"}, 50, false}, "e7bbf659-5435-44b8-b759-461ee479e513", 1},
+        {{{"GeographicalSchemaLineType", "Dotted"}, 1, false}, "e7bbf659-5435-44b8-b759-461ee479e513", 2},
+        {{{"GeographicalSchemaLineType", "DashDottedDotted"}, -2, false}, "e7bbf659-5435-44b8-b759-461ee479e513", 5},
+    }};
+    // core::V8Line kind zero compares all three values and the GUID, without flags.
+    for (const auto& item : cases) {
+        const auto prefix = "{4,0,{0}," + std::to_string(item.ordinal) + "," +
+            std::to_string(static_cast<std::uint32_t>(item.value.width)) + ",";
+        const auto suffix = "," + std::string(item.guid) + "," + (item.value.gap ? "1}" : "0}");
+        const auto canonical = prefix + (item.value == model::LineValue{} ? "0" : "7") + suffix;
+        for (const std::uint32_t flags : {0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 2147483648U, 4294967295U}) {
+            const auto decoded = codec::decode_line(prefix + std::to_string(flags) + suffix);
+            expect(decoded == item.value && codec::encode_line(decoded) == canonical &&
+                       codec::decode_line(codec::encode_line(decoded)) == item.value,
+                "absolute Line flags must normalize without losing type, signed width, family or gap");
+        }
+    }
+    for (const auto invalid : {
+             "{4,0,{0},1,1,-1,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+             "{4,0,{0},1,1,4294967296,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+             "{4,1,{0},1,1,1,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+             "{4,0,{1},1,1,1,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+             "{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,1}",
+             "{4,0,{0},3,2,0,f527dc88-1d39-40b3-bcbb-d98b690ead68,0}"})
+        expect_rejected([&] { (void)codec::decode_line(invalid); },
+            "Line flag normalization must retain uint32, absolute-kind, reference, width and gap constraints");
 }
 
 void test_localized_string() {
@@ -712,6 +753,279 @@ void test_shortcut() {
         "unknown named Shortcut key must be rejected");
 }
 
+void test_spreadsheet_format_fields() {
+    namespace stream = oof::storage::list_stream;
+    const model::LineValue border{{"SpreadsheetDocumentCellLineType", "Dotted"}, 2, true};
+    const model::ColorValue color{model::ColorKind::absolute, 12, 34, 56, 255, {}};
+    const model::LocalizedStringValue text{{{"en", "N=12"}}};
+    model::TypeDomainEntry boolean;
+    boolean.term = model::TypeDomainTerm::boolean;
+    const model::TypeDomainPatternValue type{{boolean}};
+    const model::UuidValue uuid{"01234567-89ab-cdef-0123-456789abcdef"};
+    const auto font = codec::decode_font(
+        "{8,0,959,110,0,0,0,700,0,1,0,0,0,0,0,34,\"Arial\",1,100,0}");
+    struct FieldCase { std::string_view name; model::PropertyValue value; std::string_view storage; };
+    // Native Format bit order and XDTO units, independent of descriptor codecs.
+    const std::array<FieldCase, 48> fields{{
+        {"Font", font, "0"}, {"LeftBorder", border, "0"}, {"TopBorder", border, "0"},
+        {"RightBorder", border, "0"}, {"BottomBorder", border, "0"}, {"BorderColor", color, "0"},
+        {"Height", model::DecimalValue{"96"}, "96"}, {"Width", model::DecimalValue{"144"}, "144"},
+        {"HorizontalAlignment", model::EnumerationValue{"HorizontalAlign", "Center"}, "6"},
+        {"VerticalAlignment", model::EnumerationValue{"VerticalAlign", "Center"}, "24"},
+        {"TextColor", color, "0"}, {"BackColor", color, "0"},
+        {"Pattern", model::EnumerationValue{"SpreadsheetDocumentPatternType", "WithoutPattern"}, "255"},
+        {"PatternColor", color, "0"},
+        {"TextPlacement", model::EnumerationValue{"SpreadsheetDocumentTextPlacementType", "Wrap"}, "3"},
+        {"FillType", model::EnumerationValue{"SpreadsheetDocumentAreaFillType", "Template"}, "2"},
+        {"Protection", false, "1"}, {"Hidden", true, "1"},
+        {"TextOrientation", model::DecimalValue{"150"}, "150"},
+        {"DetailsUse", model::EnumerationValue{"SpreadsheetDocumentDetailUse", "WithoutProcessing"}, "2"},
+        {"BySelectedColumns", false, "0"}, {"MarkNegatives", true, "1"}, {"ContainsValue", false, "0"},
+        {"ValueType", type, "0"}, {"Format", text, "0"}, {"ControlType", uuid, "0"},
+        {"HyperLink", true, "1"}, {"QuickDrag", false, "0"}, {"AutoMarkIncomplete", true, "1"},
+        {"MarkIncomplete", false, "0"}, {"Indent", model::DecimalValue{"7"}, "7"},
+        {"AutoIndent", model::DecimalValue{"3"}, "3"}, {"EditFormat", text, "0"},
+        {"ColumnSizeChange", model::EnumerationValue{"SizeChangeMode", "QuickChange"}, "1"},
+        {"Mask", text, "0"}, {"Picture", model::PictureRef{}, "1"},
+        {"PictureHorizontalAlignment", model::EnumerationValue{"HorizontalAlign", "Right"}, "2"},
+        {"PictureVerticalAlignment", model::EnumerationValue{"VerticalAlign", "Bottom"}, "8"},
+        {"PictureSize", model::EnumerationValue{"PictureSize", "AutoSizeIgnoreScale"}, "6"},
+        {"TextPosition", model::EnumerationValue{"TextPositionRelativeToPicture", "OnTop"}, "4"},
+        {"AutoWidthCalculation", false, "0"}, {"WidthWeightFactor", model::DecimalValue{"20"}, "20"},
+        {"LeftMargin", model::DecimalValue{"1"}, "1"}, {"TopMargin", model::DecimalValue{"2"}, "2"},
+        {"RightMargin", model::DecimalValue{"3"}, "3"}, {"BottomMargin", model::DecimalValue{"4"}, "4"},
+        {"HighlightMode", model::EnumerationValue{"SpreadsheetDocumentCellHighlightMode", "DontHighlight"}, "3"},
+        {"ShowEditMode", model::EnumerationValue{"SpreadsheetDocumentEditableCellShowType", "AsInputField"}, "1"},
+    }};
+    const auto descriptors = model::metamodel::spreadsheet_format_properties();
+    expect(descriptors.size() == fields.size(), "Format must expose all 48 named properties");
+    codec::SpreadsheetFormatResources resources;
+    model::SpreadsheetDocumentFormat all;
+    for (std::size_t owner = 0; owner < 12; ++owner) {
+        model::SpreadsheetDocumentFormat format;
+        const auto mask = std::uint64_t{15} << (owner * 4);
+        std::string expected = "{" + std::to_string(mask);
+        for (std::size_t bit = owner * 4; bit < owner * 4 + 4; ++bit) {
+            const auto& field = fields[bit];
+            expect(descriptors[bit].xml_name == field.name,
+                "Format descriptor order must agree with the native property bit");
+            format.properties.set_explicit(model::PropertyId::from_name(field.name), field.value);
+            all.properties.set_explicit(model::PropertyId::from_name(field.name), field.value);
+            expected += "," + std::string(field.storage);
+        }
+        expected += "}";
+        const auto encoded = codec::encode_spreadsheet_format(format, resources);
+        expect(stream::dump_compact(encoded) == expected,
+            "each of twelve Format owners must use its four native bits, values, and resource references");
+        expect(codec::decode_spreadsheet_format(encoded, resources) == format,
+            "each Format owner must preserve typed properties and explicit false values");
+    }
+    std::string expected = "{281474976710655";
+    for (const auto& field : fields) expected += "," + std::string(field.storage);
+    expected += "}";
+    const auto encoded = codec::encode_spreadsheet_format(all, resources);
+    expect(stream::dump_compact(encoded) == expected &&
+               codec::decode_spreadsheet_format(encoded, resources) == all,
+        "a Format combining all 48 properties must preserve bit order and typed values");
+    expect(resources.fonts.size() == 1 && resources.lines.size() == 1 && resources.colors.size() == 1 &&
+               resources.strings.size() == 1 && resources.types.size() == 1 && resources.control_types.size() == 1 &&
+               resources.masks.size() == 1 && resources.pictures.size() == 1 &&
+               resources.pictures.front() == model::PictureRef{},
+        "repeated Format owners must intern every typed resource, including explicit empty Picture");
+    model::SpreadsheetDocumentFormat empty;
+    expect(stream::dump_compact(codec::encode_spreadsheet_format(empty, resources)) == "{0}" &&
+               codec::decode_spreadsheet_format(stream::ListValue::list({stream::ListValue::raw_atom("0")}),
+                   resources).properties.empty(),
+        "an absent Format property must remain distinct from an explicitly empty resource or false Boolean");
+
+    model::SpreadsheetDocumentFormat second;
+    auto second_font = font; second_font.height = 12;
+    auto second_color = color; second_color.red = 90;
+    const model::LocalizedStringValue other_text{{{"en", "Other"}}};
+    model::TypeDomainEntry number; number.term = model::TypeDomainTerm::numeric;
+    model::PictureRef picture; picture.standard_name = model::QualifiedName{"StdPicture.Save"};
+    second.properties.set_explicit(model::PropertyId::from_name("Font"), second_font);
+    second.properties.set_explicit(model::PropertyId::from_name("LeftBorder"),
+        model::LineValue{{"SpreadsheetDocumentCellLineType", "Solid"}, 1, false});
+    second.properties.set_explicit(model::PropertyId::from_name("TextColor"), second_color);
+    second.properties.set_explicit(model::PropertyId::from_name("ValueType"), model::TypeDomainPatternValue{{number}});
+    second.properties.set_explicit(model::PropertyId::from_name("Format"), other_text);
+    second.properties.set_explicit(model::PropertyId::from_name("ControlType"),
+        model::UuidValue{"11111111-1111-1111-1111-111111111111"});
+    second.properties.set_explicit(model::PropertyId::from_name("Mask"), other_text);
+    second.properties.set_explicit(model::PropertyId::from_name("Picture"), picture);
+    const auto second_encoded = codec::encode_spreadsheet_format(second, resources);
+    expect(second_encoded.items.size() == 9 && second_encoded.items.back().atom == "2",
+        "a distinct Picture must use the next one-based reference after an empty Picture");
+    for (std::size_t index = 1; index < 8; ++index)
+        expect(second_encoded.items[index].atom == "1", "distinct nonpicture resources must use zero-based index one");
+    expect(codec::decode_spreadsheet_format(second_encoded, resources) == second &&
+               stream::dump_compact(codec::encode_spreadsheet_format(second, resources)) == stream::dump_compact(second_encoded) &&
+               resources.fonts.size() == 2 && resources.lines.size() == 2 && resources.colors.size() == 2 &&
+               resources.strings.size() == 2 && resources.types.size() == 2 && resources.control_types.size() == 2 &&
+               resources.masks.size() == 2 && resources.pictures.size() == 2,
+        "distinct resources must resolve correctly and repeated encoding must not append duplicates");
+    for (const auto& descriptor : descriptors) {
+        if (descriptor.value_codec != model::metamodel::ValueCodec::boolean) continue;
+        for (const bool enabled : {false, true}) {
+            model::SpreadsheetDocumentFormat format;
+            format.properties.set_explicit(descriptor.id, enabled);
+            const auto binary = codec::encode_spreadsheet_format(format, resources);
+            expect(binary.items[1].atom == ((enabled != (descriptor.xml_name == "Protection")) ? "1" : "0") &&
+                       codec::decode_spreadsheet_format(binary, resources) == format,
+                "every Format Boolean must retain both explicit values, with Protection inverted");
+        }
+    }
+}
+
+void test_spreadsheet_format_enums() {
+    namespace stream = oof::storage::list_stream;
+    using Member = std::pair<std::string_view, int>;
+    struct EnumCase {
+        std::string_view property;
+        std::string_view type;
+        unsigned bit;
+        std::vector<Member> members;
+    };
+    // Independently captured native enum storage, not public XSD member order.
+    const std::array cases{
+        EnumCase{"HorizontalAlignment", "HorizontalAlign", 8, {{"Left", 0}, {"Center", 6}, {"Right", 2}, {"Justify", 4}, {"Auto", 5}}},
+        EnumCase{"VerticalAlignment", "VerticalAlign", 9, {{"Top", 0}, {"Center", 24}, {"Bottom", 8}}},
+        EnumCase{"TextPlacement", "SpreadsheetDocumentTextPlacementType", 14, {{"Auto", 0}, {"Cut", 1}, {"Block", 2}, {"Wrap", 3}}},
+        EnumCase{"FillType", "SpreadsheetDocumentAreaFillType", 15, {{"Text", 0}, {"Parameter", 1}, {"Template", 2}}},
+        EnumCase{"DetailsUse", "SpreadsheetDocumentDetailUse", 19, {{"Cell", 0}, {"Row", 1}, {"WithoutProcessing", 2}}},
+        EnumCase{"ColumnSizeChange", "SizeChangeMode", 33, {{"Normal", 0}, {"QuickChange", 1}}},
+        EnumCase{"PictureSize", "PictureSize", 38, {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3},
+            {"AutoSize", 4}, {"RealSizeIgnoreScale", 5}, {"AutoSizeIgnoreScale", 6}, {"ByFontSize", 7}}},
+        EnumCase{"TextPosition", "TextPositionRelativeToPicture", 39, {{"Left", 0}, {"Right", 1}, {"Top", 2}, {"Bottom", 3}, {"OnTop", 4}, {"Auto", 5}}},
+        EnumCase{"HighlightMode", "SpreadsheetDocumentCellHighlightMode", 46, {{"Auto", 0}, {"Cell", 1}, {"Row", 2}, {"DontHighlight", 3}}},
+        EnumCase{"ShowEditMode", "SpreadsheetDocumentEditableCellShowType", 47, {{"Auto", 0}, {"AsInputField", 1}, {"Regular", 2}}},
+    };
+    codec::SpreadsheetFormatResources resources;
+    const auto check = [&](std::string_view property, std::string_view type, unsigned bit,
+                           std::string_view member, int storage) {
+        model::SpreadsheetDocumentFormat format;
+        format.properties.set_explicit(model::PropertyId::from_name(property),
+            model::EnumerationValue{std::string(type), std::string(member)});
+        const auto encoded = codec::encode_spreadsheet_format(format, resources);
+        expect(stream::dump_compact(encoded) == "{" + std::to_string(std::uint64_t{1} << bit) + "," +
+                   std::to_string(storage) + "}" && codec::decode_spreadsheet_format(encoded, resources) == format,
+            "named Format enum members must match native ordinals in both directions");
+    };
+    std::size_t members = 0;
+    for (const auto& item : cases) {
+        for (const auto& [name, storage] : item.members) {
+            check(item.property, item.type, item.bit, name, storage);
+            ++members;
+        }
+    }
+    check("Pattern", "SpreadsheetDocumentPatternType", 12, "WithoutPattern", 255);
+    check("Pattern", "SpreadsheetDocumentPatternType", 12, "Solid", 0);
+    for (int pattern = 1; pattern <= 17; ++pattern)
+        check("Pattern", "SpreadsheetDocumentPatternType", 12, "Pattern" + std::to_string(pattern), pattern);
+    expect(members + 19 == 60, "Format enum cases must cover all 60 independently named members");
+}
+
+void test_spreadsheet_format_rejections() {
+    namespace stream = oof::storage::list_stream;
+    using List = stream::ListValue;
+    codec::SpreadsheetFormatResources resources;
+    const auto record = [](unsigned bit, std::string value) {
+        return List::list({List::raw_atom(std::to_string(std::uint64_t{1} << bit)), List::raw_atom(std::move(value))});
+    };
+    for (const auto& invalid : {
+             List::raw_atom("0"), List::list({}), List::list({List::string_atom("0")}),
+             List::list({List::raw_atom("281474976710656"), List::raw_atom("0")}),
+             List::list({List::raw_atom("-1")}), List::list({List::raw_atom("64")}),
+             List::list({List::raw_atom("0"), List::raw_atom("0")}),
+             List::list({List::raw_atom("64"), List::string_atom("1")}),
+             List::list({List::raw_atom("64"), List::list({List::raw_atom("1")})})})
+        expect_rejected([&] { (void)codec::decode_spreadsheet_format(invalid, resources); },
+            "Format must reject invalid list shape, unknown flags, arity and noninteger values");
+    for (const unsigned bit : {0U, 1U, 5U, 23U, 24U, 25U, 34U, 35U}) {
+        for (const auto reference : {"-1", "0", "1"}) {
+            const auto invalid = record(bit, reference);
+            expect_rejected([&] { (void)codec::decode_spreadsheet_format(invalid, resources); },
+                "Format must reject missing or negative resource references and an unproved null Picture");
+        }
+    }
+    for (const auto& [bit, value] : {
+             std::pair{0U, "32768"}, {1U, "256"}, {6U, "32768"}, {6U, "-32769"},
+             {7U, "32768"}, {7U, "-32769"}, {18U, "2147483648"}, {42U, "-2147483649"},
+             {16U, "2"}, {17U, "-1"}, {8U, "1"}, {9U, "1"}, {12U, "254"}, {38U, "8"}, {39U, "6"}}) {
+        const auto invalid = record(bit, value);
+        expect_rejected([&] { (void)codec::decode_spreadsheet_format(invalid, resources); },
+            "Format must reject storage overflow, nonboolean values and unknown enum ordinals");
+    }
+    for (const auto& [name, value] : {
+             std::pair{"Height", "32768"}, {"Width", "-32769"}, {"Indent", "2147483648"}, {"TopMargin", "0.5"}}) {
+        model::SpreadsheetDocumentFormat invalid;
+        invalid.properties.set_explicit(model::PropertyId::from_name(name), model::DecimalValue{value});
+        expect_rejected([&] { (void)codec::encode_spreadsheet_format(invalid, resources); },
+            "Format must reject fractional or overflowing scalar values during encoding");
+    }
+    for (const auto& [name, value] : std::array<std::pair<std::string_view, model::PropertyValue>, 6>{{
+             {"UnknownFormatProperty", false}, {"Height", true},
+             {"HorizontalAlignment", model::EnumerationValue{"VerticalAlign", "Center"}},
+             {"HorizontalAlignment", model::EnumerationValue{"HorizontalAlign", "Unknown"}},
+             {"LeftBorder", model::LineValue{}}, {"ControlType", model::UuidValue{"not-a-uuid"}}}}) {
+        model::SpreadsheetDocumentFormat invalid;
+        invalid.properties.set_explicit(model::PropertyId::from_name(name), value);
+        expect_rejected([&] { (void)codec::encode_spreadsheet_format(invalid, resources); },
+            "Format must reject unknown properties, wrong types, line families, enum members and UUIDs");
+    }
+    resources.lines.resize(257);
+    expect_rejected([&] { (void)codec::decode_spreadsheet_format(record(1, "256"), resources); },
+        "a present border resource must still fit its uint8 reference");
+    expect_rejected([&] { (void)codec::decode_spreadsheet_format(record(1, "0"), resources); },
+        "border decoding must reject a resource from another line family");
+    model::SpreadsheetDocumentFormat border;
+    border.properties.set_explicit(model::PropertyId::from_name("LeftBorder"),
+        model::LineValue{{"SpreadsheetDocumentCellLineType", "Solid"}, 1, false});
+    expect_rejected([&] { (void)codec::encode_spreadsheet_format(border, resources); },
+        "border interning must reject a new resource index exceeding uint8");
+    resources.lines[255] = model::LineValue{{"SpreadsheetDocumentCellLineType", "Solid"}, 1, false};
+    const auto maximum_border = codec::encode_spreadsheet_format(border, resources);
+    expect(stream::dump_compact(maximum_border) == "{2,255}" &&
+               codec::decode_spreadsheet_format(maximum_border, resources) == border,
+        "border index 255 must remain representable and resolve to its typed line resource");
+    for (const auto& [name, bit, minimum, maximum] : {
+             std::tuple{"Height", 6U, "-32768", "32767"}, {"Width", 7U, "-32768", "32767"},
+             {"TextOrientation", 18U, "-2147483648", "2147483647"}}) {
+        for (const auto value : {minimum, maximum}) {
+            model::SpreadsheetDocumentFormat format;
+            format.properties.set_explicit(model::PropertyId::from_name(name), model::DecimalValue{value});
+            const auto encoded = codec::encode_spreadsheet_format(format, resources);
+            expect(stream::dump_compact(encoded) == stream::dump_compact(record(bit, value)) &&
+                       codec::decode_spreadsheet_format(encoded, resources) == format,
+                "Format scalar storage boundaries must remain accepted without rescaling");
+        }
+    }
+}
+
+void test_native_absolute_font_hints() {
+    const auto font = codec::decode_font(
+        "{8,0,959,110,0,0,0,700,0,1,0,0,0,0,0,34,\"Arial\",1,100,0}");
+    model::FontValue expected;
+    expected.kind = model::FontKind::absolute;
+    expected.face_name = "Arial"; expected.height = 11; expected.bold = true;
+    expected.italic = false; expected.underline = true; expected.strikeout = false;
+    expected.scale_override = true;
+    expect(font == expected && codec::encode_font(font) ==
+               "{8,0,575,110,0,0,0,700,0,1,0,0,0,0,0,0,\"Arial\",1,100,0}" &&
+               codec::decode_font(codec::encode_font(font)) == expected,
+        "native Font959 must preserve named semantics while normalizing zero overrides and pitch/family hints");
+    for (const auto& [invalid, field] : {
+             std::pair{"{8,0,959,110,0,1,0,700,0,1,0,0,0,0,0,34,\"Arial\",1,100,0}", "escapement"},
+             {"{8,0,959,110,0,0,0,700,0,1,0,0,0,0,0,34,\"Arial\",1,100,1}", "lineHeight"},
+             {"{8,0,959,110,0,0,0,700,0,1,0,0,0,0,0,256,\"Arial\",1,100,0}", "pitch and family"}}) {
+        bool rejected = false;
+        try { (void)codec::decode_font(invalid); }
+        catch (const std::runtime_error& error) { rejected = std::string_view(error.what()).find(field) != std::string_view::npos; }
+        expect(rejected, "Font must identify unsupported escapement/lineHeight or overflowing pitch/family precisely");
+    }
+}
+
 void test_platform_date_codec() {
     expect(codec::date_to_platform("2024-02-29T00:00:00") == "20240229000000",
         "local leap-day date must encode to the canonical platform atom");
@@ -797,6 +1111,7 @@ void test_canonical_decimal() {
 int main() {
     try {
         test_line();
+        test_absolute_line_override_flags();
         test_localized_string();
         test_formatted_string();
         test_composite_id();
@@ -805,6 +1120,10 @@ int main() {
         test_color();
         test_font();
         test_shortcut();
+        test_spreadsheet_format_fields();
+        test_spreadsheet_format_enums();
+        test_spreadsheet_format_rejections();
+        test_native_absolute_font_hints();
         test_platform_date_codec();
         test_canonical_decimal();
         test_compact_platform_decimal();

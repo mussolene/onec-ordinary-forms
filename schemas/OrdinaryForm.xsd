@@ -72,10 +72,11 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="LocalizedStringLanguageType"><xs:union memberTypes="xs:language"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value=""/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>
   <xs:complexType name="LocalizedStringItemType">
     <xs:simpleContent>
       <xs:extension base="xs:string">
-        <xs:attribute name="language" type="xs:language" use="required"/>
+        <xs:attribute name="language" type="LocalizedStringLanguageType" use="required"/>
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
@@ -1669,8 +1670,60 @@
   <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="SpreadsheetDocumentCellControlKindType"><xs:restriction base="xs:string"><xs:enumeration value="InputField"/></xs:restriction></xs:simpleType>
   <xs:complexType name="SpreadsheetDocumentCellControlType"><xs:sequence><xs:element name="ReadOnly" type="xs:boolean" minOccurs="0"/></xs:sequence><xs:attribute name="type" type="SpreadsheetDocumentCellControlKindType" use="required"/></xs:complexType>
-  <xs:complexType name="SpreadsheetDocumentCellType"><xs:choice><xs:element name="Text" type="xs:string"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/><xs:element name="Control" type="SpreadsheetDocumentCellControlType" minOccurs="0"/></xs:sequence></xs:choice><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
-  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentFormatPictureType"><xs:simpleContent><xs:extension base="PictureReferenceValueType"><xs:attribute name="empty" type="xs:boolean" fixed="true"/></xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentFormatType"><xs:sequence>
+    <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="LeftBorder" type="LineValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="TopBorder" type="LineValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="RightBorder" type="LineValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="BottomBorder" type="LineValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="HorizontalAlignment" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="HorizontalAlign"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Center"/><xs:enumeration value="Justify"/><xs:enumeration value="Left"/><xs:enumeration value="Right"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="VerticalAlignment" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="VerticalAlign"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Bottom"/><xs:enumeration value="Center"/><xs:enumeration value="Top"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Pattern" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="SpreadsheetDocumentPatternType"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Pattern1"/><xs:enumeration value="Pattern10"/><xs:enumeration value="Pattern11"/><xs:enumeration value="Pattern12"/><xs:enumeration value="Pattern13"/><xs:enumeration value="Pattern14"/><xs:enumeration value="Pattern15"/><xs:enumeration value="Pattern16"/><xs:enumeration value="Pattern17"/><xs:enumeration value="Pattern2"/><xs:enumeration value="Pattern3"/><xs:enumeration value="Pattern4"/><xs:enumeration value="Pattern5"/><xs:enumeration value="Pattern6"/><xs:enumeration value="Pattern7"/><xs:enumeration value="Pattern8"/><xs:enumeration value="Pattern9"/><xs:enumeration value="Solid"/><xs:enumeration value="WithoutPattern"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="PatternColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="TextPlacement" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="SpreadsheetDocumentTextPlacementType"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Block"/><xs:enumeration value="Cut"/><xs:enumeration value="Wrap"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="FillType" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="SpreadsheetDocumentAreaFillType"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Parameter"/><xs:enumeration value="Template"/><xs:enumeration value="Text"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="Protection" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Hidden" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="TextOrientation" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="DetailsUse" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="SpreadsheetDocumentDetailUse"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Cell"/><xs:enumeration value="Row"/><xs:enumeration value="WithoutProcessing"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="BySelectedColumns" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="MarkNegatives" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ContainsValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Format" type="LocalizedStringValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ControlType" type="UuidValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="HyperLink" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="QuickDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="AutoMarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="MarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Indent" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="AutoIndent" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="EditFormat" type="LocalizedStringValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ColumnSizeChange" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="SizeChangeMode"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Normal"/><xs:enumeration value="QuickChange"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="Mask" type="LocalizedStringValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Picture" type="SpreadsheetDocumentFormatPictureType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="PictureHorizontalAlignment" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="HorizontalAlign"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Center"/><xs:enumeration value="Justify"/><xs:enumeration value="Left"/><xs:enumeration value="Right"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="PictureVerticalAlignment" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="VerticalAlign"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Bottom"/><xs:enumeration value="Center"/><xs:enumeration value="Top"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="PictureSize" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="PictureSize"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="AutoSize"/><xs:enumeration value="AutoSizeIgnoreScale"/><xs:enumeration value="ByFontSize"/><xs:enumeration value="Proportionally"/><xs:enumeration value="RealSize"/><xs:enumeration value="RealSizeIgnoreScale"/><xs:enumeration value="Stretch"/><xs:enumeration value="Tile"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="TextPosition" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="TextPositionRelativeToPicture"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Bottom"/><xs:enumeration value="Left"/><xs:enumeration value="OnTop"/><xs:enumeration value="Right"/><xs:enumeration value="Top"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="AutoWidthCalculation" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="WidthWeightFactor" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="LeftMargin" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="TopMargin" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="RightMargin" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="BottomMargin" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="HighlightMode" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="SpreadsheetDocumentCellHighlightMode"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Cell"/><xs:enumeration value="DontHighlight"/><xs:enumeration value="Row"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+    <xs:element name="ShowEditMode" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="SpreadsheetDocumentEditableCellShowType"/><xs:attribute name="member" use="required"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="AsInputField"/><xs:enumeration value="Auto"/><xs:enumeration value="Regular"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>
+  </xs:sequence></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentIndexedFormatType"><xs:sequence><xs:element name="Format" type="SpreadsheetDocumentFormatType"/></xs:sequence><xs:attribute name="index" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:choice><xs:element name="Text" type="LocalizedTextValueType"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/><xs:element name="Control" type="SpreadsheetDocumentCellControlType" minOccurs="0"/></xs:sequence></xs:choice><xs:element name="Format" type="SpreadsheetDocumentFormatType" minOccurs="0"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="DefaultFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="DefaultColumnFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="Row" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Column" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="height" type="xs:unsignedInt"/><xs:attribute name="width" type="xs:unsignedInt"/></xs:complexType>
 
   <xs:complexType name="GanttSeriesType"><xs:sequence>
     <xs:element name="Value" type="xs:string"/><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType" minOccurs="0"/>

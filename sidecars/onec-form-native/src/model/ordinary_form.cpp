@@ -24,6 +24,17 @@
 
 namespace oof::model {
 
+const PropertyEntry* SpreadsheetDocumentFieldPayload::inherited_cell_property(
+    const SpreadsheetDocumentCell& cell, PropertyId id) const {
+    for (const auto& row : rows) if (row.index == cell.row)
+        if (const auto* entry = row.format.properties.find(id)) return entry;
+    for (const auto& column : columns) if (column.index == cell.column)
+        if (const auto* entry = column.format.properties.find(id)) return entry;
+    if (const auto* entry = default_column_format.properties.find(id)) return entry;
+    return default_format.properties.find(id);
+}
+
+
 std::int64_t ValueListValue::effective_last_assigned_id() const {
     constexpr auto limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
     std::int64_t maximum = -1;
@@ -183,7 +194,7 @@ bool valid_localized_string(const LocalizedStringValue& value) noexcept {
     try {
         std::set<std::string_view> languages;
         for (const auto& item : value.items) {
-            if ((item.language != "#" && !valid_xs_language(item.language)) ||
+            if ((!item.language.empty() && item.language != "#" && !valid_xs_language(item.language)) ||
                 !languages.insert(item.language).second) return false;
         }
     } catch (...) {
@@ -3421,7 +3432,20 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 }
             }
         } else if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
+            const auto check_format = [&](const SpreadsheetDocumentFormat& format) {
+                check_property_values(format.properties, [](PropertyId id) -> const metamodel::PropertyDescriptor* {
+                    const auto descriptors = metamodel::spreadsheet_format_properties();
+                    const auto found = std::ranges::find(descriptors, id, &metamodel::PropertyDescriptor::id);
+                    return found == descriptors.end() ? nullptr : &*found;
+                });
+            };
+            check_format(spreadsheet->default_format);
+            check_format(spreadsheet->default_column_format);
+            for (const auto& row : spreadsheet->rows) check_format(row.format);
+            for (const auto& column : spreadsheet->columns) check_format(column.format);
             for (const auto& cell : spreadsheet->cells) {
+                check_composite_value(cell.text);
+                check_format(cell.format);
                 if (cell.typed_value) check_typed_value(cell.typed_value->value);
                 if (cell.control) check_property_values(cell.control->properties,
                     [&](PropertyId id) { return metamodel::find_property(cell.control->kind, id); });
@@ -4130,9 +4154,58 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 spreadsheet->serialization_version != SpreadsheetDocumentFieldSerializationVersion::v18)
                 add_violation(report, InvariantCode::invalid_property, control.id, control.id,
                     "Версия сериализации SpreadsheetDocumentField должна быть 14, 16 или 18");
+            const auto validate_format = [&](const SpreadsheetDocumentFormat& format) {
+                std::optional<PropertySet> referenced_properties;
+                const auto picture_id = PropertyId::from_name("Picture");
+                if (const auto* entry = format.properties.find(picture_id))
+                    if (const auto* picture = std::get_if<PictureRef>(&entry->value); picture && *picture == PictureRef{}) {
+                        referenced_properties = format.properties;
+                        referenced_properties->unset(picture_id);
+                    }
+                validate_property_set(control.id, referenced_properties ? *referenced_properties : format.properties,
+                    [](PropertyId id) -> const metamodel::PropertyDescriptor* {
+                        const auto descriptors = metamodel::spreadsheet_format_properties();
+                        const auto found = std::ranges::find(descriptors, id, &metamodel::PropertyDescriptor::id);
+                        return found == descriptors.end() ? nullptr : &*found;
+                    }, [](const metamodel::PropertyDescriptor&) { return true; });
+            };
+            validate_format(spreadsheet->default_format);
+            validate_format(spreadsheet->default_column_format);
+            const auto validate_indexed_formats = [&](const auto& items) {
+                std::uint32_t previous = 0;
+                for (const auto& item : items) {
+                    if (item.index == 0 || item.index <= previous)
+                        add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                            "Spreadsheet row and column formats require unique positive indices in ascending order");
+                    previous = item.index;
+                    validate_format(item.format);
+                }
+            };
+            validate_indexed_formats(spreadsheet->rows);
+            validate_indexed_formats(spreadsheet->columns);
             std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
             std::optional<std::pair<std::uint32_t, std::uint32_t>> previous;
             for (const auto& cell : spreadsheet->cells) {
+                const metamodel::PropertyDescriptor text_descriptor{.value_codec = metamodel::ValueCodec::localized_text};
+                if (!property_value_matches(text_descriptor, cell.text))
+                    add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                        "Spreadsheet Cell Text requires a String or a valid LocalizedString value");
+                validate_format(cell.format);
+                if (!cell.typed_value && !cell.format.properties.contains(PropertyId::from_name("ContainsValue"))) {
+                    const auto* inherited = spreadsheet->inherited_cell_property(cell, PropertyId::from_name("ContainsValue"));
+                    if (inherited && std::holds_alternative<bool>(inherited->value) && std::get<bool>(inherited->value))
+                        add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                            "Spreadsheet text cell must explicitly override inherited ContainsValue=true");
+                }
+                if (const auto* entry = cell.format.properties.find(PropertyId::from_name("ContainsValue"));
+                    entry && std::holds_alternative<bool>(entry->value) && std::get<bool>(entry->value) != cell.typed_value.has_value())
+                    add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                        "Spreadsheet Cell Format.ContainsValue must agree with its text or typed value representation");
+                if (const auto* entry = cell.format.properties.find(PropertyId::from_name("ValueType"));
+                    entry && cell.typed_value && std::holds_alternative<TypeDomainPatternValue>(entry->value) &&
+                    std::get<TypeDomainPatternValue>(entry->value) != cell.typed_value->type)
+                    add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                        "Spreadsheet Cell Format.ValueType must match the typed cell ValueType");
                 const auto coordinate = std::pair{cell.row, cell.column};
                 if (cell.row == 0 || cell.column == 0 || !coordinates.emplace(coordinate).second ||
                     (previous && coordinate <= *previous)) {
@@ -4172,7 +4245,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                                 std::holds_alternative<DateValue>(typed.value);
                         }
                     }
-                    if (!cell.text.empty() || !supported) {
+                    const auto* text = std::get_if<std::string>(&cell.text);
+                    if (!text || !text->empty() || !supported) {
                         add_violation(
                             report,
                             InvariantCode::invalid_property,
@@ -5105,6 +5179,12 @@ void OrdinaryFormDocument::remove_unreferenced_caption_asset(ObjectId id) {
     };
     for (const auto& control : collections_.controls) {
         if (has_picture(control.properties()) || has_picture(control.extension_properties)) return;
+        if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
+            if (has_picture(spreadsheet->default_format.properties) || has_picture(spreadsheet->default_column_format.properties)) return;
+            for (const auto& row : spreadsheet->rows) if (has_picture(row.format.properties)) return;
+            for (const auto& column : spreadsheet->columns) if (has_picture(column.format.properties)) return;
+            for (const auto& cell : spreadsheet->cells) if (has_picture(cell.format.properties)) return;
+        }
         if (const auto* button = std::get_if<ButtonPayload>(&control.payload); button && menu_has_picture(menu_has_picture, button->buttons)) return;
         if (const auto* bar = std::get_if<CommandBarPayload>(&control.payload); bar && menu_has_picture(menu_has_picture, bar->buttons)) return;
     }

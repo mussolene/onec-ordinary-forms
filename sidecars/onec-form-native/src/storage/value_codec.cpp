@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <charconv>
 #include <cctype>
 #include <cstdint>
@@ -837,25 +838,30 @@ model::FontValue read_font(list_stream::ListInStream& in) {
     }
     const std::uint32_t flags = in.read_uint32();
     const std::uint32_t basic_flags = 1U | 2U | 4U | 8U | 16U | 32U;
-    const std::uint32_t allowed_flags = layout->scale_override_allowed ? basic_flags | 512U : basic_flags;
+    const std::uint32_t allowed_flags = layout->scale_override_allowed ? basic_flags | 128U | 256U | 512U : basic_flags;
     if ((flags & ~allowed_flags) != 0) throw std::runtime_error("Font contains unknown presence flags");
     const auto height = in.read_uint32();
     if (height > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
         throw std::runtime_error("Font height exceeds the supported signed 32-bit storage range");
     }
-    for (int i = 0; i < 3; ++i) if (in.read_uint32() != 0) throw std::runtime_error("Font reserved field is nonzero");
+    if (in.read_uint32() != 0) throw std::runtime_error("Font width is unsupported");
+    if (in.read_uint32() != 0) throw std::runtime_error("Font nonzero escapement is unsupported");
+    if (in.read_uint32() != 0) throw std::runtime_error("Font orientation is unsupported");
     const auto weight = in.read_uint32();
     const bool italic = in.read_bool();
     const bool underline = in.read_bool();
     const bool strikeout = in.read_bool();
-    for (int i = 0; i < 5; ++i) if (in.read_uint32() != 0) throw std::runtime_error("Font reserved field is nonzero");
+    for (int i = 0; i < 4; ++i) if (in.read_uint32() != 0) throw std::runtime_error("Font reserved field is nonzero");
+    // Absolute Font equality excludes the LOGFONT pitch/family selection hint.
+    if (in.read_uint32() > 255U) throw std::runtime_error("Font pitch and family exceeds its byte storage range");
     const auto face_name = in.read_string();
     value.auto_char_set = in.read_bool();
     const auto scale = layout->has_scale ? in.read_uint32() : 100U;
     if (scale > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
         throw std::runtime_error("Font scale exceeds the supported signed 32-bit storage range");
     }
-    if (in.read_uint32() != 0 || in.has_next()) throw std::runtime_error("Font trailer is unsupported");
+    if (in.read_uint32() != 0) throw std::runtime_error("Font nonzero lineHeight is unsupported");
+    if (in.has_next()) throw std::runtime_error("Font trailer is unsupported");
     if ((flags & 1U) == 0 || face_name.empty()) {
         throw std::runtime_error("absolute Font requires a non-empty faceName and its presence flag");
     }
@@ -1005,7 +1011,8 @@ model::LineValue decode_line(std::string_view text) {
     in.begin_list(); if (in.read_uint32() != 0) throw std::runtime_error("invalid line reserved value"); in.end_list();
     const auto ordinal = in.read_uint32();
     const auto width = in.read_uint32();
-    const auto flag = in.read_uint32();
+    // Absolute V8Line equality ignores the override flags used by nonabsolute lines.
+    (void)in.read_uint32();
     const auto guid = in.read_guid();
     const auto gap = in.read_bool();
     in.end_list(); if (in.has_next()) throw std::runtime_error("line stream contains trailing values");
@@ -1015,9 +1022,240 @@ model::LineValue decode_line(std::string_view text) {
     const auto signed_width = width <= static_cast<std::uint32_t>(INT32_MAX)
         ? static_cast<std::int32_t>(width) : static_cast<std::int32_t>(static_cast<std::int64_t>(width) - 4294967296LL);
     model::LineValue value{{std::string(family->name), std::string(family->members[ordinal])}, signed_width, gap};
-    if (flag != (value == model::LineValue{} ? 0U : 7U)) throw std::runtime_error("invalid line flags");
     (void)encode_line(value);
     return value;
+}
+
+namespace {
+
+using SpreadsheetEnumMember = std::pair<std::string_view, std::int32_t>;
+
+std::span<const SpreadsheetEnumMember> spreadsheet_enum_members(std::string_view type) {
+    static constexpr SpreadsheetEnumMember horizontal[]{SpreadsheetEnumMember{"Left", 0}, {"Center", 6},
+        {"Right", 2}, {"Justify", 4}, {"Auto", 5}};
+    static constexpr SpreadsheetEnumMember vertical[]{SpreadsheetEnumMember{"Top", 0}, {"Center", 24}, {"Bottom", 8}};
+    static constexpr SpreadsheetEnumMember placement[]{SpreadsheetEnumMember{"Auto", 0}, {"Cut", 1}, {"Block", 2}, {"Wrap", 3}};
+    static constexpr SpreadsheetEnumMember fill[]{SpreadsheetEnumMember{"Text", 0}, {"Parameter", 1}, {"Template", 2}};
+    static constexpr SpreadsheetEnumMember details[]{SpreadsheetEnumMember{"Cell", 0}, {"Row", 1}, {"WithoutProcessing", 2}};
+    static constexpr SpreadsheetEnumMember highlight[]{SpreadsheetEnumMember{"Auto", 0}, {"Cell", 1}, {"Row", 2}, {"DontHighlight", 3}};
+    static constexpr SpreadsheetEnumMember edit[]{SpreadsheetEnumMember{"Auto", 0}, {"AsInputField", 1}, {"Regular", 2}};
+    static constexpr SpreadsheetEnumMember picture_size[]{SpreadsheetEnumMember{"RealSize", 0}, {"Stretch", 1},
+        {"Proportionally", 2}, {"Tile", 3}, {"AutoSize", 4}, {"RealSizeIgnoreScale", 5},
+        {"AutoSizeIgnoreScale", 6}, {"ByFontSize", 7}};
+    static constexpr SpreadsheetEnumMember text_position[]{SpreadsheetEnumMember{"Left", 0}, {"Right", 1},
+        {"Top", 2}, {"Bottom", 3}, {"OnTop", 4}, {"Auto", 5}};
+    static constexpr SpreadsheetEnumMember size_change[]{SpreadsheetEnumMember{"Normal", 0}, {"QuickChange", 1}};
+    static constexpr SpreadsheetEnumMember pattern[]{SpreadsheetEnumMember{"WithoutPattern", 255}, {"Solid", 0},
+        {"Pattern1", 1}, {"Pattern2", 2}, {"Pattern3", 3}, {"Pattern4", 4}, {"Pattern5", 5},
+        {"Pattern6", 6}, {"Pattern7", 7}, {"Pattern8", 8}, {"Pattern9", 9}, {"Pattern10", 10},
+        {"Pattern11", 11}, {"Pattern12", 12}, {"Pattern13", 13}, {"Pattern14", 14},
+        {"Pattern15", 15}, {"Pattern16", 16}, {"Pattern17", 17}};
+    if (type == "HorizontalAlign") return horizontal;
+    if (type == "VerticalAlign") return vertical;
+    if (type == "SpreadsheetDocumentTextPlacementType") return placement;
+    if (type == "SpreadsheetDocumentAreaFillType") return fill;
+    if (type == "SpreadsheetDocumentDetailUse") return details;
+    if (type == "SpreadsheetDocumentCellHighlightMode") return highlight;
+    if (type == "SpreadsheetDocumentEditableCellShowType") return edit;
+    if (type == "PictureSize") return picture_size;
+    if (type == "TextPositionRelativeToPicture") return text_position;
+    if (type == "SizeChangeMode") return size_change;
+    if (type == "SpreadsheetDocumentPatternType") return pattern;
+    throw std::runtime_error("Spreadsheet Format enumeration storage is not established: " + std::string(type));
+}
+
+template <typename T>
+const T& spreadsheet_typed_value(const model::PropertyValue& value, std::string_view name) {
+    const auto* typed = std::get_if<T>(&value);
+    if (!typed) throw std::runtime_error("Spreadsheet Format property has the wrong value type: " + std::string(name));
+    return *typed;
+}
+
+template <typename T>
+std::int32_t intern_spreadsheet_resource(std::vector<T>& resources, const T& value,
+    std::int64_t maximum, std::string_view name) {
+    const auto existing = std::ranges::find(resources, value);
+    const auto index = existing - resources.begin();
+    if (index > maximum) throw std::runtime_error("Spreadsheet Format resource reference exceeds storage width: " + std::string(name));
+    if (existing == resources.end()) resources.push_back(value);
+    return static_cast<std::int32_t>(index);
+}
+
+template <typename T>
+const T& spreadsheet_resource(const std::vector<T>& resources, std::int64_t reference, std::string_view name) {
+    if (reference < 0 || static_cast<std::uint64_t>(reference) >= resources.size())
+        throw std::runtime_error("Spreadsheet Format references a missing resource: " + std::string(name));
+    return resources[static_cast<std::size_t>(reference)];
+}
+
+std::int64_t spreadsheet_integer(const list_stream::ListValue& atom, std::string_view name) {
+    if (atom.is_list || atom.atom_kind != list_stream::ListValue::AtomKind::raw)
+        throw std::runtime_error("Spreadsheet Format requires an integer atom: " + std::string(name));
+    return list_stream::detail::parse_integer<std::int64_t>(atom.atom, name);
+}
+
+void require_spreadsheet_scalar_range(std::size_t bit, std::int64_t value, std::string_view name) {
+    const auto minimum = bit == 0 || bit == 6 || bit == 7 ? INT16_MIN : INT32_MIN;
+    const auto maximum = bit == 0 || bit == 6 || bit == 7 ? INT16_MAX : INT32_MAX;
+    if (value < minimum || value > maximum)
+        throw std::runtime_error("Spreadsheet Format value exceeds storage width: " + std::string(name));
+}
+
+}  // namespace
+
+list_stream::ListValue encode_spreadsheet_format(
+    const model::SpreadsheetDocumentFormat& value, SpreadsheetFormatResources& resources) {
+    using model::metamodel::ValueCodec;
+    const auto descriptors = model::metamodel::spreadsheet_format_properties();
+    if (descriptors.size() != 48) throw std::logic_error("invalid Spreadsheet Format descriptor count");
+    value.properties.for_each_explicit([&](const model::PropertyEntry& entry) {
+        if (std::ranges::find(descriptors, entry.id, &model::metamodel::PropertyDescriptor::id) == descriptors.end())
+            throw std::runtime_error("Spreadsheet Format contains an unknown property");
+    });
+    std::uint64_t mask = 0;
+    std::vector<list_stream::ListValue> fields{list_stream::ListValue::raw_atom("0")};
+    for (std::size_t bit = 0; bit < descriptors.size(); ++bit) {
+        const auto& descriptor = descriptors[bit];
+        const auto* entry = value.properties.find(descriptor.id);
+        if (!entry) continue;
+        const auto name = descriptor.xml_name;
+        std::int64_t encoded = 0;
+        switch (descriptor.value_codec) {
+            case ValueCodec::font: {
+                const auto& font = spreadsheet_typed_value<model::FontValue>(entry->value, name);
+                (void)encode_font(font);
+                encoded = intern_spreadsheet_resource(resources.fonts, font, INT16_MAX, name);
+                break;
+            }
+            case ValueCodec::line: {
+                const auto& line = spreadsheet_typed_value<model::LineValue>(entry->value, name);
+                if (line.type.type_name != "SpreadsheetDocumentCellLineType")
+                    throw std::runtime_error("Spreadsheet Format border requires SpreadsheetDocumentCellLineType");
+                (void)encode_line(line);
+                encoded = intern_spreadsheet_resource(resources.lines, line, UINT8_MAX, name);
+                break;
+            }
+            case ValueCodec::color: {
+                const auto& color = spreadsheet_typed_value<model::ColorValue>(entry->value, name);
+                (void)encode_color(color);
+                encoded = intern_spreadsheet_resource(resources.colors, color, INT32_MAX, name);
+                break;
+            }
+            case ValueCodec::localized_string: {
+                const auto& string = spreadsheet_typed_value<model::LocalizedStringValue>(entry->value, name);
+                (void)encode_localized_string(string);
+                encoded = intern_spreadsheet_resource(bit == 34 ? resources.masks : resources.strings,
+                    string, INT32_MAX, name);
+                break;
+            }
+            case ValueCodec::type_domain: {
+                const auto& type = spreadsheet_typed_value<model::TypeDomainPatternValue>(entry->value, name);
+                (void)encode_type_domain(type);
+                encoded = intern_spreadsheet_resource(resources.types, type, INT32_MAX, name);
+                break;
+            }
+            case ValueCodec::uuid: {
+                const auto& uuid = spreadsheet_typed_value<model::UuidValue>(entry->value, name);
+                if (!list_stream::detail::is_canonical_guid(uuid.canonical))
+                    throw std::runtime_error("Spreadsheet Format ControlType requires a canonical UUID");
+                encoded = intern_spreadsheet_resource(resources.control_types, uuid, INT32_MAX, name);
+                break;
+            }
+            case ValueCodec::picture: {
+                const auto& picture = spreadsheet_typed_value<model::PictureRef>(entry->value, name);
+                encoded = static_cast<std::int64_t>(intern_spreadsheet_resource(resources.pictures,
+                    picture, INT32_MAX - 1, name)) + 1;
+                break;
+            }
+            case ValueCodec::boolean:
+                encoded = spreadsheet_typed_value<bool>(entry->value, name) != (bit == 16);
+                break;
+            case ValueCodec::decimal: {
+                const auto& decimal = spreadsheet_typed_value<model::DecimalValue>(entry->value, name);
+                const auto canonical = canonical_decimal(decimal.canonical);
+                encoded = list_stream::detail::parse_integer<std::int64_t>(canonical, name);
+                require_spreadsheet_scalar_range(bit, encoded, name);
+                break;
+            }
+            case ValueCodec::enumeration: {
+                const auto& enumeration = spreadsheet_typed_value<model::EnumerationValue>(entry->value, name);
+                if (enumeration.type_name != descriptor.enumeration_type)
+                    throw std::runtime_error("Spreadsheet Format enumeration type disagrees with its descriptor: " + std::string(name));
+                const auto members = spreadsheet_enum_members(enumeration.type_name);
+                const auto member = std::ranges::find(members, enumeration.member, &SpreadsheetEnumMember::first);
+                if (member == members.end())
+                    throw std::runtime_error("Spreadsheet Format enumeration member is unsupported: " + enumeration.member);
+                encoded = member->second;
+                break;
+            }
+            default: throw std::logic_error("invalid Spreadsheet Format property codec");
+        }
+        mask |= std::uint64_t{1} << bit;
+        fields.push_back(list_stream::ListValue::raw_atom(std::to_string(encoded)));
+    }
+    fields[0].atom = std::to_string(mask);
+    return list_stream::ListValue::list(std::move(fields));
+}
+
+model::SpreadsheetDocumentFormat decode_spreadsheet_format(
+    const list_stream::ListValue& value, const SpreadsheetFormatResources& resources) {
+    using model::metamodel::ValueCodec;
+    if (!value.is_list || value.items.empty()) throw std::runtime_error("Spreadsheet Format must be a nonempty list");
+    const auto& mask_atom = value.items.front();
+    if (mask_atom.is_list || mask_atom.atom_kind != list_stream::ListValue::AtomKind::raw)
+        throw std::runtime_error("Spreadsheet Format mask must be an integer atom");
+    const auto mask = list_stream::detail::parse_integer<std::uint64_t>(mask_atom.atom, "Spreadsheet Format mask");
+    if ((mask >> 48) != 0) throw std::runtime_error("Spreadsheet Format contains unsupported property bits");
+    if (value.items.size() != 1 + static_cast<std::size_t>(std::popcount(mask)))
+        throw std::runtime_error("Spreadsheet Format field count disagrees with its mask");
+    const auto descriptors = model::metamodel::spreadsheet_format_properties();
+    if (descriptors.size() != 48) throw std::logic_error("invalid Spreadsheet Format descriptor count");
+    model::SpreadsheetDocumentFormat result;
+    std::size_t cursor = 1;
+    for (std::size_t bit = 0; bit < descriptors.size(); ++bit) {
+        if ((mask & (std::uint64_t{1} << bit)) == 0) continue;
+        const auto& descriptor = descriptors[bit];
+        const auto name = descriptor.xml_name;
+        const auto encoded = spreadsheet_integer(value.items[cursor++], name);
+        require_spreadsheet_scalar_range(bit, encoded, name);
+        model::PropertyValue decoded;
+        switch (descriptor.value_codec) {
+            case ValueCodec::font: decoded = spreadsheet_resource(resources.fonts, encoded, name); break;
+            case ValueCodec::line: {
+                if (encoded < 0 || encoded > UINT8_MAX)
+                    throw std::runtime_error("Spreadsheet Format border reference exceeds uint8");
+                const auto& line = spreadsheet_resource(resources.lines, encoded, name);
+                if (line.type.type_name != "SpreadsheetDocumentCellLineType")
+                    throw std::runtime_error("Spreadsheet Format border resource has the wrong line family");
+                decoded = line;
+                break;
+            }
+            case ValueCodec::color: decoded = spreadsheet_resource(resources.colors, encoded, name); break;
+            case ValueCodec::localized_string:
+                decoded = spreadsheet_resource(bit == 34 ? resources.masks : resources.strings, encoded, name); break;
+            case ValueCodec::type_domain: decoded = spreadsheet_resource(resources.types, encoded, name); break;
+            case ValueCodec::uuid: decoded = spreadsheet_resource(resources.control_types, encoded, name); break;
+            case ValueCodec::picture:
+                if (encoded == 0) throw std::runtime_error("Spreadsheet Format null Picture reference is not established");
+                decoded = spreadsheet_resource(resources.pictures, encoded - 1, name); break;
+            case ValueCodec::boolean:
+                if (encoded != 0 && encoded != 1) throw std::runtime_error("Spreadsheet Format Boolean must be 0 or 1: " + std::string(name));
+                decoded = (encoded != 0) != (bit == 16);
+                break;
+            case ValueCodec::decimal: decoded = model::DecimalValue{std::to_string(encoded)}; break;
+            case ValueCodec::enumeration: {
+                const auto members = spreadsheet_enum_members(descriptor.enumeration_type);
+                const auto member = std::ranges::find(members, encoded, &SpreadsheetEnumMember::second);
+                if (member == members.end())
+                    throw std::runtime_error("Spreadsheet Format enumeration storage value is unsupported: " + std::string(name));
+                decoded = model::EnumerationValue{std::string(descriptor.enumeration_type), std::string(member->first)};
+                break;
+            }
+            default: throw std::logic_error("invalid Spreadsheet Format property codec");
+        }
+        result.properties.set_explicit(descriptor.id, std::move(decoded));
+    }
+    return result;
 }
 
 std::string encode_font(const model::FontValue& value) {

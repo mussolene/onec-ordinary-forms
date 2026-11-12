@@ -1776,9 +1776,10 @@ bool valid_picture_path(std::string_view path, model::PictureFormat format) {
         }
     }
     if (parts.size() < 3 || parts.size() % 2 == 0 || parts[0] != "Items") return false;
-    for (std::size_t index = 2; index + 1 < parts.size(); index += 2) {
-        if (parts[index] != "Buttons") return false;
-    }
+    if (!(parts.size() == 5 && parts[2] == "Document"))
+        for (std::size_t index = 2; index + 1 < parts.size(); index += 2) {
+            if (parts[index] != "Buttons") return false;
+        }
     std::string_view file = parts.back();
     if (parts.size() == 3 && file.starts_with("ChoiceButtonPicture.")) {
         file.remove_prefix(std::string_view("ChoiceButton").size());
@@ -2190,7 +2191,7 @@ private:
                     asset_node,
                     id,
                     "relativePath",
-                    "CaptionPicture.<matching format> or Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>",
+                    "CaptionPicture.<matching format> or Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format> or Items/<ElementName>/Document/<PictureName>/Picture.<matching format>",
                     asset.relative_path,
                     "Picture asset path is outside the ordinary-form source package contract");
             }
@@ -2689,16 +2690,107 @@ private:
                 if (spreadsheet_document_seen)
                     fail("OOF2003", child, id_text, "Document", "at most one Document element", "duplicate", "SpreadsheetDocumentField has duplicate Document elements");
                 spreadsheet_document_seen = true;
-                if (child->properties != nullptr)
-                    fail("OOF2003", child, id_text, "Document", "no attributes", "present", "Spreadsheet Document does not accept attributes");
-                auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload).cells;
+                auto& spreadsheet = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload);
+                for (xmlAttrPtr attribute = child->properties; attribute; attribute = attribute->next) {
+                    const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+                    if (attribute->ns != nullptr || (name != "height" && name != "width"))
+                        fail("OOF2003", child, id_text, "Document", "height and width attributes", std::string(name), "Unsupported Spreadsheet Document attribute");
+                }
+                if (const auto height = optional_attribute(child, "height"))
+                    spreadsheet.height = parse_integer<std::uint32_t>(*height, child, "height", id_text);
+                if (const auto width = optional_attribute(child, "width"))
+                    spreadsheet.width = parse_integer<std::uint32_t>(*width, child, "width", id_text);
+                auto& cells = spreadsheet.cells;
+                const auto parse_format = [&](xmlNodePtr format_node) {
+                    require_typed_container(format_node, id_text);
+                    model::SpreadsheetDocumentFormat format;
+                    const auto descriptors = mm::spreadsheet_format_properties();
+                    for (xmlNodePtr property_node : element_children(format_node)) {
+                        const auto name = node_name(property_node);
+                        const auto property = std::ranges::find(descriptors, name, &mm::PropertyDescriptor::xml_name);
+                        if (property == descriptors.end() || format.properties.find(property->id) != nullptr)
+                            fail("OOF2003", property_node, id_text, name, "unique named spreadsheet format property", "unknown or duplicate", "Unsupported spreadsheet format property");
+                        if (property->value_codec == mm::ValueCodec::picture && optional_attribute(property_node, "empty")) {
+                            if (required_attribute(property_node, "empty", id_text) != "true" ||
+                                property_node->properties->next != nullptr || property_node->properties->ns != nullptr ||
+                                !element_children(property_node).empty() || !trim_ascii(node_text(property_node)).empty())
+                                fail("OOF2003", property_node, id_text, name, "empty=true without another target or content", "inconsistent empty picture", "Explicit empty spreadsheet picture cannot contain another reference");
+                            format.properties.set_explicit(property->id, model::PictureRef{});
+                            continue;
+                        }
+                        std::string_view allowed;
+                        switch (property->value_codec) {
+                            case mm::ValueCodec::color: allowed = "|kind|red|green|blue|alpha|styleName|styleObjectId|styleUuid|"; break;
+                            case mm::ValueCodec::font: allowed = "|kind|styleName|styleObjectId|styleUuid|faceName|height|bold|italic|underline|strikeout|scale|scaleOverride|windowsFont|autoCharSet|"; break;
+                            case mm::ValueCodec::line: allowed = "|type|member|width|gap|"; break;
+                            case mm::ValueCodec::border: allowed = "|kind|borderType|width|styleName|styleObjectId|styleUuid|"; break;
+                            case mm::ValueCodec::enumeration: allowed = "|type|member|"; break;
+                            case mm::ValueCodec::picture: allowed = "|standardName|commonPicture|transparent|transparentX|transparentY|"; break;
+                            default: break;
+                        }
+                        for (xmlAttrPtr attribute = property_node->properties; attribute; attribute = attribute->next) {
+                            const std::string attribute_name(reinterpret_cast<const char*>(attribute->name));
+                            if (attribute->ns != nullptr || allowed.find("|" + attribute_name + "|") == std::string_view::npos)
+                                fail("OOF2003", property_node, id_text, name, "named property attributes", attribute_name, "Unsupported spreadsheet format attribute");
+                        }
+                        const bool nested = property->value_codec == mm::ValueCodec::localized_string ||
+                            property->value_codec == mm::ValueCodec::type_domain;
+                        if (nested) {
+                            require_typed_container(property_node, id_text);
+                            if (property->value_codec == mm::ValueCodec::localized_string)
+                                for (xmlNodePtr item : element_children(property_node)) {
+                                    for (xmlAttrPtr attribute = item->properties; attribute; attribute = attribute->next)
+                                        if (attribute->ns != nullptr || std::string_view(reinterpret_cast<const char*>(attribute->name)) != "language")
+                                            fail("OOF2003", item, id_text, name, "language attribute only", "unsupported", "Unsupported localized spreadsheet format attribute");
+                                    if (!element_children(item).empty())
+                                        fail("OOF2003", item, id_text, name, "plain localized text", "nested content", "Unsupported localized spreadsheet format content");
+                                }
+                        } else if (!element_children(property_node).empty() ||
+                            (!allowed.empty() && property->value_codec != mm::ValueCodec::picture && !trim_ascii(node_text(property_node)).empty()))
+                            fail("OOF2003", property_node, id_text, name, "typed property content", "nested or mixed content", "Unsupported spreadsheet format content");
+                        format.properties.set_explicit(property->id,
+                            parse_property_value(property_node, property->value_codec, id_text, typed_budget_));
+                    }
+                    return format;
+                };
                 std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
+                std::set<std::uint32_t> row_indices, column_indices;
+                bool default_format_seen = false, default_column_format_seen = false;
+                unsigned document_stage = 0;
                 for (xmlNodePtr cell_node : element_children(child)) {
-                    if (node_name(cell_node) != "Cell")
-                        fail("OOF2003", cell_node, id_text, node_name(cell_node), "Cell", node_name(cell_node), "Unknown spreadsheet Document item");
+                    const auto item_name = node_name(cell_node);
+                    const unsigned item_stage = item_name == "DefaultFormat" ? 0 : item_name == "DefaultColumnFormat" ? 1 :
+                        item_name == "Row" ? 2 : item_name == "Column" ? 3 : item_name == "Cell" ? 4 : 5;
+                    if (item_stage == 5 || item_stage < document_stage)
+                        fail("OOF2003", cell_node, id_text, item_name, "DefaultFormat, DefaultColumnFormat, Row, Column, Cell sequence", "unknown or out of order", "Invalid spreadsheet Document item");
+                    document_stage = item_stage;
+                    if (item_name == "DefaultFormat" || item_name == "DefaultColumnFormat") {
+                        auto& seen = item_name == "DefaultFormat" ? default_format_seen : default_column_format_seen;
+                        if (seen) fail("OOF2003", cell_node, id_text, item_name, "at most one format", "duplicate", "Duplicate spreadsheet default format");
+                        seen = true;
+                        (item_name == "DefaultFormat" ? spreadsheet.default_format : spreadsheet.default_column_format) = parse_format(cell_node);
+                        continue;
+                    }
+                    if (item_name == "Row" || item_name == "Column") {
+                        require_typed_container(cell_node, id_text, "index");
+                        for (xmlAttrPtr attribute = cell_node->properties; attribute; attribute = attribute->next)
+                            if (attribute->ns != nullptr || std::string_view(reinterpret_cast<const char*>(attribute->name)) != "index")
+                                fail("OOF2003", cell_node, id_text, item_name, "index attribute only", "unsupported attribute", "Unsupported spreadsheet row or column attribute");
+                        const auto index = parse_integer<std::uint32_t>(required_attribute(cell_node, "index", id_text), cell_node, "index", id_text);
+                        auto& indices = item_name == "Row" ? row_indices : column_indices;
+                        if (index == 0 || !indices.insert(index).second)
+                            fail("OOF2003", cell_node, id_text, "index", "unique positive uint32", "zero or duplicate", "Invalid spreadsheet row or column index");
+                        const auto children = element_children(cell_node);
+                        if (children.size() != 1 || node_name(children.front()) != "Format")
+                            fail("OOF2003", cell_node, id_text, item_name, "one Format child", "missing or unsupported child", "Spreadsheet row or column requires Format");
+                        auto format = parse_format(children.front());
+                        if (item_name == "Row") spreadsheet.rows.push_back({index, std::move(format)});
+                        else spreadsheet.columns.push_back({index, std::move(format)});
+                        continue;
+                    }
                     for (xmlAttrPtr attr = cell_node->properties; attr != nullptr; attr = attr->next) {
                         const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
-                        if (attr_name != "row" && attr_name != "column")
+                        if (attr->ns != nullptr || (attr_name != "row" && attr_name != "column"))
                             fail("OOF2003", cell_node, id_text, std::string(attr_name), "row and column attributes", std::string(attr_name), "Unsupported spreadsheet Cell attribute");
                     }
                     const auto row = parse_integer<std::uint32_t>(required_attribute(cell_node, "row", id_text), cell_node, "row", id_text);
@@ -2711,21 +2803,31 @@ private:
                     bool contains_value_seen = false;
                     bool value_type_seen = false;
                     bool value_seen = false;
-                    std::string text;
+                    model::PropertyValue text{std::string{}};
                     std::optional<model::TypeDomainPatternValue> value_type;
                     std::optional<model::PropertyValue> typed_value;
                     std::optional<model::SpreadsheetDocumentCellControl> cell_control;
+                    model::SpreadsheetDocumentFormat format;
+                    bool format_seen = false;
                     unsigned int content_stage = 0;
                     for (xmlNodePtr value_node : element_children(cell_node)) {
                         const auto name = node_name(value_node);
+                        if (name == "Format") {
+                            if (format_seen || (!text_seen && !value_type_seen))
+                                fail("OOF2003", value_node, id_text, name, "one Format after cell content", "duplicate or out of order", "Spreadsheet Cell Format must follow its content");
+                            format = parse_format(value_node);
+                            format_seen = true;
+                            content_stage = 6;
+                            continue;
+                        }
                         if (name == "Text") {
                             if (text_seen || content_stage != 0)
                                 fail("OOF2003", value_node, id_text, "Text", "one standalone Text child", "duplicate or mixed content", "Spreadsheet Cell Text cannot be combined with a typed value");
-                            if (value_node->properties != nullptr || !element_children(value_node).empty())
-                                fail("OOF2003", value_node, id_text, "Text", "text content without attributes or nested elements", "structured content", "Spreadsheet Cell Text must be plain text");
+                            if (value_node->properties != nullptr)
+                                fail("OOF2003", value_node, id_text, "Text", "plain or localized text without attributes", "attributes", "Spreadsheet Cell Text does not accept attributes");
                             text_seen = true;
                             content_stage = 1;
-                            text = node_text(value_node);
+                            text = parse_property_value(value_node, mm::ValueCodec::localized_text, id_text, typed_budget_);
                             continue;
                         }
                         if (name == "ContainsValue") {
@@ -2839,8 +2941,10 @@ private:
                     } else if (!text_seen) {
                         fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires Text or a typed value");
                     }
-                    cells.push_back({row, column, std::move(text), std::move(typed), std::move(cell_control)});
+                    cells.push_back({row, column, std::move(text), std::move(typed), std::move(cell_control), std::move(format)});
                 }
+                std::ranges::sort(spreadsheet.rows, {}, &model::SpreadsheetDocumentRow::index);
+                std::ranges::sort(spreadsheet.columns, {}, &model::SpreadsheetDocumentColumn::index);
                 std::sort(cells.begin(), cells.end(), [](const auto& left, const auto& right) {
                     return std::tie(left.row, left.column) < std::tie(right.row, right.column);
                 });
@@ -4840,7 +4944,7 @@ private:
         for (const auto& asset : document_.assets()) {
             const std::string id = object_id_text(asset.id);
             if (!valid_picture_path(asset.relative_path, asset.format)) {
-                serialization_fail(id, "relativePath", "CaptionPicture.<matching format> or Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format>", asset.relative_path, "Picture asset path is outside the source package contract");
+                serialization_fail(id, "relativePath", "CaptionPicture.<matching format> or Items/<ElementName>[/Buttons/<ItemName>]/Picture.<matching format> or Items/<ElementName>/ChoiceButtonPicture.<matching format> or Items/<ElementName>/Document/<PictureName>/Picture.<matching format>", asset.relative_path, "Picture asset path is outside the source package contract");
             }
             if (asset.transparent_x < -1 || asset.transparent_y < -1)
                 serialization_fail(id, "transparentX/transparentY", "coordinates at least -1", {}, "Invalid picture transparency coordinates");
@@ -5411,14 +5515,47 @@ private:
             control.kind());
         write_position(control.position, id);
         if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
-            spreadsheet != nullptr && !spreadsheet->cells.empty()) {
-            writer_.open("Document");
+            spreadsheet != nullptr && (!spreadsheet->cells.empty() || !spreadsheet->rows.empty() ||
+                !spreadsheet->columns.empty() || spreadsheet->default_format.properties.size() != 0 ||
+                spreadsheet->default_column_format.properties.size() != 0 || spreadsheet->height || spreadsheet->width)) {
+            const auto write_format = [&](std::string_view name, const model::SpreadsheetDocumentFormat& format) {
+                writer_.open(name);
+                for (const auto& property : mm::spreadsheet_format_properties()) {
+                    if (const auto* entry = format.properties.find(property.id)) {
+                        const auto* picture = std::get_if<model::PictureRef>(&entry->value);
+                        if (property.value_codec == mm::ValueCodec::picture && picture && *picture == model::PictureRef{})
+                            writer_.empty(property.xml_name, {{"empty", "true"}});
+                        else write_property(property, entry->value, id);
+                    }
+                }
+                writer_.close(name);
+            };
+            XmlAttributes document_attributes;
+            if (spreadsheet->height) document_attributes.emplace_back("height", std::to_string(*spreadsheet->height));
+            if (spreadsheet->width) document_attributes.emplace_back("width", std::to_string(*spreadsheet->width));
+            writer_.open("Document", document_attributes);
+            if (spreadsheet->default_format.properties.size() != 0) write_format("DefaultFormat", spreadsheet->default_format);
+            if (spreadsheet->default_column_format.properties.size() != 0) write_format("DefaultColumnFormat", spreadsheet->default_column_format);
+            const auto write_indexed_formats = [&](std::string_view name, const auto& items) {
+                std::vector<std::size_t> order;
+                for (std::size_t index = 0; index < items.size(); ++index) order.push_back(index);
+                std::ranges::sort(order, {}, [&](std::size_t index) { return items[index].index; });
+                for (const auto index : order) {
+                    writer_.open(name, {{"index", std::to_string(items[index].index)}});
+                    write_format("Format", items[index].format);
+                    writer_.close(name);
+                }
+            };
+            write_indexed_formats("Row", spreadsheet->rows);
+            write_indexed_formats("Column", spreadsheet->columns);
             for (const auto& cell : spreadsheet->cells) {
                 writer_.open("Cell", {{"row", std::to_string(cell.row)}, {"column", std::to_string(cell.column)}});
                 if (!cell.typed_value.has_value()) {
-                    writer_.text("Text", cell.text);
+                    const mm::PropertyDescriptor text_descriptor{.xml_name = "Text", .value_codec = mm::ValueCodec::localized_text};
+                    write_property(text_descriptor, cell.text, id);
                 } else {
-                    if (!cell.text.empty())
+                    const auto* text = std::get_if<std::string>(&cell.text);
+                    if (!text || !text->empty())
                         serialization_fail(id, "Document/Cell", "Text-only or typed value", "both", "Spreadsheet Cell cannot persist Text and a typed Value together");
                     const auto& typed = *cell.typed_value;
                     writer_.text("ContainsValue", "true");
@@ -5453,6 +5590,7 @@ private:
                     writer_.text("ReadOnly", read_only != nullptr && std::get<bool>(read_only->value) ? "true" : "false");
                     writer_.close("Control");
                 }
+                if (cell.format.properties.size() != 0) write_format("Format", cell.format);
                 writer_.close("Cell");
             }
             writer_.close("Document");

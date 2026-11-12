@@ -9350,6 +9350,7 @@ void test_common_control_tooltip_localized_text_round_trip_and_rejections() {
 
     const std::vector<model::PropertyValue> values{
         std::string("Plain hint"),
+        model::LocalizedStringValue{{{"", "No language"}, {"#", "Default"}}},
         model::LocalizedStringValue{{{"ru", "Подсказка"}, {"en", "Hint"}}},
         model::LocalizedStringValue{{{"en", "English only"}}},
         model::LocalizedStringValue{{{"ru", ""}}},
@@ -9392,7 +9393,7 @@ void test_common_control_tooltip_localized_text_round_trip_and_rejections() {
                *default_read.value == model::PropertyValue{std::string{}},
         "ordinary control ToolTip must preserve the proven empty std::string default");
 
-    for (const auto& invalid_tag : {std::string{}, std::string("en_US"), std::string("123")}) {
+    for (const auto& invalid_tag : {std::string("en_US"), std::string("123")}) {
         auto document = make_document(std::string{});
         expect(document.set_prop_val({model::ObjectCategory::control, model::ObjectId{2}},
                    model::PropertyId::from_name("ToolTip"),
@@ -9411,13 +9412,13 @@ void test_common_control_tooltip_localized_text_round_trip_and_rejections() {
     expect(valid_encoded.ok(), "valid plain ToolTip fixture must encode before malformed storage checks");
     constexpr std::string_view property_path = "$/1/2/2/1/2/1/0/12";
     for (const auto& bad : {
-             model::LocalizedStringValue{{{"", "Empty tag"}}},
+             model::LocalizedStringValue{{{"en_US", "Invalid tag"}}},
              model::LocalizedStringValue{{{"ru", "Первый"}, {"ru", "Дубликат"}}},
          }) {
         auto malformed = valid_encoded.value();
         tooltip_slot(malformed) = list_stream::parse(value_codec::encode_localized_string(bad));
         expect(!form_stream::decode_document(malformed, "InvalidToolTip"),
-            "stored ToolTip must reject empty or duplicate language tags");
+            "stored ToolTip must reject invalid or duplicate language tags");
     }
     auto too_many = valid_encoded.value();
     auto oversized_value = list_stream::parse(value_codec::encode_localized_string(
@@ -10879,6 +10880,7 @@ void test_form_caption_localized_text_round_trip_and_rejections() {
 
     const std::vector<model::PropertyValue> values{
         std::string("Обычный заголовок"),
+        model::LocalizedStringValue{{{"", "No language"}, {"#", "Default"}}},
         model::LocalizedStringValue{{{"ru", "Заголовок"}, {"en", "Caption"}}},
         model::LocalizedStringValue{{{"en", "English title"}}},
         model::LocalizedStringValue{{{"ru", ""}}},
@@ -10912,15 +10914,15 @@ void test_form_caption_localized_text_round_trip_and_rejections() {
 
     auto invalid_values = make_document();
     expect(invalid_values.set_prop_val(form_key, property,
-               model::LocalizedStringValue{{{"", "Missing language"}}}) ==
-               model::PropertyMutationStatus::invalid_value &&
+               model::LocalizedStringValue{{{"", "No language"}}}) ==
+               model::PropertyMutationStatus::applied &&
                invalid_values.set_prop_val(form_key, property,
                model::LocalizedStringValue{{{"bad_tag", "Invalid language"}}}) ==
                model::PropertyMutationStatus::invalid_value &&
                invalid_values.set_prop_val(form_key, property,
                model::LocalizedStringValue{{{"ru", "First"}, {"ru", "Duplicate"}}}) ==
                model::PropertyMutationStatus::invalid_value,
-        "Form.Caption must reject empty, invalid, and duplicate language tags");
+        "Form.Caption must accept empty language and reject invalid or duplicate language tags");
     model::LocalizedStringValue too_many;
     too_many.items.reserve(model::max_localized_text_items + 1);
     for (std::size_t index = 0; index < model::max_localized_text_items + 1; ++index) {
@@ -17585,7 +17587,7 @@ R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
         if (i == 0) type.string = {100, true};
         if (i == 1) type.numeric = {15, 3, false};
         if (i == 3) type.date = {true, true};
-        model::SpreadsheetDocumentCell cell{1, static_cast<std::uint32_t>(i + 1), {},
+        model::SpreadsheetDocumentCell cell{1, static_cast<std::uint32_t>(i + 1), std::string{},
             model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{type}}, values[i]}};
         cell.control.emplace();
         cell.control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), false);
@@ -17769,7 +17771,7 @@ void test_spreadsheet_document_field_named_properties_and_events() {
         auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload).cells;
         cells.push_back({1, 1, "Unicode 世界", std::nullopt});
         model::TypeDomainEntry entry; entry.term = model::TypeDomainTerm::boolean;
-        cells.push_back({2, 2, {}, model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{entry}}, true}});
+        cells.push_back({2, 2, std::string{}, model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{entry}}, true}});
         if (explicit_values) {
             for (const auto& [name, slot] : booleans) {
                 static_cast<void>(slot); field.properties().set_explicit(model::PropertyId::from_name(name), false);
@@ -17813,7 +17815,7 @@ void test_spreadsheet_document_field_named_properties_and_events() {
         const auto* field = decoded.value().find_control(model::ObjectId{2});
         expect(field && field->events.size() == (changed ? events.size() : 0), "all events must be retained");
         const auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(field->payload).cells;
-        expect(cells.size() == 2 && cells[0].text == "Unicode 世界" && cells[1].typed_value &&
+        expect(cells.size() == 2 && std::get<std::string>(cells[0].text) == "Unicode 世界" && cells[1].typed_value &&
             std::get<bool>(cells[1].typed_value->value), "typed and text cells must survive");
         if (changed) for (const auto& [name, slot] : booleans) {
             static_cast<void>(slot); const auto* property = field->properties().find(model::PropertyId::from_name(name));
@@ -17841,7 +17843,7 @@ void test_spreadsheet_document_field_named_properties_and_events() {
         expect(value && !std::get<bool>(value->value), "fresh view must retain each named Boolean");
     }
     const auto& fresh_cells = std::get<model::SpreadsheetDocumentFieldPayload>(fresh_field->payload).cells;
-    expect(fresh_cells.size() == 2 && fresh_cells[0].text == "Unicode 世界" && fresh_cells[1].typed_value &&
+    expect(fresh_cells.size() == 2 && std::get<std::string>(fresh_cells[0].text) == "Unicode 世界" && fresh_cells[1].typed_value &&
         std::get<bool>(fresh_cells[1].typed_value->value), "fresh view must retain text and typed cells");
     const auto fresh_rebuilt = form_stream::encode_document(fresh_decoded.value());
     expect(fresh_rebuilt.ok() && list_stream::dump_compact(fresh_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
@@ -17880,6 +17882,92 @@ void test_spreadsheet_document_field_named_properties_and_events() {
     expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown neighbor must remain incomplete");
 }
 
+void test_spreadsheet_format_owners_and_assets() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "FormatOwners";
+    for (unsigned i = 0; i < 12; ++i) form.children.push_back(model::ControlRef{model::ObjectId{i + 2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    const auto bytes = synthetic_dib_icon();
+    document.add_asset({model::ObjectId{500}, "Items/Shared/Picture.ico", model::PictureFormat::ico, bytes, false});
+    const auto set = [](auto& format, std::string_view name, model::PropertyValue value) {
+        format.properties.set_explicit(model::PropertyId::from_name(name), std::move(value));
+    };
+    for (unsigned i = 0; i < 12; ++i) {
+        model::ControlNode control{model::ObjectId{i + 2}, "Sheet" + std::to_string(i), model::SpreadsheetDocumentFieldPayload{}};
+        auto& sheet = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload);
+        set(sheet.default_format, "Width", model::DecimalValue{"144"});
+        set(sheet.default_column_format, "Protection", false);
+        sheet.height = 20; sheet.width = 30;
+        sheet.rows = {{1, {}}, {4, {}}};
+        sheet.columns = {{1, {}}, {3, {}}};
+        set(sheet.rows[0].format, "Height", model::DecimalValue{"96"});
+        set(sheet.rows[0].format, "Picture", model::PictureRef{model::PictureAssetRef{model::ObjectId{500}}});
+        set(sheet.rows[1].format, "Hidden", true);
+        set(sheet.columns[0].format, "Width", model::DecimalValue{"160"});
+        set(sheet.columns[1].format, "QuickDrag", true);
+        model::PropertyValue text = i % 3 == 0 ? model::PropertyValue{std::string{"Plain"}} :
+            i % 3 == 1 ? model::PropertyValue{model::LocalizedStringValue{{{"", "No language"}}}} :
+            model::PropertyValue{model::LocalizedStringValue{{{"#", "Default"}, {"ru", "Текст"}, {"en", "Text"}}}};
+        sheet.cells = {{1, 1, text, std::nullopt}, {1, 2, text, std::nullopt}};
+        set(sheet.cells[1].format, "Picture", model::PictureRef{});
+        set(sheet.cells[1].format, "Protection", true);
+        document.add_control(std::move(control));
+    }
+    for (unsigned variant = 0; variant < 12; ++variant) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "InheritedType";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument invalid(std::move(form));
+        model::ControlNode control{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+        auto& sheet = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload);
+        sheet.rows = {{1, {}}}; sheet.columns = {{1, {}}};
+        auto& parent = variant % 4 == 0 ? sheet.default_format : variant % 4 == 1 ? sheet.default_column_format :
+            variant % 4 == 2 ? sheet.columns[0].format : sheet.rows[0].format;
+        set(parent, "ContainsValue", true);
+        set(parent, "ValueType", model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::boolean}}});
+        sheet.cells = {{1, 1, std::string(variant < 4 ? "" : "Text"), std::nullopt}};
+        if (variant >= 8) set(sheet.cells[0].format, "ContainsValue", false);
+        invalid.add_control(std::move(control));
+        expect(invalid.validate().ok() == (variant >= 8),
+            "text cells must override inherited ContainsValue explicitly, including empty text");
+        auto encoded = oof::save_form_bin(invalid);
+        expect(encoded.ok() == (variant >= 8), "inherited typing must not silently change the kind of a text cell");
+        if (encoded) {
+            auto restored = oof::load_form_bin(encoded.value(), "InheritedType");
+            expect(restored && !std::get<model::SpreadsheetDocumentFieldPayload>(
+                restored.value().find_control(model::ObjectId{2})->payload).cells[0].typed_value,
+                "an explicit ContainsValue=false must preserve a text cell");
+        }
+    }
+    auto encoded = oof::save_form_bin(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    auto decoded = oof::load_form_bin(encoded.value(), "FormatOwners");
+    expect(decoded && decoded.value().reconstruction_complete(), "all spreadsheet format owners must decode completely");
+    expect(decoded.value().assets().size() == 12, "each sheet picture registry must have a distinct owned asset");
+    for (unsigned i = 0; i < 12; ++i) {
+        const auto& sheet = std::get<model::SpreadsheetDocumentFieldPayload>(decoded.value().find_control(model::ObjectId{i + 2})->payload);
+        expect(sheet.height == 20 && sheet.width == 30 && sheet.rows.size() == 2 && sheet.columns.size() == 2,
+            "extents and format-only rows and columns must survive");
+        const auto& picture = std::get<model::PictureRef>(sheet.rows[0].format.properties.find(model::PropertyId::from_name("Picture"))->value);
+        expect(picture.asset.id().value() != 0 && std::ranges::any_of(decoded.value().assets(), [&](const auto& asset) {
+            return asset.id == picture.asset.id() && asset.bytes == bytes &&
+                asset.relative_path == "Items/Sheet" + std::to_string(i) + "/Document/Picture1/Picture.ico";
+        }), "picture ownership and bytes must survive remapping across controls");
+        expect(std::get<model::PictureRef>(sheet.cells[1].format.properties.find(model::PropertyId::from_name("Picture"))->value) == model::PictureRef{},
+            "explicit empty cell picture must remain distinct from inherited row picture");
+        expect(sheet.cells[0].text == std::get<model::SpreadsheetDocumentFieldPayload>(document.find_control(model::ObjectId{i + 2})->payload).cells[0].text,
+            "plain, empty-language and multilingual text must retain their identity");
+    }
+    auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), xml ? "" : xml.diagnostics().front().message);
+    auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    for (const auto& asset : decoded.value().assets()) parsed.value().set_asset_bytes(asset.id, asset.bytes);
+    auto rebuilt = oof::save_form_bin(parsed.value());
+    expect(rebuilt.ok(), rebuilt ? "" : rebuilt.diagnostics().front().message);
+    auto restored = oof::load_form_bin(rebuilt.value(), "FormatOwners");
+    expect(restored && source::serialize_form_xml(restored.value()).value() == xml.value(),
+        "all twelve sheets must rebuild from named XML and resources without source binary");
+}
+
 void test_spreadsheet_document_field_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -17898,7 +17986,7 @@ void test_spreadsheet_document_field_round_trip() {
         if (term == model::TypeDomainTerm::numeric) entry.numeric = {15, 3, false};
         if (term == model::TypeDomainTerm::date) entry.date = {true, true};
         model::TypeDomainPatternValue type{{entry}};
-        return model::SpreadsheetDocumentCell{row, column, {},
+        return model::SpreadsheetDocumentCell{row, column, std::string{},
             model::SpreadsheetDocumentCellValue{std::move(type), std::move(value)}};
     };
     field_payload.cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界")));
@@ -17924,9 +18012,9 @@ void test_spreadsheet_document_field_round_trip() {
     expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after storage decode");
     const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
     expect(restored && restored->cells.size() == 12 && restored->cells[0].row == 1 &&
-        restored->cells[0].column == 1 && restored->cells[0].text == "Документ" &&
-        restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty() &&
-        restored->cells[2].row == 2 && restored->cells[2].column == 3 && restored->cells[2].text == " Ω & текст ",
+        restored->cells[0].column == 1 && std::get<std::string>(restored->cells[0].text) == "Документ" &&
+        restored->cells[1].row == 2 && restored->cells[1].column == 1 && std::get<std::string>(restored->cells[1].text).empty() &&
+        restored->cells[2].row == 2 && restored->cells[2].column == 3 && std::get<std::string>(restored->cells[2].text) == " Ω & текст ",
         "SpreadsheetDocumentField cells must preserve sparse coordinates, Unicode, whitespace, and empty content");
     expect(restored && restored->cells[3].typed_value &&
         std::get<std::string>(restored->cells[3].typed_value->value) == "Unicode Привет 世界" &&
@@ -18005,11 +18093,10 @@ void test_spreadsheet_document_field_round_trip() {
     auto shared_encoded = form_stream::encode_document(shared_document);
     expect(shared_encoded.ok(), shared_encoded.ok() ? "" : shared_encoded.diagnostics().front().message);
     auto& shared_info = shared_encoded.value().items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
-    shared_info.items.at(22).items.at(1) = list_stream::ListValue::raw_atom("1");
-    shared_info.items.erase(shared_info.items.begin() + 52);
-    shared_info.items.at(50) = list_stream::ListValue::raw_atom("1");
-    shared_info.items.at(54) = list_stream::ListValue::raw_atom("1");
-    shared_info.items.erase(shared_info.items.begin() + 56);
+    expect(shared_info.items.at(20).items.at(1).atom == "1" &&
+        shared_info.items.at(22).items.at(1).atom == "1" &&
+        shared_info.items.at(50).atom == "1",
+        "equal cell formats must share one format resource without rewriting the stream");
     const auto shared_decoded = form_stream::decode_document(shared_encoded.value(), "Main");
     expect(shared_decoded.ok(), shared_decoded.ok() ? "" : shared_decoded.diagnostics().front().message);
     const auto* shared_control = shared_decoded.value().find_control(model::ObjectId{2});
@@ -18056,8 +18143,8 @@ void test_spreadsheet_document_field_round_trip() {
     const auto* fresh_add_payload = fresh_add_control_node == nullptr ? nullptr :
         std::get_if<model::SpreadsheetDocumentFieldPayload>(&fresh_add_control_node->payload);
     expect(fresh_add_payload && fresh_add_payload->cells.size() == 2 &&
-        fresh_add_payload->cells[0].text == "Первый" && fresh_add_payload->cells[1].row == 2 &&
-        fresh_add_payload->cells[1].column == 3 && fresh_add_payload->cells[1].text == "Второй",
+        std::get<std::string>(fresh_add_payload->cells[0].text) == "Первый" && fresh_add_payload->cells[1].row == 2 &&
+        fresh_add_payload->cells[1].column == 3 && std::get<std::string>(fresh_add_payload->cells[1].text) == "Второй",
         "independent fresh Add record must normalize its unexposed fresh view envelope");
 
     constexpr std::string_view normalized_default_record = R"LS({236a17b3-7f44-46d9-a907-75f9cdc61ab5,2,{18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,1,0,0,1,0,{16,0,{1,1,{"ru","Текст"}},0},{1,0,00000000-0000-0000-0000-000000000000,0},1,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,1,{3,0,0,0,0,00000000-0000-0000-0000-000000000000},0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,1,0,0},{14,"Sheet",4294967295,0,0,0},{0}})LS";
@@ -21699,7 +21786,7 @@ void test_chart_plot_area_formats_round_trip() {
     }
     expect(lines.size() == 25, "all 25 native line members must be represented");
     for (const auto* malformed : {
-        "{4,0,{0},1,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
+        "{4,0,{0},1,1,4294967296,e5cabe59-d992-4d31-8086-3116931aff81,0}",
         "{4,0,{0},99,1,7,e5cabe59-d992-4d31-8086-3116931aff81,0}",
         "{4,0,{0},1,1,0,00000000-0000-0000-0000-000000000000,0}",
         "{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,2}",
@@ -27825,6 +27912,7 @@ int main() {
         test_spreadsheet_document_field_serialization_versions();
         test_spreadsheet_document_field_named_properties_and_events();
         test_spreadsheet_document_field_round_trip();
+        test_spreadsheet_format_owners_and_assets();
         test_two_input_fields_round_trip();
         test_canonical_unbound_input_fields_round_trip();
         test_unbound_numeric_input_bounds();

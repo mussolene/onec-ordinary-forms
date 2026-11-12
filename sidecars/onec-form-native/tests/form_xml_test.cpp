@@ -1304,7 +1304,7 @@ void test_spreadsheet_document_cells_xml_round_trip() {
         if (term == model::TypeDomainTerm::string) entry.string = {100, true};
         if (term == model::TypeDomainTerm::numeric) entry.numeric = {15, 3, false};
         if (term == model::TypeDomainTerm::date) entry.date = {true, true};
-        return model::SpreadsheetDocumentCell{row, column, {},
+        return model::SpreadsheetDocumentCell{row, column, std::string{},
             model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{entry}}, std::move(value)}};
     };
     cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界")));
@@ -1357,8 +1357,8 @@ void test_spreadsheet_document_cells_xml_round_trip() {
     expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after XML parsing");
     const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
     expect(restored && restored->cells.size() == 8 && restored->cells[0].row == 1 &&
-        restored->cells[0].column == 3 && restored->cells[0].text == " Ω <текст> & \"цитата\" " &&
-        restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty(),
+        restored->cells[0].column == 3 && std::get<std::string>(restored->cells[0].text) == " Ω <текст> & \"цитата\" " &&
+        restored->cells[1].row == 2 && restored->cells[1].column == 1 && std::get<std::string>(restored->cells[1].text).empty(),
         "named Spreadsheet Document cells and explicit empty text must round-trip");
     expect(restored && restored->cells[2].typed_value &&
         std::get<std::string>(restored->cells[2].typed_value->value) == "Unicode Привет 世界" &&
@@ -1407,6 +1407,260 @@ void test_spreadsheet_document_cells_xml_round_trip() {
         "</SpreadsheetDocumentField></ChildItems></Form>");
     expect(!authored_view_settings.ok(),
         "unpersisted SpreadsheetDocumentField ViewSettings must be rejected as authored XML");
+}
+
+void test_spreadsheet_document_localized_text_xml_round_trip() {
+    const auto wrap = [](std::string_view cells) {
+        return std::string("<Form id=\"1\" name=\"LocalizedSpreadsheet\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document>") +
+            std::string(cells) + "</Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    std::string cells;
+    for (unsigned row = 1; row <= 16; ++row) {
+        cells += "<Cell row=\"" + std::to_string(row) + "\" column=\"1\"><Text>";
+        if (row % 4 == 1) cells += " Plain Ω &amp; &lt;text&gt; ";
+        else if (row % 4 == 2) cells += "<DefaultText>Reference &amp; neutral</DefaultText>";
+        else if (row % 4 == 3) cells += "<DefaultText>Reference</DefaultText><Item language=\"ru\">Ссылка</Item><Item language=\"en\">Link 世界</Item>";
+        else cells += "<DefaultText>Hash neutral</DefaultText><Item language=\"\">Empty language</Item><Item language=\"ru\">Ссылка</Item>";
+        cells += "</Text></Cell>";
+    }
+    auto parsed = source::parse_form_xml(wrap(cells));
+    expect(parsed.ok(), parsed.ok() ? "plain, neutral and multilingual spreadsheet text must parse" : parsed.diagnostics().front().message);
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Text> Plain Ω &amp; &lt;text&gt; </Text>") != std::string::npos &&
+        serialized.value().find("<DefaultText>Reference &amp; neutral</DefaultText>") != std::string::npos &&
+        serialized.value().find("language=\"#\"") == std::string::npos,
+        "plain XML contract and named neutral text must survive serialization without platform language markers");
+    auto restored = source::parse_form_xml(serialized.value());
+    expect(restored.ok(), "localized Spreadsheet Cell Text must reparse");
+    const auto& sheet = std::get<model::SpreadsheetDocumentFieldPayload>(restored.value().find_control(model::ObjectId{2})->payload);
+    expect(sheet.cells.size() == 16, "all sixteen plain, neutral, empty-language and multilingual spreadsheet cells must survive");
+    for (unsigned index = 0; index < 16; ++index) {
+        const auto& text = sheet.cells[index].text;
+        if (index % 4 == 0)
+            expect(std::get<std::string>(text) == " Plain Ω & <text> ", "plain spreadsheet text must retain whitespace and escaped Unicode");
+        else if (index % 4 == 1)
+            expect(std::get<model::LocalizedStringValue>(text) == model::LocalizedStringValue{{{"#", "Reference & neutral"}}},
+                "neutral spreadsheet text must retain its localized value identity");
+        else if (index % 4 == 2) expect(std::get<model::LocalizedStringValue>(text) ==
+            model::LocalizedStringValue{{{"#", "Reference"}, {"ru", "Ссылка"}, {"en", "Link 世界"}}},
+            "multilingual spreadsheet text must retain every named language and the neutral value");
+        else expect(std::get<model::LocalizedStringValue>(text) ==
+            model::LocalizedStringValue{{{"#", "Hash neutral"}, {"", "Empty language"}, {"ru", "Ссылка"}}},
+            "empty native language must remain distinct from the hash neutral entry and Russian text");
+    }
+    auto repeated = source::serialize_form_xml(restored.value());
+    expect(repeated.ok() && repeated.value() == serialized.value(), "localized spreadsheet text must have a canonical XML round-trip");
+    for (const std::string_view text : {
+        "<Text>mixed<Item language=\"en\">Text</Item></Text>",
+        "<Text><Item language=\"en\">A</Item><Item language=\"en\">B</Item></Text>",
+        "<Text><Item language=\"\">A</Item><Item language=\"\">B</Item></Text>",
+        "<Text><DefaultText>A</DefaultText><DefaultText>B</DefaultText></Text>",
+        "<Text><Item language=\"#\">A</Item></Text>", "<Text><Item>A</Item></Text>",
+        "<Text raw=\"1\">A</Text>", "<Text><Item language=\"en\" raw=\"1\">A</Item></Text>",
+        "<Text><Item language=\"en\"><Nested/></Item></Text>", "<Text><Unknown/></Text>",
+        "<Text><DefaultText language=\"en\">A</DefaultText></Text>"})
+        expect(!source::parse_form_xml(wrap("<Cell row=\"1\" column=\"1\">" + std::string(text) + "</Cell>")),
+            "malformed localized spreadsheet text must reject mixed content, duplicates, unknown attributes and children");
+    for (unsigned invalid_kind = 0; invalid_kind < 2; ++invalid_kind) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "InvalidSpreadsheetText";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument invalid(std::move(form));
+        model::ControlNode control{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+        auto& payload = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload);
+        model::SpreadsheetDocumentCell cell{1, 1, model::DecimalValue{"1"}, std::nullopt};
+        if (invalid_kind == 1) {
+            cell.text = model::LocalizedStringValue{};
+            cell.typed_value = model::SpreadsheetDocumentCellValue{
+                model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::boolean}}}, false};
+        }
+        payload.cells.push_back(std::move(cell));
+        invalid.add_control(std::move(control));
+        expect(!invalid.validate().ok(), "model must reject non-text Cell.Text and localized values on typed cells");
+    }
+}
+
+void test_spreadsheet_document_picture_paths() {
+    const auto xml_for = [](std::string_view path, std::string_view format) {
+        return std::string("<Form id=\"1\" name=\"SpreadsheetPictures\" ordinaryFormVersion=\"2.1\"><PictureAssets><PictureAsset id=\"3\" relativePath=\"") +
+            std::string(path) + "\" format=\"" + std::string(format) + "\"/></PictureAssets><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document><Cell row=\"1\" column=\"1\"><Text>Picture</Text><Format><Picture>3</Picture></Format></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    for (const auto& [extension, format] : {std::pair{"gif", "gif"}, std::pair{"png", "png"},
+        std::pair{"jpg", "jpeg"}, std::pair{"jpeg", "jpeg"}, std::pair{"bmp", "bmp"}, std::pair{"ico", "ico"}}) {
+        const std::string path = "Items/Sheet/Document/Image1/Picture." + std::string(extension);
+        auto parsed = source::parse_form_xml(xml_for(path, format));
+        expect(parsed.ok(), "named Spreadsheet Document picture asset paths must parse for every existing picture format");
+        auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok() && serialized.value().find(path) != std::string::npos,
+            "named Spreadsheet Document picture asset paths must survive serialization");
+    }
+    for (const std::string_view path : {"Items/Sheet/Document/../Picture.gif", "Items/Sheet/Document/Image1/../Picture.gif",
+        "Items/Sheet/Document/Image1/Extra/Picture.gif", "Items/Sheet/Document/Image1/Buttons/Nested/Picture.gif",
+        "Items/Sheet/Buttons/Nested/Document/Image1/Picture.gif", "Items/Sheet/Document/Picture.gif",
+        "Items/Sheet/Other/Image1/Picture.gif", "Items/Sheet/Document//Picture.gif", "/Items/Sheet/Document/Image1/Picture.gif",
+        "Items/Sheet/Document/Image1/Picture.png", "Items\\Sheet\\Document\\Image1\\Picture.gif"})
+        expect(!source::parse_form_xml(xml_for(path, "gif")),
+            "Spreadsheet Document picture paths must reject traversal, extra nesting, unknown collections and mismatched filenames");
+}
+
+void test_spreadsheet_document_formats_xml_round_trip() {
+    namespace mm = model::metamodel;
+    std::string format_xml;
+    std::size_t property_count = 0;
+    std::string boolean_name;
+    for (const auto& property : mm::spreadsheet_format_properties()) {
+        std::string value;
+        switch (property.value_codec) {
+            case mm::ValueCodec::boolean: value = "false"; boolean_name = property.xml_name; break;
+            case mm::ValueCodec::decimal: value = "2.5"; break;
+            case mm::ValueCodec::integer:
+            case mm::ValueCodec::integer32: value = "2"; break;
+            case mm::ValueCodec::string: value = "Named format"; break;
+            case mm::ValueCodec::localized_string: value = "<DefaultText>Neutral</DefaultText><Item language=\"ru\">Формат</Item>"; break;
+            case mm::ValueCodec::type_domain: value = "<Entry term=\"boolean\"/>"; break;
+            case mm::ValueCodec::uuid: value = "12345678-1234-1234-1234-123456789abc"; break;
+            case mm::ValueCodec::picture: value = "standardName=\"PictureLib.Write\""; break;
+            case mm::ValueCodec::enumeration:
+                value = "type=\"" + std::string(property.enumeration_type) + "\" member=\"" + std::string(property.enumeration_members.front()) + "\"";
+                break;
+            case mm::ValueCodec::line: value = "type=\"SpreadsheetDocumentCellLineType\" member=\"Solid\" width=\"1\" gap=\"false\""; break;
+            case mm::ValueCodec::color: value = "kind=\"absolute\" red=\"31\" green=\"127\" blue=\"223\""; break;
+            case mm::ValueCodec::font: value = "kind=\"absolute\" faceName=\"Arial\" height=\"11\" bold=\"true\""; break;
+            default: continue;
+        }
+        const std::string name(property.xml_name);
+        format_xml += "<" + name;
+        if (property.value_codec == mm::ValueCodec::color || property.value_codec == mm::ValueCodec::font ||
+            property.value_codec == mm::ValueCodec::enumeration || property.value_codec == mm::ValueCodec::line ||
+            property.value_codec == mm::ValueCodec::picture)
+            format_xml += " " + value + "/>";
+        else format_xml += ">" + value + "</" + name + ">";
+        ++property_count;
+    }
+    expect(property_count == mm::spreadsheet_format_properties().size() && property_count == 48 && !boolean_name.empty(),
+        "all 48 spreadsheet format descriptors must have typed XML round-trip coverage");
+    std::string typed_format_xml = format_xml;
+    const std::string contains_value_false = "<ContainsValue>false</ContainsValue>";
+    typed_format_xml.replace(typed_format_xml.find(contains_value_false), contains_value_false.size(), "<ContainsValue>true</ContainsValue>");
+    const auto wrap = [](std::string_view items) {
+        return std::string("<Form id=\"1\" name=\"SpreadsheetFormats\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document>") +
+            std::string(items) + "</Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    std::string xml = "<Form id=\"1\" name=\"SpreadsheetFormats\" ordinaryFormVersion=\"2.1\"><ChildItems>";
+    for (unsigned owner = 0; owner < 12; ++owner) {
+        const auto id = std::to_string(owner + 2);
+        xml += "<SpreadsheetDocumentField id=\"" + id + "\" name=\"Sheet" + id + "\"><Position/><Document>" +
+            "<DefaultFormat>" + format_xml + "</DefaultFormat><DefaultColumnFormat>" + format_xml + "</DefaultColumnFormat>" +
+            "<Row index=\"7\"><Format>" + format_xml + "</Format></Row><Row index=\"2\"><Format/></Row>" +
+            "<Column index=\"9\"><Format>" + format_xml + "</Format></Column><Column index=\"3\"><Format/></Column>" +
+            "<Cell row=\"7\" column=\"9\"><Text>Styled</Text><Format>" + format_xml + "</Format></Cell>" +
+            "<Cell row=\"8\" column=\"9\"><ContainsValue>true</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Value>false</Value><Control type=\"InputField\"><ReadOnly>false</ReadOnly></Control><Format>" + typed_format_xml + "</Format></Cell>" +
+            "<Cell row=\"9\" column=\"9\"><Text>Inherited</Text></Cell></Document></SpreadsheetDocumentField>";
+    }
+    xml += "</ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "named spreadsheet formats must parse" : parsed.diagnostics().front().message);
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), serialized.ok() ? "named spreadsheet formats must serialize" : serialized.diagnostics().front().message);
+    expect(serialized.value().find("<" + boolean_name + ">false</" + boolean_name + ">") != std::string::npos,
+        "explicit false format properties must not be omitted as defaults");
+    expect(serialized.value().find("<Row index=\"2\">") < serialized.value().find("<Row index=\"7\">") &&
+        serialized.value().find("<Column index=\"3\">") < serialized.value().find("<Column index=\"9\">"),
+        "row and column format records must serialize in index order");
+    auto restored = source::parse_form_xml(serialized.value());
+    expect(restored.ok(), restored.ok() ? "named spreadsheet formats must reparse" : restored.diagnostics().front().message);
+    for (unsigned owner = 0; owner < 12; ++owner) {
+        const auto* control = restored.value().find_control(model::ObjectId{owner + 2});
+        const auto& sheet = std::get<model::SpreadsheetDocumentFieldPayload>(control->payload);
+        expect(sheet.rows.size() == 2 && sheet.columns.size() == 2 && sheet.cells.size() == 3 &&
+            sheet.rows[0].index == 2 && sheet.rows[0].format.properties.size() == 0 &&
+            sheet.columns[0].index == 3 && sheet.columns[0].format.properties.size() == 0,
+            "explicit empty row and column format records must survive across all twelve control owners");
+        expect(sheet.default_format.properties.size() == property_count &&
+            sheet.default_column_format == sheet.default_format && sheet.rows[1].format == sheet.default_format &&
+            sheet.columns[1].format == sheet.default_format && sheet.cells[0].format == sheet.default_format &&
+            sheet.cells[2].format.properties.size() == 0,
+            "default, row, column and text-cell formats must preserve exact typed explicit properties and inheritance");
+        auto typed_format = sheet.default_format;
+        typed_format.properties.set_explicit(model::PropertyId::from_name("ContainsValue"), true);
+        expect(sheet.cells[1].format == typed_format,
+            "typed-cell format must retain matching explicit ContainsValue and ValueType with every other typed property");
+    }
+    auto repeated = source::serialize_form_xml(restored.value());
+    expect(repeated.ok() && repeated.value() == serialized.value(), "spreadsheet format XML must be canonical after round-trip");
+    for (unsigned invalid_kind = 0; invalid_kind < 3; ++invalid_kind) {
+        model::Form invalid_form;
+        invalid_form.id = model::ObjectId{1};
+        invalid_form.name = "InvalidSpreadsheetFormat";
+        invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        model::ControlNode invalid_control = *restored.value().find_control(model::ObjectId{2});
+        auto& invalid_sheet = std::get<model::SpreadsheetDocumentFieldPayload>(invalid_control.payload);
+        if (invalid_kind == 0) invalid_sheet.rows[1].index = invalid_sheet.rows[0].index;
+        else if (invalid_kind == 1) invalid_sheet.columns[0].index = 0;
+        else invalid_sheet.default_format.properties.set_explicit(model::PropertyId::from_name("Font"), false);
+        invalid_document.add_control(std::move(invalid_control));
+        expect(!invalid_document.validate().ok(),
+            "model must independently reject duplicate row indices, zero column indices and wrong format value codecs");
+    }
+    const std::string boolean = "<" + boolean_name + ">false</" + boolean_name + ">";
+    const std::vector<std::string> invalid{
+        "<Row index=\"0\"><Format/></Row>", "<Column index=\"0\"><Format/></Column>",
+        "<Row index=\"1\"><Format/></Row><Row index=\"1\"><Format/></Row>",
+        "<Column index=\"1\"><Format/></Column><Column index=\"1\"><Format/></Column>",
+        "<Row index=\"1\" raw=\"1\"><Format/></Row>", "<Row index=\"1\"/>",
+        "<Row index=\"1\"><Format/><Format/></Row>", "<Column index=\"1\"><Format raw=\"1\"/></Column>",
+        "<DefaultFormat><Unknown>1</Unknown></DefaultFormat>",
+        "<DefaultFormat>" + boolean + boolean + "</DefaultFormat>",
+        "<DefaultFormat><" + boolean_name + " raw=\"1\">false</" + boolean_name + "></DefaultFormat>",
+        "<DefaultFormat>unsupported</DefaultFormat>",
+        "<DefaultFormat><HorizontalAlignment type=\"HorizontalAlign\" member=\"Invalid\"/></DefaultFormat>",
+        "<DefaultFormat><HorizontalAlignment type=\"WrongType\" member=\"Left\"/></DefaultFormat>",
+        "<DefaultFormat><TextColor kind=\"absolute\" raw=\"1\"/></DefaultFormat>",
+        "<DefaultFormat><Picture>999</Picture></DefaultFormat>",
+        "<DefaultFormat><Format><Item language=\"ru\" raw=\"1\">x</Item></Format></DefaultFormat>",
+        "<Cell row=\"1\" column=\"1\"><Text>x</Text><Format><ContainsValue>true</ContainsValue></Format></Cell>",
+        "<Cell row=\"1\" column=\"1\"><ContainsValue>true</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Format><ContainsValue>false</ContainsValue></Format></Cell>",
+        "<Cell row=\"1\" column=\"1\"><ContainsValue>true</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Format><ValueType><Entry term=\"string\"/></ValueType></Format></Cell>",
+        "<DefaultFormat/><DefaultFormat/>", "<DefaultColumnFormat/><DefaultFormat/>",
+        "<Column index=\"1\"><Format/></Column><Row index=\"1\"><Format/></Row>",
+        "<Cell row=\"1\" column=\"1\"><Format/><Text>x</Text></Cell>",
+        "<Cell row=\"1\" column=\"1\"><Text>x</Text><Format/><Format/></Cell>",
+        "<Cell row=\"1\" column=\"1\"><ContainsValue>true</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Format/><Value>true</Value></Cell>"};
+    for (const auto& item : invalid)
+        expect(!source::parse_form_xml(wrap(item)), "unsupported format properties, attributes, duplicate indices and invalid sequence must be rejected");
+    auto cleared = source::parse_form_xml(wrap(
+        "<Row index=\"1\"><Format><Picture standardName=\"PictureLib.Write\"/></Format></Row>"
+        "<Cell row=\"1\" column=\"1\"><Text>x</Text><Format><Picture empty=\"true\"/></Format></Cell>"));
+    expect(cleared.ok(), "cell format must allow an explicit empty picture that clears an inherited row picture");
+    const auto& cleared_sheet = std::get<model::SpreadsheetDocumentFieldPayload>(cleared.value().find_control(model::ObjectId{2})->payload);
+    const auto* empty_picture = cleared_sheet.cells[0].format.properties.find(model::PropertyId::from_name("Picture"));
+    expect(empty_picture && std::get<model::PictureRef>(empty_picture->value) == model::PictureRef{} &&
+        cleared_sheet.rows[0].format.properties.find(model::PropertyId::from_name("Picture")),
+        "explicit empty picture and inherited picture must retain separate explicit states");
+    auto cleared_output = source::serialize_form_xml(cleared.value());
+    expect(cleared_output.ok() && cleared_output.value().find("<Picture empty=\"true\"/>") != std::string::npos,
+        "explicit empty format pictures must serialize using the named empty attribute");
+    for (const std::string_view picture : {"<Picture empty=\"true\" standardName=\"PictureLib.Write\"/>",
+        "<Picture empty=\"true\">2</Picture>", "<Picture empty=\"false\"/>",
+        "<Picture empty=\"true\" transparent=\"true\"/>", "<Picture/>"})
+        expect(!source::parse_form_xml(wrap("<DefaultFormat>" + std::string(picture) + "</DefaultFormat>")),
+            "empty format picture must reject another target, content, attributes, false, or an implicit clear");
+    for (const std::string_view attributes : {"height=\"0\" width=\"0\"", "height=\"4294967295\" width=\"17\""}) {
+        std::string extent_xml = wrap("");
+        extent_xml.replace(extent_xml.find("<Document>"), 10, "<Document " + std::string(attributes) + ">");
+        auto extent = source::parse_form_xml(extent_xml);
+        expect(extent.ok(), "explicit Spreadsheet Document dimensions, including zero, must parse without cells");
+        auto extent_output = source::serialize_form_xml(extent.value());
+        expect(extent_output.ok() && extent_output.value().find("<Document " + std::string(attributes) + ">") != std::string::npos,
+            "explicit Spreadsheet Document dimensions must survive XML round-trip without inferred content");
+    }
+    for (const std::string_view attributes : {"height=\"-1\"", "width=\"4294967296\"", "raw=\"1\""}) {
+        std::string extent_xml = wrap("");
+        extent_xml.replace(extent_xml.find("<Document>"), 10, "<Document " + std::string(attributes) + ">");
+        expect(!source::parse_form_xml(extent_xml), "negative or overflowing dimensions and unsupported Document attributes must be rejected");
+    }
 }
 
 void test_check_box_tooltip_xml_round_trip() {
@@ -5162,6 +5416,9 @@ int main() {
         test_attribute_id_zero_xml_contract();
         test_spreadsheet_serialization_version_xml();
         test_spreadsheet_document_cells_xml_round_trip();
+        test_spreadsheet_document_formats_xml_round_trip();
+        test_spreadsheet_document_localized_text_xml_round_trip();
+        test_spreadsheet_document_picture_paths();
         test_check_box_tooltip_xml_round_trip();
         test_choice_field_static_xml_profile_and_runtime_list_rejection();
         test_control_font_xml_round_trip();

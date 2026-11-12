@@ -1338,12 +1338,31 @@ void test_spreadsheet_document_schema(xmlNodePtr schema) {
     expect(schema_component(schema, "complexType", "SpreadsheetDocumentCellType") != nullptr,
         "named SpreadsheetDocument Cell type must exist");
     const auto cells = direct_children(sequence_for_type(schema, "SpreadsheetDocumentType"), "element");
-    expect_element_shape(cells.at(0), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
+    expect(cells.size() == 5, "Spreadsheet Document must expose default, row, column and cell formats");
+    expect_element_shape(cells.at(0), "DefaultFormat", "SpreadsheetDocumentFormatType", "0", "");
+    expect_element_shape(cells.at(1), "DefaultColumnFormat", "SpreadsheetDocumentFormatType", "0", "");
+    expect_element_shape(cells.at(2), "Row", "SpreadsheetDocumentIndexedFormatType", "0", "unbounded");
+    expect_element_shape(cells.at(3), "Column", "SpreadsheetDocumentIndexedFormatType", "0", "unbounded");
+    expect_element_shape(cells.at(4), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
+    const auto formats = direct_children(sequence_for_type(schema, "SpreadsheetDocumentFormatType"), "element");
+    const auto properties = oof::model::metamodel::spreadsheet_format_properties();
+    expect(formats.size() == properties.size(), "Spreadsheet format schema must enumerate exact descriptor properties");
+    for (std::size_t index = 0; index < properties.size(); ++index)
+        expect(attribute(formats[index], "name") == properties[index].xml_name &&
+            attribute(formats[index], "minOccurs") == "0" && attribute(formats[index], "maxOccurs") == "1",
+            "Spreadsheet format properties must use descriptor order with optional explicit values");
+    expect_type_attribute(schema, "SpreadsheetDocumentIndexedFormatType", "index", "SpreadsheetCoordinateType", "required");
+    expect_type_attribute(schema, "SpreadsheetDocumentType", "height", "xs:unsignedInt", "");
+    expect_type_attribute(schema, "SpreadsheetDocumentType", "width", "xs:unsignedInt", "");
     const auto cell_type = schema_component(schema, "complexType", "SpreadsheetDocumentCellType");
-    const auto choice = direct_child(cell_type, "choice");
+    const auto cell_sequence = direct_child(cell_type, "sequence");
+    const auto cell_elements = direct_children(cell_sequence, "element");
+    expect(cell_elements.size() == 1, "Spreadsheet Cell must append one optional named Format");
+    expect_element_shape(cell_elements.at(0), "Format", "SpreadsheetDocumentFormatType", "0", "");
+    const auto choice = direct_child(cell_sequence, "choice");
     const auto alternatives = direct_children(choice, "element");
     expect(alternatives.size() == 1 && attribute(alternatives[0], "name") == "Text" &&
-        attribute(alternatives[0], "type") == "xs:string",
+        attribute(alternatives[0], "type") == "LocalizedTextValueType",
         "Spreadsheet Cell must choose between text and typed value representations");
     const auto typed_sequence = direct_child(choice, "sequence");
     const auto typed_elements = direct_children(typed_sequence, "element");
@@ -1383,6 +1402,65 @@ void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
         "named typed Spreadsheet Cell must satisfy the public XSD");
     expect(validate_document(schema, false_contains_value) != 0,
         "typed Spreadsheet Cell must require ContainsValue=true in the public XSD");
+}
+
+void test_spreadsheet_localized_text_instances(xmlSchemaPtr schema) {
+    const auto wrap = [](std::string_view text) {
+        return std::string("<Form id=\"1\" name=\"LocalizedSpreadsheet\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document><Cell row=\"1\" column=\"1\"><Text>") +
+            std::string(text) + "</Text></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    for (const std::string_view text : {"Plain &amp; text", "<DefaultText>Reference</DefaultText>",
+        "<DefaultText>Hash neutral</DefaultText><Item language=\"\">Empty language</Item>",
+        "<DefaultText>Reference</DefaultText><Item language=\"ru\">Ссылка</Item><Item language=\"en\">Link</Item>"})
+        expect(validate_document(schema, wrap(text)) == 0, "XSD must accept the existing localized text value type on Spreadsheet Cell.Text");
+    for (const std::string_view text : {"<Unknown/>", "<Item>Text</Item>",
+        "<DefaultText>A</DefaultText><DefaultText>B</DefaultText>", "<Item language=\"en\" raw=\"1\">Text</Item>"})
+        expect(validate_document(schema, wrap(text)) != 0, "XSD must reject malformed Spreadsheet Cell localized text structures");
+}
+
+void test_spreadsheet_document_format_instances(xmlSchemaPtr schema) {
+    const auto properties = oof::model::metamodel::spreadsheet_format_properties();
+    const auto boolean = std::ranges::find(properties, ValueCodec::boolean, &PropertyDescriptor::value_codec);
+    expect(boolean != properties.end(), "spreadsheet format must expose a Boolean descriptor");
+    const std::string name(boolean->xml_name);
+    const std::string boolean_format = "<" + name + ">false</" + name + ">";
+    std::string format;
+    for (const auto& property : properties) {
+        const std::string property_name(property.xml_name);
+        if (property.value_codec == ValueCodec::boolean) format += "<" + property_name + ">false</" + property_name + ">";
+        else if (property.value_codec == ValueCodec::font)
+            format += "<" + property_name + " kind=\"absolute\" faceName=\"Arial\" height=\"11\" bold=\"true\"/>";
+        else if (property.value_codec == ValueCodec::color)
+            format += "<" + property_name + " kind=\"absolute\" red=\"31\" green=\"127\" blue=\"223\"/>";
+    }
+    const auto wrap = [](std::string_view items) {
+        return std::string("<Form id=\"1\" name=\"SpreadsheetFormats\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document>") +
+            std::string(items) + "</Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    const auto items = "<DefaultFormat>" + format + "</DefaultFormat><DefaultColumnFormat>" + format +
+        "</DefaultColumnFormat><Row index=\"2\"><Format>" + format + "</Format></Row>" +
+        "<Column index=\"3\"><Format/></Column><Cell row=\"2\" column=\"3\"><Text>x</Text><Format>" + format + "</Format></Cell>";
+    expect(validate_document(schema, wrap(items)) == 0, "XSD must accept named default, row, column and cell format properties with explicit false");
+    expect(validate_document(schema, wrap("<Row index=\"1\"><Format><Picture standardName=\"PictureLib.Write\"/></Format></Row><Cell row=\"1\" column=\"1\"><Text>x</Text><Format><Picture empty=\"true\"/></Format></Cell>")) == 0,
+        "XSD must support a named empty cell picture over a row picture");
+    expect(validate_document(schema, wrap("<DefaultFormat><Picture empty=\"false\"/></DefaultFormat>")) != 0,
+        "XSD must reject false for the format-only empty picture attribute");
+    std::string extent_xml = wrap("");
+    extent_xml.replace(extent_xml.find("<Document>"), 10, "<Document height=\"0\" width=\"0\">");
+    expect(validate_document(schema, extent_xml) == 0, "XSD must accept explicit zero Spreadsheet Document dimensions");
+    for (const auto& invalid : std::vector<std::string>{
+        "<DefaultFormat><Unknown>1</Unknown></DefaultFormat>",
+        "<DefaultFormat>" + boolean_format + boolean_format + "</DefaultFormat>",
+        "<DefaultFormat raw=\"1\"/>", "<DefaultFormat/><DefaultFormat/>",
+        "<DefaultFormat><HorizontalAlignment type=\"HorizontalAlign\" member=\"Invalid\"/></DefaultFormat>",
+        "<DefaultFormat><HorizontalAlignment type=\"WrongType\" member=\"Left\"/></DefaultFormat>",
+        "<Row index=\"0\"><Format/></Row>", "<Column index=\"4294967296\"><Format/></Column>",
+        "<Row index=\"1\"/>", "<Column index=\"1\"><Format/><Format/></Column>",
+        "<Row index=\"1\" raw=\"1\"><Format/></Row>",
+        "<Column index=\"1\"><Format/></Column><Row index=\"1\"><Format/></Row>",
+        "<Cell row=\"1\" column=\"1\"><Format/><Text>x</Text></Cell>",
+        "<Cell row=\"1\" column=\"1\"><Text>x</Text><Format/><Format/></Cell>"})
+        expect(validate_document(schema, wrap(invalid)) != 0, "XSD must reject unsupported and duplicate format properties, attributes, coordinates and order");
 }
 
 void test_owned_chart_schema(xmlNodePtr schema) {
@@ -1602,6 +1680,10 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     expect_palette_properties(direct_child(form, "Properties"), metamodel.form_properties());
     expect_palette_events(direct_child(form, "Events"), metamodel.form_events());
 
+    const auto spreadsheet_format = direct_child_with_attribute(palette, "NamedConcept", "name", "SpreadsheetDocumentFormat");
+    expect(spreadsheet_format != nullptr && attribute(spreadsheet_format, "russianName") == "ФорматЯчейкиТабличногоДокумента",
+        "Palette must expose the named spreadsheet format concept and Russian metadata");
+    expect_palette_properties(direct_child(spreadsheet_format, "Properties"), oof::model::metamodel::spreadsheet_format_properties());
     xmlNodePtr summary = direct_child_with_attribute(palette, "NamedConcept", "name", "ChartSummarySeries");
     expect(summary != nullptr && attribute(summary, "apiName") == "SummarySeries" &&
         attribute(summary, "russianName") == "СводнаяСерия" &&
@@ -2376,6 +2458,8 @@ int main() {
         test_document_instances(compiled_form.get());
         test_spreadsheet_serialization_version_schema(compiled_form.get());
         test_spreadsheet_document_instances(compiled_form.get());
+        test_spreadsheet_document_format_instances(compiled_form.get());
+        test_spreadsheet_localized_text_instances(compiled_form.get());
         test_date_values(compiled_form.get());
         test_schema_structure_coverage_does_not_imply_codec_coverage(
             metamodel,

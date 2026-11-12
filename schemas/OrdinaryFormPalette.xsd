@@ -1446,6 +1446,56 @@
           <Property name="Control" russianName="ЭлементУправления"/>
           <Property name="ValueType" russianName="ОписаниеТипа" russianType="ОписаниеТипов" source="storedTypeDescriptor"/>
         </Properties></NamedConcept>
+        <NamedConcept name="SpreadsheetDocumentFormat" russianName="ФорматЯчейкиТабличногоДокумента"><Properties>
+          <Property name="Font" apiName="Font" russianName="Шрифт" russianType="" valueCodec="font"/>
+          <Property name="LeftBorder" apiName="LeftBorder" russianName="ГраницаСлева" russianType="" valueCodec="line"/>
+          <Property name="TopBorder" apiName="TopBorder" russianName="ГраницаСверху" russianType="" valueCodec="line"/>
+          <Property name="RightBorder" apiName="RightBorder" russianName="ГраницаСправа" russianType="" valueCodec="line"/>
+          <Property name="BottomBorder" apiName="BottomBorder" russianName="ГраницаСнизу" russianType="" valueCodec="line"/>
+          <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="" valueCodec="color"/>
+          <Property name="Height" apiName="Height" russianName="Высота" russianType="" valueCodec="decimal"/>
+          <Property name="Width" apiName="Width" russianName="Ширина" russianType="" valueCodec="decimal"/>
+          <Property name="HorizontalAlignment" apiName="HorizontalAlignment" russianName="ГоризонтальноеПоложение" russianType="" valueCodec="enumeration"/>
+          <Property name="VerticalAlignment" apiName="VerticalAlignment" russianName="ВертикальноеПоложение" russianType="" valueCodec="enumeration"/>
+          <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="" valueCodec="color"/>
+          <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="" valueCodec="color"/>
+          <Property name="Pattern" apiName="Pattern" russianName="Узор" russianType="" valueCodec="enumeration"/>
+          <Property name="PatternColor" apiName="PatternColor" russianName="ЦветУзора" russianType="" valueCodec="color"/>
+          <Property name="TextPlacement" apiName="TextPlacement" russianName="РазмещениеТекста" russianType="" valueCodec="enumeration"/>
+          <Property name="FillType" apiName="FillType" russianName="Заполнение" russianType="" valueCodec="enumeration"/>
+          <Property name="Protection" apiName="Protection" russianName="Защита" russianType="" valueCodec="boolean"/>
+          <Property name="Hidden" apiName="Hidden" russianName="Скрыта" russianType="" valueCodec="boolean"/>
+          <Property name="TextOrientation" apiName="TextOrientation" russianName="ОриентацияТекста" russianType="" valueCodec="decimal"/>
+          <Property name="DetailsUse" apiName="DetailsUse" russianName="ИспользованиеРасшифровки" russianType="" valueCodec="enumeration"/>
+          <Property name="BySelectedColumns" apiName="BySelectedColumns" russianName="ПоВыделеннымКолонкам" russianType="" valueCodec="boolean"/>
+          <Property name="MarkNegatives" apiName="MarkNegatives" russianName="ВыделятьОтрицательные" russianType="" valueCodec="boolean"/>
+          <Property name="ContainsValue" apiName="ContainsValue" russianName="СодержитЗначение" russianType="" valueCodec="boolean"/>
+          <Property name="ValueType" apiName="ValueType" russianName="ТипЗначения" russianType="" valueCodec="type-domain"/>
+          <Property name="Format" apiName="Format" russianName="Формат" russianType="" valueCodec="localized-string"/>
+          <Property name="ControlType" apiName="ControlType" russianName="ТипЭлементаУправления" russianType="" valueCodec="uuid"/>
+          <Property name="HyperLink" apiName="HyperLink" russianName="Гиперссылка" russianType="" valueCodec="boolean"/>
+          <Property name="QuickDrag" apiName="QuickDrag" russianName="БыстроеПеретаскивание" russianType="" valueCodec="boolean"/>
+          <Property name="AutoMarkIncomplete" apiName="AutoMarkIncomplete" russianName="АвтоОтметкаНезаполненного" russianType="" valueCodec="boolean"/>
+          <Property name="MarkIncomplete" apiName="MarkIncomplete" russianName="ОтметкаНезаполненного" russianType="" valueCodec="boolean"/>
+          <Property name="Indent" apiName="Indent" russianName="Отступ" russianType="" valueCodec="decimal"/>
+          <Property name="AutoIndent" apiName="AutoIndent" russianName="АвтоОтступ" russianType="" valueCodec="decimal"/>
+          <Property name="EditFormat" apiName="EditFormat" russianName="ФорматРедактирования" russianType="" valueCodec="localized-string"/>
+          <Property name="ColumnSizeChange" apiName="ColumnSizeChange" russianName="РежимИзмененияРазмераКолонки" russianType="" valueCodec="enumeration"/>
+          <Property name="Mask" apiName="Mask" russianName="Маска" russianType="" valueCodec="localized-string"/>
+          <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="" valueCodec="picture"/>
+          <Property name="PictureHorizontalAlignment" apiName="PictureHorizontalAlignment" russianName="ГоризонтальноеПоложениеКартинки" russianType="" valueCodec="enumeration"/>
+          <Property name="PictureVerticalAlignment" apiName="PictureVerticalAlignment" russianName="ВертикальноеПоложениеКартинки" russianType="" valueCodec="enumeration"/>
+          <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="" valueCodec="enumeration"/>
+          <Property name="TextPosition" apiName="TextPosition" russianName="ПоложениеТекста" russianType="" valueCodec="enumeration"/>
+          <Property name="AutoWidthCalculation" apiName="AutoWidthCalculation" russianName="АвтоПодборШирины" russianType="" valueCodec="boolean"/>
+          <Property name="WidthWeightFactor" apiName="WidthWeightFactor" russianName="ВесовойКоэффициентШирины" russianType="" valueCodec="decimal"/>
+          <Property name="LeftMargin" apiName="LeftMargin" russianName="ОтступСлева" russianType="" valueCodec="decimal"/>
+          <Property name="TopMargin" apiName="TopMargin" russianName="ОтступСверху" russianType="" valueCodec="decimal"/>
+          <Property name="RightMargin" apiName="RightMargin" russianName="ОтступСправа" russianType="" valueCodec="decimal"/>
+          <Property name="BottomMargin" apiName="BottomMargin" russianName="ОтступСнизу" russianType="" valueCodec="decimal"/>
+          <Property name="HighlightMode" apiName="HighlightMode" russianName="РежимПодсветки" russianType="" valueCodec="enumeration"/>
+          <Property name="ShowEditMode" apiName="ShowEditMode" russianName="ТипОтображенияРедактируемойЯчейки" russianType="" valueCodec="enumeration"/>
+        </Properties></NamedConcept>
         <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
         </Properties></NamedConcept>

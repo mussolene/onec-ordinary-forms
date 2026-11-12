@@ -399,6 +399,9 @@ struct TableColumnEnumerationMember {
     std::string_view name;
     std::uint32_t storage_value;
 };
+
+// Один именованный контракт для форматирования документа, строк, колонок и ячеек.
+[[nodiscard]] std::span<const PropertyDescriptor> spreadsheet_format_properties();
 struct TableColumnLegacyEnumerationProjection {
     std::size_t storage_slot;
     std::uint32_t maximum_value;

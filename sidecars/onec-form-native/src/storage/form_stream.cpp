@@ -748,121 +748,6 @@ bool spreadsheet_cell_value_is_default(const model::SpreadsheetDocumentCellValue
 }
 
 LV encoded_spreadsheet_cell_control(const model::SpreadsheetDocumentCell& cell, std::string_view path);
-LV canonical_spreadsheet_field_info(
-    const model::SpreadsheetDocumentFieldPayload& payload,
-    bool fresh_add_default = false) {
-    LV info = list_stream::parse(R"LS({18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,0,{0,0,00000000-0000-0000-0000-000000000000,0},0,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,0,0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1})LS");
-    auto& document_info = info.items.at(11);
-    auto& view_info = info.items.at(14);
-    if (info.items.size() != 33 || !document_info.is_list || document_info.items.size() != 65 ||
-        raw_atom(document_info.items.at(14), "$") != "2" || !view_info.is_list ||
-        view_info.items.size() != 29) {
-        throw std::logic_error("invalid SpreadsheetDocumentField canonical info descriptor");
-    }
-    switch (payload.serialization_version) {
-        case model::SpreadsheetDocumentFieldSerializationVersion::v14:
-            info.items.resize(29);
-            break;
-        case model::SpreadsheetDocumentFieldSerializationVersion::v16:
-            info.items.resize(30);
-            break;
-        case model::SpreadsheetDocumentFieldSerializationVersion::v18:
-            break;
-        default:
-            fail("OOF1122", "$/SpreadsheetDocumentField/@serializationVersion", "14, 16 or 18", {},
-                "Версия сериализации SpreadsheetDocumentField не поддерживается");
-    }
-    info.items[0] = raw(std::to_string(static_cast<unsigned>(payload.serialization_version)));
-    std::map<std::uint32_t, std::vector<const model::SpreadsheetDocumentCell*>> rows;
-    std::vector<const model::SpreadsheetDocumentCell*> typed_cells;
-    for (const auto& cell : payload.cells) {
-        rows[cell.row - 1].push_back(&cell);
-    }
-    std::vector<LV> row_items;
-    for (auto& [row, cells] : rows) {
-        std::sort(cells.begin(), cells.end(), [](const auto* left, const auto* right) {
-            return left->column < right->column;
-        });
-        row_items.push_back(raw(std::to_string(row)));
-        row_items.push_back(raw("0"));
-        row_items.push_back(raw(std::to_string(cells.size())));
-        for (const auto* cell : cells) {
-            row_items.push_back(raw(std::to_string(cell->column - 1)));
-            if (cell->typed_value.has_value()) {
-                const auto& typed = *cell->typed_value;
-                const auto reference = typed_cells.size() + 1;
-                const bool default_value = spreadsheet_cell_value_is_default(typed);
-                std::vector<LV> cell_items{raw(std::to_string((default_value ? 0 : 2) +
-                    (cell->control.has_value() ? 1 : 0))), raw(std::to_string(reference))};
-                if (cell->control.has_value()) {
-                    cell_items.push_back(raw("1"));
-                    cell_items.push_back(encoded_spreadsheet_cell_control(*cell,
-                        "$/SpreadsheetDocumentField/Cell/Control"));
-                }
-                if (!default_value) cell_items.push_back(encoded_spreadsheet_cell_value(typed.value,
-                    "$/SpreadsheetDocumentField/Cell/Value"));
-                row_items.push_back(list(std::move(cell_items)));
-                typed_cells.push_back(cell);
-            } else {
-                const auto value = cell->text.empty()
-                    ? list({raw("1"), raw("0")})
-                    : encoded_localized(cell->text);
-                row_items.push_back(list({raw("16"), raw("0"), value, raw("0")}));
-            }
-        }
-    }
-    document_info.items.insert(document_info.items.begin() + 16, row_items.begin(), row_items.end());
-    document_info.items[15] = raw(std::to_string(rows.size()));
-    std::uint32_t columns = 0;
-    std::uint32_t row_extent = 0;
-    for (const auto& cell : payload.cells) {
-        columns = std::max(columns, cell.column);
-        row_extent = std::max(row_extent, cell.row);
-    }
-    const auto composite_index = 16 + row_items.size();
-    document_info.items[composite_index] = list({raw(std::to_string(columns)), raw("0"),
-        raw("00000000-0000-0000-0000-000000000000"), raw("0")});
-    document_info.items[composite_index + 1] = raw(std::to_string(row_extent));
-
-    if (!typed_cells.empty()) {
-        const std::size_t tail_start = composite_index + 2;
-        const std::size_t typed_count = typed_cells.size();
-        document_info.items[tail_start + 25] = raw(std::to_string(typed_count));
-        std::vector<LV> type_references;
-        std::vector<LV> type_domains;
-        type_references.reserve(typed_count);
-        type_domains.reserve(typed_count);
-        for (std::size_t index = 0; index < typed_count; ++index) {
-            const auto& typed = *typed_cells[index]->typed_value;
-            type_references.push_back(list({raw("46137344"), raw("1"), raw(std::to_string(index)), raw("0")}));
-            type_domains.push_back(encoded_type_domain(typed.type,
-                "$/SpreadsheetDocumentField/Cell/ValueType"));
-        }
-        document_info.items.insert(document_info.items.begin() + static_cast<std::ptrdiff_t>(tail_start + 26),
-            type_references.begin(), type_references.end());
-        const std::size_t domain_count_index = tail_start + 28 + typed_count;
-        document_info.items[domain_count_index] = raw(std::to_string(typed_count));
-        document_info.items.insert(document_info.items.begin() + static_cast<std::ptrdiff_t>(domain_count_index + 1),
-            type_domains.begin(), type_domains.end());
-        const std::size_t type_owner_index = tail_start + 29 + typed_count * 2;
-        document_info.items[type_owner_index] = raw("1");
-        document_info.items.insert(document_info.items.begin() + static_cast<std::ptrdiff_t>(type_owner_index + 1),
-            raw("381ed624-9217-4e63-85db-c4c3cb87daae"));
-    }
-
-    if (fresh_add_default) {
-        view_info.items[1] = raw("0");
-        view_info.items[2] = raw("0");
-        view_info.items[23] = raw("0");
-        return info;
-    }
-    view_info.items[1] = raw("0");
-    view_info.items[2] = raw("0");
-    view_info.items[23] = raw("1");
-    view_info.items.insert(view_info.items.begin() + 24,
-        list({raw("3"), raw("0"), raw("0"), raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000")}));
-    return info;
-}
 
 LV encoded_localized(const model::LocalizedStringValue& value) {
     return list_stream::parse(value_codec::encode_localized_string(value));
@@ -6121,6 +6006,7 @@ struct DecodedControl {
     std::vector<DecodedTableColumnEvent> column_events{};
     std::optional<std::uint64_t> menu_root_id{};
     std::vector<PendingTableSourceBinding> table_source_bindings{};
+    std::vector<model::PictureAsset> format_assets{};
 };
 
 struct DecodedChartInfo {
@@ -11253,6 +11139,166 @@ DecodedControl decode_dendrogram(
 }
 
 
+
+template <class Sheet, class Visitor>
+void visit_spreadsheet_formats(Sheet& sheet, Visitor visitor) {
+    visitor(sheet.default_format); visitor(sheet.default_column_format);
+    for (auto& row : sheet.rows) visitor(row.format);
+    for (auto& column : sheet.columns) visitor(column.format);
+    for (auto& cell : sheet.cells) visitor(cell.format);
+}
+
+struct SpreadsheetSections {
+    std::size_t tail = 0;
+    std::size_t pictures_end = 0;
+    std::size_t masks_end = 0;
+};
+
+
+LV canonical_spreadsheet_field_info(const model::SpreadsheetDocumentFieldPayload& payload,
+    bool fresh_add_default = false, std::span<const model::PictureAsset> assets = {},
+    SpreadsheetSections* sections = nullptr) {
+    LV info = list_stream::parse(R"LS({18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,0,{0,0,00000000-0000-0000-0000-000000000000,0},0,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,0,0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1})LS");
+
+    auto& document_info = info.items.at(11);
+    auto& view_info = info.items.at(14);
+    switch (payload.serialization_version) {
+        case model::SpreadsheetDocumentFieldSerializationVersion::v14:
+            info.items.resize(29);
+            break;
+        case model::SpreadsheetDocumentFieldSerializationVersion::v16:
+            info.items.resize(30);
+            break;
+        case model::SpreadsheetDocumentFieldSerializationVersion::v18:
+            break;
+        default:
+            fail("OOF1122", "$/SpreadsheetDocumentField/@serializationVersion", "14, 16 or 18", {},
+                "Версия сериализации SpreadsheetDocumentField не поддерживается");
+    }
+    info.items[0] = raw(std::to_string(static_cast<unsigned>(payload.serialization_version)));
+
+    value_codec::SpreadsheetFormatResources resources;
+    resources.colors = {decode_control_color(parse_constant("{4,3,{-1},3}"), "$"),
+        decode_control_color(parse_constant("{4,3,{-3},3}"), "$")};
+    auto default_format = payload.default_format;
+    if (default_format.properties.empty())
+        default_format.properties.set_explicit(model::PropertyId::from_name("Width"), model::DecimalValue{"72"});
+    document_info.items[4] = value_codec::encode_spreadsheet_format(default_format, resources);
+    std::vector<LV> formats;
+    const auto format_reference = [&](const model::SpreadsheetDocumentFormat& format) {
+        if (format.properties.empty()) return std::uint64_t{0};
+        auto encoded = value_codec::encode_spreadsheet_format(format, resources);
+        const auto key = list_stream::dump_compact(encoded);
+        for (std::size_t i = 0; i < formats.size(); ++i)
+            if (list_stream::dump_compact(formats[i]) == key) return static_cast<std::uint64_t>(i + 1);
+        formats.push_back(std::move(encoded));
+        return static_cast<std::uint64_t>(formats.size());
+    };
+    std::map<std::uint32_t, std::vector<const model::SpreadsheetDocumentCell*>> rows;
+    std::map<std::uint32_t, const model::SpreadsheetDocumentFormat*> row_formats;
+    for (const auto& row : payload.rows) { rows[row.index - 1]; row_formats[row.index - 1] = &row.format; }
+    for (const auto& cell : payload.cells) rows[cell.row - 1].push_back(&cell);
+    std::vector<LV> row_items;
+    for (auto& [row, cells] : rows) {
+        std::sort(cells.begin(), cells.end(), [](const auto* l, const auto* r) { return l->column < r->column; });
+        row_items.push_back(raw(std::to_string(row)));
+        row_items.push_back(raw(std::to_string(row_formats.contains(row) ? format_reference(*row_formats.at(row)) : 0)));
+        row_items.push_back(raw(std::to_string(cells.size())));
+        for (const auto* cell : cells) {
+            row_items.push_back(raw(std::to_string(cell->column - 1)));
+            auto format = cell->format;
+            if (cell->typed_value) {
+                const auto add_typed_property = [&](std::string_view name, model::PropertyValue value) {
+                    const auto id = model::PropertyId::from_name(name);
+                    if (format.properties.contains(id)) return;
+                    const auto* inherited = payload.inherited_cell_property(*cell, id);
+                    if (!inherited || inherited->value != value) format.properties.set_explicit(id, std::move(value));
+                };
+                add_typed_property("ContainsValue", true);
+                add_typed_property("ValueType", cell->typed_value->type);
+                add_typed_property("ControlType", model::UuidValue{"381ed624-9217-4e63-85db-c4c3cb87daae"});
+            }
+            const auto reference = format_reference(format);
+            if (cell->typed_value) {
+                const bool default_value = spreadsheet_cell_value_is_default(*cell->typed_value);
+                std::vector<LV> values{raw(std::to_string((default_value ? 0 : 2) + (cell->control ? 1 : 0))), raw(std::to_string(reference))};
+                if (cell->control) {
+                    values.push_back(raw("1"));
+                    values.push_back(encoded_spreadsheet_cell_control(*cell, "$/SpreadsheetDocumentField/Document/Cell/Control"));
+                }
+                if (!default_value) values.push_back(encoded_spreadsheet_cell_value(cell->typed_value->value, "$/SpreadsheetDocumentField/Document/Cell/Value"));
+                row_items.push_back(list(std::move(values)));
+            } else {
+                const auto text = encoded_localized_text(cell->text, "$/SpreadsheetDocumentField/Document/Cell/Text");
+                row_items.push_back(list({raw("16"), raw(std::to_string(reference)), text, raw("0")}));
+            }
+        }
+    }
+    const auto derived_height = rows.empty() ? 0U : rows.rbegin()->first + 1;
+    std::uint32_t derived_width = 0;
+    for (const auto& cell : payload.cells) derived_width = std::max(derived_width, cell.column);
+    for (const auto& column : payload.columns) derived_width = std::max(derived_width, column.index);
+    std::vector<LV> columns{raw(std::to_string(payload.width.value_or(derived_width))),
+        raw(std::to_string(format_reference(payload.default_column_format))),
+        raw("00000000-0000-0000-0000-000000000000"), raw(std::to_string(payload.columns.size()))};
+    for (const auto& column : payload.columns) {
+        columns.push_back(raw(std::to_string(column.index - 1)));
+        columns.push_back(raw(std::to_string(format_reference(column.format))));
+    }
+    document_info.items[15] = raw(std::to_string(rows.size()));
+    document_info.items.insert(document_info.items.begin() + 16, row_items.begin(), row_items.end());
+    const auto columns_index = 16 + row_items.size();
+    document_info.items[columns_index] = list(std::move(columns));
+    document_info.items[columns_index + 1] = raw(std::to_string(payload.height.value_or(derived_height)));
+    const auto tail = columns_index + 2;
+    const auto original_tail = document_info.items;
+    std::vector<LV> output(original_tail.begin(), original_tail.begin() + static_cast<std::ptrdiff_t>(tail + 25));
+    output.push_back(raw(std::to_string(formats.size())));
+    output.insert(output.end(), formats.begin(), formats.end());
+    const auto append_resources = [&](const auto& values, auto encode) {
+        output.push_back(raw(std::to_string(values.size())));
+        for (const auto& value : values) output.push_back(encode(value));
+    };
+    append_resources(resources.fonts, [](const auto& v) { return list_stream::parse(value_codec::encode_font(v)); });
+    append_resources(resources.strings, [](const auto& v) { return list_stream::parse(value_codec::encode_localized_string(v)); });
+    append_resources(resources.types, [](const auto& v) { return list_stream::parse(value_codec::encode_type_domain(v)); });
+    append_resources(resources.control_types, [](const auto& v) { return raw(v.canonical); });
+    append_resources(resources.colors, [](const auto& v) { return encode_control_color(v, "$/Document/Format/Color"); });
+    append_resources(resources.pictures, [&](const model::PictureRef& v) {
+        if (v.standard_name || v.common_picture) return encode_picture_reference(v, "$/Document/Format/Picture");
+        if (!v.asset.id()) return parse_constant("{4,0,{0},\"\",-1,-1,0,0,\"\"}");
+        const auto asset = std::ranges::find(assets, v.asset.id(), &model::PictureAsset::id);
+        if (asset == assets.end()) fail("OOF1123", "$/Document/Format/Picture", "existing picture asset", {}, "Spreadsheet format picture is dangling");
+        return encode_button_picture(*asset, "$/Document/Format/Picture");
+    });
+    const auto pictures_end = output.size();
+    // После таблиц следуют свойства документа, затем отдельный реестр масок.
+    output.insert(output.end(), original_tail.begin() + static_cast<std::ptrdiff_t>(tail + 34),
+        original_tail.begin() + static_cast<std::ptrdiff_t>(tail + 40));
+    append_resources(resources.masks, [](const auto& v) { return list_stream::parse(value_codec::encode_localized_string(v)); });
+    const auto masks_end = output.size();
+    output.insert(output.end(), original_tail.begin() + static_cast<std::ptrdiff_t>(tail + 41), original_tail.end());
+    document_info.items = std::move(output);
+    std::vector<LV> lines{raw(std::to_string(resources.lines.size()))};
+    for (const auto& line : resources.lines) {
+        lines.push_back(raw("1")); lines.push_back(list_stream::parse(value_codec::encode_line(line))); lines.push_back(raw("0"));
+    }
+    document_info.items[5] = list(std::move(lines));
+    if (sections) *sections = {tail, pictures_end, masks_end};
+    if (fresh_add_default) {
+        view_info.items[1] = raw("0");
+        view_info.items[2] = raw("0");
+        view_info.items[23] = raw("0");
+        return info;
+    }
+    view_info.items[1] = raw("0");
+    view_info.items[2] = raw("0");
+    view_info.items[23] = raw("1");
+    view_info.items.insert(view_info.items.begin() + 24,
+        list({raw("3"), raw("0"), raw("0"), raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000")}));
+    return info;
+}
+
 DecodedControl decode_spreadsheet_document_field(
     const LV& record,
     std::string_view path,
@@ -11282,189 +11328,165 @@ DecodedControl decode_spreadsheet_document_field(
     if (document_info.items.size() < 65) fail("OOF1102", document_path, "complete SpreadsheetDocumentField info", describe(document_info), "Document info is incomplete");
     require_raw_constant(document_info.items[14], "2", child_path(document_path, 14));
     const auto row_count = integer_atom<std::uint32_t>(document_info.items[15], child_path(document_path, 15));
-    const auto row_payload_size = document_info.items.size() - 65;
-    if (static_cast<std::size_t>(row_count) > row_payload_size / 3)
-        fail("OOF1114", child_path(document_path, 15), "row count matching bounded row records", std::to_string(row_count), "Spreadsheet Document row count is invalid");
     model::SpreadsheetDocumentFieldPayload payload;
     payload.serialization_version = static_cast<model::SpreadsheetDocumentFieldSerializationVersion>(serialization_version);
-    std::vector<std::size_t> typed_cell_indices;
-    std::vector<bool> typed_cell_defaults;
-    std::vector<std::uint32_t> typed_format_references;
-    std::vector<std::size_t> typed_cell_record_indices;
+    value_codec::SpreadsheetFormatResources resources;
+    std::vector<model::PictureAsset> format_assets;
+    const auto& embedded = at(document_info, 5, document_path);
+    const auto embedded_count = integer_atom<std::uint32_t>(at(embedded, 0, document_path), document_path);
+    require_arity(embedded, 1 + std::size_t(embedded_count) * 3, document_path);
+    for (std::size_t i = 0; i < embedded_count; ++i) {
+        require_raw_constant(embedded.items[1 + i * 3], "1", document_path);
+        resources.lines.push_back(value_codec::decode_line(list_stream::dump_compact(embedded.items[2 + i * 3])));
+        require_raw_constant(embedded.items[3 + i * 3], "0", document_path);
+    }
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> row_references;
+    std::vector<std::uint32_t> cell_references;
+    std::vector<unsigned> cell_flags;
+    std::vector<std::size_t> cell_record_indices;
     std::size_t cursor = 16;
-    std::uint32_t previous_row = 0;
-    bool first_row = true;
-    for (std::uint32_t row_number = 0; row_number < row_count; ++row_number) {
-        const auto row_path = child_path(document_path, cursor);
-        const auto row_index = integer_atom<std::uint32_t>(at(document_info, cursor, document_path), row_path);
-        ++cursor;
-        if (row_index == std::numeric_limits<std::uint32_t>::max() || (!first_row && row_index <= previous_row))
-            fail("OOF1114", row_path, "strictly increasing supported row indices", std::to_string(row_index), "Spreadsheet row index is invalid");
-        require_raw_constant(at(document_info, cursor, document_path), "0", child_path(document_path, cursor));
-        ++cursor;
-        const auto cell_count = integer_atom<std::uint32_t>(at(document_info, cursor, document_path), child_path(document_path, cursor));
-        ++cursor;
-        if (cell_count == 0 || cursor > document_info.items.size() ||
-            static_cast<std::size_t>(cell_count) > (document_info.items.size() - cursor) / 2)
-            fail("OOF1114", child_path(document_path, cursor - 1), "nonempty row with matching cell records", std::to_string(cell_count), "Spreadsheet row cell count is invalid");
-        std::uint32_t previous_column = 0;
-        bool first_column = true;
-        for (std::uint32_t cell_index = 0; cell_index < cell_count; ++cell_index) {
-            const auto item_index = cursor++;
-            const auto column = integer_atom<std::uint32_t>(at(document_info, item_index, document_path), child_path(document_path, item_index));
-            if (column == std::numeric_limits<std::uint32_t>::max() || (!first_column && column <= previous_column))
-                fail("OOF1114", child_path(document_path, item_index), "strictly increasing supported column indices", std::to_string(column), "Spreadsheet column index is invalid");
-            const auto value_index = cursor++;
-            const auto& value = at(document_info, value_index, document_path);
-            const auto value_path = child_path(document_path, value_index);
-            if (value.is_list && value.items.size() == 4 && !value.items[0].is_list &&
-                value.items[0].atom == "16") {
-                require_raw_constant(value.items[0], "16", child_path(value_path, 0));
-                require_raw_constant(value.items[1], "0", child_path(value_path, 1));
-                const auto text = decoded_single_language_text(value.items[2], child_path(value_path, 2));
-                require_raw_constant(value.items[3], "0", child_path(value_path, 3));
-                payload.cells.push_back({row_index + 1, column + 1, text, std::nullopt});
-            } else if (value.is_list && value.items.size() >= 2 && !value.items[0].is_list &&
-                (value.items[0].atom == "0" || value.items[0].atom == "1" ||
-                 value.items[0].atom == "2" || value.items[0].atom == "3")) {
-                const auto flags = integer_atom<std::uint32_t>(value.items[0], child_path(value_path, 0));
-                const bool has_control = (flags & 1) != 0;
-                const bool has_value = (flags & 2) != 0;
-                require_arity(value, 2 + (has_control ? 2 : 0) + (has_value ? 1 : 0), value_path);
-                if (has_control) require_raw_constant(value.items[2], "1", child_path(value_path, 2));
-                const auto reference = integer_atom<std::uint32_t>(value.items[1], child_path(value_path, 1));
-                auto typed = has_value ? decoded_spreadsheet_cell_value(value.items.back(), value_path) :
-                    model::PropertyValue{model::UndefinedValue{}};
-                typed_cell_indices.push_back(payload.cells.size());
-                typed_cell_defaults.push_back(!has_value);
-                typed_format_references.push_back(reference);
-                typed_cell_record_indices.push_back(value_index);
-                payload.cells.push_back({row_index + 1, column + 1, {},
-                    model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{}, std::move(typed)}});
-            } else {
-                fail("OOF1114", value_path, "plain Text or a supported typed cell record", describe(value),
-                    "Spreadsheet Document cell record is unsupported");
-            }
-            previous_column = column;
-            first_column = false;
-        }
+    if (row_count > (document_info.items.size() - cursor) / 3)
+        fail("OOF1114", document_path, "bounded row count", {}, "Spreadsheet row count exceeds its document");
+    std::optional<std::uint32_t> previous_row;
+    for (std::uint32_t r = 0; r < row_count; ++r) {
+        const auto row_index = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
+        if (row_index == UINT32_MAX || (previous_row && row_index <= *previous_row))
+            fail("OOF1114", document_path, "strictly increasing row indices", {}, "Spreadsheet row index is invalid");
         previous_row = row_index;
-        first_row = false;
-    }
-    const std::size_t tail_start = cursor + 2;
-    if (tail_start > document_info.items.size() || document_info.items.size() - tail_start < 29)
-        fail("OOF1102", document_path, "complete SpreadsheetDocumentField typed-value tail", describe(document_info),
-            "Spreadsheet Document typed-value table is incomplete");
-    const auto typed_count = integer_atom<std::uint32_t>(at(document_info, tail_start + 25, document_path),
-        child_path(document_path, tail_start + 25));
-    const std::size_t tail_available = document_info.items.size() - tail_start;
-    if (tail_available < 29 || static_cast<std::size_t>(typed_count) > tail_available - 29)
-        fail("OOF1114", child_path(document_path, tail_start + 25),
-            "bounded format table", std::to_string(typed_count),
-            "Spreadsheet Document format count exceeds its record");
-    if (typed_cell_indices.empty() != (typed_count == 0))
-        fail("OOF1114", child_path(document_path, tail_start + 25),
-            "format records exactly when typed cells exist", std::to_string(typed_count),
-            "Spreadsheet Document format table does not match typed cells");
-    const std::size_t domain_count_index = tail_start + 28 + static_cast<std::size_t>(typed_count);
-    const auto domain_count = integer_atom<std::uint32_t>(at(document_info, domain_count_index, document_path),
-        child_path(document_path, domain_count_index));
-    if (static_cast<std::size_t>(domain_count) > tail_available - 29 - static_cast<std::size_t>(typed_count))
-        fail("OOF1114", child_path(document_path, domain_count_index),
-            "bounded ValueType table", std::to_string(domain_count),
-            "Spreadsheet Document ValueType count exceeds its record");
-    if (typed_cell_indices.empty() != (domain_count == 0))
-        fail("OOF1114", child_path(document_path, domain_count_index),
-            "ValueType records exactly when typed cells exist", std::to_string(domain_count),
-            "Spreadsheet Document ValueType table does not match typed cells");
-    std::vector<std::uint32_t> format_domain_references;
-    format_domain_references.reserve(typed_count);
-    for (std::size_t index = 0; index < static_cast<std::size_t>(typed_count); ++index) {
-        const std::size_t reference_index = tail_start + 26 + index;
-        const auto& reference = at(document_info, reference_index, document_path);
-        const auto reference_path = child_path(document_path, reference_index);
-        require_arity(reference, 4, reference_path);
-        require_raw_constant(reference.items[0], "46137344", child_path(reference_path, 0));
-        require_raw_constant(reference.items[1], "1", child_path(reference_path, 1));
-        const auto domain_reference = integer_atom<std::uint32_t>(reference.items[2], child_path(reference_path, 2));
-        if (domain_reference >= domain_count)
-            fail("OOF1114", child_path(reference_path, 2), "in-range zero-based ValueType reference",
-                std::to_string(domain_reference), "Spreadsheet Document format references a missing ValueType");
-        require_raw_constant(reference.items[3], "0", child_path(reference_path, 3));
-        format_domain_references.push_back(domain_reference);
-    }
-    std::vector<model::TypeDomainPatternValue> types;
-    types.reserve(domain_count);
-    std::vector<bool> used_domain(domain_count, false);
-    for (std::size_t index = 0; index < static_cast<std::size_t>(domain_count); ++index) {
-        const std::size_t type_index = domain_count_index + 1 + index;
-        types.push_back(type_domain(at(document_info, type_index, document_path),
-            child_path(document_path, type_index)));
-    }
-    std::vector<bool> used_format(typed_count, false);
-    for (std::size_t index = 0; index < typed_cell_indices.size(); ++index) {
-        const auto format_reference = typed_format_references[index];
-        if (format_reference == 0 || format_reference > typed_count)
-            fail("OOF1114", child_path(document_path, typed_cell_record_indices[index]),
-                "in-range one-based format reference", std::to_string(format_reference),
-                "Spreadsheet Document cell references a missing format record");
-        const std::size_t format_index = static_cast<std::size_t>(format_reference - 1);
-        used_format[format_index] = true;
-        const std::size_t domain_reference = format_domain_references[format_index];
-        used_domain[domain_reference] = true;
-        const std::size_t type_index = domain_count_index + 1 + domain_reference;
-        const auto& type = types[domain_reference];
-        auto& typed = *payload.cells[typed_cell_indices[index]].typed_value;
-        if (type.entries.size() != 1)
-            fail("OOF1114", child_path(document_path, type_index), "one ValueType entry for a typed cell",
-                describe(at(document_info, type_index, document_path)),
-                "Spreadsheet Document typed cell requires exactly one ValueType entry");
-        if (typed_cell_defaults[index]) {
-            const auto& entry = type.entries.front();
-            switch (entry.term) {
-                case model::TypeDomainTerm::string:
-                    typed.value = std::string{};
-                    break;
-                case model::TypeDomainTerm::numeric:
-                    typed.value = model::DecimalValue{"0"};
-                    break;
-                case model::TypeDomainTerm::boolean:
-                    typed.value = false;
-                    break;
-                case model::TypeDomainTerm::date:
-                    if (entry.date != model::DateQualifiers{true, true})
-                        fail("OOF1114", child_path(document_path, type_index), "known DateTime default",
-                            describe(at(document_info, type_index, document_path)),
-                            "Spreadsheet Document date default is unsupported");
-                    typed.value = model::DateValue{"0001-01-01T00:00:00"};
-                    break;
-                default:
-                    fail("OOF1114", child_path(document_path, type_index),
-                        "String, Number, Boolean, or Date default", describe(at(document_info, type_index, document_path)),
-                        "Spreadsheet Document default cell ValueType is unsupported");
-            }
-        } else {
-            const auto& entry = type.entries.front();
-            const bool matches = (entry.term == model::TypeDomainTerm::string && std::holds_alternative<std::string>(typed.value)) ||
-                (entry.term == model::TypeDomainTerm::numeric && std::holds_alternative<model::DecimalValue>(typed.value)) ||
-                (entry.term == model::TypeDomainTerm::boolean && std::holds_alternative<bool>(typed.value)) ||
-                (entry.term == model::TypeDomainTerm::date && std::holds_alternative<model::DateValue>(typed.value));
-            if (!matches)
-                fail("OOF1114", child_path(document_path, type_index), "ValueType matching explicit cell value",
-                    describe(at(document_info, type_index, document_path)),
-                    "Spreadsheet Document cell value conflicts with its ValueType");
+        const auto reference = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
+        const auto count = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
+        if (count > (document_info.items.size() - cursor) / 2)
+            fail("OOF1114", document_path, "bounded cell count", {}, "Spreadsheet cell count exceeds its document");
+        if (reference || count == 0) row_references.emplace_back(row_index + 1, reference);
+        std::optional<std::uint32_t> previous_column;
+        for (std::uint32_t c = 0; c < count; ++c) {
+            const auto column = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
+            if (column == UINT32_MAX || (previous_column && column <= *previous_column))
+                fail("OOF1114", document_path, "strictly increasing column indices", {}, "Spreadsheet column index is invalid");
+            previous_column = column;
+            cell_record_indices.push_back(cursor);
+            const auto& value = at(document_info, cursor++, document_path);
+            const auto flags = integer_atom<unsigned>(at(value, 0, document_path), document_path);
+            cell_flags.push_back(flags);
+            cell_references.push_back(integer_atom<std::uint32_t>(at(value, 1, document_path), document_path));
+            model::SpreadsheetDocumentCell cell{row_index + 1, column + 1, std::string{}, std::nullopt};
+            if (flags == 16) {
+                require_arity(value, 4, document_path);
+                cell.text = decoded_localized_text(value.items[2], document_path);
+                require_raw_constant(value.items[3], "0", document_path);
+            } else if (flags <= 3) {
+                require_arity(value, 2 + ((flags & 1) ? 2 : 0) + ((flags & 2) ? 1 : 0), document_path);
+                if (flags & 1) require_raw_constant(value.items[2], "1", document_path);
+                if (flags & 2) cell.typed_value = model::SpreadsheetDocumentCellValue{{}, decoded_spreadsheet_cell_value(value.items.back(), document_path)};
+            } else fail("OOF1114", document_path, "named text or typed cell content", {}, "Spreadsheet cell content flags are unsupported");
+            payload.cells.push_back(std::move(cell));
         }
-        typed.type = type;
-        const auto& cell_record = document_info.items.at(typed_cell_record_indices[index]);
-        if ((integer_atom<std::uint32_t>(cell_record.items[0], document_path) & 1) != 0)
-            payload.cells[typed_cell_indices[index]].control = decoded_spreadsheet_cell_control(
-                cell_record.items[3], type, child_path(document_path, typed_cell_record_indices[index]));
     }
-    if (std::ranges::find(used_format, false) != used_format.end() ||
-        std::ranges::find(used_domain, false) != used_domain.end())
-        fail("OOF1114", child_path(document_path, tail_start + 25),
-            "format and ValueType records referenced by typed cells", "unreferenced table entry",
-            "Spreadsheet Document typed-value table contains unused records");
+    const auto& columns = at(document_info, cursor++, document_path);
+    const auto width = integer_atom<std::uint32_t>(at(columns, 0, document_path), document_path);
+    const auto default_column_reference = integer_atom<std::uint32_t>(at(columns, 1, document_path), document_path);
+    require_raw_constant(at(columns, 2, document_path), "00000000-0000-0000-0000-000000000000", document_path);
+    const auto column_count = integer_atom<std::uint32_t>(at(columns, 3, document_path), document_path);
+    require_arity(columns, 4 + std::size_t(column_count) * 2, document_path);
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> column_references;
+    std::optional<std::uint32_t> previous_column;
+    for (std::size_t i = 0; i < column_count; ++i) {
+        const auto index = integer_atom<std::uint32_t>(columns.items[4 + i * 2], document_path);
+        if (index == UINT32_MAX || (previous_column && index <= *previous_column))
+            fail("OOF1114", document_path, "strictly increasing formatted column indices", {}, "Spreadsheet formatted column index is invalid");
+        previous_column = index;
+        column_references.emplace_back(index + 1, integer_atom<std::uint32_t>(columns.items[5 + i * 2], document_path));
+    }
+    const auto height = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
+    const auto tail_start = cursor;
+    cursor += 25;
+    std::vector<LV> format_records;
+    const auto read_resources = [&](auto& destination, auto decode) {
+        const auto count = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
+        if (cursor > document_info.items.size() || count > document_info.items.size() - cursor)
+            fail("OOF1114", document_path, "bounded resource count", {}, "Spreadsheet resource count exceeds its document");
+        for (std::uint32_t i = 0; i < count; ++i) destination.push_back(decode(document_info.items[cursor++]));
+    };
+    read_resources(format_records, [](const LV& v) { return v; });
+    read_resources(resources.fonts, [](const LV& v) { return value_codec::decode_font(list_stream::dump_compact(v)); });
+    read_resources(resources.strings, [](const LV& v) { return value_codec::decode_localized_string(list_stream::dump_compact(v)); });
+    read_resources(resources.types, [](const LV& v) { return value_codec::decode_type_domain(list_stream::dump_compact(v)); });
+    read_resources(resources.control_types, [&](const LV& v) { return uuid_atom(v, document_path); });
+    read_resources(resources.colors, [&](const LV& v) { return decode_control_color(v, document_path); });
+    read_resources(resources.pictures, [&](const LV& v) {
+        const auto picture = decode_button_picture(v, document_path);
+        if (!picture) return model::PictureRef{};
+        if (picture->reference) return *picture->reference;
+        const auto asset_id = model::ObjectId{format_assets.size() + 1};
+        format_assets.push_back({asset_id, "Items/" + string_atom(record.items[4].items[1], document_path) + "/Document/Picture" + std::to_string(asset_id.value()) + "/Picture." + std::string(picture_format_extension(picture->format)), picture->format, picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid});
+        return model::PictureRef{model::PictureAssetRef{asset_id}};
+    });
+    const auto pictures_end = cursor;
+    cursor += 6;
+    read_resources(resources.masks, [](const LV& v) { return value_codec::decode_localized_string(list_stream::dump_compact(v)); });
+    const auto masks_end = cursor;
+    std::vector<model::SpreadsheetDocumentFormat> formats(1);
+    for (const auto& value : format_records) formats.push_back(value_codec::decode_spreadsheet_format(value, resources));
+    const auto resolve = [&](std::uint32_t index) -> const model::SpreadsheetDocumentFormat& {
+        if (index >= formats.size()) fail("OOF1114", document_path, "existing format reference", {}, "Spreadsheet format reference is dangling");
+        return formats[index];
+    };
+    payload.default_format = value_codec::decode_spreadsheet_format(document_info.items[4], resources);
+    if (payload.default_format.properties.size() == 1) {
+        const auto* entry = payload.default_format.properties.find(model::PropertyId::from_name("Width"));
+        if (entry && entry->value == model::PropertyValue{model::DecimalValue{"72"}}) payload.default_format.properties.clear();
+    }
+    payload.default_column_format = resolve(default_column_reference);
+    for (const auto [index, reference] : row_references) payload.rows.push_back({index, resolve(reference)});
+    for (const auto [index, reference] : column_references) payload.columns.push_back({index, resolve(reference)});
+    std::uint32_t derived_height = 0, derived_width = 0;
+    for (const auto& row : payload.rows) derived_height = std::max(derived_height, row.index);
+    for (const auto& column : payload.columns) derived_width = std::max(derived_width, column.index);
+    for (std::size_t i = 0; i < payload.cells.size(); ++i) {
+        auto& cell = payload.cells[i];
+        derived_height = std::max(derived_height, cell.row); derived_width = std::max(derived_width, cell.column);
+        cell.format = resolve(cell_references[i]);
+        const auto effective = [&](std::string_view name) {
+            const auto id = model::PropertyId::from_name(name);
+            const auto* entry = cell.format.properties.find(id);
+            return entry ? entry : payload.inherited_cell_property(cell, id);
+        };
+        const auto* contains = effective("ContainsValue");
+        const bool typed = contains && std::get<bool>(contains->value);
+        if (typed) {
+            const auto* type = effective("ValueType");
+            if (!type || !std::holds_alternative<model::TypeDomainPatternValue>(type->value))
+                fail("OOF1114", document_path, "effective ValueType for typed cell", {}, "Spreadsheet typed cell has no ValueType");
+            if (!cell.typed_value) cell.typed_value = model::SpreadsheetDocumentCellValue{};
+            cell.typed_value->type = std::get<model::TypeDomainPatternValue>(type->value);
+            if (cell.typed_value->type.entries.size() != 1)
+                fail("OOF1114", document_path, "one ValueType entry", {}, "Spreadsheet typed cell has a compound ValueType");
+            if (!(cell_flags[i] & 2)) {
+                const auto term = cell.typed_value->type.entries.front().term;
+                if (term == model::TypeDomainTerm::string) cell.typed_value->value = std::string{};
+                else if (term == model::TypeDomainTerm::numeric) cell.typed_value->value = model::DecimalValue{"0"};
+                else if (term == model::TypeDomainTerm::boolean) cell.typed_value->value = false;
+                else if (term == model::TypeDomainTerm::date) cell.typed_value->value = model::DateValue{"0001-01-01T00:00:00"};
+                else fail("OOF1114", document_path, "supported default typed value", {}, "Spreadsheet typed cell default is unsupported");
+            }
+            if (cell_flags[i] & 1) cell.control = decoded_spreadsheet_cell_control(
+                document_info.items[cell_record_indices[i]].items[3], cell.typed_value->type, document_path);
+            for (const auto name : {"ContainsValue", "ValueType", "ControlType"}) {
+                const auto id = model::PropertyId::from_name(name);
+                const auto* entry = cell.format.properties.find(id);
+                if (!entry) continue;
+                const auto* inherited = payload.inherited_cell_property(cell, id);
+                const model::PropertyValue standard = std::string_view(name) == "ContainsValue" ? model::PropertyValue{true} :
+                    std::string_view(name) == "ValueType" ? model::PropertyValue{cell.typed_value->type} :
+                    model::PropertyValue{model::UuidValue{"381ed624-9217-4e63-85db-c4c3cb87daae"}};
+                if (entry->value == standard && (!inherited || inherited->value != standard)) cell.format.properties.unset(id);
+            }
+        } else if (cell.typed_value || (cell_flags[i] & 1)) {
+            fail("OOF1114", document_path, "typed contents with ContainsValue", {}, "Spreadsheet cell value conflicts with its format");
+        }
+    }
+    if (height != derived_height) payload.height = height;
+    if (width != derived_width) payload.width = width;
     const auto view_path = child_path(info_path, 14);
     const auto& view_info = at(info, 14, info_path);
     require_list(view_info, view_path);
@@ -11513,57 +11535,23 @@ DecodedControl decode_spreadsheet_document_field(
         model::EnumerationValue{"SpreadsheetDocumentSelectionShowModeType", "Always"});
     auto named_events = decode_control_event_collection(info.items.at(17), child_path(info_path, 17),
         model::ControlKind::spreadsheet_document_field);
-    const LV expected_info = canonical_spreadsheet_field_info(payload, fresh_add_default);
+    SpreadsheetSections expected_sections;
+    const LV expected_info = canonical_spreadsheet_field_info(payload, fresh_add_default, format_assets, &expected_sections);
     LV normalized_info = info;
     for (const auto slot : {8U, 9U, 10U, 15U, 16U, 17U, 25U, 26U, 27U})
         normalized_info.items.at(slot) = expected_info.items.at(slot);
-    if (serialization_version == 18) {
-        normalized_info.items[31] = expected_info.items[31];
-        normalized_info.items[32] = expected_info.items[32];
-    }
-    auto& normalized_document_info = normalized_info.items.at(11);
-    const auto& expected_document_info = expected_info.items.at(11);
-    for (std::size_t index = 0; index < typed_cell_record_indices.size(); ++index) {
-        auto& cell_record = normalized_document_info.items.at(typed_cell_record_indices[index]);
-        cell_record.items.at(1) = raw(std::to_string(index + 1));
-        if (payload.cells[typed_cell_indices[index]].control.has_value())
-            cell_record.items.at(3) = encoded_spreadsheet_cell_control(payload.cells[typed_cell_indices[index]], document_path);
-    }
-    const auto expected_format_count = integer_atom<std::uint32_t>(
-        expected_document_info.items.at(tail_start + 25), child_path(document_path, tail_start + 25));
-    const auto expected_domain_count_index = tail_start + 28 + static_cast<std::size_t>(expected_format_count);
-    const auto expected_domain_count = integer_atom<std::uint32_t>(
-        expected_document_info.items.at(expected_domain_count_index), child_path(document_path, expected_domain_count_index));
-    const std::size_t input_format_end = tail_start + 26 + static_cast<std::size_t>(typed_count);
-    const std::size_t input_interstitial_end = tail_start + 28 + static_cast<std::size_t>(typed_count);
-    const std::size_t input_domain_end = tail_start + 29 + static_cast<std::size_t>(typed_count) +
-        static_cast<std::size_t>(domain_count);
-    const std::size_t expected_format_end = tail_start + 26 + static_cast<std::size_t>(expected_format_count);
-    const std::size_t expected_domain_end = tail_start + 29 + static_cast<std::size_t>(expected_format_count) +
-        static_cast<std::size_t>(expected_domain_count);
-    if (input_domain_end > normalized_document_info.items.size() ||
-        expected_domain_end > expected_document_info.items.size() || input_format_end > input_interstitial_end ||
-        expected_format_end > expected_domain_count_index) {
-        fail("OOF1114", document_path, "canonical typed-value table placement", std::to_string(tail_start),
-            "Spreadsheet Document typed-value table cannot be normalized");
-    }
-    std::vector<LV> normalized_document_items;
-    normalized_document_items.reserve(normalized_document_info.items.size());
-    normalized_document_items.insert(normalized_document_items.end(), normalized_document_info.items.begin(),
-        normalized_document_info.items.begin() + static_cast<std::ptrdiff_t>(tail_start + 25));
-    normalized_document_items.insert(normalized_document_items.end(),
-        expected_document_info.items.begin() + static_cast<std::ptrdiff_t>(tail_start + 25),
-        expected_document_info.items.begin() + static_cast<std::ptrdiff_t>(expected_format_end));
-    normalized_document_items.insert(normalized_document_items.end(),
-        normalized_document_info.items.begin() + static_cast<std::ptrdiff_t>(input_format_end),
-        normalized_document_info.items.begin() + static_cast<std::ptrdiff_t>(input_interstitial_end));
-    normalized_document_items.insert(normalized_document_items.end(),
-        expected_document_info.items.begin() + static_cast<std::ptrdiff_t>(expected_domain_count_index),
-        expected_document_info.items.begin() + static_cast<std::ptrdiff_t>(expected_domain_end));
-    normalized_document_items.insert(normalized_document_items.end(),
-        normalized_document_info.items.begin() + static_cast<std::ptrdiff_t>(input_domain_end),
-        normalized_document_info.items.end());
-    normalized_document_info.items = std::move(normalized_document_items);
+    if (serialization_version == 18) { normalized_info.items[31] = expected_info.items[31]; normalized_info.items[32] = expected_info.items[32]; }
+    auto& normalized = normalized_info.items.at(11).items;
+    const auto& expected = expected_info.items.at(11).items;
+    std::vector<LV> named_projection(normalized.begin(), normalized.begin() + 15);
+    named_projection[4] = expected[4]; named_projection[5] = expected[5];
+    named_projection.insert(named_projection.end(), expected.begin() + 15, expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.tail));
+    named_projection.insert(named_projection.end(), normalized.begin() + static_cast<std::ptrdiff_t>(tail_start), normalized.begin() + static_cast<std::ptrdiff_t>(tail_start + 25));
+    named_projection.insert(named_projection.end(), expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.tail + 25), expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.pictures_end));
+    named_projection.insert(named_projection.end(), normalized.begin() + static_cast<std::ptrdiff_t>(pictures_end), normalized.begin() + static_cast<std::ptrdiff_t>(pictures_end + 6));
+    named_projection.insert(named_projection.end(), expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.pictures_end + 6), expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.masks_end));
+    named_projection.insert(named_projection.end(), normalized.begin() + static_cast<std::ptrdiff_t>(masks_end), normalized.end());
+    normalized = std::move(named_projection);
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(expected_info))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "SpreadsheetDocumentField");
 
@@ -11581,7 +11569,9 @@ DecodedControl decode_spreadsheet_document_field(
     std::get<model::SpreadsheetDocumentFieldPayload>(control.payload) = std::move(payload);
     control.properties() = std::move(sheet_properties);
     control.position = std::move(geometry.position);
-    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
+    DecodedControl decoded{std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}, std::move(named_events)};
+    decoded.format_assets = std::move(format_assets);
+    return decoded;
 }
 
 LV encode_spreadsheet_document_field(
@@ -11596,7 +11586,7 @@ LV encode_spreadsheet_document_field(
     }
     require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Border", "ShowSelection", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}, "$/SpreadsheetDocumentField");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
-    auto info = canonical_spreadsheet_field_info(std::get<model::SpreadsheetDocumentFieldPayload>(control.payload));
+    auto info = canonical_spreadsheet_field_info(std::get<model::SpreadsheetDocumentFieldPayload>(control.payload), false, document.assets());
     for (const auto& [name, slot] : std::array{
         std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U}, std::pair{"VerticalScrollBar", 16U},
         std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}}) {
@@ -15504,6 +15494,23 @@ Result<model::OrdinaryFormDocument> decode_document(
                     model::PictureRef{model::PictureAssetRef{asset_id}});
                 decoded_picture_assets.push_back(std::move(picture.asset));
             }
+            if (!decoded_control.format_assets.empty()) {
+                std::unordered_map<std::uint64_t, model::ObjectId> asset_ids;
+                for (auto& asset : decoded_control.format_assets) {
+                    if (synthetic_event_offset >= std::numeric_limits<std::uint64_t>::max() - event_id_base)
+                        fail("OOF1120", "$/Document/Format/Picture", "allocatable picture ID", {}, "Picture ID overflows");
+                    const model::ObjectId id{event_id_base + ++synthetic_event_offset};
+                    asset_ids.emplace(asset.id.value(), id); asset.id = id;
+                    decoded_picture_assets.push_back(std::move(asset));
+                }
+                auto& sheet = std::get<model::SpreadsheetDocumentFieldPayload>(decoded_control.control.payload);
+                visit_spreadsheet_formats(sheet, [&](auto& format) {
+                    auto* entry = format.properties.find(model::PropertyId::from_name("Picture"));
+                    if (!entry) return;
+                    auto& picture = std::get<model::PictureRef>(entry->value);
+                    if (picture.asset.id()) picture.asset = model::PictureAssetRef{asset_ids.at(picture.asset.id().value())};
+                });
+            }
             if (!decoded_control.menu_assets.empty()) {
                 std::unordered_map<std::uint64_t, model::ObjectId> asset_ids;
                 for (auto& asset : decoded_control.menu_assets) {
@@ -15644,6 +15651,15 @@ Result<list_stream::ListValue> encode_document(
             };
             if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) collect_pictures(button->buttons);
             if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) collect_pictures(command_bar->buttons);
+        }
+        for (const auto& control : document.collections().controls) {
+            if (const auto* sheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload))
+                visit_spreadsheet_formats(*sheet, [&](const auto& format) {
+                    if (const auto* entry = format.properties.find(model::PropertyId::from_name("Picture"))) {
+                        const auto& picture = std::get<model::PictureRef>(entry->value);
+                        if (picture.asset.id()) referenced_picture_ids.insert(picture.asset.id().value());
+                    }
+                });
         }
         if (referenced_picture_ids.size() != document.assets().size()) {
             fail("OOF1122", "$/PictureAssets", "one referenced asset per declared asset", "orphan or duplicate ID",

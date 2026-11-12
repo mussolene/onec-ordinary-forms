@@ -835,6 +835,7 @@ struct PropertyEntry {
 
 class PropertySet {
 public:
+    friend bool operator==(const PropertySet&, const PropertySet&) = default;
     [[nodiscard]] const PropertyEntry* find(PropertyId id) const noexcept;
     [[nodiscard]] PropertyEntry* find(PropertyId id) noexcept;
     [[nodiscard]] bool contains(PropertyId id) const noexcept;
@@ -1259,6 +1260,20 @@ struct GeographicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::geographical_schema_field> {};
 struct GraphicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::graphical_schema_field> {};
+struct SpreadsheetDocumentFormat final {
+    PropertySet properties;
+    friend bool operator==(const SpreadsheetDocumentFormat&, const SpreadsheetDocumentFormat&) = default;
+};
+struct SpreadsheetDocumentRow final {
+    std::uint32_t index{};
+    SpreadsheetDocumentFormat format;
+    friend bool operator==(const SpreadsheetDocumentRow&, const SpreadsheetDocumentRow&) = default;
+};
+struct SpreadsheetDocumentColumn final {
+    std::uint32_t index{};
+    SpreadsheetDocumentFormat format;
+    friend bool operator==(const SpreadsheetDocumentColumn&, const SpreadsheetDocumentColumn&) = default;
+};
 struct SpreadsheetDocumentCellValue final {
     TypeDomainPatternValue type;
     PropertyValue value;
@@ -1283,9 +1298,10 @@ struct SpreadsheetDocumentCellControl final {
 struct SpreadsheetDocumentCell final {
     std::uint32_t row{};
     std::uint32_t column{};
-    std::string text;
+    PropertyValue text{std::string{}};
     std::optional<SpreadsheetDocumentCellValue> typed_value;
     std::optional<SpreadsheetDocumentCellControl> control{};
+    SpreadsheetDocumentFormat format{};
     friend bool operator==(const SpreadsheetDocumentCell&, const SpreadsheetDocumentCell&) = default;
 };
 struct TableColumnControl {
@@ -1365,6 +1381,14 @@ enum class SpreadsheetDocumentFieldSerializationVersion : std::uint8_t {
 struct SpreadsheetDocumentFieldPayload final
     : TypedControlPayload<ControlKind::spreadsheet_document_field> {
     std::vector<SpreadsheetDocumentCell> cells;
+    std::vector<SpreadsheetDocumentRow> rows;
+    std::vector<SpreadsheetDocumentColumn> columns;
+    SpreadsheetDocumentFormat default_format;
+    SpreadsheetDocumentFormat default_column_format;
+    std::optional<std::uint32_t> height;
+    std::optional<std::uint32_t> width;
+    [[nodiscard]] const PropertyEntry* inherited_cell_property(
+        const SpreadsheetDocumentCell& cell, PropertyId id) const;
     SpreadsheetDocumentFieldSerializationVersion serialization_version =
         SpreadsheetDocumentFieldSerializationVersion::v18;
 };

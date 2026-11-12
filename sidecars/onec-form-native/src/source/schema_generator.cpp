@@ -456,10 +456,11 @@ void append_value_types(std::string& output) {
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="LocalizedStringLanguageType"><xs:union memberTypes="xs:language"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value=""/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>
   <xs:complexType name="LocalizedStringItemType">
     <xs:simpleContent>
       <xs:extension base="xs:string">
-        <xs:attribute name="language" type="xs:language" use="required"/>
+        <xs:attribute name="language" type="LocalizedStringLanguageType" use="required"/>
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
@@ -1367,8 +1368,36 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     output += R"XSD(  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="SpreadsheetDocumentCellControlKindType"><xs:restriction base="xs:string"><xs:enumeration value="InputField"/></xs:restriction></xs:simpleType>
   <xs:complexType name="SpreadsheetDocumentCellControlType"><xs:sequence><xs:element name="ReadOnly" type="xs:boolean" minOccurs="0"/></xs:sequence><xs:attribute name="type" type="SpreadsheetDocumentCellControlKindType" use="required"/></xs:complexType>
-  <xs:complexType name="SpreadsheetDocumentCellType"><xs:choice><xs:element name="Text" type="xs:string"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/><xs:element name="Control" type="SpreadsheetDocumentCellControlType" minOccurs="0"/></xs:sequence></xs:choice><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
-  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentFormatPictureType"><xs:simpleContent><xs:extension base="PictureReferenceValueType"><xs:attribute name="empty" type="xs:boolean" fixed="true"/></xs:extension></xs:simpleContent></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentFormatType"><xs:sequence>
+)XSD";
+    for (const auto& property : model::metamodel::spreadsheet_format_properties()) {
+        if (property.value_codec == ValueCodec::picture) {
+            output += "    <xs:element";
+            append_attribute(output, "name", property.xml_name);
+            output += " type=\"SpreadsheetDocumentFormatPictureType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+            continue;
+        }
+        if (property.value_codec != ValueCodec::enumeration) {
+            append_property_element(output, property, "    ");
+            continue;
+        }
+        output += "    <xs:element";
+        append_attribute(output, "name", property.xml_name);
+        output += " minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"type\" type=\"NonEmptyTokenType\" use=\"required\"";
+        append_attribute(output, "fixed", property.enumeration_type);
+        output += "/><xs:attribute name=\"member\" use=\"required\"><xs:simpleType><xs:restriction base=\"xs:string\">";
+        for (const auto member : property.enumeration_members) {
+            output += "<xs:enumeration";
+            append_attribute(output, "value", member);
+            output += "/>";
+        }
+        output += "</xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:element>\n";
+    }
+    output += R"XSD(  </xs:sequence></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentIndexedFormatType"><xs:sequence><xs:element name="Format" type="SpreadsheetDocumentFormatType"/></xs:sequence><xs:attribute name="index" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:choice><xs:element name="Text" type="LocalizedTextValueType"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/><xs:element name="Control" type="SpreadsheetDocumentCellControlType" minOccurs="0"/></xs:sequence></xs:choice><xs:element name="Format" type="SpreadsheetDocumentFormatType" minOccurs="0"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="DefaultFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="DefaultColumnFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="Row" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Column" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="height" type="xs:unsignedInt"/><xs:attribute name="width" type="xs:unsignedInt"/></xs:complexType>
 
 )XSD";
 
@@ -2048,6 +2077,10 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
 
         "          <Property name=\"Control\" russianName=\"ЭлементУправления\"/>\n"
         "          <Property name=\"ValueType\" russianName=\"ОписаниеТипа\" russianType=\"ОписаниеТипов\" source=\"storedTypeDescriptor\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"SpreadsheetDocumentFormat\" russianName=\"ФорматЯчейкиТабличногоДокумента\"><Properties>\n";
+    append_palette_properties(output, model::metamodel::spreadsheet_format_properties(), "          ");
+    output +=
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"SpreadsheetDocumentCellControl\" russianName=\"ЭлементУправленияЯчейкиТабличногоДокумента\"><Properties>\n"
         "          <Property name=\"ReadOnly\" russianName=\"ТолькоПросмотр\"/>\n"

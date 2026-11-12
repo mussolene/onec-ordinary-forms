@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "oof/model/ordinary_form.hpp"
 #include "oof/storage/list_stream.hpp"
@@ -14,6 +15,22 @@ namespace oof::storage::value_codec {
 [[nodiscard]] std::string canonical_platform_decimal(std::string_view text);
 // Точная компактная запись xs:decimal для числового атома платформы.
 [[nodiscard]] std::string compact_platform_decimal(std::string_view text);
+
+struct SpreadsheetFormatResources {
+    std::vector<model::FontValue> fonts;
+    std::vector<model::LineValue> lines;
+    std::vector<model::ColorValue> colors;
+    std::vector<model::LocalizedStringValue> strings;
+    std::vector<model::TypeDomainPatternValue> types;
+    std::vector<model::UuidValue> control_types;
+    std::vector<model::LocalizedStringValue> masks;
+    std::vector<model::PictureRef> pictures;
+};
+
+[[nodiscard]] list_stream::ListValue encode_spreadsheet_format(
+    const model::SpreadsheetDocumentFormat& value, SpreadsheetFormatResources& resources);
+[[nodiscard]] model::SpreadsheetDocumentFormat decode_spreadsheet_format(
+    const list_stream::ListValue& value, const SpreadsheetFormatResources& resources);
 
 // Calendar dates use 1C's local, second-precision YYYYMMDDHHMMSS atoms.
 [[nodiscard]] std::string date_to_platform(std::string_view canonical);
