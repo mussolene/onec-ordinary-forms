@@ -3327,22 +3327,30 @@ void test_catalog_list_form_extension_xml_contract() {
         model::metamodel::catalog_list_form_extension,
         model::metamodel::document_list_form_extension,
         model::metamodel::information_register_record_list_form_extension,
+        model::metamodel::accumulation_register_record_list_form_extension,
+        model::metamodel::characteristic_type_list_form_extension,
+        model::metamodel::enumeration_list_form_extension,
     };
     for (const auto& extension : empty_extensions) {
         const auto open = "<" + std::string(extension.xml_name);
         const auto empty = open + "/>";
-        const auto parsed = source::parse_form_xml(
-            "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\">" + empty + "</Form>");
-        expect(parsed.ok() && parsed.value().form().extension == extension.kind,
-            "Each empty list extension must have an explicit named identity");
+        const std::string prefix = R"XML(<Form id="1" name="List" ordinaryFormVersion="2.1"><MainAttribute attributeId="0"/>)XML";
+        const std::string suffix = R"XML(<Attributes><Attribute id="0" name="ListObject"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute></Attributes></Form>)XML";
+        const auto parsed = source::parse_form_xml(prefix + empty + suffix);
+        expect(parsed.ok() && parsed.value().form().extension == extension.kind &&
+            parsed.value().form().main_attribute.id() == model::ObjectId{0},
+            "Each empty list extension must preserve its named identity and selected object context");
         const auto xml = source::serialize_form_xml(parsed.value());
         expect(xml.ok() && xml.value().find(empty) != std::string::npos &&
             xml.value().find(extension.guid.substr(0, 8)) == std::string::npos,
             "Empty list extension XML must serialize only its named identity");
         if (xml.ok()) {
             const auto reparsed = source::parse_form_xml(xml.value());
-            expect(reparsed.ok() && reparsed.value().form().extension == extension.kind,
-                "Empty list extension XML must preserve its identity on round-trip");
+            expect(reparsed.ok() && reparsed.value().form().extension == extension.kind &&
+                reparsed.value().form().main_attribute.id() == model::ObjectId{0} &&
+                reparsed.value().find_attribute(model::ObjectId{0})->type.entries.front().type_uuid ==
+                    parsed.value().find_attribute(model::ObjectId{0})->type.entries.front().type_uuid,
+                "Empty list extension XML must preserve its identity and concrete main type on round-trip");
         }
 
         const std::array invalid{
@@ -3351,12 +3359,13 @@ void test_catalog_list_form_extension_xml_contract() {
             empty + "<DataProcessorFormExtension/>",
             open + " settings=\"0\"/>",
             open + "><Settings>0</Settings></" + std::string(extension.xml_name) + ">",
+            open + "><SaveValues>false</SaveValues></" + std::string(extension.xml_name) + ">",
+            open + "><Autonumeration type=\"AutonumerationInForm\" member=\"Auto\"/></" + std::string(extension.xml_name) + ">",
             open + ">0</" + std::string(extension.xml_name) + ">",
             open + "><Unexpected/></" + std::string(extension.xml_name) + ">",
         };
         for (const auto& body : invalid)
-            expect(!source::parse_form_xml(
-                "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\">" + body + "</Form>"),
+            expect(!source::parse_form_xml(prefix + body + suffix),
                 "Empty list extensions must reject duplicate, foreign, and unnamed settings");
     }
 }

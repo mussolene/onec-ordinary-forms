@@ -622,19 +622,17 @@ void test_table_column_generation_prototypes() {
                 auto& stored = properties(legacy);
                 stored.items[0] = list_stream::ListValue::raw_atom(std::string(layout.version));
                 stored.items.resize(layout.arity - (has_editor ? 0 : 1));
-                if (layout.version != "23") {
-                    for (const auto slot : {22U, 23U, 24U}) {
-                        auto& font = stored.items[slot];
-                        if (font.items[1].atom == "3") {
-                            font.items[0] = list_stream::ListValue::raw_atom(layout.version == "19" ? "7" : "6");
-                            if (layout.version != "19") font.items.pop_back();
-                        }
+                for (const auto slot : {22U, 23U, 24U}) {
+                    auto& font = stored.items[slot];
+                    if (font.items[1].atom == "3") {
+                        font.items[0] = list_stream::ListValue::raw_atom(layout.version == "19" ? "7" : "6");
+                        if (layout.version != "19") font.items.pop_back();
                     }
-                    for (const auto slot : {16U, 17U, 18U, 19U, 20U, 21U}) {
-                        auto& color = stored.items[slot];
-                        color.items[0] = list_stream::ListValue::raw_atom("3");
-                        color.items.pop_back();
-                    }
+                }
+                for (const auto slot : {16U, 17U, 18U, 19U, 20U, 21U}) {
+                    auto& color = stored.items[slot];
+                    color.items[0] = list_stream::ListValue::raw_atom("3");
+                    color.items.pop_back();
                 }
                 if (layout.version != "23") {
                     auto invalid_legacy_mode = legacy;
@@ -1805,6 +1803,95 @@ void test_table_column_choice_and_check_box_profiles() {
                columns_after[2].control->kind == model::ControlKind::check_box,
         "Table Column editor GUID and typed payload must roundtrip for all supported kinds");
 
+    auto mixed_document = make_document();
+    auto* mixed_table = const_cast<model::ControlNode*>(mixed_document.find_control(model::ObjectId{3}));
+    auto& mixed_columns = std::get<model::TablePayload>(mixed_table->payload).columns;
+    const auto prototypes = mixed_columns;
+    for (std::size_t index = 3; index < 12; ++index) mixed_columns.push_back(prototypes[index % 3]);
+    for (std::size_t index = 0; index < mixed_columns.size(); ++index)
+        mixed_columns[index].name = "Column" + std::to_string(index);
+    const auto mixed_current = form_stream::encode_document(mixed_document);
+    expect(mixed_current.ok(), "twelve mixed editor columns must encode");
+    const auto mixed_baseline = form_stream::decode_document(mixed_current.value(), "MixedEditorValues");
+    expect(mixed_baseline.ok(), "current mixed editor columns must decode");
+    const auto mixed_baseline_xml = source::serialize_form_xml(mixed_baseline.value());
+    expect(mixed_baseline_xml.ok(), "current mixed editor columns must serialize as named XML");
+    auto mixed_legacy = mixed_current.value();
+    auto* mixed_record = find_record_with_guid(mixed_legacy,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    auto& mixed_records = mixed_record->items[2].items[2].items[1].items[23].items;
+    constexpr std::array base_versions{"10", "16", "19", "16"};
+    constexpr std::array base_arities{13U, 18U, 21U, 18U};
+    for (std::size_t index = 0; index < mixed_columns.size(); ++index) {
+        auto& properties = mixed_records[index + 1].items[1].items[1].items[1];
+        expect(properties.items[0].atom == "23", "mixed value codecs must retain current column generation");
+        for (const auto slot : {22U, 23U, 24U}) {
+            auto& font = properties.items[slot];
+            font.items[0] = list_stream::ListValue::raw_atom(index % 2 == 0 ? "6" : "7");
+            if (index % 2 == 0) font.items.pop_back();
+        }
+        for (const auto slot : {16U, 17U, 18U, 19U, 20U, 21U}) {
+            auto& color = properties.items[slot];
+            color.items[0] = list_stream::ListValue::raw_atom("3");
+            color.items.pop_back();
+        }
+        for (const auto slot : {10U, 11U, 12U})
+            properties.items[slot] = list_stream::parse("{3,0,{0},\"\",-1,-1,1,0}");
+        auto editor = table_column_editor_info(mixed_legacy, index);
+        auto& base = index % 3 == 0 ? editor.items[2].items[0].items[0] :
+            (index % 3 == 1 ? editor.items[1].items[0] : editor.items[1].items[0].items[0]);
+        base.items[0] = list_stream::ListValue::raw_atom(base_versions[index % base_versions.size()]);
+        base.items.resize(base_arities[index % base_arities.size()]);
+        replace_table_column_editor_info(mixed_legacy, index, editor);
+    }
+    const auto mixed_decoded = form_stream::decode_document(mixed_legacy, "MixedEditorValues");
+    expect(mixed_decoded.ok() && mixed_decoded.value().reconstruction_complete(),
+        "twelve mixed columns must normalize independent column value and editor base generations");
+    const auto& mixed_restored = std::get<model::TablePayload>(
+        mixed_decoded.value().find_control(model::ObjectId{3})->payload).columns;
+    expect(mixed_restored.size() == 12, "mixed generation decoding must retain all twelve columns");
+    for (std::size_t index = 0; index < mixed_restored.size(); ++index)
+        expect(mixed_restored[index].name == mixed_columns[index].name &&
+            mixed_restored[index].control->kind == mixed_columns[index].control->kind,
+            "mixed generation decoding must retain column identity and editor kind");
+    const auto mixed_xml = source::serialize_form_xml(mixed_decoded.value());
+    expect(mixed_xml.ok() && mixed_xml.value() == mixed_baseline_xml.value(),
+        "mixed generation columns must have identical named properties and XML");
+    const auto mixed_parsed = source::parse_form_xml(mixed_xml.value());
+    expect(mixed_parsed.ok(), "mixed generation XML must parse");
+    const auto mixed_rebuilt = form_stream::encode_document(mixed_parsed.value());
+    expect(mixed_rebuilt.ok() && list_stream::dump_compact(mixed_rebuilt.value()) ==
+        list_stream::dump_compact(mixed_current.value()),
+        "mixed generation XML must rebuild the complete canonical stream without source payloads");
+
+    for (const auto invalid : {"font", "color", "picture", "generation", "arity"}) {
+        auto malformed = mixed_legacy;
+        auto* record = find_record_with_guid(malformed,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        auto& properties = record->items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1];
+        if (std::string_view(invalid) == "font") properties.items[23] = list_stream::parse("{6,3}");
+        else if (std::string_view(invalid) == "color") properties.items[16] = list_stream::parse("{3,4}");
+        else if (std::string_view(invalid) == "picture") properties.items[10].items[3] =
+            list_stream::ListValue::string_atom("UnknownPicture");
+        else if (std::string_view(invalid) == "generation") properties.items[0] = list_stream::ListValue::raw_atom("22");
+        else properties.items.pop_back();
+        const auto rejected = form_stream::decode_document(malformed, "InvalidMixedColumnValues");
+        expect(!rejected || !rejected.value().reconstruction_complete(),
+            "known value normalization must not accept malformed or unrepresented column values");
+    }
+    for (const auto invalid : {"version", "arity", "state"}) {
+        auto malformed = mixed_legacy;
+        auto editor = table_column_editor_info(malformed, 1);
+        auto& base = editor.items[1].items[0];
+        if (std::string_view(invalid) == "version") base.items[0] = list_stream::ListValue::raw_atom("18");
+        else if (std::string_view(invalid) == "arity") base.items.pop_back();
+        else base.items[16] = list_stream::ListValue::raw_atom("99");
+        replace_table_column_editor_info(malformed, 1, editor);
+        const auto rejected = form_stream::decode_document(malformed, "InvalidMixedEditorBase");
+        expect(!rejected || !rejected.value().reconstruction_complete(),
+            "shared ChoiceField base decoding must not accept unknown versions, arities, or states");
+    }
+
     for (const auto column_index : {std::size_t{0}, std::size_t{1}}) {
         const auto kind = column_index == 0 ? model::ControlKind::input_field : model::ControlKind::choice_field;
         model::Form form;
@@ -2429,8 +2516,51 @@ void test_attributes() {
 
     auto legacy_bad_constant = list_stream::parse(legacy_row5_fixture);
     legacy_bad_constant.items[2].items[1].items[2] = list_stream::ListValue::raw_atom("0");
-    expect_failure(form_stream::decode_attributes(legacy_bad_constant), "OOF1106", "$/2/2/1/2",
-        "legacy Attribute row5 must reject an unknown constant");
+    expect_failure(form_stream::decode_attributes(legacy_bad_constant), "OOF1105", "$/2/2/1/2",
+        "Счетчик использования реквизита должен быть положительным и в старом формате");
+
+    auto shared = one_component.value();
+    shared.links.clear();
+    for (std::int64_t count = 1; count <= 10; ++count) {
+        shared.links.push_back(form_stream::AttributeLink{100 + count, shared.attributes.front().id, {}});
+        const auto stored = form_stream::encode_attributes(shared);
+        expect(stored.ok() && stored.value().items[2].items[1].items[3].atom == std::to_string(count),
+            "Счетчик общего реквизита должен вычисляться по всем прямым привязкам");
+        const auto read = form_stream::decode_attributes(stored.value());
+        expect(read.ok() && read.value() == shared,
+            "Производный счетчик не должен добавлять поле в именованную модель реквизитов");
+    }
+    auto member_link = shared.links.front();
+    member_link.control_id = 120;
+    member_link.member_keys = {std::int64_t{1}};
+    shared.links.push_back(member_link);
+    expect(form_stream::encode_attributes(shared).value().items[2].items[1].items[3].atom == "10",
+        "Путь к вложенному реквизиту не должен увеличивать счетчик прямых привязок");
+    shared.attributes.front().main = false;
+    expect(form_stream::encode_attributes(shared).value().items[2].items[1].items[3].atom == "1",
+        "Обычный реквизит не должен получать счетчик автоматически созданного реквизита");
+
+    for (const auto row5 : {false, true}) {
+        auto counted = list_stream::parse(row5 ? legacy_row5_fixture : one_component_fixture);
+        const auto slot = row5 ? 2U : 3U;
+        counted.items[2].items[1].items[slot] = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_attributes(counted),
+            "Необъясненное владение реквизитом нельзя молча терять при сборке");
+        const auto& identity = counted.items[2].items[1].items[0];
+        counted.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("2"),
+            list_stream::ListValue::list({list_stream::ListValue::raw_atom("101"),
+                list_stream::ListValue::list({list_stream::ListValue::raw_atom("1"), identity})}),
+            list_stream::ListValue::list({list_stream::ListValue::raw_atom("102"),
+                list_stream::ListValue::list({list_stream::ListValue::raw_atom("1"), identity})})});
+        const auto read = form_stream::decode_attributes(counted);
+        expect(read.ok(), "Платформенный счетчик не является константой формата реквизита");
+        for (const auto bad : {"0", "-1", "2147483648", "1.5"}) {
+            auto invalid = counted;
+            invalid.items[2].items[1].items[slot] = list_stream::ListValue::raw_atom(bad);
+            expect(!form_stream::decode_attributes(invalid),
+                "Счетчик реквизита должен проверяться как положительное целое int32");
+        }
+    }
     auto legacy_bad_arity = list_stream::parse(legacy_row5_fixture);
     legacy_bad_arity.items[2].items[1].items.pop_back();
     expect_failure(form_stream::decode_attributes(legacy_bad_arity), "OOF1102", "$/2/2/1",
@@ -2692,6 +2822,83 @@ void test_usual_group_named_record_round_trip_and_rejections() {
     id_document.add_control(model::ControlNode{model::ObjectId{invalid_id}, "Group", model::UsualGroupPayload{}});
     expect_failure(form_stream::encode_document(id_document), "OOF1122", "$/UsualGroup/ID",
         "UsualGroup IDs above int64 range must be rejected by the control encoder");
+}
+
+void test_form_designer_grid_settings() {
+    using GridCase = std::tuple<bool, bool, std::int64_t, std::int64_t>;
+    constexpr std::array<GridCase, 12> cases{{
+        {false, true, 4, 4}, {true, true, 4, 4}, {false, false, 4, 4}, {true, false, 4, 4},
+        {false, true, 3, 4}, {false, true, 4, 3}, {true, false, 5, 8}, {true, true, 1, 1},
+        {false, false, 31, 17}, {true, false, 64, 96},
+        {false, true, 2147483648LL, -2147483649LL},
+        {true, false, std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max()},
+    }};
+    constexpr std::array names{"EnableGrid", "EnableLevelLines", "GridStepHor", "GridStepVer"};
+    list_stream::ListValue baseline;
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        const auto& [enable_grid, enable_level_lines, horizontal, vertical] = cases[index];
+        const std::array<model::PropertyValue, 4> values{enable_grid, enable_level_lines, horizontal, vertical};
+        const std::array<model::PropertyValue, 4> defaults{false, true, std::int64_t{4}, std::int64_t{4}};
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "Grid" + std::to_string(index);
+        for (std::size_t property = 0; property < names.size(); ++property)
+            form.properties.set_explicit(model::PropertyId::from_name(names[property]), values[property]);
+        const model::OrdinaryFormDocument document(std::move(form));
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), "Именованные параметры сетки должны собираться");
+        const auto& header = encoded.value().items[1];
+        expect(header.items[6].atom == (enable_grid ? "1" : "0") &&
+                   header.items[7].atom == (enable_level_lines ? "1" : "0") &&
+                   header.items[8].atom == std::to_string(horizontal) && header.items[9].atom == std::to_string(vertical),
+            "Заголовок должен сохранять два Булево и два int64 в платформенных позициях");
+        const auto decoded = form_stream::decode_document(encoded.value(), document.form().name);
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "Параметры сетки должны читаться без неполного восстановления");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "Параметры сетки должны записываться в именованный XML");
+        for (std::size_t property = 0; property < names.size(); ++property) {
+            const auto* entry = decoded.value().form().properties.find(model::PropertyId::from_name(names[property]));
+            const bool nondefault = values[property] != defaults[property];
+            expect(nondefault ? entry != nullptr && entry->value == values[property] : entry == nullptr,
+                "Читатель должен сохранять только отличия от доказанных defaults");
+            expect((xml.value().find("<" + std::string(names[property]) + ">") != std::string::npos) == nondefault,
+                "XML должен опускать значения параметров сетки по умолчанию");
+        }
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "Именованный XML параметров сетки должен читаться");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "Цикл BIN - XML - BIN должен сохранять параметры сетки без потери int64");
+        if (index == 0) baseline = encoded.value();
+    }
+    for (const auto slot : {6U, 7U}) {
+        for (const auto& invalid : {list_stream::ListValue::raw_atom("2"), list_stream::ListValue::string_atom("1")}) {
+            auto malformed = baseline;
+            malformed.items[1].items[slot] = invalid;
+            expect(!form_stream::decode_document(malformed, "Grid"), "Неверный тип Булево в потоке должен отклоняться");
+        }
+    }
+    for (const auto slot : {8U, 9U}) {
+        for (const auto& invalid : {list_stream::ListValue::raw_atom("9223372036854775808"),
+                 list_stream::ListValue::raw_atom("1.5"), list_stream::ListValue::string_atom("4")}) {
+            auto malformed = baseline;
+            malformed.items[1].items[slot] = invalid;
+            expect(!form_stream::decode_document(malformed, "Grid"), "Неверный int64 в потоке должен отклоняться");
+        }
+    }
+    for (const auto name : names) {
+        model::Form form;
+        form.id = model::ObjectId{1}; form.name = "InvalidGrid";
+        form.properties.set_explicit(model::PropertyId::from_name(name), std::string{"4"});
+        expect(!form_stream::encode_document(model::OrdinaryFormDocument(std::move(form))),
+            "Запись должна отклонять строку вместо типизированного параметра сетки");
+    }
+    model::Form unknown;
+    unknown.id = model::ObjectId{1}; unknown.name = "UnknownGrid";
+    unknown.properties.set_explicit(model::PropertyId::from_name("UnknownGridSetting"), true);
+    expect(!form_stream::encode_document(model::OrdinaryFormDocument(std::move(unknown))),
+        "Запись должна отклонять неизвестные параметры редактора");
 }
 
 void test_input_type_link_item_storage() {
@@ -5724,15 +5931,44 @@ void test_automatic_button_text_without_explicit_text_round_trip() {
         list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("1"),
         list_stream::ListValue::list({list_stream::ListValue::string_atom("#")}),
     }), "malformed automatic localized caption must be rejected");
-    rejects_property(list_stream::ListValue::list({
-        list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("2"),
-        list_stream::ListValue::list({list_stream::ListValue::string_atom("#"), list_stream::ListValue::string_atom("Auto")}),
-        list_stream::ListValue::list({list_stream::ListValue::string_atom("ru"), list_stream::ListValue::string_atom("Extra")}),
-    }), "multilingual absent Text must be rejected");
-    rejects_property(list_stream::ListValue::list({
-        list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("1"),
-        list_stream::ListValue::list({list_stream::ListValue::string_atom("ru"), list_stream::ListValue::string_atom("Localized")}),
-    }), "ru localized Text with absent flag must be rejected");
+    for (const auto cache : {
+             R"({1,0})", R"({1,1,{"#","Auto"}})", R"({1,1,{"ru","Русский"}})",
+             R"({1,1,{"en","English"}})", R"({1,2,{"ru","Русский"},{"en","English"}})",
+             R"({1,3,{"#","Auto"},{"ru","Русский"},{"en","English"}})"}) {
+        auto cached = encoded.value();
+        auto& menu = menu_at(cached);
+        menu.items[6 + action_count].items[6].items[4] = list_stream::parse(cache);
+        const auto loaded = form_stream::decode_document(cached, "AutomaticMenuText");
+        expect(loaded.ok() && loaded.value().reconstruction_complete(),
+            "Локализованная вычисляемая подпись действия с обработчиком должна читаться");
+        const auto xml = source::serialize_form_xml(loaded.value());
+        expect(xml.ok(), "Именованная модель действия должна сериализоваться в XML");
+        const auto from_xml = source::parse_form_xml(xml.value());
+        expect(from_xml.ok(), "XML действия должен читаться без исходного BIN");
+        const auto canonical = form_stream::encode_document(from_xml.value());
+        expect(canonical.ok() && list_stream::dump_compact(canonical.value()) == list_stream::dump_compact(encoded.value()),
+            "Сборка должна сохранять обработчик и Action.Text независимо от вычисляемой подписи");
+    }
+    rejects_property(list_stream::parse(R"({2,1,{"ru","Text"}})"),
+        "Неизвестная версия локализованной подписи должна отвергаться");
+    rejects_property(list_stream::parse(R"({1,1,{"ru","Text"},0})"),
+        "Лишние поля локализованной подписи должны отвергаться");
+
+    model::OrdinaryFormDocument submenu_document(document.form());
+    auto submenu_control = *document.find_control(model::ObjectId{2});
+    auto& submenu = std::get<model::ButtonPayload>(submenu_control.payload).buttons.front();
+    submenu.type = model::CommandBarButtonKind::submenu;
+    submenu.action.reset();
+    submenu.buttons = {action};
+    submenu_document.add_control(std::move(submenu_control));
+    auto submenu_stream = form_stream::encode_document(submenu_document);
+    expect(submenu_stream.ok(), "Подменю должно собираться для проверки границы локализации");
+    auto& submenu_menu = menu_at(submenu_stream.value());
+    const auto submenu_action_count = static_cast<std::size_t>(std::stoul(submenu_menu.items[4].atom));
+    submenu_menu.items[6 + submenu_action_count].items[6].items[4] =
+        list_stream::parse(R"({1,3,{"#","Auto"},{"ru","Русский"},{"en","English"}})");
+    expect_failure(form_stream::decode_document(submenu_stream.value(), "AutomaticMenuText"), "OOF1115",
+        "$/1/2/2/1/2/1/12", "Переводы подменю без явного Text нельзя терять как вычисляемую подпись действия");
 }
 
 void test_command_bar_owner_pair_and_strict_profile() {
@@ -23619,6 +23855,119 @@ void test_legacy_root_named_navigation_properties() {
     }
 }
 
+void test_legacy_root_owner18_and_boundary1_decoding() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "Owner18";
+    form.children.emplace_back(model::PageRef{model::ObjectId{100}});
+    form.panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+    form.panel.properties.set_explicit(model::PropertyId::from_name("BackColor"),
+        model::ColorValue{model::ColorKind::absolute, 44, 55, 66, 255, std::monostate{}});
+    model::OrdinaryFormDocument document(std::move(form));
+    model::Page page;
+    page.id = model::ObjectId{100}; page.name = "Main";
+    page.title.set(model::LocalizedStringValue{{{"ru", "Проверка границ"}}});
+    model::Position position;
+    position.left.set(8); position.top.set(8); position.width.set(384); position.height.set(284);
+    for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+        model::AnchorBinding binding;
+        binding.coordinate = edge; binding.target_coordinate = edge; binding.offset.set(-8);
+        position.bindings.anchors.push_back(binding);
+    }
+    page.position.set(position);
+    page.children.emplace_back(model::ControlRef{model::ObjectId{2}});
+    document.add_page(std::move(page));
+    model::ControlNode button{model::ObjectId{2}, "Action", model::ButtonPayload{}};
+    button.position.left.set(16); button.position.top.set(16);
+    button.position.width.set(80); button.position.height.set(24);
+    button.position.default_control.set(true);
+    document.add_control(std::move(button));
+    const auto current = form_stream::encode_document(document);
+    expect(current.ok(), "Современный эталон с одной страницей должен собираться");
+    const auto canonical = form_stream::decode_document(current.value(), "Owner18");
+    expect(canonical.ok() && canonical.value().reconstruction_complete(), "Современный эталон должен читаться полностью");
+    const auto expected_xml = source::serialize_form_xml(canonical.value());
+    expect(expected_xml.ok(), "Современный эталон должен записываться в именованный XML");
+
+    for (const auto base_version : {10U, 19U}) for (const bool legacy_outer : {false, true}) {
+        auto old = current.value();
+        if (legacy_outer) {
+            old.items[0] = list_stream::ListValue::raw_atom("23");
+            old.items[1].items[0] = list_stream::ListValue::raw_atom("16");
+            old.items[1].items.resize(11);
+            old.items[13] = list_stream::parse("{3,0,0}");
+            old.items.resize(18);
+        }
+        auto& owner = old.items[1].items[2].items[1].items[1];
+        std::size_t incoming_end = 2;
+        for (unsigned axis = 0; axis < 6; ++axis) incoming_end += 1 + std::stoul(owner.items.at(incoming_end).atom);
+        const auto shift = incoming_end - 2;
+        for (std::size_t edge = 0; edge < 4; ++edge) {
+            auto& row = owner.items[10 + shift + edge];
+            row.items[0] = list_stream::ListValue::raw_atom("1"); row.items.pop_back();
+        }
+        if (!legacy_outer && base_version == 19) {
+            const auto boundaries_only = form_stream::decode_document(old, "Owner18");
+            expect(boundaries_only.ok() && boundaries_only.value().reconstruction_complete() &&
+                       source::serialize_form_xml(boundaries_only.value()).value() == expected_xml.value(),
+                "Границы поколения 1 в современном владельце должны давать тот же именованный XML");
+        }
+        auto& base = owner.items[0];
+        if (base_version == 10) {
+            base.items[0] = list_stream::ListValue::raw_atom("10");
+            for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
+                base.items[slot].items[0] = list_stream::ListValue::raw_atom("3");
+                base.items[slot].items.pop_back();
+            }
+            base.items[4] = list_stream::parse("{6,3,0,1}"); base.items.resize(13);
+        }
+        owner.items[1] = list_stream::ListValue::raw_atom("18");
+        auto& style = owner.items[2 + shift];
+        style.items.resize(3); style.items[0] = list_stream::ListValue::raw_atom("3");
+        if (base_version == 10) style.items[2] = list_stream::parse("{3,0,{0},\"\",-1,-1,1,0}");
+        owner.items.resize(16 + shift);
+        const auto decoded = form_stream::decode_document(old, "Owner18");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            decoded ? "Поколение владельца 18 должно читаться полностью" : decoded.diagnostics().front().message);
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value() == expected_xml.value(),
+            "Владелец 18 должен сохранять страницы, привязки, цвет, порядок обхода и выбранный элемент");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "XML владельца 18 должен читаться без исходного потока");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
+            "Сборка XML владельца 18 должна точно совпадать с современным эталоном");
+        for (unsigned corruption = 0; corruption < 8; ++corruption) {
+            auto invalid = old;
+            auto& invalid_owner = invalid.items[1].items[2].items[1].items[1];
+            if (corruption == 0) invalid_owner.items[1] = list_stream::ListValue::raw_atom("17");
+            if (corruption == 1) invalid_owner.items.pop_back();
+            if (corruption == 2) invalid_owner.items.push_back(list_stream::ListValue::raw_atom("0"));
+            if (corruption == 3) invalid_owner.items[10 + shift].items.push_back(list_stream::ListValue::raw_atom("0"));
+            if (corruption == 4) invalid_owner.items[10 + shift].items[0] = list_stream::ListValue::raw_atom("3");
+            if (corruption == 5) invalid_owner.items[9 + shift] = list_stream::ListValue::raw_atom("5");
+            if (corruption == 6) invalid_owner.items[2 + shift].items[1] = list_stream::ListValue::raw_atom("2");
+            if (corruption == 7) invalid_owner.items[0].items[0] = list_stream::ListValue::raw_atom("15");
+            expect(!form_stream::decode_document(invalid, "Owner18"),
+                "Неизвестные версии, длины, оформление и счетчик пяти границ должны отклоняться");
+        }
+    }
+    auto modern_boundaries = form_stream::encode_page_position(position, 0);
+    expect(modern_boundaries.ok(), "Эталон Position должен иметь современное представление границ");
+    auto old_boundaries = modern_boundaries.value();
+    for (auto& row : old_boundaries.items) {
+        row.items[0] = list_stream::ListValue::raw_atom("1"); row.items.pop_back();
+    }
+    const auto decoded_position = form_stream::decode_page_position(old_boundaries, 0);
+    expect(decoded_position.ok(), "Границы поколения 1 должны читаться в Position");
+    const auto rebuilt_position = form_stream::encode_page_position(decoded_position.value(), 0);
+    expect(rebuilt_position.ok() && list_stream::dump_compact(rebuilt_position.value()) ==
+               list_stream::dump_compact(modern_boundaries.value()),
+        "Границы поколения 1 должны сохранять все именованные поля Position");
+    auto malformed = modern_boundaries.value();
+    malformed.items[0].items.pop_back();
+    expect(!form_stream::decode_page_position(malformed, 0), "Поколение границ 2 не должно принимать длину поколения 1");
+}
+
 void test_legacy_root_owner20_decoding() {
     auto modern_payload = platform_empty_document_payload();
     auto legacy_payload = modern_payload;
@@ -24751,8 +25100,30 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
         "A present extension requires a selected main object during decoding");
     unsupported = encoded.value();
     unsupported.items[3] = list_stream::parse("{00000000-0000-0000-0000-000000000000,0}");
-    expect_failure(form_stream::decode_document(unsupported, "Processor"), "OOF1122", "$/2/0",
-        "A main object context requires a supported extension during decoding");
+    const auto without_extension = form_stream::decode_document(unsupported, "Processor");
+    expect(without_extension.ok() && !without_extension.value().form().extension &&
+        without_extension.value().form().main_attribute.id() == model::ObjectId{2},
+        "Основной объект формы должен сохраняться независимо от наличия контроллера расширения");
+    const auto plain_xml = source::serialize_form_xml(without_extension.value());
+    expect(plain_xml.ok(), "Основной реквизит без расширения должен иметь именованный XML");
+    const auto plain_model = source::parse_form_xml(plain_xml.value());
+    expect(plain_model.ok(), "Контекст основного реквизита должен читаться из самостоятельного XML");
+    const auto plain_rebuilt = form_stream::encode_document(plain_model.value());
+    expect(plain_rebuilt.ok() && list_stream::dump_compact(plain_rebuilt.value()) == list_stream::dump_compact(unsupported),
+        "Отсутствующее расширение нельзя выводить автоматически из типа основного реквизита");
+    for (const auto bad_type : {R"({"Pattern",{"S",10,1}})",
+             R"({"Pattern",{"T",00000000-0000-0000-0000-000000000000}})"}) {
+        auto invalid = unsupported;
+        invalid.items[2].items[2].items[1].items[5] = list_stream::parse(bad_type);
+        expect(!form_stream::decode_document(invalid, "Processor"),
+            "Основной реквизит без расширения должен иметь конкретный объектный тип");
+    }
+    for (const auto flag : {1U, 2U}) {
+        auto invalid = unsupported;
+        invalid.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(invalid, "Processor"),
+            "Основной объект без расширения должен проверять флаги реквизита");
+    }
     for (const auto flag : {1u, 2u}) {
         unsupported = encoded.value();
         unsupported.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
@@ -24774,8 +25145,11 @@ void test_data_processor_form_extension_named_round_trip_and_guards() {
     auto form = parsed.value().form();
     form.extension.reset();
     parsed.value().set_form(std::move(form));
-    expect_failure(form_stream::encode_document(parsed.value()), "OOF1122", "$/MainAttribute",
-        "A main object context must not silently use an absent extension");
+    const auto plain_encoded = form_stream::encode_document(parsed.value());
+    expect(plain_encoded.ok() && list_stream::dump_compact(plain_encoded.value().items[3]) ==
+        "{00000000-0000-0000-0000-000000000000,0}" &&
+        list_stream::dump_compact(plain_encoded.value().items[2].items[0]) == "{2}",
+        "Сборка должна независимо сохранять основной реквизит и отсутствие расширения");
     form = parsed.value().form();
     form.main_attribute = model::AttributeRef{};
     parsed.value().set_form(std::move(form));
@@ -25885,7 +26259,10 @@ void test_document_form_extension_named_round_trip_and_guards() {
 void test_empty_form_extensions_named_round_trip_and_guards() {
     for (const auto* descriptor : {&model::metamodel::catalog_list_form_extension,
              &model::metamodel::document_list_form_extension,
-             &model::metamodel::information_register_record_list_form_extension}) {
+             &model::metamodel::information_register_record_list_form_extension,
+             &model::metamodel::accumulation_register_record_list_form_extension,
+             &model::metamodel::characteristic_type_list_form_extension,
+             &model::metamodel::enumeration_list_form_extension}) {
         std::string xml = R"XML(<Form id="1" name="CatalogList" ordinaryFormVersion="2.1"><Height>400</Height><Width>600</Width><MainAttribute attributeId="0"/><CatalogListFormExtension/><Attributes><Attribute id="0" name="CatalogList"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute><Attribute id="30" name="Flag"><TypeDomain><Entry term="boolean"/></TypeDomain></Attribute><Attribute id="31" name="Choices"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems>)XML";
         const std::string original_extension = "<CatalogListFormExtension/>";
         xml.replace(xml.find(original_extension), original_extension.size(),
@@ -25932,6 +26309,10 @@ void test_empty_form_extensions_named_round_trip_and_guards() {
         corrupt.items[2].items[0] = list_stream::parse("{-1}");
         expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1122", "$/2/0",
             "List form extension decoder must require its explicit main context");
+        corrupt = encoded.value();
+        corrupt.items[2].items[0] = list_stream::parse("{30}");
+        expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1122", "$/2/0",
+            "Empty extension main context must select its concrete object, not another scalar Attribute");
         for (const auto flag : {1u, 2u}) {
             corrupt = encoded.value();
             corrupt.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
@@ -25942,6 +26323,12 @@ void test_empty_form_extensions_named_round_trip_and_guards() {
         corrupt.items[3].items[0] = list_stream::ListValue::raw_atom("33333333-3333-3333-3333-333333333333");
         expect_failure(form_stream::decode_document(corrupt, "List"), "OOF1106", "$/3/0",
             "Unknown extension GUID must fail closed");
+        auto foreign_settings = parsed.value();
+        auto foreign_form = foreign_settings.form();
+        foreign_form.extension_properties.set_explicit(model::PropertyId::from_name("SaveValues"), false);
+        foreign_settings.set_form(std::move(foreign_form));
+        expect(!form_stream::encode_document(foreign_settings),
+            "Empty extensions cannot own Report/DataProcessor settings even at their default values");
         auto form = parsed.value().form();
         form.main_attribute = {};
         parsed.value().set_form(form);
@@ -26785,9 +27172,11 @@ int main() {
         test_supported_legacy_root_layout_decoding();
         test_legacy_root_named_navigation_properties();
         test_legacy_root_owner20_decoding();
+        test_legacy_root_owner18_and_boundary1_decoding();
         test_legacy_root_owner21_decoding();
         test_legacy_panel_owner_generations();
         test_platform_empty_document_fixture();
+        test_form_designer_grid_settings();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
         return 1;

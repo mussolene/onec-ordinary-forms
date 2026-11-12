@@ -749,6 +749,9 @@ void test_document_package_types(
         "DocumentListFormExtension",
         "InformationRegisterRecordListFormExtension",
         "DocumentFormExtension",
+        "AccumulationRegisterRecordListFormExtension",
+        "CharacteristicTypeListFormExtension",
+        "EnumerationListFormExtension",
     };
     expect(extension_elements.size() == expected_form_extensions.size(),
         "Form extension choice must expose every registered named extension concept");
@@ -1952,6 +1955,36 @@ void test_schema_structure_coverage_does_not_imply_codec_coverage(
         "classified Boolean value must validate");
 }
 
+void test_form_designer_grid_schema(xmlNodePtr form_schema, xmlSchemaPtr schema, xmlNodePtr palette_schema) {
+    constexpr std::array names{"EnableGrid", "EnableLevelLines", "GridStepHor", "GridStepVer"};
+    const auto elements = direct_children(sequence_for_type(form_schema, "FormType"), "element");
+    const auto form_palette = direct_child(direct_child(direct_child(direct_child(palette_schema,
+        "annotation"), "appinfo"), "Palette"), "Form");
+    const auto palette = direct_children(direct_child(form_palette, "Properties"), "Property");
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        const auto element = std::ranges::find_if(elements, [&](const auto node) {
+            return attribute(node, "name") == names[index];
+        });
+        expect(element != elements.end(), "XSD должна содержать именованный параметр редактора");
+        expect_element_shape(*element, names[index], index < 2 ? "xs:boolean" : "xs:long", "0", "1");
+        const auto property = std::ranges::find_if(palette, [&](const auto node) {
+            return attribute(node, "name") == names[index];
+        });
+        expect(property != palette.end() && attribute(*property, "designerOnly") == "true",
+            "Палитра должна отмечать параметры редактора как designerOnly");
+    }
+    const std::string prefix = "<Form id=\"1\" name=\"Grid\" ordinaryFormVersion=\"2.1\">";
+    expect(validate_document(schema, prefix +
+               "<EnableGrid>true</EnableGrid><EnableLevelLines>false</EnableLevelLines>"
+               "<GridStepHor>-9223372036854775808</GridStepHor><GridStepVer>9223372036854775807</GridStepVer></Form>") == 0,
+        "XSD должна принимать два Булево и полный диапазон int64");
+    for (const auto contents : {"<EnableGrid>2</EnableGrid>", "<EnableLevelLines>value</EnableLevelLines>",
+             "<GridStepHor>1.5</GridStepHor>", "<GridStepVer>9223372036854775808</GridStepVer>",
+             "<UnknownGridSetting>true</UnknownGridSetting>", "<EnableGrid>true</EnableGrid><EnableGrid>false</EnableGrid>"})
+        expect(validate_document(schema, prefix + contents + "</Form>") != 0,
+            "XSD должна отклонять неверные типы, переполнение, неизвестные и повторные параметры");
+}
+
 void test_standard_menu_action_schema(xmlSchemaPtr schema) {
     const auto make_xml = [](std::string_view attributes) {
         return std::string("<Form id=\"1\" name=\"StandardSchema\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
@@ -2137,6 +2170,9 @@ int main() {
                  oof::model::metamodel::catalog_list_form_extension,
                  oof::model::metamodel::document_list_form_extension,
                  oof::model::metamodel::information_register_record_list_form_extension,
+                 oof::model::metamodel::accumulation_register_record_list_form_extension,
+                 oof::model::metamodel::characteristic_type_list_form_extension,
+                 oof::model::metamodel::enumeration_list_form_extension,
              }) {
             const auto name = std::string(extension.xml_name);
             const auto empty_form = "<Form id=\"1\" name=\"List\" ordinaryFormVersion=\"2.1\"><" + name +
@@ -2199,6 +2235,7 @@ int main() {
             metamodel,
             compiled_form.get());
         test_standard_menu_action_schema(compiled_form.get());
+        test_form_designer_grid_schema(form_schema, compiled_form.get(), palette_schema);
         test_input_field_type_link_schema(schemas, compiled_form.get());
         test_attribute_id_zero_schema(compiled_form.get(), form_schema);
         test_self_contained_field_schema(compiled_form.get(), form_schema);

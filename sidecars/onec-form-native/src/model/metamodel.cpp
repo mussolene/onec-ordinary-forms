@@ -8,6 +8,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <type_traits>
@@ -532,6 +533,28 @@ std::vector<PropertyDescriptor> make_form_property_descriptors() {
         ValueKind::variant, ValueCodec::context_menu_reference, ApiAccess::read_write,
         VersionMask::platform_8_5, PersistenceClass::persisted_editable,
         StorageCodec::root_record, {DefaultKind::undefined, "undefined"}});
+    for (const auto& [name, russian_name, default_value] : std::array{
+             std::tuple{"EnableGrid", u8"ИспользоватьСетку", "false"},
+             std::tuple{"EnableLevelLines", u8"ИспользоватьВыравнивающиеЛинии", "true"}}) {
+        PropertyDescriptor property{PropertyId::from_name(name), DescriptorOwner::form,
+            PropertySurface::form, ControlKind::panel, descriptors.size(), name, name,
+            russian_name, u8"Булево", ValueKind::boolean, ValueCodec::boolean,
+            ApiAccess::unknown, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::root_record, {DefaultKind::boolean, default_value}};
+        property.designer_only = true;
+        descriptors.push_back(property);
+    }
+    for (const auto& [name, russian_name] : std::array{
+             std::pair{"GridStepHor", u8"ШагСеткиПоГоризонтали"},
+             std::pair{"GridStepVer", u8"ШагСеткиПоВертикали"}}) {
+        PropertyDescriptor property{PropertyId::from_name(name), DescriptorOwner::form,
+            PropertySurface::form, ControlKind::panel, descriptors.size(), name, name,
+            russian_name, u8"Число", ValueKind::number, ValueCodec::integer,
+            ApiAccess::unknown, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::root_record, {DefaultKind::integer, "4"}};
+        property.designer_only = true;
+        descriptors.push_back(property);
+    }
     return descriptors;
 }
 

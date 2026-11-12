@@ -1562,6 +1562,43 @@ void test_opening_boundary_for_window_properties() {
         "opening restriction must not mask an unknown owner");
 }
 
+void test_form_designer_grid_property_api() {
+    using namespace oof::model::metamodel;
+    Form form;
+    form.id = ObjectId{1}; form.name = "GridSettings";
+    OrdinaryFormDocument document(std::move(form));
+    const OrdinaryFormDocument::ObjectKey owner{ObjectCategory::form, ObjectId{1}};
+    constexpr std::array names{"EnableGrid", "EnableLevelLines", "GridStepHor", "GridStepVer"};
+    const std::array<PropertyValue, 4> defaults{false, true, std::int64_t{4}, std::int64_t{4}};
+    const std::array<PropertyValue, 4> explicit_values{true, false,
+        std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max()};
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        const auto id = PropertyId::from_name(names[index]);
+        const auto* descriptor = find_form_property(id);
+        expect(descriptor && descriptor->designer_only && descriptor->api_access == ApiAccess::unknown &&
+                   descriptor->persistence == PersistenceClass::persisted_editable &&
+                   descriptor->storage_codec == StorageCodec::root_record &&
+                   descriptor->value_codec == (index < 2 ? ValueCodec::boolean : ValueCodec::integer),
+            "Параметры редактора должны использовать типизированные дескрипторы Form с designer_only");
+        const auto initial = document.get_prop_val(owner, id);
+        expect(initial.status == PropertyReadStatus::proven_default && initial.value == defaults[index],
+            "API должен возвращать доказанные defaults параметров редактора");
+        expect(document.set_prop_val(owner, id, explicit_values[index]) == PropertyMutationStatus::applied &&
+                   document.get_prop_val(owner, id).value == explicit_values[index],
+            "API должен сохранять типизированные параметры редактора без ограничения int32");
+        expect(document.set_prop_val(owner, id, std::string{"4"}) == PropertyMutationStatus::invalid_value &&
+                   document.set_prop_val(owner, id, index < 2 ? PropertyValue{std::int64_t{1}} : PropertyValue{true}) ==
+                       PropertyMutationStatus::invalid_value,
+            "API должен отклонять строки и несовместимые скалярные типы");
+        expect(document.reset_prop_val(owner, id) == PropertyMutationStatus::reset &&
+                   document.get_prop_val(owner, id).value == defaults[index],
+            "Сброс параметра редактора должен восстанавливать доказанный default");
+    }
+    expect(document.set_prop_val(owner, PropertyId::from_name("UnknownGridSetting"), true) ==
+               PropertyMutationStatus::unknown_property,
+        "API должен отклонять неизвестные параметры редактора");
+}
+
 void test_form_runtime_state_properties() {
     using namespace oof::model::metamodel;
     Form form;
@@ -3146,7 +3183,7 @@ void test_help_metamodel() {
     expect(
         coverage.panel_placement_property_count == 9,
         "panel-control extension must retain its 9 properties");
-    expect(coverage.form_property_count == 39, "Form descriptors must include the two platform-confirmed context properties");
+    expect(coverage.form_property_count == 43, "Дескрипторы Form должны включать четыре доказанных параметра редактора");
     expect(coverage.form_event_count == 19, "Form must retain 13 common, four shared CatalogItem/Document and two DataProcessor extension events");
     for (const auto name : {"BeforeWrite", "OnWrite", "AfterWrite", "OnDataChange"}) {
         const auto* descriptor = find_form_event(name);
@@ -4604,16 +4641,33 @@ void test_document_property_api() {
 }
 
 void test_catalog_list_form_extension_model() {
-    Form form;
-    form.id = ObjectId{1};
-    form.name = "CatalogList";
-    form.extension = FormExtensionKind::catalog_list;
-    OrdinaryFormDocument document(form);
-    expect(document.validate().ok(), "CatalogList must be a declared model extension");
-    form.extension_properties.set_explicit(PropertyId::from_name("Autonumeration"),
-        EnumerationValue{"AutonumerationInForm", "DontUse"});
-    document.set_form(form);
-    expect(!document.validate().ok(), "CatalogList must reject CatalogItem settings");
+    for (const auto& extension : {
+             metamodel::catalog_list_form_extension,
+             metamodel::document_list_form_extension,
+             metamodel::information_register_record_list_form_extension,
+             metamodel::accumulation_register_record_list_form_extension,
+             metamodel::characteristic_type_list_form_extension,
+             metamodel::enumeration_list_form_extension}) {
+        expect(extension.storage == metamodel::FormExtensionStorageKind::empty &&
+            metamodel::find_form_extension_property(extension.kind, "Autonumeration") == nullptr &&
+            metamodel::find_form_extension_property(extension.kind, "SaveValues") == nullptr,
+            "Each empty extension declares its identity without another owner's persisted settings");
+        Form form;
+        form.id = ObjectId{1};
+        form.name = "List";
+        form.extension = extension.kind;
+        form.main_attribute = AttributeRef{ObjectId{20}};
+        OrdinaryFormDocument document(form);
+        TypeDomainEntry entry;
+        entry.term = TypeDomainTerm::object;
+        entry.type_uuid = UuidValue{"22222222-2222-2222-2222-222222222222"};
+        document.add_attribute(Attribute{ObjectId{20}, "ListObject", TypeDomainPatternValue{{entry}}});
+        expect(document.validate().ok(), "Each registered empty extension must accept a named main object context");
+        form.extension_properties.set_explicit(PropertyId::from_name("Autonumeration"),
+            EnumerationValue{"AutonumerationInForm", "DontUse"});
+        document.set_form(form);
+        expect(!document.validate().ok(), "Empty extensions must reject CatalogItem settings");
+    }
 }
 
 void test_saved_form_settings_model() {
@@ -6711,6 +6765,7 @@ int main() {
         test_input_type_restriction_runtime();
         test_control_name_property();
         test_form_runtime_state_properties();
+        test_form_designer_grid_property_api();
         test_chart_computed_counts();
         test_chart_active_point_reference();
         test_form_style_property();

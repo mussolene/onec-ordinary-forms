@@ -2019,6 +2019,10 @@
       <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ContextMenu" type="ContextMenuReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableGrid" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableLevelLines" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GridStepHor" type="xs:long" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GridStepVer" type="xs:long" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MainAttribute" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="AttributeIdType" use="required"/></xs:complexType></xs:element>
       <xs:choice minOccurs="0" maxOccurs="1">
         <xs:element name="DataProcessorFormExtension"><xs:complexType><xs:sequence>
@@ -2057,6 +2061,9 @@
           <xs:element name="AutoTime" type="AutoTimeModeValueType" minOccurs="0" maxOccurs="1"/>
           <xs:element name="Autonumeration" type="AutonumerationInFormValueType" minOccurs="0" maxOccurs="1"/>
         </xs:sequence></xs:complexType></xs:element>
+        <xs:element name="AccumulationRegisterRecordListFormExtension"><xs:complexType/></xs:element>
+        <xs:element name="CharacteristicTypeListFormExtension"><xs:complexType/></xs:element>
+        <xs:element name="EnumerationListFormExtension"><xs:complexType/></xs:element>
       </xs:choice>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>

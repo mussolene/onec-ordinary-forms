@@ -263,11 +263,36 @@ inline constexpr FormExtensionDescriptor document_form_extension{
     u8"Расширение формы документа",
 };
 
+inline constexpr FormExtensionDescriptor accumulation_register_record_list_form_extension{
+    FormExtensionKind::accumulation_register_record_list,
+    "8dbd9f80-21ff-11d6-a3c7-0050bae0a776",
+    "AccumulationRegisterRecordListFormExtension",
+    u8"Расширение формы списка записей регистра накопления",
+    FormExtensionStorageKind::empty,
+};
+
+inline constexpr FormExtensionDescriptor characteristic_type_list_form_extension{
+    FormExtensionKind::characteristic_type_list,
+    "357bcdc7-67b5-40ce-ba8c-6c01177d42c9",
+    "CharacteristicTypeListFormExtension",
+    u8"Расширение формы списка видов характеристик",
+    FormExtensionStorageKind::empty,
+};
+
+inline constexpr FormExtensionDescriptor enumeration_list_form_extension{
+    FormExtensionKind::enumeration_list,
+    "b8621d8f-7502-46a6-b358-063a307d0c2d",
+    "EnumerationListFormExtension",
+    u8"Расширение формы списка перечисления",
+    FormExtensionStorageKind::empty,
+};
+
 inline constexpr std::array form_extensions{
     data_processor_form_extension, catalog_item_form_extension,
     catalog_list_form_extension, report_form_extension,
     document_list_form_extension, information_register_record_list_form_extension,
-    document_form_extension,
+    document_form_extension, accumulation_register_record_list_form_extension,
+    characteristic_type_list_form_extension, enumeration_list_form_extension,
 };
 
 struct InputFieldExtensionDescriptor {

@@ -3186,8 +3186,7 @@ DecodedOwnerPages decode_owner_pages(
             normalized.items.begin() + static_cast<std::ptrdiff_t>(offset),
             normalized.items.begin() + static_cast<std::ptrdiff_t>(offset + 4)));
         const auto first_row_path = child_path(path, offset);
-        require_arity(boundaries.items[0], 9, first_row_path);
-        const auto index = integer_atom<std::uint32_t>(boundaries.items[0].items[5], child_path(first_row_path, 5));
+        const auto index = integer_atom<std::uint32_t>(at(boundaries.items[0], 5, first_row_path), child_path(first_row_path, 5));
         if (index >= boundary_page_count || seen_boundary_page[index]) {
             fail("OOF1114", child_path(first_row_path, 5), "unique Page boundary index within the owner",
                 std::to_string(index), "Owner Page boundary index is duplicate or out of range");
@@ -3199,6 +3198,9 @@ DecodedOwnerPages decode_owner_pages(
         const auto boundary_index = separate_by_page ? page_index : 0;
         auto position = decode_page_position(boundaries_by_page[boundary_index], static_cast<std::uint32_t>(boundary_index), owner);
         if (!position) throw DecodeFailure(position.diagnostics().front());
+        auto canonical_boundaries = encode_page_position(position.value(), static_cast<std::uint32_t>(boundary_index), owner);
+        if (!canonical_boundaries) throw DecodeFailure(canonical_boundaries.diagnostics().front());
+        boundaries_by_page[boundary_index] = std::move(canonical_boundaries.value());
         pages[page_index].position.set(std::move(position.value()));
     }
     for (std::size_t index = 0; index < boundary_page_count; ++index) {
@@ -3216,9 +3218,19 @@ DecodedOwnerPages decode_owner_pages(
         layout.page_style_section_version == 3;
     const bool owner_version_is_raw = normalized.items.size() > 1 && !normalized.items[1].is_list &&
         normalized.items[1].atom_kind == LV::AtomKind::raw;
+    const bool owner_version18 = owner_version_is_raw && normalized.items[1].atom == "18";
     const bool owner_version20 = owner_version_is_raw && normalized.items[1].atom == "20";
     const bool owner_version21 = owner_version_is_raw && normalized.items[1].atom == "21";
     const bool owner_version26 = owner_version_is_raw && normalized.items[1].atom == "26";
+    const bool proven_root_owner18_layout = !panel &&
+        ((layout.outer_format == OuterFormat::v23 && layout.root_arity == 18 &&
+            layout.kind == LayoutKind::form_section_16 && layout.page_style_section_version == 3) ||
+         (layout.outer_format == OuterFormat::v27 && layout.root_arity == 20 &&
+            layout.kind == LayoutKind::form_section_18 && layout.page_style_section_version == 10));
+    if (owner_version18 && (!proven_root_owner18_layout || normalized.items.size() != 16 || pages.size() != 1))
+        fail("OOF1114", child_path(path, 1), "root owner18/16 with one Page in a proven layout",
+            std::to_string(normalized.items.size()), "Поколение корневой панели 18 не соответствует доказанной структуре");
+    const bool legacy_root_owner18 = owner_version18 && proven_root_owner18_layout;
     if (outer27_legacy_tuple && !owner_version20 && !owner_version21 && !owner_version26)
         fail("OOF1114", child_path(child_path(path, 1), 1), "root owner version 20, 21, or 26 for the proven outer27 tuple",
             owner_version_is_raw ? normalized.items[1].atom : "non-raw owner version",
@@ -3255,21 +3267,23 @@ DecodedOwnerPages decode_owner_pages(
             expected.items[1].items.end());
         normalized.items[normalized.items.size() - 6] = normalized.items[0].items[2];
     }
-    if (legacy_root_owner20 || legacy_root_owner21) {
+    if (legacy_root_owner18 || legacy_root_owner20 || legacy_root_owner21) {
         if (pages.size() != 1)
             fail("OOF1114", child_path(path, 5), "one Page for the proven legacy root-owner layout",
                 std::to_string(pages.size()), "Legacy root-owner geometry is proven only for one Page");
         const auto source_base_path = child_path(child_path(path, 1), 0);
         const auto& source_base = normalized.items[0];
-        require_arity(source_base, 13, source_base_path);
-        require_raw_constant(source_base.items[0], "10", child_path(source_base_path, 0));
-        for (const auto slot : {1U, 5U, 11U, 12U})
-            require_exact(source_base.items[slot], expected.items[1].items[0].items[slot],
-                child_path(source_base_path, slot), "Legacy root common-base field is unsupported");
+        if (!legacy_root_owner18) {
+            require_arity(source_base, 13, source_base_path);
+            require_raw_constant(source_base.items[0], "10", child_path(source_base_path, 0));
+        }
         auto canonical_base = source_base;
         read_common_control_base(canonical_base, source_base_path, [&] {
             return expected.items[1].items[0];
         }, {warnings, owner_id, panel ? "Panel" : "Form"});
+        for (const auto slot : {1U, 5U, 11U, 12U})
+            require_exact(canonical_base.items[slot], expected.items[1].items[0].items[slot],
+                child_path(source_base_path, slot), "Legacy root common-base field is unsupported");
         for (const auto slot : {2U, 3U, 6U, 7U, 8U, 9U, 10U}) {
             const auto color_path = child_path(source_base_path, slot);
             canonical_base.items[slot] = encode_control_color(
@@ -3279,12 +3293,13 @@ DecodedOwnerPages decode_owner_pages(
         canonical_base.items[4] = encode_control_font(decode_control_font(source_base.items[4], font_path), font_path);
 
         const auto legacy_style = parse_constant("{3,1,{3,0,{0},\"\",-1,-1,1,0}}");
-        require_exact(normalized.items[2], legacy_style, child_path(child_path(path, 1), 2),
+        require_exact(legacy_root_owner18 ? normalize_empty_picture_style(normalized.items[2]) : normalized.items[2],
+            legacy_style, child_path(child_path(path, 1), 2),
             "Legacy root owner style contains unsupported settings");
         normalized.items[0] = std::move(canonical_base);
         normalized.items[1] = expected.items[1].items[1];
         normalized.items[2] = expected.items[1].items[2];
-        // The proven owner20 and owner21 layouts omit only their respective modern tail fields.
+        // Поколения 18, 20 и 21 опускают только доказанные служебные поля современного конструктора.
         const auto first_omitted_slot = normalized.items.size();
         normalized.items.insert(normalized.items.end(),
             expected.items[1].items.begin() + static_cast<std::ptrdiff_t>(first_omitted_slot),
@@ -4487,7 +4502,6 @@ std::optional<LV> upgrade_table_column_properties(const LV& source, std::string_
             "Table Column properties version is unsupported");
     const bool has_editor = raw_atom(at(source, 38, path), child_path(path, 38)) != null_uuid;
     require_arity(source, layout->record.arity - (has_editor ? 0 : 1), path);
-    if (version == "23") return std::nullopt;
     auto current = canonical_table_column_properties(has_editor);
     std::copy(source.items.begin() + 1, source.items.end(), current.items.begin() + 1);
     if (!layout->has_layout_width)
@@ -4516,6 +4530,7 @@ std::optional<LV> upgrade_table_column_properties(const LV& source, std::string_
         if (color.is_list && !color.items.empty() && !color.items[0].is_list && color.items[0].atom == "3")
             current.items[slot] = encode_control_color(decode_control_color(color, child_path(path, slot)), child_path(path, slot));
     }
+    if (version == "23" && same_list_value(current, source)) return std::nullopt;
     return current;
 }
 
@@ -5425,28 +5440,20 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
             entry.changes_data = bool_atom(props.items[2], path);
             const bool text_present = bool_atom(props.items[5], path);
+            model::LocalizedStringValue automatic_text;
             if (text_present) {
                 entry.text = decoded_single_language_text(props.items[4], path);
             } else {
-                model::LocalizedStringValue automatic_text;
                 try {
                     list_stream::ListInStream in(props.items[4]);
                     automatic_text = value_codec::read_localized_string(in);
                 } catch (const std::exception& error) {
-                    fail("OOF1108", std::string(path), "empty or single automatic localized Text", describe(props.items[4]), error.what());
+                    fail("OOF1108", std::string(path), "valid localized automatic Text", describe(props.items[4]), error.what());
                 }
-                if (automatic_text.items.size() > 1 ||
-                    (!automatic_text.items.empty() &&
-                        (automatic_text.items.front().language != "#" || automatic_text.items.front().text.empty()))) {
-                    fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
-                        describe(props.items[4]), "Absent button Text contains an unsupported localized value");
-                }
-                const auto expected_text = automatic_text.items.empty()
-                    ? encoded_localized(std::string_view{})
-                    : encoded_localized(model::LocalizedStringValue{{{"#",
-                        normalize_storage_line_endings(automatic_text.items.front().text)}}});
-                require_exact(props.items[4], expected_text, path,
-                    "absent button Text must use the canonical empty or single # localized value");
+                for (auto& item : automatic_text.items)
+                    item.text = normalize_storage_line_endings(item.text);
+                require_exact(props.items[4], encoded_localized(automatic_text), path,
+                    "absent button Text must use a canonical localized value");
             }
             const auto id = integer_atom<std::uint64_t>(props.items[7], path);
             if (id == 0 || id > max_id || !entry_ids.insert(id).second)
@@ -5511,6 +5518,15 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
                     parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
                     child_path(action_path, 4), "Menu action target is unsupported");
+            }
+            // У действия с обработчиком подпись вычисляется независимо от этого
+            // значения. У подменю переводы могут влиять на отображаемый Text.
+            if (!text_present && !entry.action && entry.type != model::CommandBarButtonKind::separator &&
+                (automatic_text.items.size() > 1 ||
+                 (!automatic_text.items.empty() &&
+                  (automatic_text.items.front().language != "#" || automatic_text.items.front().text.empty())))) {
+                fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
+                    describe(props.items[4]), "Automatic button Text needs a named localized representation for this action kind");
             }
             const auto expected_properties = menu_entry_properties(entry, owner, id);
             const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
@@ -11664,9 +11680,10 @@ model::TableColumn decode_table_column(
                 require_raw_constant(editor_info.items[0], "2", child_path(editor_path, 0));
                 require_arity(editor_info.items[1], 46, embedded_payload_path);
                 require_raw_constant(editor_info.items[1].items[1], "31", child_path(embedded_payload_path, 1));
-                require_arity(editor_info.items[1].items[0], 21, child_path(embedded_payload_path, 0));
-                require_raw_constant(editor_info.items[1].items[0].items[0], "19",
-                    child_path(child_path(embedded_payload_path, 0), 0));
+                const auto base_path = child_path(embedded_payload_path, 0);
+                read_common_control_base(editor_info.items[1].items[0], base_path, [&] {
+                    return canonical_choice_field_info(true, std::string{}, {}).items[1].items[0];
+                }, {warnings, table_id, "TableColumn.ChoiceField", CommonControlBaseStatePolicy::strict_default_layouts});
                 require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
                     "Table Column ChoiceField cannot contain storage children");
                 enabled_atom = &editor_info.items[1].items[0].items[1];
@@ -13370,12 +13387,10 @@ std::size_t form_extension_ordinal(model::FormExtensionKind kind,
 }
 
 void validate_form_extension_context(const model::OrdinaryFormDocument& document, std::string_view path) {
-    if (document.form().main_attribute.has_value() && !document.form().extension)
-        fail("OOF1122", std::string(path), "declared extension for the main object context",
-            "absent extension", "MainAttribute context has no supported form extension");
-    if (!document.form().extension) return;
-    if (*document.form().extension == model::FormExtensionKind::data_processor ||
-        *document.form().extension == model::FormExtensionKind::report) {
+    if (!document.form().extension && !document.form().main_attribute.has_value()) return;
+    if (document.form().extension &&
+        (*document.form().extension == model::FormExtensionKind::data_processor ||
+         *document.form().extension == model::FormExtensionKind::report)) {
         if (!document.form().main_attribute.has_value())
             fail("OOF1122", std::string(path), "selected MainAttribute reference", "absent",
                 "Report/DataProcessor extension requires an explicit object context");
@@ -13390,14 +13405,16 @@ void validate_form_extension_context(const model::OrdinaryFormDocument& document
                 "nondefault flags", "Report/DataProcessor main Attribute flags are not supported");
         return;
     }
-    const auto extension_descriptor = std::ranges::find(model::metamodel::form_extensions,
-        *document.form().extension, &model::metamodel::FormExtensionDescriptor::kind);
-    if (extension_descriptor == model::metamodel::form_extensions.end() ||
-        (*document.form().extension != model::FormExtensionKind::catalog_item &&
-         *document.form().extension != model::FormExtensionKind::document &&
-         extension_descriptor->storage != model::metamodel::FormExtensionStorageKind::empty))
-        fail("OOF1122", std::string(path), "declared ordinary-form extension", "unknown extension kind",
-            "Form extension kind is unsupported by the storage codec");
+    if (document.form().extension) {
+        const auto extension_descriptor = std::ranges::find(model::metamodel::form_extensions,
+            *document.form().extension, &model::metamodel::FormExtensionDescriptor::kind);
+        if (extension_descriptor == model::metamodel::form_extensions.end() ||
+            (*document.form().extension != model::FormExtensionKind::catalog_item &&
+             *document.form().extension != model::FormExtensionKind::document &&
+             extension_descriptor->storage != model::metamodel::FormExtensionStorageKind::empty))
+            fail("OOF1122", std::string(path), "declared ordinary-form extension", "unknown extension kind",
+                "Form extension kind is unsupported by the storage codec");
+    }
     if (!document.form().main_attribute.has_value())
         fail("OOF1122", std::string(path), "selected MainAttribute reference", "absent",
             "Metadata form extension requires an explicit object context");
@@ -13430,8 +13447,11 @@ Result<model::Position> decode_page_position(
         for (std::size_t edge = 0; edge < 4; ++edge) {
             const auto path = child_path("$/Page/Position", edge);
             const auto& row = boundaries.items[edge];
-            require_arity(row, 9, path);
-            require_raw_constant(row.items[0], "2", child_path(path, 0));
+            const auto version = integer_atom<std::uint32_t>(at(row, 0, path), child_path(path, 0));
+            if (version != 1 && version != 2)
+                fail("OOF1114", child_path(path, 0), "boundary version 1 or 2", std::to_string(version),
+                    "Неизвестное поколение границы страницы");
+            require_arity(row, version == 1 ? 8 : 9, path);
             coordinates[edge] = integer_atom<std::int32_t>(row.items[1], child_path(path, 1));
             require_raw_constant(row.items[2], edge % 2 == 0 ? "1" : "0", child_path(path, 2));
             require_raw_constant(row.items[3], "1", child_path(path, 3));
@@ -13439,7 +13459,7 @@ Result<model::Position> decode_page_position(
             require_raw_constant(row.items[5], std::to_string(page_index), child_path(path, 5));
             require_raw_constant(row.items[6], "0", child_path(path, 6));
             margins[edge] = integer_atom<std::int32_t>(row.items[7], child_path(path, 7));
-            require_raw_constant(row.items[8], "0", child_path(path, 8));
+            if (version == 2) require_raw_constant(row.items[8], "0", child_path(path, 8));
             if (edge < 2 && margins[edge] != 0) {
                 fail("OOF1122", child_path(path, 7), "fixed Left/Top boundary", std::to_string(margins[edge]),
                     "Page Left/Top constraints are not established");
@@ -13725,6 +13745,8 @@ Result<AttributesRecord> decode_attributes(
                 "Attribute table count does not match its records");
         }
         result.attributes.reserve(attribute_count);
+        std::vector<std::int32_t> stored_usage_counts;
+        stored_usage_counts.reserve(attribute_count);
         for (std::uint32_t index = 0; index < attribute_count; ++index) {
             const std::string record_path = child_path(child_path(path, 2), index + 1);
             const auto& item = table.items[index + 1];
@@ -13735,12 +13757,16 @@ Result<AttributesRecord> decode_attributes(
             attribute.main = bool_atom(item.items[1], child_path(record_path, 1));
             const std::size_t type_slot = legacy_row5 ? 4 : 5;
             if (legacy_row5) {
-                require_raw_constant(item.items[2], "1", child_path(record_path, 2));
                 attribute.stored_data = false;
             } else {
                 attribute.stored_data = bool_atom(item.items[2], child_path(record_path, 2));
-                require_raw_constant(item.items[3], "1", child_path(record_path, 3));
             }
+            const auto usage_slot = legacy_row5 ? 2U : 3U;
+            const auto usage = integer_atom<std::int32_t>(item.items[usage_slot], child_path(record_path, usage_slot));
+            if (usage < 1)
+                fail("OOF1105", child_path(record_path, usage_slot), "positive Attribute usage count",
+                    std::to_string(usage), "Attribute usage count must be positive");
+            stored_usage_counts.push_back(usage);
             const std::size_t name_slot = legacy_row5 ? 3 : 4;
             attribute.name = string_atom(item.items[name_slot], child_path(record_path, name_slot));
             attribute.type = type_domain(item.items[type_slot], child_path(record_path, type_slot));
@@ -13813,6 +13839,22 @@ Result<AttributesRecord> decode_attributes(
                 }
             }
             result.links.push_back(std::move(link));
+        }
+        std::map<std::tuple<std::int64_t, std::string_view, bool>, std::uint32_t> direct_link_counts;
+        for (const auto& link : result.links) {
+            if (link.member_keys.empty())
+                ++direct_link_counts[{link.attribute_id.object_id, link.attribute_id.uuid.canonical, link.attribute_id.is_null}];
+        }
+        for (std::size_t index = 0; index < result.attributes.size(); ++index) {
+            const auto& attribute = result.attributes[index];
+            const auto found = direct_link_counts.find({attribute.id.object_id, attribute.id.uuid.canonical, attribute.id.is_null});
+            const auto expected = attribute.main && found != direct_link_counts.end() ? std::max(1U, found->second) : 1U;
+            if (static_cast<std::uint32_t>(stored_usage_counts[index]) != expected) {
+                const auto& row = table.items[index + 1];
+                const auto count_path = child_path(child_path(child_path(path, 2), index + 1), row.items.size() == 5 ? 2 : 3);
+                fail("OOF1114", count_path, std::to_string(expected), std::to_string(stored_usage_counts[index]),
+                    "Attribute usage count has ownership not represented by its named bindings");
+            }
         }
         return result;
     });
@@ -13921,6 +13963,11 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
                 "Attribute collection is too large for the platform record");
         }
 
+        std::map<std::tuple<std::int64_t, std::string_view, bool>, std::uint32_t> direct_link_counts;
+        for (const auto& link : record.links) {
+            if (link.member_keys.empty())
+                ++direct_link_counts[{link.attribute_id.object_id, link.attribute_id.uuid.canonical, link.attribute_id.is_null}];
+        }
         std::vector<list_stream::ListValue> attributes;
         attributes.reserve(record.attributes.size() + 1);
         attributes.push_back(
@@ -13928,11 +13975,16 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
         for (std::size_t index = 0; index < record.attributes.size(); ++index) {
             const auto& attribute = record.attributes[index];
             const std::string record_path = "$/2/2/" + std::to_string(index + 1);
+            const auto found = direct_link_counts.find({attribute.id.object_id, attribute.id.uuid.canonical, attribute.id.is_null});
+            const auto direct_links = attribute.main && found != direct_link_counts.end() ? found->second : 0U;
+            if (direct_links > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()))
+                fail("OOF1112", record_path + "/3", "Attribute usage count within int32 range",
+                    "count overflow", "Attribute has too many direct bindings");
             attributes.push_back(list_stream::ListValue::list({
                 encoded_composite_id(attribute.id, record_path + "/0"),
                 list_stream::ListValue::raw_atom(attribute.main ? "1" : "0"),
                 list_stream::ListValue::raw_atom(attribute.stored_data ? "1" : "0"),
-                list_stream::ListValue::raw_atom("1"),
+                list_stream::ListValue::raw_atom(std::to_string(std::max(1U, direct_links))),
                 list_stream::ListValue::string_atom(attribute.name),
                 encoded_type_domain(attribute.type, record_path + "/5"),
             }));
@@ -14192,10 +14244,10 @@ Result<model::OrdinaryFormDocument> decode_document(
                 "Stored form dimensions are invalid");
         }
         const bool navigate_on_enter = bool_atom(form_section.items[5], "$/1/5");
-        require_raw_constant(form_section.items[6], "0", "$/1/6");
-        require_raw_constant(form_section.items[7], "1", "$/1/7");
-        require_raw_constant(form_section.items[8], "4", "$/1/8");
-        require_raw_constant(form_section.items[9], "4", "$/1/9");
+        const bool enable_grid = bool_atom(form_section.items[6], "$/1/6");
+        const bool enable_level_lines = bool_atom(form_section.items[7], "$/1/7");
+        const auto grid_step_hor = integer_atom<std::int64_t>(form_section.items[8], "$/1/8");
+        const auto grid_step_ver = integer_atom<std::int64_t>(form_section.items[9], "$/1/9");
         // Slot 10 is a platform serialization counter. It is normalized by the writer.
         static_cast<void>(integer_atom<std::uint32_t>(form_section.items[10], "$/1/10"));
         if (layout.value().kind == LayoutKind::form_section_18) {
@@ -14284,6 +14336,10 @@ Result<model::OrdinaryFormDocument> decode_document(
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         form.panel = std::move(root_owner.panel);
+        if (enable_grid) form.properties.set_explicit(model::PropertyId::from_name("EnableGrid"), true);
+        if (!enable_level_lines) form.properties.set_explicit(model::PropertyId::from_name("EnableLevelLines"), false);
+        if (grid_step_hor != 4) form.properties.set_explicit(model::PropertyId::from_name("GridStepHor"), grid_step_hor);
+        if (grid_step_ver != 4) form.properties.set_explicit(model::PropertyId::from_name("GridStepVer"), grid_step_ver);
         if (configuration_style) form.properties.set_explicit(model::PropertyId::from_name("Style"), model::StyleValue{configuration_style});
         if (caption_picture && caption_picture->reference) form.properties.set_explicit(model::PropertyId::from_name("CaptionPicture"),
             *caption_picture->reference);
@@ -15054,12 +15110,24 @@ Result<list_stream::ListValue> encode_document(
         }
         require_allowed_properties(
             document.form().properties,
-            {"Caption", "CaptionPicture", "Style", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow"},
+            {"Caption", "CaptionPicture", "Style", "AutoTitle", "AllowClose", "DesktopMode", "Width", "Height", "AutoContextMenu", "ContextMenu", "EnterKeyBehavior", "SizeChange", "ChangeWindowAppearanceMode", "WindowAppearanceMode", "WindowLocation", "WindowDockLocation", "WindowState", "ConnectableWindow", "EnableGrid", "EnableLevelLines", "GridStepHor", "GridStepVer"},
             "$/Form");
 
         const auto caption = explicit_localized_text(
             document.form().properties, "Caption", "$/Form");
         const bool auto_title = explicit_bool(document.form().properties, "AutoTitle", true);
+        const bool enable_grid = explicit_bool(document.form().properties, "EnableGrid", false);
+        const bool enable_level_lines = explicit_bool(document.form().properties, "EnableLevelLines", true);
+        std::array<std::int64_t, 2> grid_steps{4, 4};
+        constexpr std::array grid_step_names{"GridStepHor", "GridStepVer"};
+        for (std::size_t index = 0; index < grid_steps.size(); ++index) {
+            const auto* property = document.form().properties.find(model::PropertyId::from_name(grid_step_names[index]));
+            if (!property) continue;
+            const auto* value = std::get_if<std::int64_t>(&property->value);
+            if (!value) fail("OOF1122", "$/Form/" + std::string(grid_step_names[index]),
+                "int64", "different value type", "Шаг сетки должен иметь целочисленный тип");
+            grid_steps[index] = *value;
+        }
         const bool allow_close = explicit_bool(document.form().properties, "AllowClose", true);
         const bool desktop_mode = explicit_bool(document.form().properties, "DesktopMode", false);
         const bool connectable_window = explicit_bool(document.form().properties, "ConnectableWindow", false);
@@ -15454,10 +15522,10 @@ Result<list_stream::ListValue> encode_document(
             raw(std::to_string(width)),
             raw(std::to_string(height)),
             raw(std::to_string(enter_behavior)),
-            raw("0"),
-            raw("1"),
-            raw("4"),
-            raw("4"),
+            raw(enable_grid ? "1" : "0"),
+            raw(enable_level_lines ? "1" : "0"),
+            raw(std::to_string(grid_steps[0])),
+            raw(std::to_string(grid_steps[1])),
             raw(std::to_string(serialization_counter)),
             raw(std::to_string(width)),
             raw(std::to_string(height)),
