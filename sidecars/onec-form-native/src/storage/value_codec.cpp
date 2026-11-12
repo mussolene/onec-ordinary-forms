@@ -764,7 +764,7 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
         if (value.underline) out.write_bool(*value.underline);
         if (value.strikeout) out.write_bool(*value.strikeout);
         if (value.face_name) out.write_string(*value.face_name);
-        out.write_uint32(1); out.write_uint32(scale); out.end_list();
+        out.write_bool(value.auto_char_set); out.write_uint32(scale); out.end_list();
         return;
     }
     if (has_style) {
@@ -783,7 +783,7 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
     out.write_bool(value.strikeout.value_or(false));
     out.write_uint32(0); out.write_uint32(0); out.write_uint32(0); out.write_uint32(0); out.write_uint32(0);
     out.write_string(value.face_name.value_or(std::string{}));
-    out.write_uint32(1); out.write_uint32(scale); out.write_uint32(0);
+    out.write_bool(value.auto_char_set); out.write_uint32(scale); out.write_uint32(0);
     out.end_list();
 }
 
@@ -826,7 +826,7 @@ model::FontValue read_font(list_stream::ListInStream& in) {
         if (flags & 16U) value.underline = in.read_bool();
         if (flags & 32U) value.strikeout = in.read_bool();
         if (flags & 1U) value.face_name = in.read_string();
-        if (in.read_uint32() != 1) throw std::runtime_error("Font reserved marker is unsupported");
+        value.auto_char_set = in.read_bool();
         const auto scale = layout->has_scale ? in.read_uint32() : 100U;
         if (scale > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()) || in.has_next())
             throw std::runtime_error("Font scale or trailer is unsupported");
@@ -850,7 +850,7 @@ model::FontValue read_font(list_stream::ListInStream& in) {
     const bool strikeout = in.read_bool();
     for (int i = 0; i < 5; ++i) if (in.read_uint32() != 0) throw std::runtime_error("Font reserved field is nonzero");
     const auto face_name = in.read_string();
-    if (in.read_uint32() != 1) throw std::runtime_error("Font reserved marker is unsupported");
+    value.auto_char_set = in.read_bool();
     const auto scale = layout->has_scale ? in.read_uint32() : 100U;
     if (scale > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
         throw std::runtime_error("Font scale exceeds the supported signed 32-bit storage range");

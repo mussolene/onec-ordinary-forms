@@ -445,6 +445,20 @@ void test_font() {
     model::FontValue automatic;
     expect(codec::encode_font(automatic) == "{8,3,0,1,100}", "automatic Font must match its exact default tuple");
     expect(codec::decode_font(codec::encode_font(automatic)) == automatic, "automatic Font must round-trip");
+    for (auto value : {font, automatic, codec::decode_font("{8,2,0,{-20},1,100}"),
+                       codec::decode_font("{8,1,0,{0},1,100}")}) {
+        value.auto_char_set = false;
+        const auto modern = codec::encode_font(value);
+        expect(codec::decode_font(modern) == value,
+            "every Font kind must preserve disabled automatic character set selection");
+        auto legacy = modern;
+        legacy[1] = '7';
+        expect(codec::decode_font(legacy) == value, "Font7 must preserve autoCharSet independently from scale");
+        legacy[1] = '6';
+        const auto scale = legacy.rfind(",100");
+        legacy.erase(scale, 4);
+        expect(codec::decode_font(legacy) == value, "Font6 must preserve autoCharSet with implicit scale");
+    }
     const auto legacy_automatic = codec::decode_font("{6,3,0,1}");
     expect(legacy_automatic == automatic && codec::encode_font(legacy_automatic) == "{8,3,0,1,100}",
         "observed legacy automatic Font6 must decode to the typed default and rebuild as Font8");
@@ -460,7 +474,7 @@ void test_font() {
                        "{8,3,4," + std::to_string(weight) + ",1,100}",
             "legacy Font6 bold override must remain explicit through the canonical Font8 writer");
     }
-    for (const auto legacy : {"{6,2,0,1}", "{6,3,4,1}", "{6,3,0,0}", "{6,3,0,1,100}"}) {
+    for (const auto legacy : {"{6,2,0,1}", "{6,3,4,1}", "{6,3,0,2}", "{6,3,0,1,100}"}) {
         expect_rejected([legacy] { static_cast<void>(codec::decode_font(legacy)); },
             "unobserved Font6 kinds, settings, and trailing fields must be rejected");
     }
@@ -503,7 +517,7 @@ void test_font() {
             "native-confirmed Font7 payload must preserve typed properties and write Font8");
     }
     for (const auto intermediate : {"{7,3,512,1,100}", "{7,3,64,1,100}",
-             "{7,3,0,1}", "{7,3,0,1,100,0}", "{7,3,0,0,100}",
+             "{7,3,0,1}", "{7,3,0,1,100,0}", "{7,3,0,2,100}",
              "{7,3,0,1,2147483648}"}) {
         expect_rejected([intermediate] { static_cast<void>(codec::decode_font(intermediate)); },
             "Font7 must reject unsupported flags, missing scale, trailers, and invalid ranges");

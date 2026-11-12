@@ -1559,7 +1559,7 @@ void test_control_font_xml_round_trip() {
         if (kind == "CheckBox") batch += R"XML(<DataPath attributeId="17"/>)XML";
         if (kind == "InputField") batch += R"XML(<ValueType><Entry term="string" length="20"/></ValueType>)XML";
         batch += "<Position/><Font kind=\"styleReference\" styleName=\"" + std::string(styles[index].name) +
-            "\" height=\"12\" bold=\"true\" italic=\"false\" underline=\"false\" strikeout=\"false\"/></" + kind + ">";
+            "\" height=\"12\" bold=\"true\" italic=\"false\" underline=\"false\" strikeout=\"false\" autoCharSet=\"false\"/></" + kind + ">";
     }
     batch += "</ChildItems></Form>";
     const auto mixed = source::parse_form_xml(batch);
@@ -1576,6 +1576,7 @@ void test_control_font_xml_round_trip() {
         expected.kind = model::FontKind::style_reference; expected.face_name.reset();
         expected.style = model::QualifiedName{std::string(styles[index].name)};
         expected.italic = false; expected.underline = false; expected.strikeout = false;
+        expected.auto_char_set = false;
         expect(entry && std::get<model::FontValue>(entry->value) == expected,
             "each control must retain its named style, size, bold and explicit false overrides");
     }

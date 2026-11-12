@@ -22,8 +22,11 @@ Font у ListBox не объявлен в текущем API и не вводит
 CalendarField и ProgressBar также поддерживают Font и BorderColor,
 UsualGroup поддерживает Font и BorderColor, TrackBar поддерживает BorderColor.
 У UsualGroup default шрифта отличается: `Font kind="automatic" bold="true"`.
-Именованный FontValue различает отсутствие bold, явно false и true;
-остальные неподтвержденные переопределения автоматического шрифта отклоняются.
+Именованный FontValue различает отсутствие bold, явно false и true.
+Атрибут `autoCharSet` сохраняет автоматический выбор набора символов шрифта,
+включая явно заданное `false`; значение по умолчанию `true` не выводится.
+Общий кодек читает этот признак в Font6, Font7 и Font8 и собирает Font8.
+Имя поля подтверждено [официальным API EDT](https://edt.1c.ru/dev/edt/2025.2/apidocs/com/_1c/g5/v8/dt/form/layout/model/platform/font/Font.html).
 
 Общие TextColor, BackColor, FieldTextColor, FieldBackColor, ButtonTextColor и
 ButtonBackColor поддерживаются там, где пара контрол/свойство подтверждена

@@ -980,7 +980,7 @@ constexpr std::array<std::string_view, 5> windows_font_names{
 model::FontValue parse_font(xmlNodePtr node) {
     static constexpr std::string_view allowed_attributes[] = {
         "kind", "styleName", "styleObjectId", "styleUuid", "faceName", "height",
-        "bold", "italic", "underline", "strikeout", "scale", "scaleOverride", "windowsFont"};
+        "bold", "italic", "underline", "strikeout", "scale", "scaleOverride", "windowsFont", "autoCharSet"};
     for (xmlAttrPtr attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
         const std::string_view name(reinterpret_cast<const char*>(attribute->name));
         if (std::ranges::find(allowed_attributes, name) == std::end(allowed_attributes)) {
@@ -1020,6 +1020,9 @@ model::FontValue parse_font(xmlNodePtr node) {
     }
     if (auto scale_override = optional_attribute(node, "scaleOverride")) {
         value.scale_override = parse_boolean(*scale_override, node, "scaleOverride");
+    }
+    if (auto auto_char_set = optional_attribute(node, "autoCharSet")) {
+        value.auto_char_set = parse_boolean(*auto_char_set, node, "autoCharSet");
     }
     const bool has_style = !std::holds_alternative<std::monostate>(value.style);
     if ((value.kind == model::FontKind::windows_font) != value.windows_font.has_value())
@@ -4035,6 +4038,7 @@ private:
             attributes.emplace_back("scale", format_double(value.scale));
         }
         if (value.scale_override) attributes.emplace_back("scaleOverride", "true");
+        if (!value.auto_char_set) attributes.emplace_back("autoCharSet", "false");
         writer_.empty(name, attributes);
     }
 

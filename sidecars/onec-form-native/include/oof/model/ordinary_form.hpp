@@ -495,6 +495,7 @@ struct FontValue {
     double scale = 100.0;
     bool scale_override = false;
     std::optional<WindowsFont> windows_font;
+    bool auto_char_set = true;
 
     friend bool operator==(const FontValue&, const FontValue&) = default;
 };

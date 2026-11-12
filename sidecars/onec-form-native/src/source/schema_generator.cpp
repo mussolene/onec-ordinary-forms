@@ -758,6 +758,7 @@ void append_value_types(std::string& output) {
     <xs:attribute name="strikeout" type="xs:boolean" use="optional"/>
     <xs:attribute name="scale" type="xs:double" use="optional"/>
     <xs:attribute name="scaleOverride" type="xs:boolean" use="optional"/>
+    <xs:attribute name="autoCharSet" type="xs:boolean" use="optional" default="true"/>
     <xs:attribute name="styleName" type="NonEmptyTokenType" use="optional"/>
     <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
     <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
