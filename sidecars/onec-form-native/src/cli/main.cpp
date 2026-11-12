@@ -635,6 +635,13 @@ int dump_form(
         print_diagnostics(loaded.diagnostics(), json);
         return 1;
     }
+    if (!loaded.value().reconstruction_complete()) {
+        auto diagnostics = loaded.diagnostics();
+        diagnostics.push_back({"OOF1140", oof::DiagnosticSeverity::error, {}, "$", "reconstructionComplete",
+            "true", "false", "Cannot export an incomplete form as an editable source package. No output files were written."});
+        print_diagnostics(diagnostics, json);
+        return 1;
+    }
     const auto xml = oof::source::serialize_form_xml(loaded.value(), types ? &types->schema : nullptr);
     if (!xml) {
         print_diagnostics(xml.diagnostics(), json);

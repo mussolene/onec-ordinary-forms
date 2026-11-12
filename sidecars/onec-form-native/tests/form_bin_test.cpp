@@ -209,7 +209,9 @@ void test_button_base_state_normalization() {
             expect(partial_parsed.ok() && !partial_parsed.value().reconstruction_complete(),
                 "partial Button XML must preserve incomplete reconstruction");
             const auto partial_build = oof::save_form_bin(partial_parsed.value());
-            expect(partial_build.ok(), "partial Button XML must remain buildable to Form.bin");
+            expect(!partial_build.ok() && partial_build.diagnostics().front().code == "OOF1140" &&
+                       partial_build.diagnostics().front().severity == oof::DiagnosticSeverity::error,
+                "partial Button XML must never build a Form.bin with missing properties");
         }
         const auto changed_neighbor = oof::load_form_bin(alter_button_record("2", true), "Main");
         expect(changed_neighbor.ok() && !changed_neighbor.value().reconstruction_complete() &&

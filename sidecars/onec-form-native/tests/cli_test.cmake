@@ -287,7 +287,7 @@ require_contains("${final_xml_text}" "<Caption>After</Caption>" "edited named Ca
 require_contains("${final_xml_text}" "<Caption>Launch</Caption>" "edited Button Caption round-trip")
 require_file_equals("${test_root}/second/Form/Module.bsl" "${module_text}" "edited module preservation")
 
-# Неполнота источника предупреждает, но не запрещает сборку известных свойств.
+# Неполный источник не должен уничтожать данные существующего результата.
 set(partial_source "${test_root}/partial/Form.xml")
 set(partial_bin "${test_root}/partial.bin")
 file(MAKE_DIRECTORY "${test_root}/partial/Form")
@@ -295,17 +295,19 @@ string(REPLACE "ordinaryFormVersion=\"2.1\"" "ordinaryFormVersion=\"2.1\" recons
   partial_xml "${edited_xml}")
 file(WRITE "${partial_source}" "${partial_xml}")
 file(WRITE "${test_root}/partial/Form/Module.bsl" "${module_text}")
-run_cli(0 "partial source build" build "${partial_source}" "${partial_bin}" --json)
+file(WRITE "${partial_bin}" "preserve this output")
+run_cli(1 "partial source build" build "${partial_source}" "${partial_bin}" --json)
 string(JSON partial_ok GET "${CLI_STDOUT}" ok)
-string(JSON warning_count LENGTH "${CLI_STDOUT}" diagnostics)
-string(JSON warning_severity GET "${CLI_STDOUT}" diagnostics 0 severity)
-if(NOT partial_ok OR warning_count LESS 1 OR NOT warning_severity STREQUAL "warning")
-  message(FATAL_ERROR "partial source must build successfully with JSON warnings")
+string(JSON partial_severity GET "${CLI_STDOUT}" diagnostics 0 severity)
+if(partial_ok OR NOT partial_severity STREQUAL "error")
+  message(FATAL_ERROR "partial source must fail with an error diagnostic")
 endif()
-file(READ "${partial_bin}" partial_binary HEX)
-file(READ "${second_bin}" known_binary HEX)
-if(NOT partial_binary STREQUAL known_binary)
-  message(FATAL_ERROR "partial metadata must preserve the serialized known properties and module")
+require_contains("${CLI_STDOUT}" "OOF1140" "incomplete source diagnostic")
+require_file_equals("${partial_bin}" "preserve this output" "partial build must not overwrite output")
+file(REMOVE "${partial_bin}")
+run_cli(1 "partial source new output" build "${partial_source}" "${partial_bin}" --json)
+if(EXISTS "${partial_bin}")
+  message(FATAL_ERROR "partial build must not create an output")
 endif()
 
 # Errors must be diagnostic, nonzero, and leave a pre-existing output untouched.

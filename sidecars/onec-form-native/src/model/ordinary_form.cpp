@@ -4000,9 +4000,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
                                 const ControlNode* command_bar = find_control(standard.command_bar.id());
                                 if (command_bar == nullptr || command_bar->kind() != ControlKind::command_bar)
                                     invalid("StandardAction commandBarId must resolve to a CommandBar control");
-                            } else if (standard.context == StandardMenuActionContext::default_context) {
+                            } else if (standard.context == StandardMenuActionContext::default_context ||
+                                       standard.context == StandardMenuActionContext::form) {
                                 if (standard.command_bar.id().value() != 0)
-                                    invalid("Default StandardAction context cannot have commandBarId");
+                                    invalid("Default or Form StandardAction context cannot have commandBarId");
                             } else invalid("unknown StandardAction context");
                             if (standard.source == StandardMenuActionSource::control) {
                                 const auto id = standard.source_control.id();

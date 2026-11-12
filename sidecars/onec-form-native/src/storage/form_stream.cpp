@@ -1994,6 +1994,13 @@ std::uint64_t default_selected_owner_id(const model::OrdinaryFormDocument& docum
     return selected;
 }
 
+std::uint64_t command_bar_collection_id(const model::OrdinaryFormDocument& document, std::uint64_t control_id) {
+    if (control_id != 4) return control_id;
+    std::uint64_t candidate = 5;
+    while (document.find_control(model::ObjectId{candidate}) != nullptr) ++candidate;
+    return candidate;
+}
+
 LV canonical_command_bar_properties(bool enabled, model::PropertyValue tool_tip,
                                      const std::vector<model::CommandBarButton>& buttons,
                                      const model::OrdinaryFormDocument& document, std::uint64_t control_id, bool secondary = true,
@@ -2027,8 +2034,9 @@ LV canonical_command_bar_properties(bool enabled, model::PropertyValue tool_tip,
     properties[13] = raw("0");
     // Slot 8 is the observed stable root-owner marker.
     properties[8] = raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79");
-    properties[7] = encode_button_menu(buttons, document, control_id, command_bar_root_marker, control_id);
-    properties[9] = raw(std::to_string(control_id));
+    const auto collection_id = command_bar_collection_id(document, control_id);
+    properties[7] = encode_button_menu(buttons, document, control_id, command_bar_root_marker, collection_id);
+    properties[9] = raw(std::to_string(collection_id));
     const auto selected = default_menu_item_id(buttons);
     if (selected != 0) {
         properties[10] = properties[7].items[1];
@@ -3863,11 +3871,6 @@ std::optional<DecodedControlEvent> decode_button_event(
     if (raw_atom(event_record.items[1], child_path(event_path, 1)) == standard_menu_action_guid) {
         bool alias = false;
         auto action = decode_standard_menu_action(event_record.items[2], child_path(event_path, 2), alias);
-        // A button action uses the form command collection, not a CommandBar control.
-        if (action.context == model::StandardMenuActionContext::command_bar && action.command_bar.id().value() == 4) {
-            action.context = model::StandardMenuActionContext::form;
-            action.command_bar = {};
-        }
         return DecodedControlEvent{"Click", {}, {}, std::move(action)};
     }
     require_raw_constant(
@@ -5058,7 +5061,7 @@ LV encode_standard_menu_action(const model::StandardMenuAction& action,
             if (!command_bar || command_bar->kind() != model::ControlKind::command_bar)
                 fail("OOF1123", std::string(path), "existing CommandBar context", "missing or wrong control kind", "Standard command context is invalid");
             context = list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)),
-                raw(std::to_string(command_bar->id.value())), raw("0")});
+                raw(std::to_string(command_bar_collection_id(document, command_bar->id.value()))), raw("0")});
             break;
         }
         default: fail("OOF1122", std::string(path), "Default or CommandBar", "unknown", "Standard command context is unsupported");
@@ -5128,9 +5131,13 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
         const auto context_id = integer_atom<std::uint64_t>(context.items[3], child_path(context_path, 3));
         if (context_id == 0)
             fail("OOF1123", child_path(context_path, 3), "nonzero CommandBar collection identity", "zero", "Standard command context is invalid");
-        action.context = model::StandardMenuActionContext::command_bar;
-        // Resolved after all CommandBar collection identities are known.
-        action.command_bar = model::ControlRef{model::ObjectId{context_id}};
+        if (context_id == 4) {
+            action.context = model::StandardMenuActionContext::form;
+        } else {
+            action.context = model::StandardMenuActionContext::command_bar;
+            // Resolved after all CommandBar collection identities are known.
+            action.command_bar = model::ControlRef{model::ObjectId{context_id}};
+        }
     } else fail("OOF1114", child_path(context_path, 1), "Default or CommandBar context", std::to_string(kind), "Standard command context is unsupported");
     if (source == std::numeric_limits<std::uint32_t>::max()) action.source = model::StandardMenuActionSource::form;
     else if (source == 0) action.source = model::StandardMenuActionSource::all_sources;
@@ -6479,8 +6486,9 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     normalized.items[0] = std::move(normalized_base);
     // Native forms keep a separate root collection identity. After resolving
     // the actual marker/ID pair, rebuild that identity from the named owner.
-    normalized.items[7] = encode_button_menu({}, empty_document, raw_id, command_bar_root_marker, raw_id);
-    normalized.items[9] = raw(std::to_string(raw_id));
+    const auto canonical_collection_id = command_bar_collection_id(empty_document, raw_id);
+    normalized.items[7] = encode_button_menu({}, empty_document, raw_id, command_bar_root_marker, canonical_collection_id);
+    normalized.items[9] = raw(std::to_string(canonical_collection_id));
     // Designer relocates the selected action source UUID on load. The public model owns
     // the named action selection, not the transient source identity.
     normalized.items[10] = raw("9d0a2e40-b978-11d4-84b6-008048da06df");
@@ -14970,11 +14978,10 @@ Result<model::OrdinaryFormDocument> decode_document(
 
 Result<list_stream::ListValue> encode_document(
     const model::OrdinaryFormDocument& document) {
-    Diagnostics warnings;
     if (!document.reconstruction_complete()) {
-        warnings.push_back({
-            "OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
-            "The output was built from an incomplete reconstruction; unsupported source properties were not restored."});
+        return Result<list_stream::ListValue>::failure({{
+            "OOF1140", DiagnosticSeverity::error, {}, "$", "reconstructionComplete", "true", "false",
+            "Cannot build an incomplete form: source properties are missing from the named model. No form stream was written."}});
     }
     auto encoded = capture_decode_failure<list_stream::ListValue>([&document] {
         validate_radio_groups(document);
@@ -15623,11 +15630,15 @@ Result<list_stream::ListValue> encode_document(
         if (!decoded) {
             throw DecodeFailure(decoded.diagnostics().front());
         }
+        if (!decoded.value().reconstruction_complete()) {
+            auto diagnostic = decoded.diagnostics().front();
+            diagnostic.severity = DiagnosticSeverity::error;
+            diagnostic.message = "Writer readback is incomplete: " + diagnostic.message;
+            throw DecodeFailure(std::move(diagnostic));
+        }
         return encoded;
     });
-    if (!encoded) return encoded;
-    return Result<list_stream::ListValue>::success(
-        encoded.take_value(), std::move(warnings));
+    return encoded;
 }
 
 }  // namespace oof::storage::form_stream

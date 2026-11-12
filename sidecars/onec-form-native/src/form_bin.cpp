@@ -189,6 +189,12 @@ Result<std::vector<std::uint8_t>> save_form_bin(
         if (!verified) {
             return Result<std::vector<std::uint8_t>>::failure(verified.diagnostics());
         }
+        if (!verified.value().reconstruction_complete()) {
+            auto diagnostics = verified.diagnostics();
+            diagnostics.push_back(diagnostic("OOF1140", "Form.bin/form", "complete named model", "incomplete readback",
+                "The writer produced a form that cannot be read completely. No Form.bin was returned."));
+            return Result<std::vector<std::uint8_t>>::failure(std::move(diagnostics));
+        }
         return Result<std::vector<std::uint8_t>>::success(
             std::move(bytes), encoded.diagnostics());
     } catch (const std::exception& error) {

@@ -3267,8 +3267,7 @@ void test_gantt_chart_named_storage_round_trip() {
             expect(partial_payload && partial_payload->series.size() == 2 && partial_payload->points.size() == 3 &&
                 partial_payload->intervals.size() == 2, "Gantt named dimensions and intervals must survive an unknown default word");
             const auto rebuilt = form_stream::encode_document(partial.value());
-            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
-                "Gantt rebuild must use fresh canonical named data after warning about the default word");
+            expect(!rebuilt.ok(), "Непредставленное поле Gantt должно запрещать сборку");
         }
     }
     auto nonnumeric_gantt_default = encoded.value();
@@ -5537,7 +5536,7 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
                std::get<model::ButtonPayload>(document.find_control(model::ObjectId{2})->payload).buttons.size(),
         "known menu entries and client interface variants must survive an unknown second tail value");
     const auto partial_menu_reencoded = form_stream::encode_document(partial_second_tail.value());
-    expect(partial_menu_reencoded.ok(), "partial menu profile must remain buildable through the primary writer");
+    expect(!partial_menu_reencoded.ok(), "Неполное меню должно запрещать сборку");
 
     auto invalid_model = document.form();
     model::OrdinaryFormDocument invalid_document(std::move(invalid_model));
@@ -5619,9 +5618,9 @@ void test_menu_action_generations_share_named_model() {
                 expect(parsed.ok(), "old generation must serialize as valid named XML");
                 const auto rebuilt = form_stream::encode_document(parsed.value());
                 if (command_bar) {
-                    expect(rebuilt.ok() && std::ranges::any_of(rebuilt.diagnostics(), [](const auto& diagnostic) {
-                        return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
-                    }), "unrepresented old CommandBar context must retain the incomplete-build warning");
+                    expect(!rebuilt.ok() && std::ranges::any_of(rebuilt.diagnostics(), [](const auto& diagnostic) {
+                        return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::error;
+                    }), "unrepresented old CommandBar context must prevent a lossy build");
                 } else {
                     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(current.value()),
                         "XML-only rebuild of complete old Button menu must equal the current named-model encoding");
@@ -6018,7 +6017,7 @@ void test_command_bar_standard_menu_action_round_trip_and_guards() {
         expect(standard_payload.items.at(0).atom == "6" && standard_payload.items.at(1).atom == expected_source_id &&
                    standard_payload.items.at(4).items.at(1).atom == "99" &&
                    standard_payload.items.at(4).items.at(2).atom == "b78f2e80-ec68-11d4-9dcf-0050bae2bc79" &&
-                   standard_payload.items.at(4).items.at(3).atom == "4",
+                   standard_payload.items.at(4).items.at(3).atom == "6",
             "standard Close wire data must preserve its known subtype, context, and CommandBar reference");
 
         const auto decoded = form_stream::decode_document(encoded.value(), "StandardMenuAction");
@@ -6128,7 +6127,7 @@ void test_standard_menu_action_default_context_and_control_source() {
         return *std::get<model::CommandBarPayload>(document.find_control(model::ObjectId{4})->payload)
             .buttons.front().standard_action;
     };
-    for (const auto context : {"Default", "CommandBar"}) {
+    for (const auto context : {"Default", "Form", "CommandBar"}) {
         for (const auto source_name : {"Form", "AllSources", "Control"}) {
             const auto parsed = source::parse_form_xml(make_xml(context, source_name));
             expect(parsed.ok(), parsed ? "named StandardAction variants must parse" : parsed.diagnostics().front().message);
@@ -6167,6 +6166,42 @@ void test_standard_menu_action_default_context_and_control_source() {
             }
         }
     }
+    std::string shared_xml = R"XML(<Form id="1" name="SharedFormContexts" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    for (unsigned index = 0; index < 12; ++index)
+        shared_xml += "<CommandBar id=\"" + std::to_string(index + 20) + "\" name=\"Bar" +
+            std::to_string(index) + R"XML("><Position/><Buttons><CommandBarButton name="Close" type="Action"><StandardAction command="Close" context="Form" source="AllSources"/></CommandBarButton></Buttons></CommandBar>)XML";
+    shared_xml += "</ChildItems></Form>";
+    const auto shared = source::parse_form_xml(shared_xml);
+    expect(shared.ok(), "twelve independent bars must accept the existing named Form context");
+    const auto canonical_shared = form_stream::encode_document(shared.value());
+    expect(canonical_shared.ok(), "the Form context batch must encode without a baseline");
+    auto aliased_shared = canonical_shared.value();
+    for (unsigned index = 0; index < 12; ++index) {
+        auto* bar = const_cast<list_stream::ListValue*>(find_control_record(aliased_shared, index + 20));
+        auto& properties = bar->items.at(2).items.at(1);
+        properties.items.at(9) = list_stream::ListValue::raw_atom("4");
+        auto& menu = properties.items.at(7);
+        const auto count = static_cast<std::size_t>(std::stoul(menu.items.at(4).atom));
+        menu.items.at(6 + count).items.at(2) = list_stream::ListValue::raw_atom("4");
+    }
+    const auto decoded_shared = form_stream::decode_document(aliased_shared, "SharedFormContexts");
+    expect(decoded_shared.ok() && decoded_shared.value().reconstruction_complete(),
+        "Form context4 must resolve independently from twelve duplicated CommandBar collection identities");
+    for (unsigned index = 0; index < 12; ++index) {
+        const auto& item = std::get<model::CommandBarPayload>(decoded_shared.value().find_control(
+            model::ObjectId{index + 20})->payload).buttons.front();
+        expect(item.standard_action && item.standard_action->context == model::StandardMenuActionContext::form &&
+            item.standard_action->command_bar.id().value() == 0,
+            "every shared4 action must remain a Form action without an invented CommandBar reference");
+    }
+    const auto shared_named = source::serialize_form_xml(decoded_shared.value());
+    expect(shared_named.ok(), "the shared context batch must serialize as named XML");
+    const auto shared_reopened = source::parse_form_xml(shared_named.value());
+    expect(shared_reopened.ok(), "the shared context batch must reopen from XML");
+    const auto shared_rebuilt = form_stream::encode_document(shared_reopened.value());
+    expect(shared_rebuilt.ok() && list_stream::dump_compact(shared_rebuilt.value()) ==
+        list_stream::dump_compact(canonical_shared.value()), "all twelve bars must rebuild canonically from XML only");
+
     auto renumbered_xml = make_xml("Default", "Control");
     for (const auto marker : {"sourceControlId=\"5\"", "Button id=\"5\""}) {
         const auto at = renumbered_xml.find(marker);
@@ -6316,9 +6351,8 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
                 return diagnostic.code == "OOF1145" && diagnostic.severity == oof::DiagnosticSeverity::warning;
             }), "verified SaveValues alias must report an explicit warning and remain partial");
         const auto alias_rebuilt = alias_decoded ? form_stream::encode_document(alias_decoded.value()) : oof::Result<list_stream::ListValue>::failure({});
-        expect(alias_rebuilt.ok() && action_payload(*find_control_record(alias_rebuilt.value(), 100), true).items.at(4).items.at(3).atom == "4" &&
-            action_payload(*find_control_record(alias_rebuilt.value(), 100), true).items.at(4).items.at(4).atom == "1",
-            "verified SaveValues aliases must write the canonical factory tuple");
+        expect(!alias_rebuilt.ok() && alias_rebuilt.diagnostics().front().code == "OOF1140",
+            "Неполную модель SaveValues нельзя молча заменить каноническим вариантом");
     }
     const auto rejects = [&](auto mutate, std::string_view message) {
         const auto invalid = mutate_first_action(mutate);
@@ -8300,12 +8334,12 @@ void test_label_partial_reconstruction_warning_and_build() {
                parsed.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
         "XML parsing must preserve incompleteness as a warning");
     const auto built = oof::save_form_bin(parsed.value());
-    expect(built.ok() && !built.value().empty() &&
+    expect(!built.ok() &&
                std::any_of(built.diagnostics().begin(), built.diagnostics().end(), [](const auto& diagnostic) {
-                   return diagnostic.severity == oof::DiagnosticSeverity::warning &&
-                       diagnostic.message.find("unsupported source properties were not restored") != std::string::npos;
+                   return diagnostic.severity == oof::DiagnosticSeverity::error &&
+                       diagnostic.code == "OOF1140";
                }),
-        "build must write Form.bin and warn that unsupported source properties were not restored");
+        "build must reject incomplete XML instead of discarding unsupported source properties");
 
     auto malformed_arity = source_stream.value();
     auto* malformed_label = find_record_with_guid(malformed_arity,
@@ -8385,8 +8419,7 @@ void test_control_unknown_common_state_warning_and_build() {
         expect(parsed.ok() && !parsed.value().reconstruction_complete(),
             "partial control XML must preserve reconstruction completeness");
         const auto built = oof::save_form_bin(parsed.value());
-        expect(built.ok() && !built.value().empty(),
-            "partial control XML must remain buildable to Form.bin");
+        expect(!built.ok(), "Неполный XML контрола должен запрещать сборку Form.bin");
     };
 
     exercise(model::ControlKind::button, "Run");
@@ -14033,9 +14066,7 @@ void test_dendrogram_strict_native_fixture() {
         expect(partial_graph && partial_graph->items.empty() && partial_graph->links.empty(),
             "empty Dendrogram Items and Links must remain empty in the named model");
         const auto rebuilt = form_stream::encode_document(partial_empty.value());
-        expect(rebuilt.ok() && canonical_empty_rebuild.ok() &&
-            list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(canonical_empty_rebuild.value()),
-            "empty Dendrogram rebuild must use fresh canonical named data after warning");
+        expect(!rebuilt.ok(), "Неполная Dendrogram должна запрещать сборку");
     }
     auto nonnumeric_empty_word = stream;
     carrier_record = nullptr;
@@ -18522,8 +18553,7 @@ void test_owned_panel_colors_and_repeated_background() {
                    parsed.value().form().panel.properties.find(model::PropertyId::from_name("BackColor"))->value,
         "inconsistent background copy must warn while retaining the named BackColor");
     const auto rebuilt_background = form_stream::encode_document(inconsistent_background.value());
-    expect(rebuilt_background.ok() && list_stream::dump_compact(rebuilt_background.value()) == list_stream::dump_compact(encoded.value()),
-        "partial background model must rebuild the known named colors rather than preserve an unknown copy");
+    expect(!rebuilt_background.ok(), "Непредставленное значение фона должно запрещать сборку");
     auto malformed_owner = encoded.value();
     malformed_owner.items[1].items[2].items[1].items[1].items[0].items.pop_back();
     expect(!form_stream::decode_document(malformed_owner, "TruncatedOwnerBase"),
@@ -19176,12 +19206,9 @@ void test_recursive_panel_pages_keep_owner_geometry_separate() {
     expect(partial_parsed.ok() && !partial_parsed.value().reconstruction_complete(),
         "partial nested Panel XML must preserve its completeness state");
     const auto partial_bin = oof::save_form_bin(partial_parsed.value());
-    expect(partial_bin.ok() && !partial_bin.value().empty() &&
-               std::any_of(partial_bin.diagnostics().begin(), partial_bin.diagnostics().end(),
-                   [](const auto& diagnostic) {
-                       return diagnostic.severity == oof::DiagnosticSeverity::warning;
-                   }),
-        "partial nested Panel XML must build Form.bin with an unsupported-property warning");
+    expect(!partial_bin.ok() && std::any_of(partial_bin.diagnostics().begin(), partial_bin.diagnostics().end(),
+        [](const auto& diagnostic) { return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::error; }),
+        "Неполная вложенная Panel должна запрещать сборку Form.bin");
 
     auto moved_incoming = encoded.value();
     auto& moved_root_children = moved_incoming.items[1].items[2].items[2];
@@ -19491,8 +19518,7 @@ void test_command_bar_unrepresented_self_dependency() {
                control->position.bindings.anchors.front().target_coordinate == model::BindingCoordinate::bottom,
         "the named primary Form.Bottom binding must remain unchanged");
     const auto rebuilt = form_stream::encode_document(decoded.value());
-    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
-        "the writer must derive the graph from named bindings without preserving the unrepresented tuple");
+    expect(!rebuilt.ok(), "Непредставленная зависимость CommandBar должна запрещать сборку");
     const auto baseline = form_stream::decode_document(encoded.value(), "SelfDependency");
     expect(baseline.ok() && baseline.value().reconstruction_complete(),
         "the canonical CommandBar graph must remain complete");
@@ -19711,8 +19737,7 @@ void test_embedded_chart_typed_variants_and_guards() {
         const auto restored = source::parse_form_xml(restored_xml.value());
         expect(restored.ok() && !restored.value().reconstruction_complete(), "embedded Font warning must survive named XML cycle");
         const auto restored_binary = form_stream::encode_document(restored.value());
-        expect(restored_binary.ok() && list_stream::dump_compact(restored_binary.value()) == list_stream::dump_compact(encoded.value()),
-            "embedded Font variant must retain owner projection without preserving unavailable raw fields");
+        expect(!restored_binary.ok(), "Непредставленный шрифт вложенной диаграммы должен запрещать сборку");
         for (const auto mutation : {0, 1, 2}) {
             auto invalid = encoded.value();
             auto& chart = find_record(find_record, invalid, kind)->items[2].items[1].items[2];
@@ -19733,8 +19758,8 @@ void test_embedded_chart_typed_variants_and_guards() {
                 const auto projected_xml = source::serialize_form_xml(projected.value());
                 expect(projected_xml.ok(), "valid Gantt typed residual must allow named XML");
                 const auto projected_document = source::parse_form_xml(projected_xml.value());
-                expect(projected_document.ok() && form_stream::encode_document(projected_document.value()).ok(),
-                    "valid Gantt typed residual must allow XML reconstruction");
+                expect(projected_document.ok() && !form_stream::encode_document(projected_document.value()).ok(),
+                    "Неполная модель Gantt доступна для анализа, но не для сборки");
             }
             for (const auto index : {std::size_t{12}, std::size_t{13}, std::size_t{14}, std::size_t{15}, std::size_t{25}}) {
                 auto malformed = encoded.value();
@@ -22980,10 +23005,9 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
         "incomplete Chart XML must expose reconstruction status");
     const auto partial_xml_document = source::parse_form_xml(partial_xml.value());
     expect(partial_xml_document.ok() && !partial_xml_document.value().reconstruction_complete() &&
-        form_stream::encode_document(partial_xml_document.value()).ok(), "incomplete Chart XML must rebuild successfully");
+        !form_stream::encode_document(partial_xml_document.value()).ok(), "Неполный XML диаграммы должен запрещать сборку");
     const auto partial_rebuilt = form_stream::encode_document(partial.value());
-    expect(partial_rebuilt.ok() && list_stream::dump_compact(partial_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
-        "optional Chart profile data must be omitted from fresh named reconstruction");
+    expect(!partial_rebuilt.ok(), "Непредставленные свойства диаграммы нельзя отбрасывать при сборке");
     auto style_fonts = encoded.value();
     record = find_chart_record(style_fonts);
     for (const auto index : {std::size_t{49}, std::size_t{50}, std::size_t{51}}) {
@@ -26014,7 +26038,7 @@ void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
 }
 
 
-void test_partial_complex_and_spreadsheet_profiles_rebuild_from_xml() {
+void test_partial_complex_and_spreadsheet_profiles_reject_build_from_xml() {
     const auto check_partial_xml_build = [](const model::OrdinaryFormDocument& partial,
                                             model::ObjectId control_id,
                                             std::string_view control_name) {
@@ -26029,14 +26053,11 @@ void test_partial_complex_and_spreadsheet_profiles_rebuild_from_xml() {
         expect(restored != nullptr && restored->name == control_name,
             "partial XML must retain the known control identity");
         const auto encoded = form_stream::encode_document(parsed.value());
-        expect(encoded.ok(), "partial XML model must remain encodable through the primary form writer");
+        expect(!encoded.ok(), "Неполная модель должна отклоняться основным writer");
         const auto built = oof::save_form_bin(parsed.value());
-        expect(built.ok() && std::any_of(built.diagnostics().begin(), built.diagnostics().end(),
-                   [](const auto& diagnostic) {
-                       return diagnostic.severity == oof::DiagnosticSeverity::warning &&
-                           diagnostic.message.find("unsupported source properties were not restored") != std::string::npos;
-                   }),
-            "partial XML model must build Form.bin with the source-property warning");
+        expect(!built.ok() && std::any_of(built.diagnostics().begin(), built.diagnostics().end(),
+            [](const auto& diagnostic) { return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::error; }),
+            "Неполная модель должна отклоняться контейнерным writer");
     };
 
     const auto pivot_xml = source::parse_form_xml(R"XML(<Form id="1" name="PartialPivot" ordinaryFormVersion="2.1"><ChildItems>
@@ -26213,9 +26234,9 @@ void test_pivot_chart_types() {
         std::ranges::any_of(partial.diagnostics(), [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
         "the observed unknown renderer field must remain explicitly incomplete, without normalization");
     const auto partial_output = form_stream::encode_document(partial.value());
-    expect(partial_output.ok() && std::ranges::any_of(partial_output.diagnostics(),
-        [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
-        "the existing incomplete reconstruction contract must retain its warning during rebuild");
+    expect(!partial_output.ok() && std::ranges::any_of(partial_output.diagnostics(),
+        [](const auto& diagnostic) { return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::error; }),
+        "Неполная модель PivotChart должна отклоняться с ошибкой OOF1140");
 }
 
 void test_complex_chart_back_color_pairs() {
@@ -26547,7 +26568,7 @@ int main() {
         test_complex_chart_back_color_pairs();
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
-        test_partial_complex_and_spreadsheet_profiles_rebuild_from_xml();
+        test_partial_complex_and_spreadsheet_profiles_reject_build_from_xml();
         test_command_bar_owner_pair_and_strict_profile();
         test_command_bar_five_named_properties_and_invalid_variants();
         test_command_bar_named_action_source_references();

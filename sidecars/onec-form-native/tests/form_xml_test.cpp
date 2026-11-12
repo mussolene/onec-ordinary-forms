@@ -3645,8 +3645,12 @@ void test_standard_menu_action_xml_contract() {
         "Default context rejects mutually exclusive commandBarId");
     expect(!source::parse_form_xml(replace_once(default_control, "context=\"Default\"", "context=\"CommandBar\"")),
         "CommandBar context requires commandBarId");
-    expect(!source::parse_form_xml(replace_once(default_control, "context=\"Default\"", "context=\"Form\"")),
-        "unproven Form context must reject");
+    const auto form_context = source::parse_form_xml(replace_once(default_control,
+        "context=\"Default\"", "context=\"Form\""));
+    expect(form_context.ok(), "native-confirmed Form context must use the existing named XML contract");
+    expect(!source::parse_form_xml(replace_once(default_control, "context=\"Default\"",
+        "context=\"Form\" commandBarId=\"4\"")),
+        "Form context must reject a conflicting CommandBar reference");
     for (const auto source_name : {"Form", "AllSources"})
         expect(!source::parse_form_xml(replace_once(default_control, "source=\"Control\"",
             std::string("source=\"") + source_name + "\"")), "non-Control source rejects sourceControlId");
