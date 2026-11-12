@@ -2132,6 +2132,11 @@ int main() {
             compile_schema(schemas.ordinary_form_palette_xsd, "OrdinaryFormPalette.xsd");
         expect(compiled_palette != nullptr, "palette XSD must compile");
         expect(validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Shared" ordinaryFormVersion="2.1"><Panel><SeparateByPage>false</SeparateByPage><AutoLink>false</AutoLink><UseOnlyVisibleArea>false</UseOnlyVisibleArea></Panel></Form>)XML") == 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><Panel><ScrollPageMode>true</ScrollPageMode></Panel></Form>)XML") != 0,
+            "Корневая Panel должна принимать общие свойства и отклонять свойства только вложенной Panel");
+        expect(validate_document(compiled_form.get(),
                    R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><CatalogItemFormExtension><Autonumeration type="AutonumerationInForm" member="DontUse"/><UseForFoldersAndItems type="FoldersAndItemsUse" member="FoldersAndItems"/></CatalogItemFormExtension></Form>)XML") == 0 &&
                    validate_document(compiled_form.get(),
                    R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><CatalogItemFormExtension/><DataProcessorFormExtension/></Form>)XML") != 0,

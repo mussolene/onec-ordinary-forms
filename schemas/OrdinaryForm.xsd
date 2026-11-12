@@ -1984,19 +1984,12 @@
 
   <xs:complexType name="FormPanelType"><xs:sequence>
       <xs:element name="AutoTabOrder" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ShowTabs" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ToolTip" type="LocalizedTextValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="PanelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeparateByPage" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ScrollPageMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoLink" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="UseOnlyVisibleArea" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
   </xs:sequence></xs:complexType>
   <xs:complexType name="FormType">
     <xs:sequence>
@@ -2204,6 +2197,8 @@
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoLink" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="UseOnlyVisibleArea" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="PanelEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChildItems" type="PanelChildItemsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>

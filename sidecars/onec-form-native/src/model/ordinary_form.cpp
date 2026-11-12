@@ -885,8 +885,9 @@ std::optional<std::vector<ObjectId>> placement_control_group(const OrdinaryFormD
         panel = page_owner->control;
     }
     bool shared_pages = false;
-    if (panel && panel->kind() == ControlKind::panel) {
-        const auto* separate = panel->properties().find(PropertyId::from_name("SeparateByPage"));
+    if (!panel || panel->kind() == ControlKind::panel) {
+        const auto& properties = panel ? panel->properties() : document.form().panel.properties;
+        const auto* separate = properties.find(PropertyId::from_name("SeparateByPage"));
         if (separate) {
             const auto* boolean = std::get_if<bool>(&separate->value);
             if (!boolean) return std::nullopt;
@@ -908,8 +909,9 @@ std::optional<std::vector<ObjectId>> placement_control_group(const OrdinaryFormD
         return true;
     };
     if (shared_pages) {
-        if (!collect(Owner{&panel->children, panel})) return std::nullopt;
-        for (const auto& child : panel->children) {
+        const auto& children = panel ? panel->children : document.form().children;
+        if (!collect(Owner{&children, panel})) return std::nullopt;
+        for (const auto& child : children) {
             const auto* reference = std::get_if<PageRef>(&child);
             if (!reference) continue;
             const auto* page = document.find_page(reference->id());
@@ -935,13 +937,12 @@ std::optional<TabOrderGroup> tab_order_group(const OrdinaryFormDocument& documen
     TabOrderGroup group;
     group.target_index = static_cast<std::size_t>(found - ids->begin());
     group.ids = std::move(*ids);
-    std::set<std::int32_t> seen;
     for (std::size_t index = 0; index < group.ids.size(); ++index) {
         const auto* control = document.find_control(group.ids[index]);
         if (!control) return std::nullopt;
         const auto& property = control->position.tab_order;
         const auto value = property.is_explicit() ? property.value() : std::optional<std::int32_t>{static_cast<std::int32_t>(index + 1)};
-        if (!value || *value <= 0 || static_cast<std::size_t>(*value) > group.ids.size() || !seen.insert(*value).second) return std::nullopt;
+        if (!value || *value <= 0) return std::nullopt;
         group.orders.push_back(*value);
     }
     return group;
@@ -2728,13 +2729,18 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             for (auto& candidate : collections_.controls) consider(candidate.children);
             if (siblings && siblings->size() != group->ids.size()) siblings = nullptr;
             if (!siblings) {
+                std::vector<std::pair<const PropertySet*, std::vector<ChildItemRef>*>> owners{
+                    {&form_.panel.properties, &form_.children}};
                 for (auto& panel : collections_.controls) {
                     if (panel.kind() != ControlKind::panel) continue;
-                    const auto* separate = panel.properties().find(PropertyId::from_name("SeparateByPage"));
+                    owners.emplace_back(&panel.properties(), &panel.children);
+                }
+                for (const auto& [properties, children] : owners) {
+                    const auto* separate = properties->find(PropertyId::from_name("SeparateByPage"));
                     if (!separate || !std::get_if<bool>(&separate->value) || std::get<bool>(separate->value)) continue;
                     std::vector<Page*> pages;
                     std::vector<ChildItemRef> merged;
-                    for (const auto& item : panel.children) {
+                    for (const auto& item : *children) {
                         const auto* page = std::get_if<PageRef>(&item);
                         const auto location = page ? find_location(ObjectCategory::page, page->id()) : std::nullopt;
                         if (!location) { pages.clear(); break; }
@@ -2790,13 +2796,15 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
                 }
             } else return PropertyMutationStatus::invalid_value;
             if (requested < 1 || requested > static_cast<std::int64_t>(group->ids.size())) return PropertyMutationStatus::applied;
-            const auto old_order = group->orders[group->target_index];
-            const auto new_order = static_cast<std::int32_t>(requested);
-            for (std::size_t index = 0; index < group->ids.size(); ++index) {
-                auto order = group->orders[index];
-                if (index == group->target_index) order = new_order;
-                else if (old_order < new_order && order > old_order && order <= new_order) --order;
-                else if (old_order > new_order && order >= new_order && order < old_order) ++order;
+            std::vector<std::size_t> traversal;
+            traversal.reserve(group->ids.size());
+            for (std::size_t index = 0; index < group->ids.size(); ++index)
+                if (index != group->target_index) traversal.push_back(index);
+            std::ranges::stable_sort(traversal, {}, [&](std::size_t index) { return group->orders[index]; });
+            traversal.insert(traversal.begin() + static_cast<std::ptrdiff_t>(requested - 1), group->target_index);
+            for (std::size_t rank = 0; rank < traversal.size(); ++rank) {
+                const auto index = traversal[rank];
+                const auto order = static_cast<std::int32_t>(rank + 1);
                 if (order == group->orders[index]) continue;
                 const auto sibling = find_location(ObjectCategory::control, group->ids[index]);
                 auto& position = collections_.controls[sibling->index].position.tab_order;
@@ -3854,11 +3862,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
         });
 
     validate_property_set(form_.id, form_.panel.properties,
-        [](PropertyId id) { return metamodel::find_property(ControlKind::panel, id); },
+        [](PropertyId id) -> const metamodel::PropertyDescriptor* {
+            return metamodel::Metamodel::instance().root_panel_property(id);
+        },
         [](const metamodel::PropertyDescriptor& descriptor) { return descriptor.surface == metamodel::PropertySurface::control_payload &&
-            descriptor.persistence == metamodel::PersistenceClass::persisted_editable &&
-            (descriptor.api_name == "AutoTabOrder" || descriptor.api_name == "BorderColor" ||
-             descriptor.api_name == "TextColor" || descriptor.api_name == "BackColor"); });
+            descriptor.persistence == metamodel::PersistenceClass::persisted_editable; });
 
     for (const auto& command : collections_.commands) {
         if (const auto& picture = command.picture.value(); picture.has_value()) {

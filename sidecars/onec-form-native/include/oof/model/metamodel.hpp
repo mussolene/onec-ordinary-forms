@@ -635,6 +635,7 @@ public:
 
     [[nodiscard]] std::span<const ControlDescriptor> controls() const noexcept;
     [[nodiscard]] std::span<const PropertyDescriptor> form_properties() const noexcept;
+    [[nodiscard]] std::span<const PropertyDescriptor> root_panel_properties() const noexcept;
     [[nodiscard]] std::span<const PropertyDescriptor> form_extension_properties() const noexcept;
     [[nodiscard]] std::span<const PropertyDescriptor> form_extension_properties(
         FormExtensionKind kind) const noexcept;
@@ -663,6 +664,9 @@ public:
     [[nodiscard]] const PropertyDescriptor* form_property(
         std::string_view name) const noexcept;
     [[nodiscard]] const PropertyDescriptor* form_property(PropertyId id) const noexcept;
+    [[nodiscard]] const PropertyDescriptor* root_panel_property(
+        std::string_view name) const noexcept;
+    [[nodiscard]] const PropertyDescriptor* root_panel_property(PropertyId id) const noexcept;
     [[nodiscard]] const PropertyDescriptor* form_extension_property(
         FormExtensionKind kind, std::string_view name) const noexcept;
     [[nodiscard]] const PropertyDescriptor* form_extension_property(

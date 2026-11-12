@@ -514,12 +514,45 @@ void test_tab_order_reorders_siblings() {
         expect(document.get_prop_val(owner(id), property).value == PropertyValue{static_cast<std::int64_t>(id - 9)},
             "reset must restore the sibling permutation");
 
-    auto invalid_graph = document;
-    auto* invalid_control = const_cast<ControlNode*>(invalid_graph.find_control(ObjectId{11}));
-    invalid_control->position.tab_order.set(std::optional<std::int32_t>{1});
-    expect(invalid_graph.set_prop_val(owner(12), property, std::int64_t{1}) == PropertyMutationStatus::unsupported_surface &&
-            invalid_control->position.tab_order.value() == std::optional<std::int32_t>{1},
-        "an ambiguous sibling permutation must be rejected without mutation");
+    auto duplicate_graph = document;
+    auto* duplicate_control = const_cast<ControlNode*>(duplicate_graph.find_control(ObjectId{11}));
+    duplicate_control->position.tab_order.set(std::optional<std::int32_t>{1});
+    expect(duplicate_graph.get_prop_val(owner(11), property).value == PropertyValue{std::int64_t{1}} &&
+            duplicate_graph.set_prop_val(owner(12), property, std::int64_t{1}) == PropertyMutationStatus::applied &&
+            duplicate_graph.get_prop_val(owner(11), property).value == PropertyValue{std::int64_t{3}},
+        "Назначение TabOrder должно упорядочить повторения стабильно и перенумеровать всю группу");
+
+    for (const int variant : {0, 1, 2, 3, 4}) {
+        Form stored_form; stored_form.id = ObjectId{1}; stored_form.name = "StoredOrder";
+        for (std::uint64_t id = 10; id < 20; ++id) stored_form.children.push_back(ControlRef{ObjectId{id}});
+        OrdinaryFormDocument stored(std::move(stored_form));
+        for (std::int32_t index = 0; index < 10; ++index) {
+            auto order = index + 1;
+            if (variant == 1) order += 10;
+            if (variant == 2) order = 1;
+            if (variant == 3) order = 10 - index;
+            if (variant == 4 && index == 9) order = std::numeric_limits<std::int32_t>::max();
+            ControlNode control{ObjectId{static_cast<std::uint64_t>(index + 10)}, "Control" + std::to_string(index), ButtonPayload{}};
+            control.position.tab_order.set(std::optional<std::int32_t>{order});
+            stored.add_control(std::move(control));
+        }
+        expect(stored.set_prop_val(owner(19), property, std::int64_t{1}) == PropertyMutationStatus::applied,
+            "Назначение должно поддерживать весь сохраненный положительный диапазон");
+        const std::array<std::int64_t, 10> after_first = variant == 3
+            ? std::array<std::int64_t, 10>{10,9,8,7,6,5,4,3,2,1}
+            : std::array<std::int64_t, 10>{2,3,4,5,6,7,8,9,10,1};
+        for (std::uint64_t index = 0; index < 10; ++index)
+            expect(stored.get_prop_val(owner(index + 10), property).value == PropertyValue{after_first[index]},
+                "Перенумерация должна совпадать с независимыми чтениями платформы");
+        expect(stored.set_prop_val(owner(10), property, std::int64_t{5}) == PropertyMutationStatus::applied,
+            "Повторное перемещение должно использовать полученный порядок");
+        const std::array<std::int64_t, 10> after_second = variant == 3
+            ? std::array<std::int64_t, 10>{5,10,9,8,7,6,4,3,2,1}
+            : std::array<std::int64_t, 10>{5,2,3,4,6,7,8,9,10,1};
+        for (std::uint64_t index = 0; index < 10; ++index)
+            expect(stored.get_prop_val(owner(index + 10), property).value == PropertyValue{after_second[index]},
+                "Второе перемещение должно совпадать с независимыми чтениями платформы");
+    }
 
     Form nested_form; nested_form.id = ObjectId{1}; nested_form.name = "NestedTabOrder";
     nested_form.children = {ControlRef{ObjectId{2}}, ControlRef{ObjectId{3}}};
@@ -3160,16 +3193,28 @@ void test_chart_appearance_defaults() {
 void test_help_metamodel() {
     using namespace oof::model::metamodel;
 
+    const auto& registry = Metamodel::instance();
+    const auto* root_auto_link = registry.root_panel_property("AutoLink");
+    const auto* nested_auto_link = find_property(ControlKind::panel, "AutoLink");
+    expect(root_auto_link && nested_auto_link &&
+            root_auto_link->default_value.canonical == "true" &&
+            nested_auto_link->default_value.canonical == "false",
+        "AutoLink должен учитывать разные defaults корневой и вложенной Panel");
+    expect(registry.root_panel_properties().size() == 7 &&
+            registry.root_panel_property("SeparateByPage") &&
+            registry.root_panel_property("UseOnlyVisibleArea") &&
+            !registry.root_panel_property("ScrollPageMode"),
+        "Корневая Panel должна предоставлять только поддержанные общие свойства");
     const MetamodelCoverage& coverage = metamodel_coverage();
     expect(coverage.target_platform_version == "8.5.1.1343" && coverage.target_control_count == 25 &&
                coverage.excluded_control_count == 1 && coverage.excluded_control_property_occurrences == 2,
         "coverage target must explicitly exclude ActiveX without changing the help catalog");
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 428,
+        coverage.control_property_occurrences == 430,
         "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 207,
+        coverage.unique_control_property_names == 209,
         "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,

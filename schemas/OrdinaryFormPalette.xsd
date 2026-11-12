@@ -157,6 +157,8 @@
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+              <Property name="AutoLink" apiName="AutoLink" russianName="АвтоПравила" russianType="Булево" designerOnly="true" valueCodec="boolean"/>
+              <Property name="UseOnlyVisibleArea" apiName="UseOnlyVisibleArea" russianName="Исп. только видимую область" russianType="Булево" designerOnly="true" valueCodec="boolean"/>
             </Properties>
             <Events>
               <Event name="OnCurrentPageChange" apiName="OnCurrentPageChange" russianName="ПриСменеСтраницы"/>

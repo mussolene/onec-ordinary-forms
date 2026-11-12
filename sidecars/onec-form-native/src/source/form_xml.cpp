@@ -1919,7 +1919,7 @@ public:
             } else if (name == "Panel") {
                 for (xmlNodePtr property : element_children(child)) {
                     const auto property_name = node_name(property);
-                    const auto* descriptor = metamodel_.property(model::ControlKind::panel, property_name);
+                    const auto* descriptor = metamodel_.root_panel_property(property_name);
                     if (descriptor == nullptr || descriptor->surface != mm::PropertySurface::control_payload ||
                         descriptor->persistence != mm::PersistenceClass::persisted_editable)
                         fail("OOF2003", property, form_id, property_name, "supported main Panel property", property_name, "Unsupported main Panel property");
@@ -4511,12 +4511,16 @@ private:
                 const auto& properties = document_.form().panel.properties;
                 bool explicit_panel = false;
                 properties.for_each_explicit([&](const model::PropertyEntry& entry) {
-                    const auto* property = metamodel_.property(model::ControlKind::panel, entry.id);
-                    if (property != nullptr && !equals_descriptor_default(*property, entry.value)) explicit_panel = true;
+                    const auto* property = metamodel_.root_panel_property(entry.id);
+                    if (property == nullptr)
+                        serialization_fail(std::string(object_id), "Panel",
+                            "supported main Panel property", "unsupported property",
+                            "Form.Panel property is not declared by the executable metamodel");
+                    if (!equals_descriptor_default(*property, entry.value)) explicit_panel = true;
                 });
                 if (explicit_panel) {
                     writer_.open(descriptor.xml_name);
-                    write_property_set(properties, metamodel_.properties_for(model::ControlKind::panel), object_id);
+                    write_property_set(properties, metamodel_.root_panel_properties(), object_id);
                     writer_.close(descriptor.xml_name);
                 }
                 continue;

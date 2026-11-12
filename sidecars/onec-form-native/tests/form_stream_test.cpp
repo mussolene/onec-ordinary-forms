@@ -18125,9 +18125,9 @@ void test_two_input_fields_round_trip() {
 
     auto wrong_geometry = encoded.value();
     wrong_geometry.items[1].items[2].items[2].items[2].items[3].items[geometry_tail_start(wrong_geometry.items[1].items[2].items[2].items[2].items[3]) + 2] =
-        list_stream::ListValue::raw_atom("4");
+        list_stream::ListValue::raw_atom("0");
     expect_failure(form_stream::decode_document(wrong_geometry, "Main"), "OOF1114", "$/1/2/2/2/3/20",
-        "unknown two-InputField sibling geometry must fail closed");
+        "Неположительный порядок обхода InputField должен отклоняться");
 
     auto truncated_input = encoded.value();
     const auto input_guid = truncated_input.items[1].items[2].items[2].items[1].items[0];
@@ -18280,9 +18280,9 @@ void test_two_input_fields_round_trip() {
 
     auto changed_button_index = mixed_encoded.value();
     changed_button_index.items[1].items[2].items[2].items[2].items[3].items[geometry_tail_start(changed_button_index.items[1].items[2].items[2].items[2].items[3]) + 2] =
-        list_stream::ListValue::raw_atom("9");
+        list_stream::ListValue::raw_atom("0");
     expect_failure(form_stream::decode_document(changed_button_index, "Mixed"), "OOF1114", "$/1/2/2/2/3/20",
-        "Button must reject geometry sibling indexes that differ from ChildItems");
+        "Неположительный TabOrder кнопки должен отклоняться");
 
     auto unsupported_action_text = mixed_encoded.value();
     auto& first_action = unsupported_action_text.items[1].items[2].items[2].items[2]
@@ -18423,8 +18423,8 @@ void test_six_reordered_controls_use_logical_geometry_ordinals() {
     auto wrong_next_index = encoded.value();
     wrong_next_index.items[1].items[2].items[2].items[6].items[3].items[geometry_tail_start(wrong_next_index.items[1].items[2].items[2].items[6].items[3]) + 2] =
         list_stream::ListValue::raw_atom("2");
-    expect_failure(form_stream::decode_document(wrong_next_index, "Reordered"), "OOF1114", "$/1/2/2/4/3/20",
-        "duplicate page-local TabOrder must be rejected");
+    expect(form_stream::decode_document(wrong_next_index, "Reordered").ok(),
+        "Одинаковый TabOrder допустим и не меняет уникальный порядок ChildItems");
 }
 
 void test_root_pages_round_trip_with_page_local_control_order() {
@@ -18603,7 +18603,8 @@ void test_root_pages_round_trip_with_page_local_control_order() {
     expect(page_rebuilt.ok() && list_stream::dump_compact(page_rebuilt.value()) == list_stream::dump_compact(independent_pages.value()),
         "Page-local traversal order must round-trip without moving ChildItems across Pages");
     const_cast<model::ControlNode*>(document.find_control(model::ObjectId{4}))->position.tab_order.set(std::optional<std::int32_t>{3});
-    expect(!form_stream::encode_document(document).ok(), "TabOrder must be bounded by its own Page rather than total owner count");
+    expect(form_stream::encode_document(document).ok(),
+        "Сохраняемый TabOrder может превышать число элементов страницы");
 
     model::Form batch_form;
     batch_form.id = model::ObjectId{1};
@@ -18811,11 +18812,15 @@ void test_owned_panel_auto_tab_order_round_trip() {
     for (const auto root_auto : {true, false}) for (const auto nested_auto : {true, false}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "AutoTraversal";
         if (!root_auto) form.panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+        if (!root_auto) form.panel.properties.set_explicit(model::PropertyId::from_name("AutoLink"), false);
+        if (!root_auto) form.panel.properties.set_explicit(model::PropertyId::from_name("UseOnlyVisibleArea"), false);
         form.children = {model::ControlRef{model::ObjectId{2}}};
         model::OrdinaryFormDocument document(std::move(form));
         model::ControlNode panel{model::ObjectId{2}, "Nested", model::PanelPayload{}};
         panel.children = {model::PageRef{model::ObjectId{3}}};
         if (!nested_auto) panel.properties().set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+        if (nested_auto) panel.properties().set_explicit(model::PropertyId::from_name("AutoLink"), true);
+        if (!nested_auto) panel.properties().set_explicit(model::PropertyId::from_name("UseOnlyVisibleArea"), false);
         model::Page page; page.id = model::ObjectId{3}; page.name = "NestedPage";
         model::Position page_position;
         page_position.width.set(100); page_position.height.set(80);
@@ -18841,12 +18846,80 @@ void test_owned_panel_auto_tab_order_round_trip() {
         const auto rebuilt = form_stream::encode_document(decoded.value());
         expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
             "traversal flags and ownership must survive fresh named-model rebuild");
+        const auto named = source::serialize_form_xml(decoded.value());
+        expect(named.ok(), "Контекстные значения автопривязки должны сериализоваться");
+        const auto fresh = source::parse_form_xml(named.value());
+        expect(fresh.ok(), "Контекстные значения автопривязки должны читаться");
+        const auto fresh_stream = form_stream::encode_document(fresh.value());
+        expect(fresh_stream.ok() && list_stream::dump_compact(fresh_stream.value()) == list_stream::dump_compact(encoded.value()),
+            "Различающиеся defaults корневой и вложенной панели должны сохраняться через XML");
         auto invalid = encoded.value();
         invalid.items[1].items[2].items[1].items[1].items[13] = list_stream::ListValue::raw_atom("2");
         const auto invalid_result = form_stream::decode_document(invalid, "InvalidTraversal");
         expect(!invalid_result && invalid_result.diagnostics().front().path == "$/1/2/1/1/13",
             "nonboolean traversal must identify the original field path");
+        invalid = encoded.value();
+        invalid.items[1].items[2].items[1].items[1].items[20] = list_stream::ListValue::raw_atom("2");
+        const auto invalid_visible = form_stream::decode_document(invalid, "InvalidVisibleArea");
+        expect(!invalid_visible && invalid_visible.diagnostics().front().path == "$/1/2/1/1/20",
+            "Настройка видимой области должна оставаться строгим bool");
     }
+}
+
+void test_root_panel_shared_layout_and_context_defaults() {
+    using namespace model;
+    Form form; form.id = ObjectId{1}; form.name = "SharedRoot";
+    form.children = {PageRef{ObjectId{100}}, PageRef{ObjectId{101}}};
+    form.panel.properties.set_explicit(PropertyId::from_name("SeparateByPage"), false);
+    form.panel.properties.set_explicit(PropertyId::from_name("AutoLink"), false);
+    form.panel.properties.set_explicit(PropertyId::from_name("UseOnlyVisibleArea"), false);
+    OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t page_index = 0; page_index < 2; ++page_index) {
+        Page page; page.id = ObjectId{100 + page_index}; page.name = "Page" + std::to_string(page_index);
+        Position area; area.left.set(8); area.top.set(8); area.width.set(300); area.height.set(200);
+        for (const auto edge : {BindingCoordinate::right, BindingCoordinate::bottom}) {
+            AnchorBinding binding; binding.coordinate = edge; binding.target_coordinate = edge; binding.offset.set(-8);
+            area.bindings.anchors.push_back(std::move(binding));
+        }
+        page.position.set(std::move(area));
+        for (std::uint64_t index = 0; index < 5; ++index) {
+            const auto id = 10 + page_index * 5 + index;
+            page.children.push_back(ControlRef{ObjectId{id}});
+            ControlNode control{ObjectId{id}, "Control" + std::to_string(id), ButtonPayload{}};
+            if (id == 19) control.position.default_control.set(true);
+            document.add_control(std::move(control));
+        }
+        document.add_page(std::move(page));
+    }
+    expect(document.get_prop_val({ObjectCategory::control, ObjectId{19}}, PropertyId::from_name("TabOrder")).value ==
+        PropertyValue{std::int64_t{10}}, "Общая область корневой панели должна объединять порядок всех страниц");
+    const auto stored = form_stream::encode_document(document);
+    expect(stored.ok(), stored ? "Корневая панель должна сохранять общую область и отключенную автопривязку" : stored.diagnostics().front().message);
+    const auto loaded = form_stream::decode_document(stored.value(), "SharedRoot");
+    expect(loaded.ok() && loaded.value().reconstruction_complete(), "Именованные флаги корневой панели должны давать полную модель");
+    expect(loaded.value().collections().pages.size() == 2 && loaded.value().collections().pages.front().children.size() == 10 &&
+        loaded.value().collections().pages.back().children.empty(),
+        "Общая физическая область должна собирать ChildItems на первой странице");
+    const auto xml = source::serialize_form_xml(loaded.value());
+    expect(xml.ok() && xml.value().find("<AutoLink>false</AutoLink>") != std::string::npos &&
+        xml.value().find("<SeparateByPage>false</SeparateByPage>") != std::string::npos &&
+        xml.value().find("<UseOnlyVisibleArea>false</UseOnlyVisibleArea>") != std::string::npos,
+        "Корневое значение false нельзя пропускать по default вложенной панели");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "Именованные флаги должны читаться без исходного BIN");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(stored.value()),
+        "Общая геометрия, порядок, автопривязка и DefaultControl должны собираться из XML");
+    expect(document.set_prop_val({ObjectCategory::control, ObjectId{19}}, PropertyId::from_name("ZOrder"), std::int64_t{1}) ==
+        PropertyMutationStatus::applied && document.get_prop_val({ObjectCategory::control, ObjectId{19}}, PropertyId::from_name("ZOrder")).value ==
+            PropertyValue{std::int64_t{1}}, "ZOrder должен переставлять элементы общей корневой области");
+    const auto unequal = [&] {
+        auto changed = document;
+        auto* page = const_cast<Page*>(changed.find_page(ObjectId{101}));
+        auto area = page->position.value(); area.width.set(301); page->position.set(std::move(area));
+        return form_stream::encode_document(changed);
+    }();
+    expect(!unequal, "Разные области нельзя молча объединять при SeparateByPage=false");
 }
 
 void test_owned_panel_common_properties_and_page_event() {
@@ -24956,16 +25029,59 @@ void test_independent_tab_order_observed_geometry_and_guards() {
     const auto rebuilt=form_stream::encode_document(parsed.value());
     expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value())==list_stream::dump_compact(encoded.value()),
         "named XML TabOrder permutation must rebuild without a baseline");
-    for (const auto invalid : {0,-1,4,2,3}) {
+    for (const auto invalid : {0,-1}) {
         second->position.tab_order.set(std::optional<std::int32_t>{invalid});
-        expect(!form_stream::encode_document(document).ok(),"invalid or duplicate TabOrder including implicit defaults must fail");
+        expect(!form_stream::encode_document(document).ok(),"Неположительный TabOrder должен отклоняться");
     }
     second->position.tab_order.set(std::nullopt);
     expect(!form_stream::encode_document(document).ok(),"explicit undefined TabOrder must fail");
-    for (const auto invalid : {"0","4","2","1.5"}) {
+    for (const auto invalid : {"0","-1","2147483648","1.5"}) {
         auto corrupt=encoded.value(); auto& geometry=corrupt.items[1].items[2].items[2].items[1].items[3];
         geometry.items[geometry_tail_start(geometry)+2]=list_stream::ListValue::raw_atom(invalid);
         expect(!form_stream::decode_document(corrupt,"InvalidOrder").ok(),"invalid native TabOrder must not be normalized");
+    }
+
+    // Designer сохраняет пропуски и повторения, не перенумеровывая TabOrder.
+    for (const bool automatic : {false, true}) {
+        for (const auto variant : {0, 1, 2, 3, 4}) {
+            model::Form batch_form;
+            batch_form.id = model::ObjectId{1};
+            batch_form.name = "StoredOrder";
+            if (!automatic) batch_form.panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+            for (std::uint64_t id = 10; id < 20; ++id)
+                batch_form.children.push_back(model::ControlRef{model::ObjectId{id}});
+            model::OrdinaryFormDocument batch(std::move(batch_form));
+            for (std::int32_t index = 0; index < 10; ++index) {
+                auto order = index + 1;
+                if (variant == 1) order += 10;
+                if (variant == 2) order = 1;
+                if (variant == 3) order = 10 - index;
+                if (variant == 4 && index == 9) order = std::numeric_limits<std::int32_t>::max();
+                model::ControlNode control{model::ObjectId{static_cast<std::uint64_t>(index + 10)},
+                    "Control" + std::to_string(index), index % 2
+                        ? model::ControlPayload{model::LabelDecorationPayload{}}
+                        : model::ControlPayload{model::ButtonPayload{}}};
+                control.position.tab_order.set(std::optional<std::int32_t>{order});
+                batch.add_control(std::move(control));
+            }
+            const auto stored = form_stream::encode_document(batch);
+            expect(stored.ok(), "Положительные TabOrder должны сохраняться независимо от размера группы и повторений");
+            const auto loaded = form_stream::decode_document(stored.value(), "StoredOrder");
+            expect(loaded.ok() && loaded.value().reconstruction_complete(), "Все значения TabOrder должны попадать в полную модель");
+            for (std::uint64_t id = 10; id < 20; ++id) {
+                const auto key = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, model::ObjectId{id}};
+                expect(loaded.value().get_prop_val(key, model::PropertyId::from_name("TabOrder")).value ==
+                    batch.get_prop_val(key, model::PropertyId::from_name("TabOrder")).value,
+                    "Именованное свойство должно возвращать сохраненный порядок, включая повторения");
+            }
+            const auto named_xml = source::serialize_form_xml(loaded.value());
+            expect(named_xml.ok(), "Сохраненный порядок должен иметь именованный XML");
+            const auto fresh = source::parse_form_xml(named_xml.value());
+            expect(fresh.ok(), "Именованный порядок должен читаться без исходного потока");
+            const auto fresh_stream = form_stream::encode_document(fresh.value());
+            expect(fresh_stream.ok() && list_stream::dump_compact(fresh_stream.value()) == list_stream::dump_compact(stored.value()),
+                "XML-only сборка должна сохранять все TabOrder, ChildItems и остальные данные");
+        }
     }
 }
 
@@ -27163,6 +27279,7 @@ int main() {
         test_root_pages_round_trip_with_page_local_control_order();
         test_owned_panel_colors_and_repeated_background();
         test_owned_panel_auto_tab_order_round_trip();
+        test_root_panel_shared_layout_and_context_defaults();
         test_owned_panel_common_properties_and_page_event();
         test_owner_page_default_controls();
         test_panel_shared_page_position_round_trip();

@@ -1129,7 +1129,8 @@ LV canonical_root_panel_payload(
     std::int32_t width,
     std::int32_t height,
     const std::vector<model::Page>& pages = {},
-    std::optional<model::ControlRef> page_owner = std::nullopt) {
+    std::optional<model::ControlRef> page_owner = std::nullopt,
+    bool separate_by_page = true) {
     if (width < 8 || height < 8) {
         fail(
             "OOF1120",
@@ -1149,8 +1150,21 @@ LV canonical_root_panel_payload(
     const auto page_table = encode_page_table(effective_pages);
     if (!page_table) throw DecodeFailure(page_table.diagnostics().front());
     value.items[1].items[11] = page_table.value();
+    value.items[1].items[10] = raw(separate_by_page ? "1" : "0");
+    const auto area_count = separate_by_page ? effective_pages.size() : std::size_t{1};
+    if (!separate_by_page && !pages.empty()) {
+        const auto first = encode_page_position(pages.front().position.value(), 0, page_owner);
+        if (!first) throw DecodeFailure(first.diagnostics().front());
+        for (const auto& page : pages) {
+            const auto area = encode_page_position(page.position.value(), 0, page_owner);
+            if (!area) throw DecodeFailure(area.diagnostics().front());
+            if (!same_list_value(area.value(), first.value()))
+                fail("OOF1122", "$/Panel/Pages/Position", "identical shared Page positions", page.name,
+                    "Panel without page distribution requires a single shared page position");
+        }
+    }
     std::vector<LV> boundary_rows;
-    for (std::size_t index = 0; index < effective_pages.size(); ++index) {
+    for (std::size_t index = 0; index < area_count; ++index) {
         model::Position position;
         if (pages.empty()) {
             position.left.set(8);
@@ -1175,11 +1189,11 @@ LV canonical_root_panel_payload(
     value.items[1].items.insert(value.items[1].items.begin() + 16,
         boundary_rows.begin(), boundary_rows.end());
     value.items[1].items[9] = raw(effective_pages.size() > 1 ? "1" : "0");
-    value.items[1].items[15] = raw(std::to_string(effective_pages.size() * 4));
-    if (effective_pages.size() > 1) {
-        const std::size_t repeated_marker_start = 16 + effective_pages.size() * 4 + 2;
+    value.items[1].items[15] = raw(std::to_string(area_count * 4));
+    if (area_count > 1) {
+        const std::size_t repeated_marker_start = 16 + area_count * 4 + 2;
         std::vector<LV> markers;
-        for (std::size_t index = 1; index < effective_pages.size(); ++index) {
+        for (std::size_t index = 1; index < area_count; ++index) {
             markers.push_back(raw("4294967295"));
         }
         value.items[1].items.insert(value.items[1].items.begin() + static_cast<std::ptrdiff_t>(repeated_marker_start),
@@ -1194,24 +1208,7 @@ LV canonical_panel_payload(const std::vector<model::Page>& pages, model::Control
         fail("OOF1122", "$/Panel/Pages", "at least one named Panel Page", "empty",
             "Panel page storage requires explicit Pages");
     }
-    auto envelope = canonical_root_panel_payload(8, 8,
-        separate_by_page ? pages : std::vector<model::Page>{pages.front()}, owner);
-    if (!separate_by_page) {
-        auto shared_boundaries = encode_page_position(pages.front().position.value(), 0, owner);
-        if (!shared_boundaries) throw DecodeFailure(shared_boundaries.diagnostics().front());
-        for (const auto& page : pages) {
-            auto boundaries = encode_page_position(page.position.value(), 0, owner);
-            if (!boundaries) throw DecodeFailure(boundaries.diagnostics().front());
-            if (list_stream::dump_compact(boundaries.value()) != list_stream::dump_compact(shared_boundaries.value())) {
-                fail("OOF1122", "$/Panel/Pages/Position", "identical shared Page positions", page.name,
-                    "Panel without page distribution requires a single shared page position");
-            }
-        }
-        const auto page_table = encode_page_table(pages);
-        if (!page_table) throw DecodeFailure(page_table.diagnostics().front());
-        envelope.items[1].items[11] = page_table.value();
-        envelope.items[1].items[10] = raw("0");
-    }
+    auto envelope = canonical_root_panel_payload(8, 8, pages, owner, separate_by_page);
     envelope.items[1].items[9] = raw("1");
     envelope.items[1].items[12] = raw("0");
     return envelope;
@@ -2902,7 +2899,7 @@ DecodedGeometry decode_geometry(
     return decoded;
 }
 
-struct GeometryPageOrdinal { std::uint32_t page; std::uint32_t ordinal; std::int32_t tab_order; };
+struct GeometryPageOrdinal { std::uint32_t page; std::uint32_t ordinal; };
 
 GeometryPageOrdinal geometry_page_ordinal(
     const LV& geometry,
@@ -2933,7 +2930,7 @@ GeometryPageOrdinal geometry_page_ordinal(
         fail("OOF1114", child_path(path, cursor + 2), "positive TabOrder and safe child ordinal", std::to_string(tab_order),
             "Geometry order values are invalid");
     }
-    return {page, ordinal, tab_order};
+    return {page, ordinal};
 }
 
 std::vector<GeometryIncomingAnchor> sorted_incoming(std::vector<GeometryIncomingAnchor> incoming) {
@@ -3168,7 +3165,7 @@ DecodedOwnerPages decode_owner_pages(
             "Owner Page table cannot be empty");
     }
     const auto count = pages.size();
-    const bool separate_by_page = !panel || bool_atom(at(normalized, 4, path), child_path(path, 4));
+    const bool separate_by_page = bool_atom(at(normalized, 4, path), child_path(path, 4));
     const auto boundary_page_count = separate_by_page ? count : 1;
     if (integer_atom<std::uint32_t>(at(normalized, 9, path), child_path(path, 9)) != boundary_page_count * 4) {
         fail("OOF1114", child_path(path, 9), std::to_string(boundary_page_count * 4), describe(at(normalized, 9, path)),
@@ -3208,7 +3205,7 @@ DecodedOwnerPages decode_owner_pages(
             normalized.items[10 + index * 4 + edge] = boundaries_by_page[index].items[edge];
     }
     auto expected = panel ? canonical_panel_payload(pages, *owner, separate_by_page) :
-        canonical_root_panel_payload(8, 8, pages, owner);
+        canonical_root_panel_payload(8, 8, pages, owner, separate_by_page);
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
     // Page rows have already passed their complete typed decoder, including legacy style guards.
@@ -3306,7 +3303,7 @@ DecodedOwnerPages decode_owner_pages(
             expected.items[1].items.end());
         normalized.items[19] = normalized.items[0].items[2];
         // AutoTabOrder and DefaultControl use the typed validation and named mappings below.
-        for (const auto slot : {3U, 4U, 6U, 8U, 9U, 10U, 11U, 12U, 13U, 14U, 16U, 17U})
+        for (const auto slot : {3U, 4U, 8U, 9U, 10U, 11U, 12U, 13U, 16U, 17U})
             require_exact(normalized.items[slot], expected.items[1].items[slot],
                 child_path(child_path(path, 1), slot), "Legacy root owner field is unsupported");
         if (legacy_root_owner21)
@@ -3330,11 +3327,21 @@ DecodedOwnerPages decode_owner_pages(
     }, {warnings, owner_id, panel ? "Panel" : "Form"});
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
+    const auto auto_link = bool_atom(normalized.items[6], child_path(child_path(path, 1), 6 + incoming_end - 2));
+    expected.items[1].items[6] = raw(auto_link ? "1" : "0");
+    const auto endless_layout_slot = 10 + boundary_page_count * 4;
+    const auto endless_layout = bool_atom(normalized.items[endless_layout_slot],
+        child_path(child_path(path, 1), endless_layout_slot + incoming_end - 2));
+    expected.items[1].items[endless_layout_slot] = raw(endless_layout ? "1" : "0");
     model::PanelPayload decoded_panel;
     std::optional<LV> panel_picture;
     if (!auto_tab_order) decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
-    if (panel && !separate_by_page)
+    if (!separate_by_page)
         decoded_panel.properties.set_explicit(model::PropertyId::from_name("SeparateByPage"), false);
+    if (auto_link != !panel)
+        decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoLink"), auto_link);
+    if (endless_layout)
+        decoded_panel.properties.set_explicit(model::PropertyId::from_name("UseOnlyVisibleArea"), false);
     if (panel) {
         const auto base_path = child_path(child_path(path, 1), 0);
         const auto common = decode_common_control_base(normalized.items[0], base_path,
@@ -3435,16 +3442,17 @@ LV encode_owner_pages(
     std::int32_t height = 8,
     const model::PropertySet& properties = {}) {
     const bool scroll = panel && explicit_bool(properties, "ScrollPageMode", false);
-    const bool separate = panel && explicit_bool(properties, "SeparateByPage", true);
+    const bool separate = explicit_bool(properties, "SeparateByPage", true);
     if (scroll && (!separate || properties.contains(model::PropertyId::from_name("ShowTabs"))))
         fail("OOF1122", "$/Panel/ScrollPageMode", "separate pages without explicit ShowTabs", "conflicting settings",
             "Scrolling pages cannot use shared page geometry or an explicit tab display mode");
     auto envelope = panel ? canonical_panel_payload(pages, *owner, separate) :
-        canonical_root_panel_payload(width, height, pages, owner);
+        canonical_root_panel_payload(width, height, pages, owner, separate);
     if (panel) require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode", "Picture", "PictureSize", "PanelPictureLocation"}, "$/Panel");
-    else require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
+        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "AutoLink", "UseOnlyVisibleArea", "ScrollPageMode", "Picture", "PictureSize", "PanelPictureLocation"}, "$/Panel");
+    else require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor", "SeparateByPage", "AutoLink", "UseOnlyVisibleArea"}, "$/Panel");
     envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
+    envelope.items[1].items[12] = raw(explicit_bool(properties, "AutoLink", !panel) ? "1" : "0");
     if (panel) {
         CommonControlBaseFields common;
         common.enabled = explicit_bool(properties, "Enabled", true);
@@ -3484,9 +3492,10 @@ LV encode_owner_pages(
         envelope.items[1].items[0].items[slot] = encoded_color;
         if (name == "BackColor") envelope.items[1].items[envelope.items[1].items.size() - 6] = encoded_color;
     }
-    const bool focus_per_page = !panel || separate;
+    const bool focus_per_page = separate;
     const auto focus_count = focus_per_page ? std::max(pages.size(), std::size_t{1}) : std::size_t{1};
     const auto focus_start = 17 + focus_count * 4;
+    envelope.items[1].items.at(focus_start - 1) = raw(explicit_bool(properties, "UseOnlyVisibleArea", true) ? "0" : "1");
     for (std::size_t group = 0; group < focus_count; ++group) {
         auto selected = std::numeric_limits<std::uint32_t>::max();
         for (std::size_t page_index = 0; page_index < std::max(pages.size(), std::size_t{1}); ++page_index) {
@@ -14451,7 +14460,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             if (child_table.items.size() != static_cast<std::size_t>(count) + 1) {
                 fail("OOF1102", std::string(path), "control count matching records", describe(child_table), "Control table count does not match its records");
             }
-            struct RecordSlot { const LV* record; std::string path; std::uint32_t ordinal; std::int32_t tab_order; std::string tab_order_path; };
+            struct RecordSlot { const LV* record; std::string path; std::uint32_t ordinal; };
             std::vector<std::vector<std::optional<RecordSlot>>> ordered(pages.size());
             for (std::uint32_t index = 0; index < count; ++index) {
                 const auto record_path = child_path(path, static_cast<std::size_t>(index) + 1);
@@ -14478,7 +14487,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     fail("OOF1114", child_path(geometry_path, ordinal_slot), "unique page-local ordinal",
                         std::to_string(page_ordinal.ordinal), "Control geometry ordinal is duplicated");
                 }
-                page_records[page_ordinal.ordinal] = RecordSlot{&record, record_path, page_ordinal.ordinal, page_ordinal.tab_order, child_path(geometry_path, ordinal_slot + 1)};
+                page_records[page_ordinal.ordinal] = RecordSlot{&record, record_path, page_ordinal.ordinal};
             }
             for (std::size_t page_index = 0; page_index < ordered.size(); ++page_index) {
                 auto& page_records = ordered[page_index];
@@ -14493,13 +14502,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                 if (page_records.size() != record_count) {
                     fail("OOF1114", std::string(path), "contiguous page-local ChildItems ordinals",
                         std::to_string(page_index), "Page child ordinals do not form a permutation");
-                }
-                std::set<std::int32_t> tab_orders;
-                for (const auto& slot : page_records) {
-                    if (!slot) continue;
-                    if (static_cast<std::size_t>(slot->tab_order) > record_count || !tab_orders.insert(slot->tab_order).second)
-                        fail("OOF1114", slot->tab_order_path, "page-local TabOrder permutation 1..count",
-                            std::to_string(slot->tab_order), "Control TabOrder is out of range or duplicated");
                 }
                 for (std::size_t ordinal = 0; ordinal < page_records.size(); ++ordinal) {
                     if (!page_records[ordinal]) fail("OOF1114", std::string(path), "page-local ordinal permutation",
@@ -15212,7 +15214,7 @@ Result<list_stream::ListValue> encode_document(
             if (const auto* panel_ref = std::get_if<model::ControlRef>(&owner)) {
                 const auto* panel = document.find_control(panel_ref->id());
                 shared_page = panel && !explicit_bool(panel->properties(), "SeparateByPage", true);
-            }
+            } else shared_page = !explicit_bool(document.form().panel.properties, "SeparateByPage", true);
             std::vector<EncodedChild> children;
             const auto append_control = [&](const model::ControlRef& reference, std::uint32_t page_index,
                                             std::size_t ordinal) {
@@ -15333,7 +15335,7 @@ Result<list_stream::ListValue> encode_document(
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
                     require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor",
-                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "ScrollPageMode", "Picture", "PictureSize", "PanelPictureLocation"}, child_path(path, ordinal) + "/Panel");
+                        "Enabled", "ToolTip", "Font", "Transparent", "ShowTabs", "Border", "SeparateByPage", "AutoLink", "UseOnlyVisibleArea", "ScrollPageMode", "Picture", "PictureSize", "PanelPictureLocation"}, child_path(path, ordinal) + "/Panel");
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");
@@ -15382,18 +15384,6 @@ Result<list_stream::ListValue> encode_document(
                         "Owner child sequence contains an unsupported item");
                     append_control(*control_ref, 0, ordinal);
                 }
-            }
-            std::map<std::uint32_t, std::size_t> page_child_counts;
-            for (const auto& child : children) ++page_child_counts[child.page_index];
-            std::map<std::uint32_t, std::set<std::int32_t>> page_tab_orders;
-            for (const auto& child : children) {
-                const auto& property = child.control->position.tab_order;
-                const auto order = property.is_explicit() ? property.value()
-                    : std::optional<std::int32_t>{static_cast<std::int32_t>(child.ordinal + 1)};
-                if (!order || *order <= 0 || static_cast<std::size_t>(*order) > page_child_counts.at(child.page_index) ||
-                    !page_tab_orders[child.page_index].insert(*order).second)
-                    fail("OOF1122", std::string(path) + "/Position/TabOrder", "page-local TabOrder permutation 1..count",
-                        order ? std::to_string(*order) : "undefined", "Control TabOrder is invalid, out of range, or duplicated");
             }
             std::unordered_set<std::uint64_t> immediate_ids;
             for (const auto& child : children) immediate_ids.insert(child.control->id.value());

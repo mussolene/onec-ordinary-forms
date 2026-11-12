@@ -2009,6 +2009,7 @@ struct Metamodel::Impl {
     std::vector<PropertyDescriptor> control_extension_properties;
     std::vector<PropertyDescriptor> panel_placement_properties;
     std::vector<PropertyDescriptor> form_properties;
+    std::vector<PropertyDescriptor> root_panel_properties;
     std::vector<PropertyDescriptor> form_extension_properties;
     std::vector<EventDescriptor> form_events;
 
@@ -2093,6 +2094,26 @@ struct Metamodel::Impl {
             events[static_cast<std::size_t>(descriptor.control_kind)].push_back(descriptor);
         }
         add_gantt_chart_data_properties(properties);
+        auto& panel_properties = properties[static_cast<std::size_t>(ControlKind::panel)];
+        PropertyDescriptor auto_link{
+            PropertyId::from_name("AutoLink"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::panel,
+            std::ranges::max_element(panel_properties, {}, &PropertyDescriptor::order)->order + 1,
+            "AutoLink", "AutoLink", u8"АвтоПравила", u8"Булево",
+            ValueKind::boolean, ValueCodec::boolean, ApiAccess::unknown,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::control_info, {DefaultKind::boolean, "false"}};
+        auto_link.designer_only = true;
+        panel_properties.push_back(auto_link);
+        PropertyDescriptor visible_area{
+            PropertyId::from_name("UseOnlyVisibleArea"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::panel, auto_link.order + 1,
+            "UseOnlyVisibleArea", "UseOnlyVisibleArea", u8"Исп. только видимую область", u8"Булево",
+            ValueKind::boolean, ValueCodec::boolean, ApiAccess::unknown,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::control_info, {DefaultKind::boolean, "true"}};
+        visible_area.designer_only = true;
+        panel_properties.push_back(visible_area);
         control_extension_properties = make_control_extension_property_descriptors();
         panel_placement_properties = make_panel_placement_property_descriptors();
         form_properties = make_form_property_descriptors();
@@ -2164,6 +2185,20 @@ struct Metamodel::Impl {
         sort_and_validate_order(control_extension_properties, "Form control extension");
         sort_and_validate_order(panel_placement_properties, "Panel control extension");
         sort_and_validate_order(form_properties, "Form properties");
+        constexpr std::array root_panel_names{
+            std::string_view{"AutoTabOrder"}, std::string_view{"BorderColor"},
+            std::string_view{"TextColor"}, std::string_view{"BackColor"},
+            std::string_view{"SeparateByPage"}, std::string_view{"AutoLink"},
+            std::string_view{"UseOnlyVisibleArea"}};
+        for (const auto& descriptor : panel_properties) {
+            if (std::ranges::find(root_panel_names, descriptor.api_name) == root_panel_names.end())
+                continue;
+            root_panel_properties.push_back(descriptor);
+            if (descriptor.api_name == "AutoLink")
+                root_panel_properties.back().default_value = {DefaultKind::boolean, "true"};
+        }
+        if (root_panel_properties.size() != root_panel_names.size())
+            throw std::logic_error("missing Form.Panel property descriptor");
         std::ranges::sort(form_extension_properties, [](const auto& left, const auto& right) {
             return std::tie(left.extension_kind, left.order) < std::tie(right.extension_kind, right.order);
         });
@@ -2377,6 +2412,10 @@ std::span<const PropertyDescriptor> Metamodel::form_properties() const noexcept 
     return impl_->form_properties;
 }
 
+std::span<const PropertyDescriptor> Metamodel::root_panel_properties() const noexcept {
+    return impl_->root_panel_properties;
+}
+
 std::span<const PropertyDescriptor> Metamodel::form_extension_properties() const noexcept {
     return impl_->form_extension_properties;
 }
@@ -2468,6 +2507,18 @@ const PropertyDescriptor* Metamodel::property(ControlKind kind, PropertyId id) c
 const PropertyDescriptor* Metamodel::form_property(PropertyId id) const noexcept {
     const auto found = impl_->form_properties_by_id.find(id);
     return found == impl_->form_properties_by_id.end() ? nullptr : found->second;
+}
+
+const PropertyDescriptor* Metamodel::root_panel_property(std::string_view name) const noexcept {
+    const auto properties = root_panel_properties();
+    const auto found = std::ranges::find(properties, name, &PropertyDescriptor::api_name);
+    return found == properties.end() ? nullptr : &*found;
+}
+
+const PropertyDescriptor* Metamodel::root_panel_property(PropertyId id) const noexcept {
+    const auto properties = root_panel_properties();
+    const auto found = std::ranges::find(properties, id, &PropertyDescriptor::id);
+    return found == properties.end() ? nullptr : &*found;
 }
 
 const PropertyDescriptor* Metamodel::form_extension_property(FormExtensionKind kind, std::string_view name) const noexcept {
