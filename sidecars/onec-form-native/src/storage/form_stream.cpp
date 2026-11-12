@@ -934,7 +934,16 @@ bool is_empty_picture_descriptor(const LV& value) {
         ? parse_constant("{3,0,{0},\"\",-1,-1,1,0}")
         : canonical_button_picture();
     for (std::size_t index = 0; index < expected.items.size(); ++index) {
-        if (index == 6) {
+        if (index == 4 || index == 5) {
+            const auto& dimension = value.items[index];
+            if (dimension.is_list || dimension.atom_kind != LV::AtomKind::raw) return false;
+            std::int32_t parsed_dimension{};
+            const auto begin = dimension.atom.data();
+            const auto end = begin + dimension.atom.size();
+            const auto result = std::from_chars(begin, end, parsed_dimension);
+            if (dimension.atom.empty() || result.ec != std::errc{} || result.ptr != end)
+                return false;
+        } else if (index == 6) {
             if (!same_list_value(value.items[index], raw("0")) &&
                 !same_list_value(value.items[index], raw("1"))) return false;
         } else if (!same_list_value(value.items[index], expected.items[index])) {

@@ -3525,8 +3525,16 @@ void test_shared_action_metadata_policies_and_rejections() {
             "legacy action pictures must rebuild canonically without changing named action values");
         action_at(legacy_picture).items[2].items[5].items[5] =
             list_stream::ListValue::raw_atom("42");
+        const auto cached_picture = form_stream::decode_document(legacy_picture, "Actions");
+        expect(cached_picture.ok(), "empty action pictures must accept inactive cached dimensions");
+        const auto cached_rebuilt = form_stream::encode_document(cached_picture.value());
+        expect(cached_rebuilt.ok() && list_stream::dump_compact(cached_rebuilt.value()) ==
+                list_stream::dump_compact(encoded.value()),
+            "empty action picture cached dimensions must rebuild canonically for every action owner");
+        action_at(legacy_picture).items[2].items[5].items[5] =
+            list_stream::ListValue::raw_atom("2147483648");
         expect(!form_stream::decode_document(legacy_picture, "Actions"),
-            "unrepresented legacy action picture settings must be rejected");
+            "out-of-range empty action picture dimensions must be rejected");
         const std::array picture_aliases{
             list_stream::parse("{3,0,{0},\"\",-1,-1,0,0}"),
             list_stream::parse("{4,0,{0},\"\",-1,-1,0,0,\"\"}")};
@@ -5293,6 +5301,39 @@ void test_button_picture_enums_round_trip_and_validation() {
                    list_stream::dump_compact(encoded.value()),
             "empty Button.Picture aliases must rebuild as the current default without semantic drift");
     }
+
+    std::string empty_batch_xml = R"XML(<Form id="1" name="EmptyPictures" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    for (std::uint64_t index = 0; index < 24; ++index)
+        empty_batch_xml += "<InputField id=\"" + std::to_string(index + 2) + "\" name=\"Item" +
+            std::to_string(index) + "\"><ValueType><Entry term=\"string\" length=\"20\"/></ValueType><Position/></InputField>";
+    empty_batch_xml += "</ChildItems></Form>";
+    const auto empty_batch = source::parse_form_xml(empty_batch_xml);
+    expect(empty_batch.ok(), "twenty-four empty-picture controls must parse as named XML");
+    const auto empty_current = form_stream::encode_document(empty_batch.value());
+    expect(empty_current.ok(), "the empty-picture batch must encode");
+    auto empty_legacy = empty_current.value();
+    constexpr std::array dimensions{std::numeric_limits<std::int32_t>::min(), -673720361, -2, -1, 0, 1,
+        83, 353703189, 2147483647, 42, -42, -2147483647};
+    for (std::uint64_t index = 0; index < 24; ++index) {
+        auto* item = const_cast<list_stream::ListValue*>(find_control_record(empty_legacy, index + 2));
+        expect(item != nullptr, "each empty-picture control must have its own stream record");
+        const auto version = index < 12 ? 3 : 4;
+        item->items[2].items[2].items[0].items[28] = list_stream::parse("{" + std::to_string(version) +
+            ",0,{0},\"\"," + std::to_string(dimensions[index % 12]) + "," +
+            std::to_string(dimensions[(index + 6) % 12]) + "," + std::to_string(index % 2) +
+            ",0" + (version == 4 ? ",\"\"" : "") + "}");
+    }
+    const auto empty_decoded = form_stream::decode_document(empty_legacy, "EmptyPictures");
+    expect(empty_decoded.ok() && empty_decoded.value().reconstruction_complete(),
+        "native-confirmed empty Picture3/4 cached sizes must not prevent full decoding");
+    const auto empty_xml = source::serialize_form_xml(empty_decoded.value());
+    expect(empty_xml.ok() && empty_xml.value() == source::serialize_form_xml(empty_batch.value()).value(),
+        "cached dimensions of an empty picture must not create a public picture or asset");
+    const auto empty_parsed = source::parse_form_xml(empty_xml.value());
+    expect(empty_parsed.ok(), "the empty-picture batch must reopen from named XML");
+    const auto empty_rebuilt = form_stream::encode_document(empty_parsed.value());
+    expect(empty_rebuilt.ok() && list_stream::dump_compact(empty_rebuilt.value()) ==
+        list_stream::dump_compact(empty_current.value()), "all twenty-four controls must rebuild using canonical empty pictures");
 
     model::Form foreign_form;
     foreign_form.id = model::ObjectId{1};
@@ -23444,7 +23485,7 @@ void test_supported_legacy_root_layout_decoding() {
                    list_stream::dump_compact(canonical.value()),
             "empty Form.CaptionPicture aliases must rebuild through the current writer");
     }
-    legacy_empty_picture.items[13].items[2].items[5] = list_stream::ListValue::raw_atom("42");
+    legacy_empty_picture.items[13].items[2].items[5] = list_stream::ListValue::raw_atom("-2147483649");
     expect(!form_stream::decode_document(legacy_empty_picture, "UnknownLegacyPicture"),
         "legacy picture settings without a named representation must be rejected");
 
@@ -24231,8 +24272,8 @@ void test_page_table_codec() {
         list_stream::parse("{5,0,{0},\"\",-1,-1,1,0,\"\"}"),
         list_stream::parse("{4,0,{1},\"\",-1,-1,1,0,\"\"}"),
         list_stream::parse("{4,0,{0},\"unexpected\",-1,-1,1,0,\"\"}"),
-        list_stream::parse("{4,0,{0},\"\",20,-1,1,0,\"\"}"),
-        list_stream::parse("{4,0,{0},\"\",-1,20,1,0,\"\"}"),
+        list_stream::parse("{4,0,{0},\"\",-2147483649,-1,1,0,\"\"}"),
+        list_stream::parse("{4,0,{0},\"\",-1,2147483648,1,0,\"\"}"),
         list_stream::parse("{4,0,{0},\"\",-1,-1,2,0,\"\"}"),
         list_stream::parse("{4,0,{0},\"\",-1,-1,1,0,\"\",0}"),
     };
