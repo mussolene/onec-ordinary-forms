@@ -1221,6 +1221,36 @@ void test_attribute_id_zero_xml_contract() {
         "control ID 0 must remain invalid in public XML");
 }
 
+void test_spreadsheet_serialization_version_xml() {
+    using Version = model::SpreadsheetDocumentFieldSerializationVersion;
+    const auto xml_for = [](std::string_view attributes, std::string_view kind = "SpreadsheetDocumentField") {
+        return std::string("<Form id=\"1\" name=\"SheetVersion\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
+            std::string(kind) + " id=\"2\" name=\"Sheet\"" + std::string(attributes) + "><Position/></" +
+            std::string(kind) + "></ChildItems></Form>";
+    };
+    for (const auto& [attribute, version] : std::array{
+        std::pair{std::string_view{}, Version::v18},
+        std::pair{std::string_view{" serializationVersion=\"14\""}, Version::v14},
+        std::pair{std::string_view{" serializationVersion=\"16\""}, Version::v16},
+        std::pair{std::string_view{" serializationVersion=\"18\""}, Version::v18}}) {
+        const auto parsed = source::parse_form_xml(xml_for(attribute));
+        expect(parsed.ok() && std::get<model::SpreadsheetDocumentFieldPayload>(parsed.value().find_control(model::ObjectId{2})->payload).
+            serialization_version == version, "XML должен читать версию компонента и default18 прежнего XML");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok() && (version == Version::v18
+            ? serialized.value().find("serializationVersion=") == std::string::npos
+            : serialized.value().find("serializationVersion=\"" + std::to_string(static_cast<unsigned>(version)) + "\"") != std::string::npos),
+            "XML должен сохранять старое поколение и опускать default18");
+    }
+    for (const auto version : {"0", "15", "17", "19", "14.0", "014", ""})
+        expect(!source::parse_form_xml(xml_for(" serializationVersion=\"" + std::string(version) + "\"")),
+            "Атрибут должен принимать только точные версии 14, 16 и 18");
+    expect(!source::parse_form_xml(xml_for(" serializationVersion=\"14\"", "Button")),
+        "Версию оболочки SSF нельзя задавать другому контролу");
+    expect(!source::parse_form_xml(xml_for(" serializationVersion=\"14\" serializationVersion=\"16\"")),
+        "Повторенный атрибут версии должен отклоняться");
+}
+
 void test_spreadsheet_document_cells_xml_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -2210,6 +2240,193 @@ void test_neutral_localized_text_xml() {
         const auto invalid = std::string("<Form id=\"1\" name=\"Neutral\" ordinaryFormVersion=\"2.1\"><ChildItems><PictureDecoration id=\"4\" name=\"P\"><Position/><NonselectedPictureText>") + value + "</NonselectedPictureText></PictureDecoration></ChildItems></Form>";
         expect(!source::parse_form_xml(invalid), "neutral text must reject duplicate defaults, wire markers and unsupported attributes");
     }
+}
+
+void test_catalog_list_table_source_matrix() {
+    const std::string prefix = R"XML(<Form id="1" name="CatalogRows" ordinaryFormVersion="2.1"><Attributes><Attribute id="0" name="Rows"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Rows"><DataPath attributeId="0"/><Position/><Columns>
+<Column name="Picture"><Source><StandardPicture/></Source><Header/></Column>
+<Column name="Code"><Source><MetadataField name="Code"/></Source><Header/><ValueType><Entry term="string" length="9" variable="true"/></ValueType></Column>
+<Column name="Description"><Source><MetadataField name="Description"/></Source><Header/><Control type="InputField"><ValueType><Entry term="string" length="40" variable="true"/></ValueType></Control></Column>
+<Column name="Flag"><Source><MetadataField uuid="44444444-4444-4444-4444-444444444444"/></Source><Header/><ValueType><Entry term="boolean"/></ValueType></Column>
+</Columns><CatalogListTableExtension>)XML";
+    const std::string suffix = "</CatalogListTableExtension></Table></ChildItems></Form>";
+    const std::array<std::string, 12> variants{
+        "", "<Tree>true</Tree>", "<EditType type=\"ListEditMode\" member=\"InList\"/>",
+        "<HierarchicalView>false</HierarchicalView>", "<ChangeHierarchicalView>false</ChangeHierarchicalView>",
+        "<ViewFoldersAndItems type=\"FoldersAndItemsUse\" member=\"Folders\"/>",
+        "<ChangeCurrentParent>false</ChangeCurrentParent>", "<ChangeEditingMode>true</ChangeEditingMode>",
+        "<NewRowShowCheck type=\"NewRowShowCheckVariant\" member=\"DontCheck\"/>",
+        "<Autonumeration type=\"AutonumerationInForm\" member=\"DontUse\"/>",
+        "<Tree>true</Tree><Events><BeforeParentChange id=\"5\">ParentHandler</BeforeParentChange><BeforeSetDeletionMark id=\"6\">DeleteHandler</BeforeSetDeletionMark><BeforeExpand id=\"7\">ExpandHandler</BeforeExpand><BeforeCollapse id=\"8\">CollapseHandler</BeforeCollapse></Events>",
+        "<Tree>false</Tree><EditType type=\"ListEditMode\" member=\"InDialog\"/><Autonumeration type=\"AutonumerationInForm\" member=\"Auto\"/>"};
+    for (std::size_t index = 0; index < variants.size(); ++index) {
+        const auto parsed = source::parse_form_xml(prefix + variants[index] + suffix);
+        expect(parsed.ok(), parsed ? "CatalogList source matrix parses" : parsed.diagnostics().front().message);
+        const auto xml = source::serialize_form_xml(parsed.value());
+        expect(xml.ok(), "CatalogList matrix serializes named XML");
+        const auto reparsed = source::parse_form_xml(xml.value());
+        expect(reparsed.ok(), "CatalogList matrix reparses without metadata context");
+        const auto encoded = oof::storage::form_stream::encode_document(reparsed.value());
+        expect(encoded.ok(), encoded ? "CatalogList matrix encodes" : encoded.diagnostics().front().message);
+        const auto decoded = oof::storage::form_stream::decode_document(encoded.value(), "CatalogRows");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ? "CatalogList matrix is complete" : decoded.diagnostics().front().message);
+        const auto rebuilt_xml = source::serialize_form_xml(decoded.value());
+        expect(rebuilt_xml.ok() && rebuilt_xml.value() == xml.value(), "CatalogList properties, events and family column identities survive XML-only roundtrip");
+        const auto& columns = std::get<model::TablePayload>(decoded.value().find_control(model::ObjectId{3})->payload).columns;
+        expect(std::get<model::TableMetadataColumnField>(*columns[1].source).field.name == "Code" &&
+            std::get<model::TableMetadataColumnField>(*columns[2].source).field.name == "Description" &&
+            std::get<model::TableMetadataColumnField>(*columns[3].source).field.uuid.has_value(),
+            "Catalog standard and UUID columns keep their named families");
+        if (index == 0) {
+            auto legacy = encoded.value();
+            auto& body = legacy.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(3).items.at(1);
+            body.items[0].atom = "11"; body.items.pop_back();
+            const auto old = oof::storage::form_stream::decode_document(legacy, "CatalogRows");
+            expect(old.ok() && old.value().reconstruction_complete(), "CatalogList source v11 with omitted Autonumeration decodes completely");
+            const auto old_xml = source::serialize_form_xml(old.value());
+            expect(old_xml.ok() && old_xml.value() == xml.value(), "CatalogList v11 uses proven Auto default");
+            for (unsigned bad = 0; bad < 6; ++bad) {
+                auto changed = encoded.value();
+                auto& source = changed.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(3).items.at(1);
+                using LV = oof::storage::list_stream::ListValue;
+                if (bad == 0) source.items[0].atom = "10";
+                if (bad == 1) source.items.push_back(LV::raw_atom("0"));
+                if (bad == 2) source.items[1].atom = "2";
+                if (bad == 3) source.items[2].atom = "99";
+                if (bad == 4) source.items[9] = oof::storage::list_stream::parse("{1,1,{0,55555555-5555-5555-5555-555555555555,{1,0,70005}}}");
+                if (bad == 5) source.items[10].items[0].atom = "4";
+                const auto rejected = oof::storage::form_stream::decode_document(changed, "CatalogRows");
+                expect(!rejected, "CatalogList unknown versions, arity, values and binding factories remain explicit rejects");
+                if (bad == 4) expect(rejected.diagnostics().front().message.find("binding factory") != std::string::npos,
+                    "unknown source bindings have an exact diagnostic and are not dropped");
+            }
+            auto wrong = reparsed.value();
+            auto* attribute = const_cast<model::Attribute*>(wrong.find_attribute(model::ObjectId{0}));
+            attribute->type.entries.front().type_name = model::QualifiedName{"DocumentList.Other"};
+            expect(!oof::storage::form_stream::encode_document(wrong), "CatalogList source rejects a conflicting generated type family");
+            attribute->type.entries.front().type_name = model::QualifiedName{"CatalogList.Items"};
+            expect(oof::storage::form_stream::encode_document(wrong).ok(), "CatalogList explicit type UUID and family name build without external metadata");
+        }
+    }
+    expect(!source::parse_form_xml(prefix + "<EditType type=\"ListEditMode\" member=\"Unknown\"/>" + suffix),
+        "CatalogList unknown enumeration member is rejected");
+    auto wrong_column = prefix;
+    const auto name = wrong_column.find("MetadataField name=\"Code\"");
+    wrong_column.replace(name, std::string("MetadataField name=\"Code\"").size(), "MetadataField name=\"Number\"");
+    expect(!source::parse_form_xml(wrong_column + suffix), "CatalogList does not reinterpret DocumentList standard columns");
+}
+
+void test_catalog_source_bindings_matrix() {
+    const std::string prefix = R"XML(<Form id="1" name="CatalogBindings" ordinaryFormVersion="2.1"><Attributes>
+<Attribute id="0" name="Rows"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute>
+<Attribute id="2" name="Current"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute>
+</Attributes><ChildItems><Table id="3" name="Rows"><DataPath attributeId="0"/><Position/><Columns><Column name="Code"><Source><MetadataField name="Code"/></Source><Header/><ValueType><Entry term="string" length="9" variable="true"/></ValueType></Column></Columns><CatalogListTableExtension><Bindings>)XML";
+    const std::string suffix = R"XML(</Bindings></CatalogListTableExtension></Table>
+<Table id="8" name="EventOwner"><DataPath attributeId="0"/><Position/><Columns><Column name="Code"><Source><MetadataField name="Code"/></Source><Header/><ValueType><Entry term="string" length="9" variable="true"/></ValueType></Column></Columns><CatalogListTableExtension/></Table>
+</ChildItems></Form>)XML";
+    constexpr std::array<std::string_view, 3> roles{"Owner", "Parent", "ActiveRow"};
+    std::vector<std::string> variants;
+    for (const auto role : roles) {
+        for (const unsigned depth : {0U, 1U, 3U}) {
+            std::string value = "<" + std::string(role) + "><DataPath attributeId=\"2\">";
+            for (unsigned index = 0; index < depth; ++index)
+                value += "<Member uuid=\"33333333-3333-3333-3333-333333333333\"/>";
+            variants.push_back(value + "</DataPath></" + std::string(role) + ">");
+        }
+        variants.push_back("<" + std::string(role) + "><EventSource event=\"ObjectActivationProcessing\"><FormRef id=\"1\"/></EventSource></" + std::string(role) + ">");
+        variants.push_back("<" + std::string(role) + "><EventSource event=\"BeforeExpand\"><ControlRef id=\"8\"/></EventSource></" + std::string(role) + ">");
+    }
+    variants.push_back("<ActiveRow><EventSource event=\"BeforeExpand\"><ControlRef id=\"8\"/></EventSource></ActiveRow><Owner><DataPath attributeId=\"2\"/></Owner><Parent><EventSource event=\"ObjectActivationProcessing\"><FormRef id=\"1\"/></EventSource></Parent>");
+    for (const auto& variant : variants) {
+        const auto parsed = source::parse_form_xml(prefix + variant + suffix);
+        expect(parsed.ok(), parsed ? "Catalog source binding matrix parses" : parsed.diagnostics().front().message);
+        expect(parsed.value().collections().events.empty(), "source event references do not require handler objects");
+        const auto copy = parsed.value();
+        const auto xml = source::serialize_form_xml(copy);
+        expect(xml.ok(), "typed binding graph copy serializes");
+        const auto encoded = oof::storage::form_stream::encode_document(copy);
+        expect(encoded.ok(), encoded ? "Catalog bindings encode" : encoded.diagnostics().front().message);
+        const auto decoded = oof::storage::form_stream::decode_document(encoded.value(), "CatalogBindings");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ? "Catalog binding graph is complete" : decoded.diagnostics().front().message);
+        const auto repeated = source::serialize_form_xml(decoded.value());
+        expect(repeated.ok() && repeated.value() == xml.value(), "direct, nested and forward event references survive named XML-only roundtrip");
+        const auto& bindings = std::get<model::TablePayload>(decoded.value().find_control(model::ObjectId{3})->payload).source_bindings;
+        expect(!bindings.empty(), "nonempty Catalog bindings are retained as named objects");
+    }
+    std::string remapped = prefix + "<Parent><EventSource event=\"BeforeExpand\"><ControlRef id=\"88\"/></EventSource></Parent><Owner><DataPath attributeId=\"22\"/></Owner>" + suffix;
+    remapped.replace(remapped.find("Attribute id=\"2\""), std::string("Attribute id=\"2\"").size(), "Attribute id=\"22\"");
+    remapped.replace(remapped.find("Table id=\"8\""), std::string("Table id=\"8\"").size(), "Table id=\"88\"");
+    const auto renamed = source::parse_form_xml(remapped);
+    expect(renamed.ok(), "renumbered binding owner and Attribute references parse");
+    const auto encoded = oof::storage::form_stream::encode_document(renamed.value());
+    expect(encoded.ok(), "renumbered typed references encode without stale persisted IDs");
+    const auto decoded = oof::storage::form_stream::decode_document(encoded.value(), "CatalogBindings");
+    expect(decoded.ok(), "renumbered binding graph decodes");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<ControlRef id=\"88\"") != std::string::npos &&
+        xml.value().find("<DataPath attributeId=\"22\"") != std::string::npos,
+        "control and Attribute identities are taken from current typed references");
+    for (const auto& invalid : std::array<std::string, 7>{
+        "<Owner><DataPath attributeId=\"2\"/></Owner><Owner><DataPath attributeId=\"2\"/></Owner>",
+        "<Unknown><DataPath attributeId=\"2\"/></Unknown>",
+        "<Owner><DataPath attributeId=\"99\"/></Owner>",
+        "<Parent><EventSource event=\"BeforeExpand\"><ControlRef id=\"99\"/></EventSource></Parent>",
+        "<Parent><EventSource event=\"Unknown\"><ControlRef id=\"8\"/></EventSource></Parent>",
+        "<Parent><EventSource event=\"ObjectActivationProcessing\"><FormRef id=\"99\"/></EventSource></Parent>",
+        "<Parent><EventSource event=\"ObjectActivationProcessing\"><FormRef id=\"1\"/><ControlRef id=\"8\"/></EventSource></Parent>"})
+        expect(!source::parse_form_xml(prefix + invalid + suffix), "duplicate, dangling, unknown and ambiguous source bindings are rejected");
+    for (const unsigned bad : {0U, 1U, 2U}) {
+        auto changed = encoded.value();
+        auto& links = changed.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(3).items.at(1).items.at(9);
+        if (bad == 0) links.items[2].items[0].atom = "99";
+        if (bad == 1) links.items[3].items[2].items[2].atom = "69999";
+        if (bad == 2) links.items[2].items[2].items[1].atom = "99";
+        expect(!oof::storage::form_stream::decode_document(changed, "CatalogBindings"),
+            "unknown storage role, event ID and DataPath arity are rejected without dropping references");
+    }
+    for (const bool document_scope : {false, true}) {
+        auto scoped_prefix = prefix;
+        const std::string extension = document_scope
+            ? "<MainAttribute attributeId=\"4\"/><DocumentFormExtension/>"
+            : "<MainAttribute attributeId=\"4\"/><DataProcessorFormExtension/>";
+        scoped_prefix.insert(scoped_prefix.find("<Attributes>"), extension);
+        scoped_prefix.insert(scoped_prefix.find("</Attributes>"),
+            "<Attribute id=\"4\" name=\"Object\"><TypeDomain><Entry term=\"object\" typeUuid=\"99999999-9999-9999-9999-999999999999\"/></TypeDomain></Attribute>");
+        const std::string event = document_scope ? "BeforeWrite" : "BeforeSaveValues";
+        const auto scoped = source::parse_form_xml(scoped_prefix + "<Parent><EventSource event=\"" + event +
+            "\"><FormRef id=\"1\"/></EventSource></Parent>" + suffix);
+        expect(scoped.ok(), scoped ? "extension-scoped Form binding parses" : scoped.diagnostics().front().message);
+        const auto binary = oof::storage::form_stream::encode_document(scoped.value());
+        expect(binary.ok(), binary ? "extension-scoped Form binding encodes" : binary.diagnostics().front().message);
+        const auto restored = oof::storage::form_stream::decode_document(binary.value(), "CatalogBindings");
+        expect(restored.ok(), restored ? "extension-scoped Form binding decodes" : restored.diagnostics().front().message);
+        const auto& binding = std::get<model::TablePayload>(restored.value().find_control(model::ObjectId{3})->payload).source_bindings.front();
+        expect(std::get<model::TableEventSource>(binding.source).event == event,
+            "storage event ID 80000 resolves through the actual Form extension scope");
+        const auto wrong_event = document_scope ? "BeforeSaveValues" : "BeforeWrite";
+        expect(!source::parse_form_xml(scoped_prefix + "<Parent><EventSource event=\"" + wrong_event +
+            "\"><FormRef id=\"1\"/></EventSource></Parent>" + suffix),
+            "Form event source names cannot escape their declared extension scope");
+    }
+    auto catalog_prefix = prefix;
+    catalog_prefix.insert(catalog_prefix.find("<Attributes>"),
+        "<MainAttribute attributeId=\"2\"/><CatalogItemFormExtension/>");
+    const std::string parent_binding =
+        "<Parent><DataPath attributeId=\"2\"><Member name=\"Parent\"/></DataPath></Parent>";
+    const auto parent = source::parse_form_xml(catalog_prefix + parent_binding + suffix);
+    expect(parent.ok(), "one standard Parent source member parses");
+    const auto parent_stream = oof::storage::form_stream::encode_document(parent.value());
+    expect(parent_stream.ok(), "one standard Parent source member encodes");
+    auto deep_stream = parent_stream.value();
+    auto& path = deep_stream.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2)
+        .items.at(3).items.at(1).items.at(9).items.at(2).items.at(2);
+    path.items[1].atom = "3";
+    path.items.push_back(path.items.back());
+    expect(!oof::storage::form_stream::decode_document(deep_stream, "CatalogBindings"),
+        "native Save drops a continuation through standard Parent, so its input cannot be declared complete");
+    expect(!source::parse_form_xml(catalog_prefix +
+        "<Parent><DataPath attributeId=\"2\"><Member name=\"Parent\"/><Member name=\"Parent\"/></DataPath></Parent>" + suffix),
+        "unrepresentable repeated Parent source paths must fail before writing a BIN");
 }
 
 void test_document_list_table_source_xml_and_native() {
@@ -4636,9 +4853,9 @@ void test_configuration_type_schema_xml_enrichment() {
     expect(types.ok(), types ? "" : types.diagnostics().front().message);
     std::string xml = R"XML(<Form id="1" name="SchemaNames" ordinaryFormVersion="2.1"><Attributes>
       <Attribute id="0" name="Root"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute>
-      <Attribute id="2" name="Reference"><TypeDomain><Entry term="reference" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute>
-      <Attribute id="3" name="List"><TypeDomain><Entry term="list" typeUuid="33333333-3333-3333-3333-333333333333"/></TypeDomain></Attribute>
-      <Attribute id="4" name="Type"><TypeDomain><Entry term="type" typeUuid="44444444-4444-4444-4444-444444444444"/></TypeDomain></Attribute>
+      <Attribute id="2" name="Reference"><TypeDomain><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></TypeDomain></Attribute>
+      <Attribute id="3" name="List"><TypeDomain><Entry term="object" typeUuid="33333333-3333-3333-3333-333333333333"/></TypeDomain></Attribute>
+      <Attribute id="4" name="Type"><TypeDomain><Entry term="object" typeUuid="44444444-4444-4444-4444-444444444444"/></TypeDomain></Attribute>
       <Attribute id="5" name="Primitive"><TypeDomain><Entry term="string" length="40"/></TypeDomain></Attribute>
       <Attribute id="6" name="Unknown"><TypeDomain><Entry term="object" typeUuid="55555555-5555-5555-5555-555555555555"/></TypeDomain></Attribute>
       </Attributes><ChildItems>)XML";
@@ -4792,6 +5009,7 @@ int main() {
         test_input_field_tooltip_and_format_xml_round_trip();
         test_input_field_type_link_xml_contract();
         test_attribute_id_zero_xml_contract();
+        test_spreadsheet_serialization_version_xml();
         test_spreadsheet_document_cells_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
         test_choice_field_static_xml_profile_and_runtime_list_rejection();
@@ -4811,6 +5029,8 @@ int main() {
         test_table_fixed_column_xml();
         test_table_columns_named_profile();
         test_neutral_localized_text_xml();
+        test_catalog_list_table_source_matrix();
+        test_catalog_source_bindings_matrix();
         test_document_list_table_source_xml_and_native();
         test_table_columns_without_editors_xml();
         test_table_column_layout_xml();

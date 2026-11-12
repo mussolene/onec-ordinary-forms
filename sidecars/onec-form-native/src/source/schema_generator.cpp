@@ -1531,6 +1531,23 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "    </xs:sequence>\n"
         "  </xs:complexType>\n\n";
 
+    output += R"XSD(  <xs:complexType name="TableEventSourceType">
+    <xs:choice>
+      <xs:element name="FormRef"><xs:complexType><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType></xs:element>
+      <xs:element name="ControlRef"><xs:complexType><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType></xs:element>
+    </xs:choice>
+    <xs:attribute name="event" type="xs:NCName" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="TableSourceBindingType"><xs:choice>
+    <xs:element name="DataPath" type="DataPathType"/>
+    <xs:element name="EventSource" type="TableEventSourceType"/>
+  </xs:choice></xs:complexType>
+  <xs:complexType name="CatalogTableSourceBindingsType"><xs:all>
+    <xs:element name="Owner" type="TableSourceBindingType" minOccurs="0"/>
+    <xs:element name="Parent" type="TableSourceBindingType" minOccurs="0"/>
+    <xs:element name="ActiveRow" type="TableSourceBindingType" minOccurs="0"/>
+  </xs:all></xs:complexType>
+)XSD";
     for (const auto& extension : model::metamodel::table_source_extension_descriptors()) {
         const std::string event_type = std::string(extension.xml_name) + "EventsType";
         append_event_type(output, event_type, model::metamodel::table_source_event_descriptors(extension.kind));
@@ -1538,6 +1555,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         append_attribute(output, "name", std::string(extension.xml_name) + "Type");
         output += "><xs:sequence>\n";
         append_property_elements(output, model::metamodel::table_source_property_descriptors(extension.kind), "    ", false);
+        if (extension.kind == model::TableSourceExtensionKind::catalog_list)
+            output += "    <xs:element name=\"Bindings\" type=\"CatalogTableSourceBindingsType\" minOccurs=\"0\"/>\n";
         output += "    <xs:element name=\"Events\"";
         append_attribute(output, "type", event_type);
         output += " minOccurs=\"0\"/></xs:sequence></xs:complexType>\n";
@@ -1633,8 +1652,13 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         output +=
             "    </xs:sequence>\n"
             "    <xs:attribute name=\"name\" type=\"xs:string\" use=\"required\"/>\n"
-            "    <xs:attribute name=\"id\" type=\"ObjectIdType\" use=\"required\"/>\n"
-            "  </xs:complexType>\n";
+            "    <xs:attribute name=\"id\" type=\"ObjectIdType\" use=\"required\"/>\n";
+        if (control.kind == model::ControlKind::spreadsheet_document_field)
+            output += "    <xs:attribute name=\"serializationVersion\" use=\"optional\" default=\"18\">"
+                "<xs:simpleType><xs:restriction base=\"xs:string\">"
+                "<xs:enumeration value=\"14\"/><xs:enumeration value=\"16\"/><xs:enumeration value=\"18\"/>"
+                "</xs:restriction></xs:simpleType></xs:attribute>\n";
+        output += "  </xs:complexType>\n";
         output += "  <xs:element";
         append_attribute(output, "name", control.public_name);
         append_attribute(output, "type", type_name);

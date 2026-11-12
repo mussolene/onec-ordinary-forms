@@ -2981,7 +2981,7 @@ const PropertyDescriptor* find_property(ControlKind kind, PropertyId id) noexcep
 }
 
 std::span<const TableSourceExtensionDescriptor> table_source_extension_descriptors() noexcept {
-    static constexpr std::array descriptors{document_list_table_extension};
+    static constexpr std::array descriptors{document_list_table_extension, catalog_list_table_extension};
     return descriptors;
 }
 
@@ -3025,18 +3025,57 @@ std::span<const TableColumnBooleanDescriptor> table_column_boolean_descriptors()
 }
 
 std::span<const PropertyDescriptor> table_source_property_descriptors(TableSourceExtensionKind kind) noexcept {
-    static const std::array descriptors{
+    static const std::array document_properties{
         PropertyDescriptor{PropertyId::from_name("EnablePeriodSetting"), DescriptorOwner::control,
             PropertySurface::control_payload, ControlKind::table, 0, "EnablePeriodSetting", "EnablePeriodSetting",
             u8"РазрешитьНастройкуПериода", u8"Булево", ValueKind::boolean, ValueCodec::boolean,
             ApiAccess::read_write, VersionMask::all_supported, PersistenceClass::persisted_editable,
             StorageCodec::control_info, {DefaultKind::boolean, "true"}},
     };
-    return kind == TableSourceExtensionKind::document_list ? std::span<const PropertyDescriptor>{descriptors} : std::span<const PropertyDescriptor>{};
+    static constexpr std::array<std::string_view, 2> edit_modes{"InList", "InDialog"};
+    static constexpr std::array<std::string_view, 3> folder_modes{"Items", "Folders", "FoldersAndItems"};
+    static constexpr std::array<std::string_view, 2> autonumeration{"Auto", "DontUse"};
+    static constexpr std::array<std::string_view, 2> row_checks{"DontCheck", "FilterMismatchMessage"};
+    static const auto catalog_properties = [] {
+        std::array<PropertyDescriptor, 9> result{};
+        struct Spec { std::string_view name; std::u8string_view russian; DefaultKind kind; std::string_view value; };
+        constexpr std::array specs{
+            Spec{"Tree", u8"Дерево", DefaultKind::boolean, "false"},
+            Spec{"EditType", u8"СпособРедактирования", DefaultKind::enumeration, "ListEditMode.InDialog"},
+            Spec{"HierarchicalView", u8"ИерархическийПросмотр", DefaultKind::boolean, "true"},
+            Spec{"ChangeHierarchicalView", u8"ИзменятьИерархическийПросмотр", DefaultKind::boolean, "true"},
+            Spec{"ViewFoldersAndItems", u8"ПросмотрГруппИЭлементов", DefaultKind::enumeration, "FoldersAndItemsUse.FoldersAndItems"},
+            Spec{"ChangeCurrentParent", u8"ИзменятьТекущегоРодителя", DefaultKind::boolean, "true"},
+            Spec{"ChangeEditingMode", u8"ИзменятьСпособРедактирования", DefaultKind::boolean, "false"},
+            Spec{"NewRowShowCheck", u8"ПроверкаОтображенияНовойСтроки", DefaultKind::enumeration, "NewRowShowCheckVariant.FilterMismatchMessage"},
+            Spec{"Autonumeration", u8"Автонумерация", DefaultKind::enumeration, "AutonumerationInForm.Auto"}};
+        for (std::size_t index = 0; index < specs.size(); ++index) {
+            const auto& spec = specs[index];
+            const bool boolean = spec.kind == DefaultKind::boolean;
+            result[index] = {PropertyId::from_name(spec.name), DescriptorOwner::control,
+                PropertySurface::control_payload, ControlKind::table, index, spec.name, spec.name,
+                spec.russian, boolean ? u8"Булево" : u8"Перечисление", boolean ? ValueKind::boolean : ValueKind::enumeration,
+                boolean ? ValueCodec::boolean : ValueCodec::enumeration, ApiAccess::read_write,
+                VersionMask::platform_8_5, PersistenceClass::persisted_editable, StorageCodec::control_info,
+                {spec.kind, spec.value}};
+        }
+        result[1].platform_type = u8"СпособРедактированияСписка";
+        result[4].platform_type = u8"ИспользованиеГруппИЭлементов";
+        result[7].platform_type = u8"ВариантПроверкиОтображенияНовойСтроки";
+        result[8].platform_type = u8"АвтонумерацияВФорме";
+        result[1].enumeration_type = "ListEditMode"; result[1].enumeration_members = edit_modes;
+        result[4].enumeration_type = "FoldersAndItemsUse"; result[4].enumeration_members = folder_modes;
+        result[7].enumeration_type = "NewRowShowCheckVariant"; result[7].enumeration_members = row_checks;
+        result[8].enumeration_type = "AutonumerationInForm"; result[8].enumeration_members = autonumeration;
+        return result;
+    }();
+    if (kind == TableSourceExtensionKind::document_list) return document_properties;
+    if (kind == TableSourceExtensionKind::catalog_list) return catalog_properties;
+    return {};
 }
 
 std::span<const EventDescriptor> table_source_event_descriptors(TableSourceExtensionKind kind) noexcept {
-    static const std::array descriptors{
+    static const std::array document_events{
         EventDescriptor{DescriptorOwner::control, ControlKind::table, 0, "BeforeSetDeletionMark", "BeforeSetDeletionMark",
             u8"ПередУстановкойПометкиУдаления", VersionMask::all_supported, PersistenceClass::persisted_editable,
             StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10000U},
@@ -3050,7 +3089,23 @@ std::span<const EventDescriptor> table_source_event_descriptors(TableSourceExten
             u8"ПередИзменениемДаты", VersionMask::all_supported, PersistenceClass::persisted_editable,
             StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10003U},
     };
-    return kind == TableSourceExtensionKind::document_list ? std::span<const EventDescriptor>{descriptors} : std::span<const EventDescriptor>{};
+    static const std::array catalog_events{
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 0, "BeforeParentChange", "BeforeParentChange",
+            u8"ПередИзменениемРодителя", VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10000U},
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 1, "BeforeSetDeletionMark", "BeforeSetDeletionMark",
+            u8"ПередУстановкойПометкиУдаления", VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10001U},
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 2, "BeforeExpand", "BeforeExpand",
+            u8"ПередРазворачиванием", VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10002U},
+        EventDescriptor{DescriptorOwner::control, ControlKind::table, 3, "BeforeCollapse", "BeforeCollapse",
+            u8"ПередСворачиванием", VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::event_record, "e1692cc2-605b-4535-84dd-28440238746c", 10003U},
+    };
+    if (kind == TableSourceExtensionKind::document_list) return document_events;
+    if (kind == TableSourceExtensionKind::catalog_list) return catalog_events;
+    return {};
 }
 
 const PropertyDescriptor* find_property(const ControlNode& control, std::string_view name) noexcept {

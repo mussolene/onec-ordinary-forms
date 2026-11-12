@@ -321,10 +321,9 @@ struct TypeParser {
                 continue;
             }
             if (auto known = generated.find(local); known != generated.end()) {
-                if (known->second.category == "Object") entry.term = model::TypeDomainTerm::object;
-                else if (known->second.category == "Ref") entry.term = model::TypeDomainTerm::reference;
-                else if (known->second.category == "List") entry.term = model::TypeDomainTerm::list;
-                else { unresolved = model::QualifiedName{name}; continue; }
+                // GeneratedType category describes its metadata interface. The
+                // serialized type domain identifies every nominal type by UUID.
+                entry.term = model::TypeDomainTerm::object;
                 entry.type_uuid = known->second.type_id;
                 append_entry(domain, std::move(entry), path);
                 continue;

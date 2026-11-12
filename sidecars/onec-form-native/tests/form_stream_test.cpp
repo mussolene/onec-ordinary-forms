@@ -1160,6 +1160,22 @@ void test_table_boolean_properties() {
     expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown Table flag bits must remain incomplete");
 }
 
+void test_catalog_table_source_metadata_context() {
+    const auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Catalog" ordinaryFormVersion="2.1"><Attributes><Attribute id="0" name="Rows"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="3" name="Rows"><DataPath attributeId="0"/><Position/><Columns><Column name="Code"><Source><MetadataField name="Code"/></Source><Header/><ValueType><Entry term="string" length="9" variable="true"/></ValueType></Column></Columns><CatalogListTableExtension/></Table></ChildItems></Form>)XML");
+    expect(parsed.ok(), "CatalogList source context fixture parses");
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "CatalogList source context fixture encodes without a baseline");
+    for (const bool matching : {true, false}) {
+        auto metadata = oof::MetadataContext::create({{{"11111111-1111-1111-1111-111111111111"},
+            {"22222222-2222-2222-2222-222222222222"}, matching ? "CatalogList.Items" : "DocumentList.Other"}}, {});
+        expect(metadata.ok(), "nominal source type context is valid");
+        const auto context = std::make_shared<const oof::MetadataContext>(metadata.take_value());
+        const auto decoded = form_stream::decode_document(encoded.value(), "Catalog", context);
+        expect(decoded.ok() == matching, "Catalog source must match a supplied generated type family");
+        if (matching) expect(decoded.value().reconstruction_complete(), "matching Catalog source type is complete");
+    }
+}
+
 void test_table_enumeration_properties() {
     auto seed = form_stream::decode_document(captured_table_payload(), "TableEnums");
     expect(seed.ok(), "Table enum fixture must decode");
@@ -7120,6 +7136,19 @@ void test_command_bar_default_button_round_trip_and_guards() {
     relocated.items[1].items[2].items[2].items[1].items[2].items[1].items[10] =
         list_stream::ListValue::raw_atom("3ffd4fb3-770c-4579-9cbe-44187ca9b300");
     expect(form_stream::decode_document(relocated, "RelocatedDefault").ok(), "platform source UUID relocation must preserve named selection");
+    auto repeated_default_id = encoded.value();
+    auto& repeated_properties = repeated_default_id.items[1].items[2].items[2].items[1].items[2].items[1];
+    auto& repeated_menu = repeated_properties.items[7];
+    const auto repeated_actions = std::stoul(repeated_menu.items[4].atom);
+    auto& nested_properties = repeated_menu.items[7 + repeated_actions].items[6];
+    nested_properties.items[6].atom = "44444444-4444-4444-8444-444444444444";
+    nested_properties.items[7].atom = repeated_properties.items[11].atom;
+    const auto exact_default = form_stream::decode_document(repeated_default_id, "DefaultAction");
+    expect(exact_default.ok() && std::get<model::CommandBarPayload>(exact_default.value().find_control(model::ObjectId{4})->payload).buttons.back().default_button,
+        "exact DefaultButton pair must distinguish a nested action with the same numeric ID");
+    repeated_properties.items[10].atom = "55555555-5555-4555-8555-555555555555";
+    expect(!form_stream::decode_document(repeated_default_id, "AmbiguousDefault"),
+        "relocated DefaultButton source must reject ambiguous numeric candidates");
     const auto reject_property = [&](std::size_t index, std::string value) {
         auto invalid = encoded.value();
         invalid.items[1].items[2].items[2].items[1].items[2].items[1].items[index] = list_stream::ListValue::raw_atom(std::move(value));
@@ -17320,6 +17349,95 @@ R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
     }
 }
 
+void test_spreadsheet_document_field_serialization_versions() {
+    using Version = model::SpreadsheetDocumentFieldSerializationVersion;
+    constexpr std::array versions{Version::v14, Version::v16, Version::v18};
+    constexpr std::array booleans{"Enabled", "HorizontalScrollBar", "VerticalScrollBar", "EnableStartDrag", "EnableDrag"};
+    model::Form form; form.id = model::ObjectId{1}; form.name = "SheetGenerations";
+    for (std::uint64_t index = 0; index < 12; ++index)
+        form.children.push_back(model::ControlRef{model::ObjectId{10 + index}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        model::ControlNode field{model::ObjectId{10 + index}, "Sheet" + std::to_string(index), model::SpreadsheetDocumentFieldPayload{}};
+        auto& payload = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload);
+        payload.serialization_version = versions[index % versions.size()];
+        const auto variant = index / versions.size();
+        if (variant % 2) payload.cells.push_back({1, 1, "Текст", std::nullopt});
+        for (std::size_t bit = 0; bit < booleans.size(); ++bit)
+            if ((variant + bit) % 3 == 1)
+                field.properties().set_explicit(model::PropertyId::from_name(booleans[bit]), false);
+        if (variant >= 2)
+            field.properties().set_explicit(model::PropertyId::from_name("ShowSelection"),
+                model::EnumerationValue{"SpreadsheetDocumentSelectionShowModeType", "Always"});
+        document.add_control(std::move(field));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "Матрица из 12 полей должна сохранять выбранные поколения");
+    const auto& records = encoded.value().items[1].items[2].items[2];
+    expect(records.items.size() == 13, "Матрица должна содержать 12 контролов");
+    for (std::size_t index = 0; index < 12; ++index) {
+        const auto version = versions[index % versions.size()];
+        const auto& info = records.items[index + 1].items[2];
+        const auto arity = version == Version::v14 ? 29U : version == Version::v16 ? 30U : 33U;
+        expect(info.items.size() == arity && info.items[0].atom == std::to_string(static_cast<unsigned>(version)),
+            "Оболочка должна сохранять точную пару версии и размера без современного хвоста");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "SheetGenerations");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), "Все поколения должны давать полную именованную модель");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("serializationVersion=\"14\"") != std::string::npos &&
+        xml.value().find("serializationVersion=\"16\"") != std::string::npos &&
+        xml.value().find("serializationVersion=\"18\"") == std::string::npos,
+        "XML должен явно переносить старые поколения и опускать default18");
+    auto fresh = source::parse_form_xml(xml.value());
+    expect(fresh.ok(), "Самостоятельный XML должен восстанавливать поколения");
+    const auto rebuilt = form_stream::encode_document(fresh.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "XML-only сборка должна сохранять все поколения и именованные данные");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto id = model::ObjectId{10 + index};
+        const auto& payload = std::get<model::SpreadsheetDocumentFieldPayload>(fresh.value().find_control(id)->payload);
+        expect(payload.serialization_version == versions[index % versions.size()], "Версия должна принадлежать конкретному контролу");
+        const auto owner = model::OrdinaryFormDocument::ObjectKey{model::ObjectCategory::control, id};
+        const auto enabled = fresh.value().get_prop_val(owner, model::PropertyId::from_name("Enabled"));
+        expect(enabled.value.has_value() && fresh.value().set_prop_val(owner, model::PropertyId::from_name("Enabled"), !std::get<bool>(*enabled.value)) ==
+            model::PropertyMutationStatus::applied, "Изменение представимого свойства должно применяться");
+    }
+    const auto edited_xml = source::serialize_form_xml(fresh.value());
+    expect(edited_xml.ok(), "Измененные свойства должны сохраняться в XML");
+    const auto edited = source::parse_form_xml(edited_xml.value());
+    expect(edited.ok(), "Измененный XML должен читаться без исходного BIN");
+    const auto edited_stream = form_stream::encode_document(edited.value());
+    expect(edited_stream.ok(), "Измененные свойства должны сохраняться без повышения версии");
+    for (std::size_t index = 0; index < 12; ++index) {
+        const auto& before = records.items[index + 1].items[2];
+        const auto& after = edited_stream.value().items[1].items[2].items[2].items[index + 1].items[2];
+        expect(after.items.size() == before.items.size() && after.items[0].atom == before.items[0].atom &&
+            after.items[8].atom != before.items[8].atom, "Правка Enabled должна сохранять поколение и менять значение");
+    }
+    for (const auto version : {"0", "15", "17", "19", "14.5"}) {
+        auto invalid = encoded.value();
+        invalid.items[1].items[2].items[2].items[1].items[2].items[0] = list_stream::ListValue::raw_atom(version);
+        expect(!form_stream::decode_document(invalid, "BadSheetVersion"), "Неизвестная версия должна отклоняться");
+    }
+    for (const auto version : {"16", "18"}) {
+        auto invalid = encoded.value();
+        invalid.items[1].items[2].items[2].items[1].items[2].items[0] = list_stream::ListValue::raw_atom(version);
+        expect(!form_stream::decode_document(invalid, "BadSheetArity"), "Размер оболочки должен соответствовать версии");
+    }
+    auto invalid = encoded.value();
+    invalid.items[1].items[2].items[2].items[1].items[2].items[15] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(invalid, "BadSheetBoolean"), "Legacy bool должен оставаться строгим");
+    invalid = encoded.value();
+    invalid.items[1].items[2].items[2].items[1].items[2].items.push_back(list_stream::ListValue::raw_atom("0"));
+    expect(!form_stream::decode_document(invalid, "ExtraSheetField"), "Неизвестный хвост нельзя игнорировать");
+    invalid = encoded.value();
+    invalid.items[1].items[2].items[2].items[2].items[2].items[29] = list_stream::ListValue::raw_atom("1");
+    const auto partial = form_stream::decode_document(invalid, "UnknownSheetState");
+    expect(partial.ok() && !partial.value().reconstruction_complete() && !form_stream::encode_document(partial.value()),
+        "Непредставленное состояние поколения16 должно сохранять отказ полной реконструкции");
+}
+
 void test_spreadsheet_document_field_named_properties_and_events() {
     constexpr std::array booleans{
         std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U},
@@ -22371,6 +22489,97 @@ void test_context_menu_named_reference_roundtrip() {
     expect(separate_xml.ok() && separate_xml.value() == public_xml.value(),
         "sixteen control types must resolve the same named ContextMenu from a separately identified root collection");
 
+    auto namespaced = encoded.value();
+    auto* namespaced_bar = find_record_with_guid(namespaced, model::metamodel::descriptor_for(model::ControlKind::command_bar).guid);
+    auto& menu_graph = namespaced_bar->items[2].items[1].items[7];
+    const auto action_count = std::stoul(menu_graph.items[4].atom);
+    const auto group_begin = 6 + action_count;
+    using Identity = std::pair<std::string, std::string>;
+    std::map<Identity, Identity> button_ids;
+    std::map<Identity, Identity> group_ids;
+    for (std::size_t group_index = group_begin; group_index < menu_graph.items.size(); ++group_index) {
+        auto& group = menu_graph.items[group_index];
+        if (group_index != group_begin) {
+            const Identity old{group.items[1].atom, group.items[2].atom};
+            const auto suffix = std::to_string(group_index);
+            const std::string marker = "11111111-1111-4111-8111-" + std::string(12 - suffix.size(), '0') + suffix;
+            group_ids.emplace(old, Identity{marker, "1"});
+            group.items[1].atom = marker; group.items[2].atom = "1";
+        }
+        const auto count = std::stoul(group.items[4].atom);
+        for (std::size_t index = 0; index < count; ++index) {
+            auto& item = group.items[6 + 2 * index];
+            const Identity old{item.items[6].atom, item.items[7].atom};
+            const auto suffix = std::to_string(button_ids.size() + 1);
+            const std::string marker = "22222222-2222-4222-8222-" + std::string(12 - suffix.size(), '0') + suffix;
+            button_ids.emplace(old, Identity{marker, "1"});
+            item.items[6].atom = marker; item.items[7].atom = "1";
+        }
+    }
+    for (std::size_t group_index = group_begin; group_index < menu_graph.items.size(); ++group_index) {
+        auto& references = menu_graph.items[group_index].items.back().items[2];
+        for (std::size_t index = 1; index + 2 < references.items.size(); index += 3) {
+            const auto& replacement = button_ids.at({references.items[index].atom, references.items[index + 1].atom});
+            references.items[index].atom = replacement.first; references.items[index + 1].atom = replacement.second;
+        }
+    }
+    for (std::size_t index = 5; index < 5 + action_count; ++index) {
+        auto& target = menu_graph.items[index].items[4];
+        if (!target.is_list || target.items.size() != 3) continue;
+        const auto replacement = group_ids.find({target.items[1].atom, target.items[2].atom});
+        if (replacement != group_ids.end()) {
+            target.items[1].atom = replacement->second.first; target.items[2].atom = replacement->second.second;
+        }
+    }
+    auto& namespace_contexts = namespaced.items[11];
+    for (std::size_t index = 1; index + 4 < namespace_contexts.items.size(); index += 5) {
+        const auto replacement = button_ids.find({namespace_contexts.items[index + 2].atom, namespace_contexts.items[index + 3].atom});
+        if (replacement != button_ids.end()) {
+            namespace_contexts.items[index + 2].atom = replacement->second.first;
+            namespace_contexts.items[index + 3].atom = replacement->second.second;
+        }
+    }
+    const auto namespace_read = form_stream::decode_document(namespaced);
+    expect(namespace_read.ok() && namespace_read.value().reconstruction_complete(),
+        namespace_read ? "complete menu namespace graph" : namespace_read.diagnostics().front().message);
+    check(namespace_read.value());
+    const auto namespace_xml = source::serialize_form_xml(namespace_read.value());
+    expect(namespace_xml.ok() && namespace_xml.value() == public_xml.value(),
+        "sixteen controls resolve named menus when button identities and submenu targets use distinct namespaces and repeated numeric IDs");
+    const auto namespace_rebuilt = form_stream::encode_document(namespace_read.value());
+    expect(namespace_rebuilt.ok() && list_stream::dump_compact(namespace_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "menu graph rebuild derives canonical identities from named paths without a baseline");
+    auto duplicate_identity = namespaced;
+    auto* duplicate_bar = find_record_with_guid(duplicate_identity, model::metamodel::descriptor_for(model::ControlKind::command_bar).guid);
+    auto& duplicate_root = duplicate_bar->items[2].items[1].items[7].items[group_begin];
+    duplicate_root.items[8].items[6] = duplicate_root.items[6].items[6];
+    expect(!form_stream::decode_document(duplicate_identity), "duplicate complete button identities must be rejected");
+    auto missing_namespace = namespaced;
+    auto& missing_rows = missing_namespace.items[11];
+    for (std::size_t index = 1; index + 4 < missing_rows.items.size(); index += 5) {
+        if (missing_rows.items[index + 2].atom.starts_with("22222222")) {
+            missing_rows.items[index + 2].atom = "33333333-3333-4333-8333-333333333333";
+            break;
+        }
+    }
+    expect(!form_stream::decode_document(missing_namespace), "numeric menu ID alone must not resolve an absent context namespace");
+    for (const bool cycle : {false, true}) {
+        auto invalid_target = namespaced;
+        auto* invalid_bar = find_record_with_guid(invalid_target, model::metamodel::descriptor_for(model::ControlKind::command_bar).guid);
+        auto& graph = invalid_bar->items[2].items[1].items[7];
+        bool changed = false;
+        for (std::size_t index = 5; index < 5 + action_count; ++index) {
+            auto& target = graph.items[index].items[4];
+            if (!target.is_list || target.items.size() != 3 || !target.items[1].atom.starts_with("11111111")) continue;
+            target.items[1].atom = cycle ? graph.items[group_begin].items[1].atom : "66666666-6666-4666-8666-666666666666";
+            target.items[2].atom = graph.items[group_begin].items[2].atom;
+            changed = true;
+            break;
+        }
+        expect(changed && !form_stream::decode_document(invalid_target),
+            "submenu full-pair targets must reject missing namespaces and cycles");
+    }
+
     auto& menu = std::get<model::CommandBarPayload>(bar->payload).buttons;
     std::reverse(menu.begin(), menu.end());
     auto reordered = form_stream::encode_document(document.value());
@@ -27153,6 +27362,7 @@ int main() {
         test_table_read_only_runtime_flags();
         test_table_named_common_properties();
         test_table_boolean_properties();
+        test_catalog_table_source_metadata_context();
         test_table_enumeration_properties();
         test_table_appearance_properties();
         test_table_header_footer_heights();
@@ -27269,6 +27479,7 @@ int main() {
         test_input_list_choice_mode_round_trip();
         test_single_input_field_round_trip();
         test_spreadsheet_cell_controls();
+        test_spreadsheet_document_field_serialization_versions();
         test_spreadsheet_document_field_named_properties_and_events();
         test_spreadsheet_document_field_round_trip();
         test_two_input_fields_round_trip();

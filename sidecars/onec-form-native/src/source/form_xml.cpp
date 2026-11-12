@@ -2383,6 +2383,17 @@ private:
             required_attribute(node, "name", id_text),
             make_payload(descriptor->kind),
         };
+        if (const auto version = optional_attribute(node, "serializationVersion")) {
+            auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
+            if (spreadsheet == nullptr)
+                fail("OOF2003", node, id_text, "serializationVersion", "SpreadsheetDocumentField", type_name,
+                    "Версия сериализации допустима только у SpreadsheetDocumentField");
+            if (*version == "14") spreadsheet->serialization_version = model::SpreadsheetDocumentFieldSerializationVersion::v14;
+            else if (*version == "16") spreadsheet->serialization_version = model::SpreadsheetDocumentFieldSerializationVersion::v16;
+            else if (*version == "18") spreadsheet->serialization_version = model::SpreadsheetDocumentFieldSerializationVersion::v18;
+            else fail("OOF2003", node, id_text, "serializationVersion", "14, 16 or 18", *version,
+                "Версия сериализации SpreadsheetDocumentField не поддерживается");
+        }
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
         bool type_link_seen = false;
@@ -2778,13 +2789,15 @@ private:
                 else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
             } else if (name == "Columns" && descriptor->kind == model::ControlKind::table) {
                 std::get<model::TablePayload>(control.payload).columns = parse_table_columns(child, id_text);
-            } else if (name == "DocumentListTableExtension" && descriptor->kind == model::ControlKind::table) {
+            } else if (descriptor->kind == model::ControlKind::table && std::ranges::any_of(mm::table_source_extension_descriptors(),
+                [&](const auto& extension) { return extension.xml_name == name; })) {
                 auto& table = std::get<model::TablePayload>(control.payload);
                 if (table.source_extension)
                     fail("OOF2003", child, id_text, name, "one named Table source extension", "duplicate or content",
                         "Table source extension is duplicated or malformed");
                 require_typed_container(child, id_text);
-                table.source_extension = model::TableSourceExtensionKind::document_list;
+                table.source_extension = std::ranges::find(mm::table_source_extension_descriptors(), name,
+                    &mm::TableSourceExtensionDescriptor::xml_name)->kind;
                 std::set<std::string> seen;
                 const auto properties = mm::table_source_property_descriptors(*table.source_extension);
                 for (auto* property_node : element_children(child)) {
@@ -2792,6 +2805,47 @@ private:
                     if (!seen.insert(property_name).second)
                         fail("OOF2003", property_node, id_text, property_name, "one extension member", "duplicate",
                             "Table source extension member is duplicated");
+                    if (property_name == "Bindings" && table.source_extension == model::TableSourceExtensionKind::catalog_list) {
+                        require_typed_container(property_node, id_text);
+                        std::set<model::TableSourceBindingRole> roles;
+                        constexpr std::array<std::string_view, 3> names{"Owner", "Parent", "ActiveRow"};
+                        for (auto* role_node : element_children(property_node)) {
+                            const auto role = std::ranges::find(names, node_name(role_node));
+                            if (role == names.end()) fail("OOF2003", role_node, id_text, "Bindings", "named source binding role",
+                                node_name(role_node), "Table source binding role is unsupported");
+                            const auto kind = static_cast<model::TableSourceBindingRole>(role - names.begin());
+                            if (!roles.insert(kind).second)
+                                fail("OOF2003", role_node, id_text, "Bindings", "unique source binding role", "duplicate",
+                                    "Table source binding role is duplicated");
+                            require_typed_container(role_node, id_text);
+                            const auto targets = element_children(role_node);
+                            if (targets.size() != 1) fail("OOF2003", role_node, id_text, "Bindings", "one DataPath or EventSource",
+                                "missing or multiple", "Table source binding requires one typed source");
+                            auto* target = targets.front();
+                            if (node_name(target) == "DataPath") {
+                                table.source_bindings.push_back({kind, parse_data_path(target, id_text)});
+                            } else if (node_name(target) == "EventSource") {
+                                require_typed_container(target, id_text, "event");
+                                model::TableEventSource source;
+                                source.event = required_attribute(target, "event", id_text);
+                                const auto owners = element_children(target);
+                                if (owners.size() != 1) fail("OOF2003", target, id_text, "EventSource", "one FormRef or ControlRef",
+                                    "missing or multiple", "Event source requires one typed owner");
+                                auto* owner = owners.front();
+                                require_typed_container(owner, id_text, "id");
+                                if (!element_children(owner).empty()) fail("OOF2003", owner, id_text, "EventSource", "empty reference",
+                                    "content", "Event source reference cannot contain children");
+                                const auto reference = parse_object_id(required_attribute(owner, "id", id_text), owner, "id", id_text);
+                                if (node_name(owner) == "FormRef") source.owner = model::FormRef{reference};
+                                else if (node_name(owner) == "ControlRef") source.owner = model::ControlRef{reference};
+                                else fail("OOF2003", owner, id_text, "EventSource", "FormRef or ControlRef", node_name(owner),
+                                    "Event source owner kind is unsupported");
+                                table.source_bindings.push_back({kind, std::move(source)});
+                            } else fail("OOF2003", target, id_text, "Bindings", "DataPath or EventSource", node_name(target),
+                                "Table source binding target is unsupported");
+                        }
+                        continue;
+                    }
                     if (property_name == "Events") {
                         auto events = parse_control_events(property_node, id,
                             mm::table_source_event_descriptors(*table.source_extension));
@@ -2950,6 +3004,13 @@ private:
                     fail("OOF2003", child, id_text, name, "property on its typed XML surface", name, "Control property appears on the wrong object-model surface");
                 }
             }
+        }
+        if (const auto* table = std::get_if<model::TablePayload>(&control.payload);
+            table && table->source_extension == model::TableSourceExtensionKind::catalog_list) {
+            for (auto* child : element_children(node))
+                if (node_name(child) == "Tree")
+                    fail("OOF2003", child, id_text, "Tree", "CatalogListTableExtension/Tree", "Table/Tree",
+                        "CatalogList Tree belongs to its source extension");
         }
         if (auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
             for (const auto [area, property] : {std::pair{&chart->legend_area, "ShowLegend"}, std::pair{&chart->title_area, "ShowTitle"}}) {
@@ -4940,7 +5001,11 @@ private:
     void write_control(const model::ControlNode& control) {
         const auto& descriptor = metamodel_.control(control.kind());
         const std::string id = object_id_text(control.id);
-        writer_.open(descriptor.public_name, {{"name", control.name}, {"id", id}});
+        XmlAttributes attributes{{"name", control.name}, {"id", id}};
+        if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
+            spreadsheet != nullptr && spreadsheet->serialization_version != model::SpreadsheetDocumentFieldSerializationVersion::v18)
+            attributes.emplace_back("serializationVersion", std::to_string(static_cast<unsigned>(spreadsheet->serialization_version)));
+        writer_.open(descriptor.public_name, attributes);
         if (control.data_path.has_value()) write_data_path(*control.data_path);
         if (const auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
             input_field != nullptr && input_field->type_link.has_value())
@@ -5021,6 +5086,8 @@ private:
         } else if (const auto* table = std::get_if<model::TablePayload>(&control.payload)) {
             for (const auto& property : metamodel_.properties_for(control.kind())) {
                 if (property.api_name == "Columns") write_table_columns(table->columns, id);
+                else if (table->source_extension && std::ranges::any_of(mm::table_source_property_descriptors(*table->source_extension),
+                    [&](const auto& source_property) { return source_property.id == property.id; })) continue;
                 else if (const auto* entry = control.properties().find(property.id);
                     entry != nullptr && !equals_descriptor_default(property, entry->value))
                     write_property(property, entry->value, id);
@@ -5265,7 +5332,9 @@ private:
         }
         auto common_events = control.events;
         if (const auto* table = std::get_if<model::TablePayload>(&control.payload); table && table->source_extension) {
-            if (*table->source_extension != model::TableSourceExtensionKind::document_list)
+            const auto extensions = mm::table_source_extension_descriptors();
+            const auto extension = std::ranges::find(extensions, *table->source_extension, &mm::TableSourceExtensionDescriptor::kind);
+            if (extension == extensions.end())
                 serialization_fail(id, "TableSourceExtension", "registered source interface", "unknown kind",
                     "Table source extension is unsupported");
             const auto descriptors = mm::table_source_event_descriptors(*table->source_extension);
@@ -5277,10 +5346,31 @@ private:
                 if (belongs) source_events.push_back(reference);
                 return belongs;
             });
-            writer_.open("DocumentListTableExtension");
+            writer_.open(extension->xml_name);
             write_property_set(control.properties(), mm::table_source_property_descriptors(*table->source_extension), id);
+            if (!table->source_bindings.empty()) {
+                writer_.open("Bindings");
+                constexpr std::array<std::string_view, 3> names{"Owner", "Parent", "ActiveRow"};
+                for (std::size_t role = 0; role < names.size(); ++role) {
+                    const auto found = std::ranges::find(table->source_bindings,
+                        static_cast<model::TableSourceBindingRole>(role), &model::TableSourceBinding::role);
+                    if (found == table->source_bindings.end()) continue;
+                    writer_.open(names[role]);
+                    if (const auto* path = std::get_if<model::DataPath>(&found->source)) write_data_path(*path);
+                    else {
+                        const auto& source = std::get<model::TableEventSource>(found->source);
+                        writer_.open("EventSource", {{"event", source.event}});
+                        if (const auto* form = std::get_if<model::FormRef>(&source.owner))
+                            writer_.empty("FormRef", {{"id", object_id_text(form->id())}});
+                        else writer_.empty("ControlRef", {{"id", object_id_text(std::get<model::ControlRef>(source.owner).id())}});
+                        writer_.close("EventSource");
+                    }
+                    writer_.close(names[role]);
+                }
+                writer_.close("Bindings");
+            }
             write_events("Events", source_events, descriptors, id);
-            writer_.close("DocumentListTableExtension");
+            writer_.close(extension->xml_name);
         }
         write_events("Events", common_events, metamodel_.events_for(control.kind()), id);
         write_child_items(control.children);

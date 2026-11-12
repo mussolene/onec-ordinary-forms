@@ -1267,7 +1267,7 @@ struct TableColumnControl {
     std::optional<InputFieldExtensionKind> extension;
 };
 
-enum class TableSourceExtensionKind : std::uint8_t { document_list };
+enum class TableSourceExtensionKind : std::uint8_t { document_list, catalog_list };
 
 struct TableMetadataColumnField {
     DataPathMember field;
@@ -1308,13 +1308,36 @@ struct TableColumn {
     bool change_position = true;
 };
 
+enum class TableSourceBindingRole : std::uint8_t { owner, parent, active_row };
+
+struct TableEventSource {
+    std::variant<FormRef, ControlRef> owner;
+    std::string event;
+    friend bool operator==(const TableEventSource&, const TableEventSource&) = default;
+};
+
+struct TableSourceBinding {
+    TableSourceBindingRole role = TableSourceBindingRole::owner;
+    std::variant<DataPath, TableEventSource> source;
+    friend bool operator==(const TableSourceBinding&, const TableSourceBinding&) = default;
+};
+
 struct TablePayload final : TypedControlPayload<ControlKind::table> {
     std::vector<TableColumn> columns;
     std::optional<TableSourceExtensionKind> source_extension;
+    std::vector<TableSourceBinding> source_bindings;
 };
+enum class SpreadsheetDocumentFieldSerializationVersion : std::uint8_t {
+    v14 = 14,
+    v16 = 16,
+    v18 = 18,
+};
+
 struct SpreadsheetDocumentFieldPayload final
     : TypedControlPayload<ControlKind::spreadsheet_document_field> {
     std::vector<SpreadsheetDocumentCell> cells;
+    SpreadsheetDocumentFieldSerializationVersion serialization_version =
+        SpreadsheetDocumentFieldSerializationVersion::v18;
 };
 struct LabelDecorationPayload final
     : TypedControlPayload<ControlKind::label_decoration> {};

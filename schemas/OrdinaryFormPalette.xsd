@@ -136,6 +136,22 @@
           <Event name="BeforeUndoPosting" apiName="BeforeUndoPosting" russianName="ПередОтменойПроведения"/>
           <Event name="BeforeDateChange" apiName="BeforeDateChange" russianName="ПередИзменениемДаты"/>
         </Events></NamedConcept>
+        <NamedConcept name="CatalogListTableExtension" russianName="Расширение табличного поля списка справочника"><Properties>
+          <Property name="Tree" apiName="Tree" russianName="Дерево" russianType="Булево" valueCodec="boolean"/>
+          <Property name="EditType" apiName="EditType" russianName="СпособРедактирования" russianType="СпособРедактированияСписка" valueCodec="enumeration"/>
+          <Property name="HierarchicalView" apiName="HierarchicalView" russianName="ИерархическийПросмотр" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ChangeHierarchicalView" apiName="ChangeHierarchicalView" russianName="ИзменятьИерархическийПросмотр" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ViewFoldersAndItems" apiName="ViewFoldersAndItems" russianName="ПросмотрГруппИЭлементов" russianType="ИспользованиеГруппИЭлементов" valueCodec="enumeration"/>
+          <Property name="ChangeCurrentParent" apiName="ChangeCurrentParent" russianName="ИзменятьТекущегоРодителя" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ChangeEditingMode" apiName="ChangeEditingMode" russianName="ИзменятьСпособРедактирования" russianType="Булево" valueCodec="boolean"/>
+          <Property name="NewRowShowCheck" apiName="NewRowShowCheck" russianName="ПроверкаОтображенияНовойСтроки" russianType="ВариантПроверкиОтображенияНовойСтроки" valueCodec="enumeration"/>
+          <Property name="Autonumeration" apiName="Autonumeration" russianName="Автонумерация" russianType="АвтонумерацияВФорме" valueCodec="enumeration"/>
+        </Properties><Events>
+          <Event name="BeforeParentChange" apiName="BeforeParentChange" russianName="ПередИзменениемРодителя"/>
+          <Event name="BeforeSetDeletionMark" apiName="BeforeSetDeletionMark" russianName="ПередУстановкойПометкиУдаления"/>
+          <Event name="BeforeExpand" apiName="BeforeExpand" russianName="ПередРазворачиванием"/>
+          <Event name="BeforeCollapse" apiName="BeforeCollapse" russianName="ПередСворачиванием"/>
+        </Events></NamedConcept>
         <Controls>
           <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
             <Properties>

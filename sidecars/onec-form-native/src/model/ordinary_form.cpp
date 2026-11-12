@@ -321,9 +321,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::type_domain && type_domain_numeric_precision_normalized(typed_value);
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 if (expected != metamodel::ValueCodec::enumeration) return false;
-                if (descriptor.surface == metamodel::PropertySurface::form_extension) {
-                    return descriptor.extension_kind.has_value() &&
-                        typed_value.type_name == descriptor.enumeration_type &&
+                if (!descriptor.enumeration_type.empty()) {
+                    return typed_value.type_name == descriptor.enumeration_type &&
                         std::ranges::find(descriptor.enumeration_members, typed_value.member) !=
                             descriptor.enumeration_members.end();
                 }
@@ -516,7 +515,7 @@ bool property_api_enumeration_matches(
     const EnumerationValue& value
 ) noexcept {
     if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
-    if (descriptor.surface == metamodel::PropertySurface::form_extension)
+    if (!descriptor.enumeration_type.empty())
         return property_value_matches(descriptor, PropertyValue{value});
     if (descriptor.surface == metamodel::PropertySurface::panel_placement && descriptor.api_name == "Collapse")
         return property_value_matches(descriptor, PropertyValue{value});
@@ -1760,6 +1759,8 @@ bool supports_string_input_property(const TypeDomainPatternValue& type, std::str
 }
 
 bool table_tree_property_available(const OrdinaryFormDocument& document, const ControlNode& control) {
+    if (const auto* table = std::get_if<TablePayload>(&control.payload);
+        table && table->source_extension == TableSourceExtensionKind::catalog_list) return true;
     const auto type = control.data_path ? document.resolve_data_path_type(*control.data_path) : std::nullopt;
     TypeDomainEntry expected;
     expected.term = TypeDomainTerm::value_tree;
@@ -4082,6 +4083,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
             }
         }
         if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
+            if (spreadsheet->serialization_version != SpreadsheetDocumentFieldSerializationVersion::v14 &&
+                spreadsheet->serialization_version != SpreadsheetDocumentFieldSerializationVersion::v16 &&
+                spreadsheet->serialization_version != SpreadsheetDocumentFieldSerializationVersion::v18)
+                add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                    "Версия сериализации SpreadsheetDocumentField должна быть 14, 16 или 18");
             std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
             std::optional<std::pair<std::uint32_t, std::uint32_t>> previous;
             for (const auto& cell : spreadsheet->cells) {
@@ -4306,7 +4312,48 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
             };
             bool tree_source = false;
-            const bool document_list_source = table->source_extension == TableSourceExtensionKind::document_list;
+            const bool metadata_source = table->source_extension.has_value();
+            const bool catalog_list_source = table->source_extension == TableSourceExtensionKind::catalog_list;
+            if (!catalog_list_source && !table->source_bindings.empty())
+                invalid_table("Table source bindings require the CatalogList extension");
+            std::set<TableSourceBindingRole> binding_roles;
+            for (const auto& binding : table->source_bindings) {
+                if (binding.role > TableSourceBindingRole::active_row || !binding_roles.insert(binding.role).second)
+                    invalid_table("Table source binding role is unknown or duplicated");
+                if (const auto* path = std::get_if<DataPath>(&binding.source)) {
+                    require_attribute(control.id, path->attribute);
+                    if (path->members.size() > MetadataContext::max_path_depth)
+                        invalid_table("Table source binding DataPath exceeds its depth limit");
+                    for (const auto& member : path->members) {
+                        if ((member.name.empty() && !member.uuid) ||
+                            (member.uuid && !valid_typed_uuid(member.uuid->canonical)))
+                            invalid_table("Table source binding DataPath member requires a name or nonzero UUID");
+                        if (member.type)
+                            invalid_table("Table source binding member types belong to the metadata context");
+                    }
+                    if (!path->members.empty() && std::any_of(path->members.begin(), path->members.end() - 1,
+                        [](const auto& member) { return !member.uuid; }))
+                        invalid_table("CatalogList source DataPath cannot continue through a standard member");
+                } else {
+                    const auto& source = std::get<TableEventSource>(binding.source);
+                    const metamodel::EventDescriptor* descriptor = nullptr;
+                    if (const auto* form = std::get_if<FormRef>(&source.owner)) {
+                        if (form->id() != form_.id)
+                            add_violation(report, InvariantCode::dangling_reference, control.id, form->id(),
+                                "Table event source must reference its Form");
+                        descriptor = metamodel::find_form_event(source.event);
+                    } else {
+                        const auto target = std::get<ControlRef>(source.owner);
+                        require_control(control.id, target);
+                        if (const auto* owner = find_control(target.id())) descriptor = metamodel::find_event(*owner, source.event);
+                    }
+                    if (!descriptor || descriptor->storage_codec != metamodel::StorageCodec::event_record ||
+                        !descriptor->storage_event_id ||
+                        (std::holds_alternative<FormRef>(source.owner) && !descriptor->extension_kinds.empty() &&
+                            !metamodel::form_event_uses_table(*descriptor, form_.extension)))
+                        invalid_table("Table event source must name a persisted event descriptor of its owner");
+                }
+            }
             if (table->source_extension && std::ranges::none_of(
                     metamodel::table_source_extension_descriptors(), [&](const auto& descriptor) {
                         return descriptor.kind == *table->source_extension;
@@ -4326,8 +4373,15 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     type->entries.front().string == LengthQualifiers{} &&
                     type->entries.front().binary == LengthQualifiers{} &&
                     type->entries.front().date == DateQualifiers{};
-                if (document_list_source) {
-                    if (!valid_document_list) invalid_table("DocumentList Table DataPath requires one qualified object type GUID");
+                if (metadata_source) {
+                    if (!valid_document_list) invalid_table("Metadata Table DataPath requires one qualified object type GUID");
+                    if (catalog_list_source && valid_document_list) {
+                        const auto& entry = type->entries.front();
+                        const auto* metadata = metadata_context_ ? metadata_context_->lookup_type(*entry.type_uuid) : nullptr;
+                        const std::string_view name = metadata ? metadata->name : entry.type_name ? entry.type_name->value : std::string_view{};
+                        if (!name.empty() && !name.starts_with("CatalogList."))
+                            invalid_table("CatalogList Table source requires its matching generated type family");
+                    }
                 } else if (!type || type->entries.size() != 1 ||
                     (type->entries.front() != value_table && type->entries.front() != value_tree)) {
                     invalid_table("Table DataPath must reference the named ValueTable or ValueTree type");
@@ -4335,7 +4389,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     tree_source = type->entries.front() == value_tree;
                 }
             }
-            if (!tree_source && control.properties().find(PropertyId::from_name("Tree")) != nullptr) {
+            if (!tree_source && !catalog_list_source && control.properties().find(PropertyId::from_name("Tree")) != nullptr) {
                 invalid_table("Table Tree property requires a ValueTree DataPath");
             }
             if (!tree_source) {
@@ -4346,7 +4400,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
             }
-            if (!document_list_source && !tree_source && table->columns.empty()) {
+            if (!metadata_source && !tree_source && table->columns.empty()) {
                 invalid_table("ValueTable requires at least one Column");
             }
             std::set<std::string> column_names;
@@ -4372,8 +4426,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 if (column.name.empty() || !column_names.insert(column.name).second) {
                     invalid_table("Table Column names must be non-empty and unique");
                 }
-                if (document_list_source && !column.source) invalid_table("DocumentList Table columns require a named source");
-                if (!document_list_source && column.source) invalid_table("Table column source requires the DocumentList Table extension");
+                if (metadata_source && !column.source) invalid_table("Metadata Table columns require a named source");
+                if (!metadata_source && column.source) invalid_table("Table column source requires its named metadata source extension");
                 if (column.source && !column.data_path.empty()) invalid_table("Table column DataPath must be empty when a named source is present");
                 if (!column.source && column.data_path.empty()) {
                     invalid_table("Table Column DataPath must be non-empty");
@@ -4385,8 +4439,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
                             const auto& field = source.field;
                             if (field.type) invalid_table("Table metadata field type belongs to the column or editor ValueType");
                             if (field.uuid && !valid_typed_uuid(field.uuid->canonical)) invalid_table("Table metadata field GUID is invalid");
-                            if (!field.uuid && field.name != "Date" && field.name != "Number")
-                                invalid_table("Table metadata field without GUID must be Date or Number");
+                            if (!field.uuid && (catalog_list_source
+                                ? field.name != "Code" && field.name != "Description"
+                                : field.name != "Date" && field.name != "Number"))
+                                invalid_table("Table metadata field without GUID must match its source family");
                             if (field.name.empty() && !field.uuid) invalid_table("Table metadata field requires a GUID or a supported builtin name");
                         } else if constexpr (std::is_same_v<Source, TableStandardPictureColumn>) {
                             if (column.control) invalid_table("Standard Picture Table column cannot have an editor");

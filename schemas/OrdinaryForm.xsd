@@ -2160,6 +2160,22 @@
     </xs:sequence>
   </xs:complexType>
 
+  <xs:complexType name="TableEventSourceType">
+    <xs:choice>
+      <xs:element name="FormRef"><xs:complexType><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType></xs:element>
+      <xs:element name="ControlRef"><xs:complexType><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType></xs:element>
+    </xs:choice>
+    <xs:attribute name="event" type="xs:NCName" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="TableSourceBindingType"><xs:choice>
+    <xs:element name="DataPath" type="DataPathType"/>
+    <xs:element name="EventSource" type="TableEventSourceType"/>
+  </xs:choice></xs:complexType>
+  <xs:complexType name="CatalogTableSourceBindingsType"><xs:all>
+    <xs:element name="Owner" type="TableSourceBindingType" minOccurs="0"/>
+    <xs:element name="Parent" type="TableSourceBindingType" minOccurs="0"/>
+    <xs:element name="ActiveRow" type="TableSourceBindingType" minOccurs="0"/>
+  </xs:all></xs:complexType>
   <xs:complexType name="DocumentListTableExtensionEventsType">
     <xs:sequence>
       <xs:element name="BeforeSetDeletionMark" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
@@ -2172,6 +2188,27 @@
   <xs:complexType name="DocumentListTableExtensionType"><xs:sequence>
     <xs:element name="EnablePeriodSetting" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
     <xs:element name="Events" type="DocumentListTableExtensionEventsType" minOccurs="0"/></xs:sequence></xs:complexType>
+  <xs:complexType name="CatalogListTableExtensionEventsType">
+    <xs:sequence>
+      <xs:element name="BeforeParentChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeSetDeletionMark" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeExpand" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeCollapse" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="CatalogListTableExtensionType"><xs:sequence>
+    <xs:element name="Tree" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="EditType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="HierarchicalView" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ChangeHierarchicalView" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ViewFoldersAndItems" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ChangeCurrentParent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ChangeEditingMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="NewRowShowCheck" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Autonumeration" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="Bindings" type="CatalogTableSourceBindingsType" minOccurs="0"/>
+    <xs:element name="Events" type="CatalogListTableExtensionEventsType" minOccurs="0"/></xs:sequence></xs:complexType>
   <xs:complexType name="PanelType">
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
@@ -2918,6 +2955,7 @@
       <xs:element name="HeaderFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Tree" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="DocumentListTableExtension" type="DocumentListTableExtensionType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CatalogListTableExtension" type="CatalogListTableExtensionType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="TableEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
@@ -2948,6 +2986,7 @@
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="ObjectIdType" use="required"/>
+    <xs:attribute name="serializationVersion" use="optional" default="18"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="14"/><xs:enumeration value="16"/><xs:enumeration value="18"/></xs:restriction></xs:simpleType></xs:attribute>
   </xs:complexType>
   <xs:element name="SpreadsheetDocumentField" type="SpreadsheetDocumentFieldType"/>
 

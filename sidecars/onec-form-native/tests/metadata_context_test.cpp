@@ -1,4 +1,5 @@
 #include "oof/source/metadata_xml.hpp"
+#include "oof/storage/value_codec.hpp"
 
 #include <array>
 #include <iostream>
@@ -140,6 +141,30 @@ bool test_characteristic_type_set_alias() {
         path.value().leaf_type->entries.front().term == TypeDomainTerm::string &&
         path.value().leaf_type->entries.front().string == oof::model::LengthQualifiers{10, true},
         "Characteristic.TypeLinkKinds did not resolve through ChartOfCharacteristicTypes.Properties/Type");
+}
+
+bool test_generated_type_categories_use_nominal_identity() {
+    constexpr std::array categories{"Object", "Ref", "List", "RecordSet"};
+    for (const std::string category : categories) {
+        const std::string generated_name = "Catalog" + category + ".Target";
+        const std::string target_id = "22222222-2222-4222-8222-222222222222";
+        const std::array xml{
+            metadata_document("Catalog", "Root", "99999999-9999-4999-8999-999999999999",
+                "CatalogObject.Root", "11111111-1111-4111-8111-111111111111",
+                "<ChildObjects>" + attribute_xml("Target", "33333333-3333-4333-8333-333333333333",
+                    "<v8:Type>cfg:" + generated_name + "</v8:Type>") + "</ChildObjects>"),
+            metadata_document("Catalog", "Target", "88888888-8888-4888-8888-888888888888",
+                generated_name, target_id, "", category)};
+        const auto context = oof::source::parse_metadata_context(xml);
+        if (!expect(context.ok(), "generated nominal type metadata must parse")) return false;
+        const auto path = context.value().resolve_names(object_type("11111111-1111-4111-8111-111111111111"),
+            std::array{std::string{"Target"}});
+        const auto stored = oof::storage::value_codec::decode_type_domain(
+            "{\"Pattern\",{\"#\"," + target_id + "}}");
+        if (!expect(path.ok() && path.value().leaf_type == stored,
+            "metadata interface category must not change the nominal type token")) return false;
+    }
+    return true;
 }
 
 bool test_rejections() {
@@ -325,6 +350,7 @@ bool test_configuration_type_schema_rejections() {
 int main() {
     return test_configuration_type_schema() && test_configuration_type_schema_rejections() &&
         test_context_lookup_and_path() && test_xml_cross_document_and_shared_owner() &&
+        test_generated_type_categories_use_nominal_identity() &&
         test_characteristic_type_set_alias() &&
         test_rejections() && test_factory_validation_and_unresolved_type() ? 0 : 1;
 }

@@ -1146,7 +1146,8 @@ void test_control_surfaces_and_property_order(
             expect_element_shape(elements[cursor++], "Intervals", "GanttIntervalCollectionType", "0", "1");
         }
         if (control.kind == oof::model::ControlKind::table) {
-            expect_element_shape(elements[cursor++], "DocumentListTableExtension", "DocumentListTableExtensionType", "0", "1");
+            for (const auto& extension : oof::model::metamodel::table_source_extension_descriptors())
+                expect_element_shape(elements[cursor++], extension.xml_name, std::string(extension.xml_name) + "Type", "0", "1");
         }
         expect_element_shape(
             elements[cursor++],
@@ -1305,6 +1306,20 @@ void test_spreadsheet_document_schema(xmlNodePtr schema) {
     expect_type_attribute(schema, "SpreadsheetDocumentCellControlType", "type", "SpreadsheetDocumentCellControlKindType", "required");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "row", "SpreadsheetCoordinateType", "required");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "column", "SpreadsheetCoordinateType", "required");
+}
+
+void test_spreadsheet_serialization_version_schema(xmlSchemaPtr schema) {
+    const auto xml_for = [](std::string_view version, std::string_view kind = "SpreadsheetDocumentField") {
+        return std::string("<Form id=\"1\" name=\"SheetVersion\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
+            std::string(kind) + " id=\"2\" name=\"Sheet\" serializationVersion=\"" + std::string(version) +
+            "\"><Position/></" + std::string(kind) + "></ChildItems></Form>";
+    };
+    for (const auto version : {"14", "16", "18"})
+        expect(validate_document(schema, xml_for(version)) == 0, "XSD должен принимать три поколения SSF");
+    for (const auto version : {"0", "15", "17", "19", "14.0", "014", ""})
+        expect(validate_document(schema, xml_for(version)) != 0, "XSD должен отклонять неподдержанные значения версии");
+    expect(validate_document(schema, xml_for("14", "Button")) != 0,
+        "Атрибут версии SSF нельзя применять к другому контролу");
 }
 
 void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
@@ -2234,6 +2249,7 @@ int main() {
         test_value_list_schema(schemas, compiled_form.get());
         test_recursive_typed_value_schema(compiled_form.get());
         test_document_instances(compiled_form.get());
+        test_spreadsheet_serialization_version_schema(compiled_form.get());
         test_spreadsheet_document_instances(compiled_form.get());
         test_date_values(compiled_form.get());
         test_schema_structure_coverage_does_not_imply_codec_coverage(

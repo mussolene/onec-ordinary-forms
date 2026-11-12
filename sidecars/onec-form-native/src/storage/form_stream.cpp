@@ -759,6 +759,20 @@ LV canonical_spreadsheet_field_info(
         view_info.items.size() != 29) {
         throw std::logic_error("invalid SpreadsheetDocumentField canonical info descriptor");
     }
+    switch (payload.serialization_version) {
+        case model::SpreadsheetDocumentFieldSerializationVersion::v14:
+            info.items.resize(29);
+            break;
+        case model::SpreadsheetDocumentFieldSerializationVersion::v16:
+            info.items.resize(30);
+            break;
+        case model::SpreadsheetDocumentFieldSerializationVersion::v18:
+            break;
+        default:
+            fail("OOF1122", "$/SpreadsheetDocumentField/@serializationVersion", "14, 16 or 18", {},
+                "Версия сериализации SpreadsheetDocumentField не поддерживается");
+    }
+    info.items[0] = raw(std::to_string(static_cast<unsigned>(payload.serialization_version)));
     std::map<std::uint32_t, std::vector<const model::SpreadsheetDocumentCell*>> rows;
     std::vector<const model::SpreadsheetDocumentCell*> typed_cells;
     for (const auto& cell : payload.cells) {
@@ -4544,7 +4558,8 @@ std::optional<LV> upgrade_table_column_properties(const LV& source, std::string_
 }
 
 LV canonical_table_column_record(const model::TableColumn& column, std::string_view path, bool tree_source = false, std::size_t ordinal = 0,
-    const model::OrdinaryFormDocument* document = nullptr, model::ObjectId table_id = {}) {
+    const model::OrdinaryFormDocument* document = nullptr, model::ObjectId table_id = {},
+    std::optional<model::TableSourceExtensionKind> source_extension = std::nullopt) {
     const bool has_editor = column.control.has_value();
     auto properties = canonical_table_column_properties(has_editor);
     properties.items[1] = encoded_localized(column.header);
@@ -4609,6 +4624,14 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         if (const auto* source = std::get_if<model::TableMetadataColumnField>(&*column.source)) {
             if (source->field.uuid) field = encoded_composite_id(
                 model::CompositeIdValue{0, *source->field.uuid, false}, std::string(path) + "/Source/MetadataField");
+            else if (source_extension == model::TableSourceExtensionKind::catalog_list) {
+                const auto standard = std::ranges::find(catalog_standard_members, source->field.name,
+                    &decltype(catalog_standard_members)::value_type::first);
+                if (standard == catalog_standard_members.end() || standard->first == "Parent")
+                    fail("OOF1122", std::string(path) + "/Source", "Code, Description or metadata GUID", source->field.name,
+                        "CatalogList Table column field does not match its source family");
+                field = list({raw(std::to_string(standard->second))});
+            }
             else if (source->field.name == "Date") field = list({raw("-3")});
             else if (source->field.name == "Number") field = list({raw("-2")});
             else fail("OOF1122", std::string(path) + "/Source", "metadata GUID, Date, or Number",
@@ -4705,6 +4728,253 @@ std::optional<LV> upgrade_table_properties(const LV& properties, std::string_vie
     return current;
 }
 
+constexpr std::array<std::size_t, 9> catalog_source_property_slots{1, 2, 3, 4, 5, 6, 7, 10, 11};
+constexpr std::string_view ctrl_event_link_guid = "1fd7d9d4-0172-40e8-a7c6-b17e872d8c75";
+
+struct PendingTableDataPath {
+    model::CompositeIdValue attribute;
+    std::vector<MetadataMemberKey> members;
+};
+struct PendingTableEventSource {
+    std::int32_t owner_id = 0;
+    std::int32_t event_id = 0;
+};
+struct PendingTableSourceBinding {
+    model::TableSourceBindingRole role;
+    std::variant<PendingTableDataPath, PendingTableEventSource> source;
+};
+
+std::vector<PendingTableSourceBinding> decode_catalog_source_bindings(const LV& value, std::string_view path) {
+    require_raw_constant(at(value, 0, path), "1", child_path(path, 0));
+    const auto count = integer_atom<std::size_t>(at(value, 1, path), child_path(path, 1));
+    if (count > 3) fail("OOF1122", std::string(path), "at most three named roles", std::to_string(count),
+        "CatalogList source binding count is unsupported");
+    require_arity(value, count + 2, path);
+    std::set<std::uint32_t> roles;
+    std::vector<PendingTableSourceBinding> result;
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto row_path = child_path(path, index + 2);
+        const auto& row = value.items[index + 2];
+        require_arity(row, 3, row_path);
+        const auto role = integer_atom<std::uint32_t>(row.items[0], row_path);
+        if (role > 2 || !roles.insert(role).second)
+            fail("OOF1122", row_path, "unique Owner, Parent or ActiveRow role", std::to_string(role),
+                "CatalogList source binding role is unknown or duplicated");
+        const auto factory = raw_atom(row.items[1], child_path(row_path, 1));
+        const auto& payload = row.items[2];
+        if (factory == ctrl_event_link_guid) {
+            require_arity(payload, 3, child_path(row_path, 2));
+            require_raw_constant(payload.items[0], "1", row_path);
+            const auto owner = integer_atom<std::int32_t>(payload.items[1], row_path);
+            const auto event = integer_atom<std::int32_t>(payload.items[2], row_path);
+            if (owner < 0 || event < 0) fail("OOF1122", row_path, "nonnegative owner and event references", "negative",
+                "CatalogList event source reference is invalid");
+            result.push_back({static_cast<model::TableSourceBindingRole>(role), PendingTableEventSource{owner, event}});
+        } else if (factory == input_type_link_data_source_guid) {
+            require_raw_constant(at(payload, 0, row_path), "2", row_path);
+            const auto depth = integer_atom<std::size_t>(at(payload, 1, row_path), row_path);
+            if (depth == 0 || depth > MetadataContext::max_path_depth + 1)
+                fail("OOF1122", row_path, "bounded nonempty DataPath", std::to_string(depth),
+                    "CatalogList source DataPath depth is unsupported");
+            require_arity(payload, depth + 2, row_path);
+            PendingTableDataPath target{composite_id(payload.items[2], row_path), {}};
+            if (!target.attribute.is_null || target.attribute.uuid.canonical != null_uuid || target.attribute.object_id < 0)
+                fail("OOF1122", row_path, "local Attribute root", "unsupported root",
+                    "CatalogList source DataPath root is unsupported");
+            for (std::size_t member = 1; member < depth; ++member) {
+                const auto key = composite_id(payload.items[member + 2], row_path);
+                if (key.is_null && key.uuid.canonical == null_uuid) target.members.emplace_back(key.object_id);
+                else if (key.object_id == 0 && key.uuid.canonical != null_uuid) target.members.emplace_back(key.uuid);
+                else fail("OOF1122", row_path, "metadata field UUID or standard member", "unsupported member",
+                    "CatalogList source DataPath member identity is unsupported");
+            }
+            result.push_back({static_cast<model::TableSourceBindingRole>(role), std::move(target)});
+        } else fail("OOF1122", child_path(row_path, 1), "DataPath or event source", "unsupported factory",
+            "CatalogList source binding factory is unsupported");
+    }
+    return result;
+}
+
+LV encode_catalog_source_bindings(const std::vector<model::TableSourceBinding>& bindings,
+    const model::OrdinaryFormDocument& document, std::string_view path) {
+    std::array<const model::TableSourceBinding*, 3> ordered{};
+    for (const auto& binding : bindings) {
+        const auto role = static_cast<std::size_t>(binding.role);
+        if (role >= ordered.size() || ordered[role])
+            fail("OOF1122", std::string(path), "unique supported binding roles", "unknown or duplicate",
+                "CatalogList source binding role is unknown or duplicated");
+        ordered[role] = &binding;
+    }
+    std::vector<LV> rows{raw("1"), raw(std::to_string(bindings.size()))};
+    for (std::size_t role = 0; role < ordered.size(); ++role) {
+        if (!ordered[role]) continue;
+        const auto& binding = *ordered[role];
+        if (const auto* target = std::get_if<model::DataPath>(&binding.source)) {
+            if (!resolve_attribute_reference(document, *target))
+                fail("OOF1123", std::string(path), "existing DataPath Attribute", "missing",
+                    "CatalogList source DataPath does not resolve");
+            const auto members = encode_binding_members(document.form(), *target);
+            std::vector<LV> fields{raw("2"), raw(std::to_string(members.size() + 1)),
+                encoded_composite_id({static_cast<std::int64_t>(target->attribute.id().value()),
+                    model::UuidValue{std::string(null_uuid)}, true}, path)};
+            for (const auto& key : members) {
+                if (const auto* uuid = std::get_if<model::UuidValue>(&key))
+                    fields.push_back(encoded_composite_id({0, *uuid, false}, path));
+                else fields.push_back(encoded_composite_id({std::get<std::int64_t>(key), model::UuidValue{std::string(null_uuid)}, true}, path));
+            }
+            rows.push_back(list({raw(std::to_string(role)), raw(std::string(input_type_link_data_source_guid)), list(std::move(fields))}));
+        } else {
+            const auto& event_source = std::get<model::TableEventSource>(binding.source);
+            const model::metamodel::EventDescriptor* descriptor = nullptr;
+            std::uint64_t owner_id = 0;
+            if (const auto* form = std::get_if<model::FormRef>(&event_source.owner)) {
+                if (form->id() != document.form().id)
+                    fail("OOF1123", std::string(path), "current Form reference", "missing", "CatalogList event source Form does not resolve");
+                descriptor = model::metamodel::find_form_event(event_source.event);
+                if (descriptor && !descriptor->extension_kinds.empty() &&
+                    !model::metamodel::form_event_uses_table(*descriptor, document.form().extension))
+                    descriptor = nullptr;
+            } else {
+                owner_id = std::get<model::ControlRef>(event_source.owner).id().value();
+                if (owner_id == 0) fail("OOF1123", std::string(path), "positive Control reference", "zero",
+                    "CatalogList event source Control does not resolve");
+                if (const auto* control = document.find_control(model::ObjectId{owner_id}))
+                    descriptor = model::metamodel::find_event(*control, event_source.event);
+            }
+            if (!descriptor || !descriptor->storage_event_id || owner_id > std::numeric_limits<std::int32_t>::max())
+                fail("OOF1123", std::string(path), "named event of an existing owner", "unresolved",
+                    "CatalogList event source does not resolve");
+            rows.push_back(list({raw(std::to_string(role)), raw(std::string(ctrl_event_link_guid)),
+                list({raw("1"), raw(std::to_string(owner_id)), raw(std::to_string(*descriptor->storage_event_id))})}));
+        }
+    }
+    return list(std::move(rows));
+}
+
+model::TableSourceBinding resolve_catalog_source_binding(const PendingTableSourceBinding& binding,
+    const model::OrdinaryFormDocument& document, std::string_view path) {
+    if (const auto* target = std::get_if<PendingTableDataPath>(&binding.source)) {
+        const model::AttributeRef reference{model::ObjectId{static_cast<std::uint64_t>(target->attribute.object_id)}};
+        const auto* attribute = document.find_attribute(reference.id());
+        if (!attribute) fail("OOF1123", std::string(path), "existing Attribute", "missing",
+            "CatalogList source DataPath Attribute does not resolve");
+        model::DataPath result{reference, {}};
+        std::optional<MetadataPath> resolved;
+        if (document.metadata_context() && std::ranges::all_of(target->members,
+            [](const auto& key) { return std::holds_alternative<model::UuidValue>(key); })) {
+            const auto value = document.metadata_context()->resolve_keys(attribute->type, target->members);
+            if (!value) throw DecodeFailure(value.diagnostics().front());
+            resolved = value.value();
+        }
+        bool catalog_family = catalog_member_root(document.form(), result);
+        for (std::size_t index = 0; index < target->members.size(); ++index) {
+            const auto& key = target->members[index];
+            if (const auto* uuid = std::get_if<model::UuidValue>(&key)) {
+                result.members.emplace_back(resolved ? resolved->members.at(index) : std::string{}, *uuid);
+                catalog_family = false;
+            } else {
+                const auto standard = std::ranges::find(catalog_standard_members, std::get<std::int64_t>(key),
+                    &decltype(catalog_standard_members)::value_type::second);
+                if (!catalog_family || standard == catalog_standard_members.end() || index + 1 != target->members.size())
+                    fail("OOF1123", std::string(path), "known standard metadata member", "unsupported member",
+                        "CatalogList source DataPath standard member is unsupported");
+                result.members.emplace_back(std::string(standard->first));
+            }
+        }
+        return {binding.role, std::move(result)};
+    }
+    const auto& target = std::get<PendingTableEventSource>(binding.source);
+    model::TableEventSource result;
+    std::array<std::span<const model::metamodel::EventDescriptor>, 2> descriptors{};
+    if (target.owner_id == 0) {
+        result.owner = model::FormRef{document.form().id};
+        descriptors[0] = model::metamodel::Metamodel::instance().form_events();
+    } else {
+        const model::ControlRef reference{model::ObjectId{static_cast<std::uint64_t>(target.owner_id)}};
+        const auto* control = document.find_control(reference.id());
+        if (!control) fail("OOF1123", std::string(path), "existing Control", "missing",
+            "CatalogList event source Control does not resolve");
+        result.owner = reference;
+        descriptors[0] = model::metamodel::event_descriptors(control->kind());
+        if (const auto* table = std::get_if<model::TablePayload>(&control->payload); table && table->source_extension)
+            descriptors[1] = model::metamodel::table_source_event_descriptors(*table->source_extension);
+    }
+    for (const auto collection : descriptors) {
+        const auto found = std::ranges::find_if(collection, [&](const auto& event) {
+            return event.storage_codec == model::metamodel::StorageCodec::event_record &&
+                event.storage_event_id == static_cast<std::uint32_t>(target.event_id) &&
+                (target.owner_id != 0 || event.extension_kinds.empty() ||
+                    model::metamodel::form_event_uses_table(event, document.form().extension));
+        });
+        if (found != collection.end()) {
+            result.event = found->api_name;
+            return {binding.role, std::move(result)};
+        }
+    }
+    fail("OOF1123", std::string(path), "named event descriptor of the source owner", "unknown event",
+        "CatalogList event source event descriptor is unsupported");
+}
+
+LV encode_catalog_table_source(const model::PropertySet& properties, std::string_view path) {
+    auto source = parse_constant("{12,0,1,1,1,2,1,0,{0},{1,0},{3,1},0}");
+    const auto descriptors = model::metamodel::table_source_property_descriptors(model::TableSourceExtensionKind::catalog_list);
+    for (std::size_t index = 0; index < descriptors.size(); ++index) {
+        const auto& descriptor = descriptors[index];
+        auto& value = source.items[catalog_source_property_slots[index]];
+        auto* atom = index == 7 ? &value.items[1] : &value;
+        const auto* entry = properties.find(descriptor.id);
+        if (descriptor.value_codec == model::metamodel::ValueCodec::boolean) {
+            *atom = raw(explicit_bool(properties, descriptor.api_name, descriptor.default_value.canonical == "true") ? "1" : "0");
+        } else {
+            const auto separator = descriptor.default_value.canonical.find('.');
+            std::string_view member = descriptor.default_value.canonical.substr(separator + 1);
+            if (entry) {
+                const auto* enumeration = std::get_if<model::EnumerationValue>(&entry->value);
+                if (!enumeration || enumeration->type_name != descriptor.enumeration_type)
+                    fail("OOF1122", std::string(path), std::string(descriptor.enumeration_type), "different type",
+                        "CatalogList Table source enumeration type is unsupported");
+                member = enumeration->member;
+            }
+            const auto found = std::ranges::find(descriptor.enumeration_members, member);
+            if (found == descriptor.enumeration_members.end())
+                fail("OOF1122", std::string(path), "declared enumeration member", std::string(member),
+                    "CatalogList Table source enumeration member is unsupported");
+            *atom = raw(std::to_string(found - descriptor.enumeration_members.begin()));
+        }
+    }
+    return source;
+}
+
+void decode_catalog_table_source(const LV& source, model::PropertySet& properties, std::string_view path) {
+    require_list(source, path);
+    const auto version = integer_atom<unsigned>(at(source, 0, path), path);
+    if (version != 11 && version != 12)
+        fail("OOF1106", std::string(path), "CatalogList source version 11 or 12", std::to_string(version),
+            "CatalogList Table source version is unsupported");
+    require_arity(source, version, path);
+    require_arity(source.items[10], 2, child_path(path, 10));
+    require_raw_constant(source.items[10].items[0], "3", child_path(path, 10));
+    const auto descriptors = model::metamodel::table_source_property_descriptors(model::TableSourceExtensionKind::catalog_list);
+    for (std::size_t index = 0; index < descriptors.size(); ++index) {
+        const auto slot = catalog_source_property_slots[index];
+        if (slot >= source.items.size()) continue;
+        const auto& descriptor = descriptors[index];
+        const auto& stored = index == 7 ? source.items[slot].items[1] : source.items[slot];
+        if (descriptor.value_codec == model::metamodel::ValueCodec::boolean) {
+            const bool value = bool_atom(stored, child_path(path, slot));
+            if (value != (descriptor.default_value.canonical == "true")) properties.set_explicit(descriptor.id, value);
+        } else {
+            const auto ordinal = integer_atom<std::size_t>(stored, child_path(path, slot));
+            if (ordinal >= descriptor.enumeration_members.size())
+                fail("OOF1122", child_path(path, slot), "declared source enumeration member", std::to_string(ordinal),
+                    "CatalogList Table source enumeration ordinal is unsupported");
+            model::EnumerationValue value{std::string(descriptor.enumeration_type), std::string(descriptor.enumeration_members[ordinal])};
+            if (value.type_name + "." + value.member != descriptor.default_value.canonical)
+                properties.set_explicit(descriptor.id, std::move(value));
+        }
+    }
+}
+
 LV canonical_table_control_info(
     const model::TypeDomainPatternValue& source_type,
     const std::vector<model::TableColumn>& columns,
@@ -4713,7 +4983,8 @@ LV canonical_table_control_info(
     bool tree_mode = true,
     std::optional<model::TableSourceExtensionKind> source_extension = std::nullopt,
     bool enable_period_setting = true,
-    const model::OrdinaryFormDocument* document = nullptr, model::ObjectId table_id = {}) {
+    const model::OrdinaryFormDocument* document = nullptr, model::ObjectId table_id = {},
+    const model::PropertySet* source_properties = nullptr) {
     const bool tree_source = is_single_value_tree_type_domain(source_type);
     if ((!tree_source && !source_extension && columns.empty()) || columns.size() > 256) {
         fail("OOF1122", std::string(path) + "/Columns", "supported Table Column count",
@@ -4734,7 +5005,7 @@ LV canonical_table_control_info(
     column_records.push_back(raw(std::to_string(columns.size())));
     for (std::size_t index = 0; index < columns.size(); ++index) {
         column_records.push_back(canonical_table_column_record(
-            columns[index], std::string(path) + "/Columns/Column[" + std::to_string(index) + "]", tree_source, index, document, table_id));
+            columns[index], std::string(path) + "/Columns/Column[" + std::to_string(index) + "]", tree_source, index, document, table_id, source_extension));
     }
     properties.items[23] = list(std::move(column_records));
     LV source = tree_source
@@ -4742,10 +5013,19 @@ LV canonical_table_control_info(
             list({raw("4"), raw(tree_mode ? "1" : "0"), raw("1"), list({raw("0")})})})
         : list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})});
     if (source_extension) {
-        if (*source_extension != model::TableSourceExtensionKind::document_list)
+        if (*source_extension == model::TableSourceExtensionKind::catalog_list) {
+            const model::PropertySet defaults;
+            source = list({raw(std::string(model::metamodel::catalog_list_table_extension.guid)),
+                encode_catalog_table_source(source_properties ? *source_properties : defaults, path)});
+            if (document) {
+                const auto* owner = document->find_control(table_id);
+                if (owner) source.items[1].items[9] = encode_catalog_source_bindings(
+                    std::get<model::TablePayload>(owner->payload).source_bindings, *document, path);
+            }
+        } else if (*source_extension != model::TableSourceExtensionKind::document_list)
             fail("OOF1122", std::string(path), "known Table source extension", "unknown kind",
                 "Table source extension is unsupported");
-        source = list({raw(std::string(model::metamodel::document_list_table_extension.guid)),
+        else source = list({raw(std::string(model::metamodel::document_list_table_extension.guid)),
             list({raw("2"), list({raw("0")}), list({raw("3"), raw("1"),
                 list({raw("0"), raw(enable_period_setting ? "1" : "0")})})})});
     }
@@ -5301,8 +5581,7 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
 }
 
 struct DecodedMenu {
-    std::string owner;
-    std::unordered_map<std::uint64_t, std::vector<std::string>> paths;
+    std::unordered_map<std::string, std::vector<std::string>> paths;
     std::vector<model::CommandBarButton> entries;
     std::vector<model::PictureAsset> assets;
 };
@@ -5333,7 +5612,7 @@ constexpr std::array menu_action_layouts{
 DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::string_view control_name,
     Diagnostics& warnings, bool& reconstruction_complete,
                                std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0,
-                               std::uint64_t default_item_id = 0) {
+                               std::uint64_t default_item_id = 0, std::string_view default_item_owner = {}) {
     require_list(menu, path);
     if (menu.items.size() < 7) fail("OOF1102", std::string(path), "menu header and collections", describe(menu), "Menu is incomplete");
     require_raw_constant(menu.items[0], "5", path);
@@ -5371,7 +5650,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
     if (group_count != menu.items.size() - 6 - action_count || group_count == 0)
         fail("OOF1102", std::string(path), "exact menu collection count", describe(menu), "Menu collection count is inconsistent");
     std::unordered_map<std::string, const LV*> groups;
-    std::unordered_map<std::string, std::unordered_map<std::uint64_t, model::CommandBarButtonOrder>> submenu_orders;
+    std::unordered_map<std::string, std::unordered_map<std::string, model::CommandBarButtonOrder>> submenu_orders;
     for (std::size_t i = 0; i < group_count; ++i) {
         const auto& group = menu.items[6 + action_count + i];
         require_list(group, path);
@@ -5380,7 +5659,6 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         const auto id = integer_atom<std::uint64_t>(group.items[2], path);
         const auto marker = uuid_atom(group.items[1], path).canonical;
         const bool root_group = marker == root_marker && id == root_group_id;
-        if (!root_group) require_raw_constant(group.items[1], owner, path);
         require_raw_constant(group.items[3], "0", path);
         const auto key = menu_group_key(marker, id);
         if (!groups.emplace(key, &group).second) fail("OOF1114", std::string(path), "unique owner/ID collection pairs", std::to_string(id), "Duplicate menu collection");
@@ -5401,19 +5679,40 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         auto& orders = submenu_orders[key];
         for (std::size_t ref = 0; ref < ref_count; ++ref) {
             const auto base = 1 + ref * 3;
-            require_raw_constant(refs.items[base], owner, path);
+            const auto submenu_owner = uuid_atom(refs.items[base], path).canonical;
             const auto submenu_id = integer_atom<std::uint64_t>(refs.items[base + 1], path);
             const auto order = integer_atom<unsigned>(refs.items[base + 2], path);
-            if (submenu_id == 0 || order > 2 || !orders.emplace(submenu_id,
+            if (submenu_id == 0 || order > 2 || !orders.emplace(menu_group_key(submenu_owner, submenu_id),
                 order == 1 ? model::CommandBarButtonOrder::ascending : order == 2 ? model::CommandBarButtonOrder::descending : model::CommandBarButtonOrder::none).second)
                 fail("OOF1114", std::string(path), "unique submenu IDs and order 0, 1, or 2", std::to_string(submenu_id), "Menu order footer is invalid");
         }
     }
     DecodedMenu decoded;
-    decoded.owner = owner;
     std::vector<std::string> current_names;
     std::unordered_set<std::string> consumed_groups;
-    std::unordered_set<std::uint64_t> entry_ids;
+    std::unordered_set<std::string> entry_ids;
+    auto default_item_key = menu_group_key(default_item_owner, default_item_id);
+    if (default_item_id != 0) {
+        std::unordered_set<std::string> candidates;
+        for (const auto& [key, group] : groups) {
+            const auto count = integer_atom<std::size_t>(group->items[4], path);
+            if (count > (group->items.size() - 6) / 2 || group->items.size() != 6 + 2 * count)
+                fail("OOF1102", std::string(path), "exact collection size", describe(*group), "Menu item count is inconsistent");
+            for (std::size_t index = 0; index < count; ++index) {
+                const auto& properties = group->items[6 + 2 * index];
+                if (integer_atom<std::uint64_t>(at(properties, 7, path), path) == default_item_id)
+                    candidates.insert(menu_group_key(uuid_atom(at(properties, 6, path), path).canonical, default_item_id));
+            }
+        }
+        // Designer переносит UUID источника выбранного действия. При отсутствии
+        // точной пары локальный ID разрешается только при единственном кандидате.
+        if (!candidates.contains(default_item_key)) {
+            if (candidates.size() != 1)
+                fail("OOF1114", std::string(path), "unambiguous selected action", std::to_string(default_item_id),
+                    "DefaultButton source relocation is missing or ambiguous");
+            default_item_key = *candidates.begin();
+        }
+    }
     std::unordered_set<std::string> consumed_actions;
     std::function<std::vector<model::CommandBarButton>(std::string, std::uint64_t, std::string, std::size_t)> visit;
     visit = [&](std::string group_marker, std::uint64_t group_id, std::string asset_path, std::size_t depth) {
@@ -5443,7 +5742,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 props.items.resize(16, raw("0"));
                 props.items[0] = raw("8");
             }
-            require_raw_constant(props.items[6], owner, child_path(path, 6));
+            const auto item_owner = uuid_atom(props.items[6], child_path(path, 6)).canonical;
             model::CommandBarButton entry;
             entry.name = string_atom(props.items[1], path);
             if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
@@ -5465,23 +5764,25 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     "absent button Text must use a canonical localized value");
             }
             const auto id = integer_atom<std::uint64_t>(props.items[7], path);
-            if (id == 0 || id > max_id || !entry_ids.insert(id).second)
+            const auto item_key = menu_group_key(item_owner, id);
+            if (id == 0 || (item_owner == owner && id > max_id) ||
+                id > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) || !entry_ids.insert(item_key).second)
                 fail("OOF1114", std::string(path), "positive unique item ID within maximum", std::to_string(id), "Menu identity is invalid");
             current_names.push_back(entry.name);
-            decoded.paths.emplace(id, current_names);
+            decoded.paths.emplace(item_key, current_names);
             const auto type = integer_atom<unsigned>(props.items[9], path);
             if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
             entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
-            if (id == default_item_id) {
+            if (default_item_id != 0 && item_key == default_item_key) {
                 if (type != 0 || depth != 0)
                     fail("OOF1122", std::string(path), "top-level Action for DefaultButton", entry.name, "Unsupported default menu action");
                 entry.default_button = true;
             }
             if (entry.type == model::CommandBarButtonKind::submenu) {
-                const auto order = submenu_orders[group_key].find(id);
+                const auto order = submenu_orders[group_key].find(item_key);
                 if (order == submenu_orders[group_key].end()) fail("OOF1114", std::string(path), "submenu order footer entry", std::to_string(id), "Submenu order is missing");
                 entry.order = order->second;
-            } else if (submenu_orders[group_key].contains(id)) {
+            } else if (submenu_orders[group_key].contains(item_key)) {
                 fail("OOF1114", std::string(path), "submenu order footer entry only", std::to_string(id), "Non-submenu has an order footer entry");
             }
             const auto representation = integer_atom<unsigned>(props.items[10], path);
@@ -5507,6 +5808,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto& action = *action_record.value;
             const auto& action_path = action_record.path;
             require_raw_constant(action.items[2], "1", child_path(action_path, 2));
+            std::string target_marker;
+            std::uint64_t target_id = 0;
             if (type == 0) {
                 if (raw_atom(action.items[3], child_path(action_path, 3)) == standard_menu_action_guid) {
                     bool save_values_alias = false;
@@ -5524,7 +5827,13 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 }
             } else {
                 require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
-                require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
+                if (type == 1) {
+                    const auto& target = action.items[4];
+                    require_arity(target, 3, child_path(action_path, 4));
+                    require_raw_constant(target.items[0], "1", child_path(action_path, 4));
+                    target_marker = uuid_atom(target.items[1], child_path(action_path, 4)).canonical;
+                    target_id = integer_atom<std::uint64_t>(target.items[2], child_path(action_path, 4));
+                } else require_exact(action.items[4],
                     parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
                     child_path(action_path, 4), "Menu action target is unsupported");
             }
@@ -5537,7 +5846,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
                     describe(props.items[4]), "Automatic button Text needs a named localized representation for this action kind");
             }
-            const auto expected_properties = menu_entry_properties(entry, owner, id);
+            const auto expected_properties = menu_entry_properties(entry, item_owner, id);
             const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
                 expected_properties.items.begin(), expected_properties.items.end(), [](const auto& left, const auto& right) {
                     return list_stream::dump_compact(left) == list_stream::dump_compact(right);
@@ -5605,10 +5914,10 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             require_arity(action, cursor, action_path);
             if (type == 1) {
                 ++submenu_count;
-                submenu_refs.push_back(raw(owner)); submenu_refs.push_back(raw(std::to_string(id)));
+                submenu_refs.push_back(raw(item_owner)); submenu_refs.push_back(raw(std::to_string(id)));
                 submenu_refs.push_back(raw(entry.order == model::CommandBarButtonOrder::ascending ? "1" :
                     entry.order == model::CommandBarButtonOrder::descending ? "2" : "0"));
-                entry.buttons = visit(owner, id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
+                entry.buttons = visit(target_marker, target_id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
             }
             entries.push_back(std::move(entry));
             current_names.pop_back();
@@ -5619,7 +5928,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         return entries;
     };
     decoded.entries = visit(std::string(root_marker), root_group_id, "Items/" + std::string(control_name) + "/Buttons", 0);
-    if (default_item_id != 0 && !entry_ids.contains(default_item_id))
+    if (default_item_id != 0 && !entry_ids.contains(default_item_key))
         fail("OOF1114", std::string(path), "existing default menu item", std::to_string(default_item_id), "DefaultButton references a missing menu item");
     if (consumed_groups.size() != groups.size() || consumed_actions.size() != actions.size())
         fail("OOF1114", std::string(path), "all owned menu objects consumed", "orphan", "Menu has unconsumed objects");
@@ -5643,10 +5952,10 @@ struct DecodedControl {
         model::PictureAsset asset;
     };
     std::vector<PicturePropertyAsset> picture_property_assets{};
-    std::string menu_owner{};
-    std::unordered_map<std::uint64_t, std::vector<std::string>> menu_paths{};
+    std::unordered_map<std::string, std::vector<std::string>> menu_paths{};
     std::vector<DecodedTableColumnEvent> column_events{};
     std::optional<std::uint64_t> menu_root_id{};
+    std::vector<PendingTableSourceBinding> table_source_bindings{};
 };
 
 struct DecodedChartInfo {
@@ -6500,7 +6809,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         (default_id != 0 && (secondary || default_owner == null_uuid)))
         fail("OOF1122", properties_path, "consistent default Action reference on primary CommandBar", "inconsistent reference", "Unsupported DefaultButton context");
     auto menu = decode_button_menu(properties.items[7], child_path(properties_path, 7), name, warnings, reconstruction_complete,
-        command_bar_root_marker, root_group_id, default_id);
+        command_bar_root_marker, root_group_id, default_id, default_owner);
     // Платформа может оставить выбор действия панели после назначения другой кнопки.
     // Активный владелец определяется заголовком формы, а не сохраненной ссылкой панели.
     if (raw_id != selected_owner_id) {
@@ -6575,7 +6884,6 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     control.position = geometry.position;
     DecodedControl result{std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
     result.menu_root_id = root_group_id;
-    result.menu_owner = std::move(menu.owner);
     result.menu_paths = std::move(menu.paths);
     return result;
 }
@@ -6858,7 +7166,6 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         std::get<model::ButtonPayload>(control.payload).buttons = std::move(menu.entries);
     }
     DecodedControl result{std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
-    result.menu_owner = std::move(menu.owner);
     result.menu_paths = std::move(menu.paths);
     return result;
 }
@@ -10789,7 +11096,15 @@ DecodedControl decode_spreadsheet_document_field(
 
     const auto& info = record.items[2];
     const auto info_path = child_path(path, 2);
-    require_arity(info, 33, info_path);
+    const auto serialization_version = integer_atom<std::uint32_t>(at(info, 0, info_path), child_path(info_path, 0));
+    switch (serialization_version) {
+        case 14: require_arity(info, 29, info_path); break;
+        case 16: require_arity(info, 30, info_path); break;
+        case 18: require_arity(info, 33, info_path); break;
+        default:
+            fail("OOF1106", child_path(info_path, 0), "14, 16 or 18", std::to_string(serialization_version),
+                "Версия сериализации SpreadsheetDocumentField не поддерживается");
+    }
     const auto& document_info = at(info, 11, info_path);
     const auto document_path = child_path(info_path, 11);
     require_list(document_info, document_path);
@@ -10800,6 +11115,7 @@ DecodedControl decode_spreadsheet_document_field(
     if (static_cast<std::size_t>(row_count) > row_payload_size / 3)
         fail("OOF1114", child_path(document_path, 15), "row count matching bounded row records", std::to_string(row_count), "Spreadsheet Document row count is invalid");
     model::SpreadsheetDocumentFieldPayload payload;
+    payload.serialization_version = static_cast<model::SpreadsheetDocumentFieldSerializationVersion>(serialization_version);
     std::vector<std::size_t> typed_cell_indices;
     std::vector<bool> typed_cell_defaults;
     std::vector<std::uint32_t> typed_format_references;
@@ -11003,11 +11319,13 @@ DecodedControl decode_spreadsheet_document_field(
         const bool value = bool_atom(info.items.at(slot), child_path(info_path, slot));
         if (!value) sheet_properties.set_explicit(model::PropertyId::from_name(name), false);
     }
-    for (const auto& [primary, paired] : {std::pair{15U, 31U}, std::pair{16U, 32U}}) {
-        if (bool_atom(info.items.at(primary), child_path(info_path, primary)) !=
-            bool_atom(info.items.at(paired), child_path(info_path, paired))) {
-            fail("OOF1114", child_path(info_path, paired), "matching scroll bar fields", "mismatch",
-                "SpreadsheetDocumentField scroll bar fields disagree");
+    if (serialization_version == 18) {
+        for (const auto& [primary, paired] : {std::pair{15U, 31U}, std::pair{16U, 32U}}) {
+            if (bool_atom(info.items.at(primary), child_path(info_path, primary)) !=
+                bool_atom(info.items.at(paired), child_path(info_path, paired))) {
+                fail("OOF1114", child_path(info_path, paired), "matching scroll bar fields", "mismatch",
+                    "SpreadsheetDocumentField scroll bar fields disagree");
+            }
         }
     }
     const auto border_color = decode_control_color(info.items.at(9), child_path(info_path, 9));
@@ -11026,8 +11344,12 @@ DecodedControl decode_spreadsheet_document_field(
         model::ControlKind::spreadsheet_document_field);
     const LV expected_info = canonical_spreadsheet_field_info(payload, fresh_add_default);
     LV normalized_info = info;
-    for (const auto slot : {8U, 9U, 10U, 15U, 16U, 17U, 25U, 26U, 27U, 31U, 32U})
+    for (const auto slot : {8U, 9U, 10U, 15U, 16U, 17U, 25U, 26U, 27U})
         normalized_info.items.at(slot) = expected_info.items.at(slot);
+    if (serialization_version == 18) {
+        normalized_info.items[31] = expected_info.items[31];
+        normalized_info.items[32] = expected_info.items[32];
+    }
     auto& normalized_document_info = normalized_info.items.at(11);
     const auto& expected_document_info = expected_info.items.at(11);
     for (std::size_t index = 0; index < typed_cell_record_indices.size(); ++index) {
@@ -11109,8 +11431,11 @@ LV encode_spreadsheet_document_field(
         std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}}) {
         info.items.at(slot) = raw(explicit_bool(control.properties(), name, true) ? "1" : "0");
     }
-    info.items.at(31) = info.items.at(15);
-    info.items.at(32) = info.items.at(16);
+    if (std::get<model::SpreadsheetDocumentFieldPayload>(control.payload).serialization_version ==
+        model::SpreadsheetDocumentFieldSerializationVersion::v18) {
+        info.items.at(31) = info.items.at(15);
+        info.items.at(32) = info.items.at(16);
+    }
     info.items.at(9) = encode_control_color(explicit_control_color(control.properties(), "BorderColor", "SpreadsheetDocumentField"), "$/SpreadsheetDocumentField/BorderColor");
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Border"))) {
         const auto* border = std::get_if<model::BorderValue>(&entry->value);
@@ -11476,7 +11801,8 @@ DecodedControl decode_input_field(
 model::TableColumn decode_table_column(
     const LV& value, std::string_view path, std::uint64_t table_id,
     Diagnostics& warnings, bool& reconstruction_complete, bool tree_source, std::size_t ordinal,
-    std::vector<DecodedTableColumnEvent>& column_events) {
+    std::vector<DecodedTableColumnEvent>& column_events,
+    std::optional<model::TableSourceExtensionKind> source_extension = std::nullopt) {
     require_arity(value, 2, path);
     const bool metadata_column = !value.items[0].is_list && value.items[0].atom == "48a6ebc3-fcc8-4f8f-b399-459fb32aa46b";
     require_raw_constant(value.items[0], metadata_column ? "48a6ebc3-fcc8-4f8f-b399-459fb32aa46b" : "737535a4-21e6-4971-8513-3e3173a9fedd", child_path(path, 0));
@@ -11533,7 +11859,14 @@ model::TableColumn decode_table_column(
             column.source = model::TableStandardPictureColumn{};
         } else {
             model::DataPathMember member;
-            if (info.items[2].items.size() == 1 && field.object_id == -3) member.name = "Date";
+            if (source_extension == model::TableSourceExtensionKind::catalog_list && info.items[2].items.size() == 1) {
+                const auto standard = std::ranges::find(catalog_standard_members, field.object_id,
+                    &decltype(catalog_standard_members)::value_type::second);
+                if (standard == catalog_standard_members.end() || standard->first == "Parent")
+                    fail("OOF1122", field_path, "known CatalogList standard field", "unsupported identity",
+                        "CatalogList Table column standard field is unsupported");
+                member.name = standard->first;
+            } else if (info.items[2].items.size() == 1 && field.object_id == -3) member.name = "Date";
             else if (info.items[2].items.size() == 1 && field.object_id == -2) member.name = "Number";
             else if (info.items[2].items.size() == 2 && field.object_id == 0 && !field.is_null &&
                 field.uuid.canonical != null_uuid) member.uuid = field.uuid;
@@ -11728,7 +12061,7 @@ model::TableColumn decode_table_column(
     }
     LV normalized = value;
     normalized.items[1].items[1].items[1] = properties;
-    const LV canonical = canonical_table_column_record(column, path, tree_source, ordinal);
+    const LV canonical = canonical_table_column_record(column, path, tree_source, ordinal, nullptr, {}, source_extension);
     for (const auto& property : model::metamodel::table_column_enumeration_descriptors()) {
         if (!property.legacy_projection) continue;
         const auto slot = table_column_property_slot(property.legacy_projection->storage_slot, has_editor);
@@ -11774,17 +12107,19 @@ DecodedControl decode_table(
     require_raw_constant(info.items[0], "5", child_path(info_path, 0));
     const bool document_list_source = info.items[3].is_list && info.items[3].items.size() == 2 &&
         !info.items[3].items[0].is_list && info.items[3].items[0].atom == model::metamodel::document_list_table_extension.guid;
-    const auto source_extension = document_list_source
+    const bool catalog_list_source = info.items[3].is_list && info.items[3].items.size() == 2 &&
+        !info.items[3].items[0].is_list && info.items[3].items[0].atom == model::metamodel::catalog_list_table_extension.guid;
+    const auto source_extension = catalog_list_source ? std::optional{model::TableSourceExtensionKind::catalog_list} : document_list_source
         ? std::optional{model::TableSourceExtensionKind::document_list} : std::nullopt;
     const auto& bound_type = linked_attribute.required_type();
     const bool tree_source = is_single_value_tree_type_domain(bound_type);
     bool supported_source = tree_source || is_single_value_table_type_domain(bound_type);
-    if (document_list_source && bound_type.entries.size() == 1) {
+    if (source_extension && bound_type.entries.size() == 1) {
         const auto& entry = bound_type.entries.front();
         supported_source = entry.term == model::TypeDomainTerm::object && entry.type_uuid &&
             entry.numeric == model::NumericQualifiers{} && entry.string == model::LengthQualifiers{} &&
             entry.binary == model::LengthQualifiers{} && entry.date == model::DateQualifiers{};
-    } else if (document_list_source) supported_source = false;
+    } else if (source_extension) supported_source = false;
     if (!supported_source)
         fail("OOF1122", child_path(path, 1), "matching Table source interface and named type domain",
             linked_attribute.name, "Table DataPath target must have a supported named collection type");
@@ -11795,7 +12130,15 @@ DecodedControl decode_table(
     bool tree_mode = true;
     bool enable_period_setting = true;
     std::vector<DecodedControlEvent> source_events;
-    if (document_list_source) {
+    model::PropertySet catalog_properties;
+    std::vector<PendingTableSourceBinding> catalog_bindings;
+    if (catalog_list_source) {
+        const auto source_path = child_path(child_path(info_path, 3), 1);
+        decode_catalog_table_source(info.items[3].items[1], catalog_properties, source_path);
+        catalog_bindings = decode_catalog_source_bindings(info.items[3].items[1].items[9], child_path(source_path, 9));
+        source_events = decode_named_control_events(info.items[3].items[1].items[8], child_path(source_path, 8),
+            model::metamodel::table_source_event_descriptors(*source_extension));
+    } else if (document_list_source) {
         const auto source_path = child_path(info_path, 3);
         const auto& source = info.items[3].items[1];
         require_arity(source, 3, child_path(source_path, 1));
@@ -11854,6 +12197,7 @@ DecodedControl decode_table(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::TablePayload{}};
     control.data_path = linked_attribute.data_path;
     control.position = geometry.position;
+    control.properties() = std::move(catalog_properties);
     decode_control_metadata(record.items[4], metadata_path, control);
     if (tree_source && !tree_mode) control.properties().set_explicit(model::PropertyId::from_name("Tree"), false);
     auto& table = std::get<model::TablePayload>(control.payload);
@@ -11864,7 +12208,7 @@ DecodedControl decode_table(
     for (std::size_t index = 1; index < stored_columns.items.size(); ++index) {
         table.columns.push_back(decode_table_column(
             stored_columns.items[index], child_path(columns_path, index), raw_id,
-            warnings, reconstruction_complete, tree_source, index - 1, column_events));
+            warnings, reconstruction_complete, tree_source, index - 1, column_events, source_extension));
     }
     const auto flags = integer_atom<std::uint32_t>(properties.items[1],
         child_path(child_path(child_path(info_path, 2), 1), 1));
@@ -11873,7 +12217,7 @@ DecodedControl decode_table(
             "ValueTree Table mode and flags disagree");
     const bool read_only = (flags & 0x400U) == 0;
     const LV canonical_info = canonical_table_control_info(linked_attribute.required_type(), table.columns, read_only,
-        info_path, tree_mode, source_extension, enable_period_setting);
+        info_path, tree_mode, source_extension, enable_period_setting, nullptr, {}, &control.properties());
     const auto base_path = child_path(child_path(info_path, 2), 0);
     auto base = info.items[2].items[0];
     read_common_control_base(base, base_path, [&] {
@@ -11887,6 +12231,7 @@ DecodedControl decode_table(
     normalized_info.items[2].items[0] = std::move(base);
     normalized_info.items[4] = list({raw("0")});
     if (document_list_source) normalized_info.items[3].items[1].items[1] = list({raw("0")});
+    if (catalog_list_source) normalized_info.items[3] = canonical_info.items[3];
     if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     auto& normalized_table_properties = normalized_info.items[2].items[1];
     auto normalized_flags = flags;
@@ -11964,6 +12309,7 @@ DecodedControl decode_table(
     DecodedControl decoded{std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {},
         std::move(named_events)};
     decoded.column_events = std::move(column_events);
+    decoded.table_source_bindings = std::move(catalog_bindings);
     return decoded;
 }
 
@@ -13171,7 +13517,8 @@ LV encode_table(
         "HeaderBackColor", "HeaderTextColor", "FooterBackColor", "FooterTextColor", "SelectionBackColor",
         "SelectionTextColor", "AlternationRowBackColor", "HeaderFont", "FooterFont",
         "HorizontalScrollBar", "VerticalScrollBar", "RowInputMode", "SelectionMode", "RowSelectionMode", "InitialListView", "InitialTreeView",
-        "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree", "EnablePeriodSetting"}, "$/Table");
+        "HeaderHeight", "FooterHeight", "FixedLeft", "FixedRight", "Output", "Border", "Tree", "EnablePeriodSetting", "EditType", "HierarchicalView", "ChangeHierarchicalView",
+        "ViewFoldersAndItems", "ChangeCurrentParent", "ChangeEditingMode", "NewRowShowCheck", "Autonumeration"}, "$/Table");
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
     const auto attribute = resolve_attribute_reference(document, *control.data_path);
     if (!attribute) {
@@ -13181,15 +13528,17 @@ LV encode_table(
     const bool tree_source = is_single_value_tree_type_domain(attribute->required_type());
     const auto& table = std::get<model::TablePayload>(control.payload);
     const bool document_list_source = table.source_extension == model::TableSourceExtensionKind::document_list;
+    const bool catalog_list_source = table.source_extension == model::TableSourceExtensionKind::catalog_list;
+    const bool metadata_source = table.source_extension.has_value();
     if (!document_list_source && control.properties().find(model::PropertyId::from_name("EnablePeriodSetting")))
         fail("OOF1122", "$/Table/EnablePeriodSetting", "DocumentList source extension", "other source",
             "EnablePeriodSetting requires the DocumentList Table interface");
     for (const auto& column : table.columns)
-        if (column.source.has_value() != document_list_source)
+        if (column.source.has_value() != metadata_source)
             fail("OOF1122", "$/Table/Columns/Source", "column source matching the selected Table interface", column.name,
                 "Column source does not match its Table source extension");
     bool supported_source = tree_source || is_single_value_table_type_domain(attribute->required_type());
-    if (document_list_source) {
+    if (metadata_source) {
         const auto& type = attribute->required_type();
         supported_source = type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::object &&
             type.entries.front().type_uuid && type.entries.front().numeric == model::NumericQualifiers{} &&
@@ -13200,7 +13549,7 @@ LV encode_table(
         fail("OOF1122", "$/Table/DataPath", "unqualified ValueTable or ValueTree Attribute", attribute->name,
             "Table DataPath must target a supported named collection type");
     }
-    if (!tree_source && control.properties().find(model::PropertyId::from_name("Tree")))
+    if (!tree_source && !catalog_list_source && control.properties().find(model::PropertyId::from_name("Tree")))
         fail("OOF1122", "$/Table/Tree", "ValueTree source", "ValueTable", "Tree is unavailable for a ValueTable source");
     if (!tree_source) {
         for (const auto& reference : control.events) {
@@ -13214,11 +13563,11 @@ LV encode_table(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
     const bool enable_period_setting = explicit_bool(control.properties(), "EnablePeriodSetting", true);
     auto info = canonical_table_control_info(attribute->required_type(), table.columns, read_only, "$/Table", tree_mode,
-        table.source_extension, enable_period_setting, &document, control.id);
+        table.source_extension, enable_period_setting, &document, control.id, &control.properties());
     encode_named_control_border(info.items[2].items[0], model::ControlKind::table, control.properties(), "$/Table");
     std::vector<model::EventRef> common_events;
     std::vector<model::EventRef> source_events;
-    const auto source_descriptors = document_list_source
+    const auto source_descriptors = metadata_source
         ? model::metamodel::table_source_event_descriptors(*table.source_extension)
         : std::span<const model::metamodel::EventDescriptor>{};
     for (const auto reference : control.events) {
@@ -13229,8 +13578,8 @@ LV encode_table(
     }
     info.items.at(4) = encode_named_control_events(document, model::ControlRef{control.id}, common_events,
         model::metamodel::event_descriptors(control.kind()), "$/Table/Events");
-    if (document_list_source)
-        info.items[3].items[1].items[1] = encode_named_control_events(document, model::ControlRef{control.id}, source_events,
+    if (metadata_source)
+        info.items[3].items[1].items[catalog_list_source ? 8 : 1] = encode_named_control_events(document, model::ControlRef{control.id}, source_events,
             source_descriptors, "$/Table/DocumentListTableExtension/Events");
     auto& table_properties = info.items.at(2).items.at(1);
     auto flags = integer_atom<std::uint32_t>(table_properties.items.at(1), "$/Table/Flags");
@@ -14897,15 +15246,20 @@ Result<model::OrdinaryFormDocument> decode_document(
                     if (owner->control.kind() == model::ControlKind::command_bar && marker == command_bar_root_marker && owner->menu_root_id == item_id)
                         properties.set_explicit(model::PropertyId::from_name("ContextMenu"), model::ControlRef{model::ObjectId{owner_id}});
                     else {
-                        if (marker != owner->menu_owner || !owner->menu_paths.contains(item_id))
+                        const auto target_key = menu_group_key(marker, item_id);
+                        if (!owner->menu_paths.contains(target_key))
                             fail("OOF1123", "$/11", "known menu button", "missing or ambiguous", "Context menu button is invalid");
-                        properties.set_explicit(model::PropertyId::from_name("ContextMenu"), model::CommandBarButtonRef{model::ControlRef{model::ObjectId{owner_id}}, owner->menu_paths.at(item_id)});
+                        properties.set_explicit(model::PropertyId::from_name("ContextMenu"), model::CommandBarButtonRef{model::ControlRef{model::ObjectId{owner_id}}, owner->menu_paths.at(target_key)});
                     }
                 }
             }
         }
 
+        std::vector<std::pair<model::ControlRef, std::vector<PendingTableSourceBinding>>> pending_table_bindings;
         for (auto& decoded_control : pending_controls) {
+            if (!decoded_control.table_source_bindings.empty())
+                pending_table_bindings.emplace_back(model::ControlRef{decoded_control.control.id},
+                    std::move(decoded_control.table_source_bindings));
             for (const auto& named_event : decoded_control.named_events) {
                 if (synthetic_event_offset >=
                     std::numeric_limits<std::uint64_t>::max() - event_id_base) {
@@ -15012,6 +15366,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
         for (auto& asset : decoded_picture_assets) document.add_asset(std::move(asset));
         document.set_form(std::move(form));
+        for (const auto& [owner, bindings] : pending_table_bindings) {
+            auto* control = const_cast<model::ControlNode*>(document.find_control(owner.id()));
+            auto& table = std::get<model::TablePayload>(control->payload);
+            for (const auto& binding : bindings)
+                table.source_bindings.push_back(resolve_catalog_source_binding(binding, document, "$/Table/CatalogListTableExtension/Bindings"));
+        }
 
         validate_radio_groups(document);
         const auto report = document.validate();

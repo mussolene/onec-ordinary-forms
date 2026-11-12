@@ -3002,6 +3002,32 @@ void test_document_list_table_named_model() {
             *std::get<TablePayload>(picture.find_control(ObjectId{3})->payload).columns.front().source) &&
         picture_copy.validate().ok(), "copied Table source values are independently owned");
 
+    auto catalog = make_document(true);
+    auto* catalog_control = const_cast<ControlNode*>(catalog.find_control(ObjectId{3}));
+    std::get<TablePayload>(catalog_control->payload).source_extension = TableSourceExtensionKind::catalog_list;
+    const_cast<Attribute*>(catalog.find_attribute(ObjectId{2}))->type.entries.front().type_name = QualifiedName{"CatalogList.Items"};
+    const auto catalog_properties = table_source_property_descriptors(TableSourceExtensionKind::catalog_list);
+    expect(catalog_properties.size() == 9, "Catalog source declares nine proven named properties");
+    for (const auto& descriptor : catalog_properties) {
+        const auto value = catalog.get_prop_val(owner, descriptor.id);
+        expect(value.status == PropertyReadStatus::proven_default && value.value.has_value(),
+            "Catalog source properties expose proven contextual defaults");
+        expect(catalog.set_prop_val(owner, descriptor.id, *value.value) == PropertyMutationStatus::applied,
+            "Catalog source descriptor accepts its own typed default");
+        expect(catalog.reset_prop_val(owner, descriptor.id) == PropertyMutationStatus::reset,
+            "Catalog source properties reset through the existing property set");
+    }
+    expect(catalog.get_prop_val(owner, PropertyId::from_name("Tree")).value == PropertyValue{false},
+        "Catalog Tree default overrides the common ValueTree default");
+    expect(catalog.set_prop_val(owner, PropertyId::from_name("EditType"), EnumerationValue{"ListEditMode", "Unknown"}) == PropertyMutationStatus::invalid_value,
+        "Catalog enum rejects undeclared members");
+    constexpr std::array catalog_events{"BeforeParentChange", "BeforeSetDeletionMark", "BeforeExpand", "BeforeCollapse"};
+    for (std::size_t index = 0; index < catalog_events.size(); ++index) {
+        const auto* event = find_event(*catalog_control, catalog_events[index]);
+        expect(event && event->storage_event_id == 10000U + index, "Catalog event IDs come from its source descriptor registry");
+    }
+    expect(!catalog.validate().has(InvariantCode::invalid_property), "Catalog metadata source accepts its matching generated type family");
+
     auto missing_source = make_document(true, std::nullopt);
     auto& missing_table = std::get<TablePayload>(const_cast<ControlNode*>(missing_source.find_control(ObjectId{3}))->payload);
     TableColumn no_source; no_source.name = "NoSource"; no_source.header.items.push_back({"en", "NoSource"});
@@ -6750,7 +6776,7 @@ void test_chart_document_resource_budget() {
 
 void test_self_contained_field_type_model() {
     TypeDomainEntry identity;
-    identity.term = TypeDomainTerm::reference;
+    identity.term = TypeDomainTerm::object;
     identity.type_uuid = UuidValue{"11111111-1111-1111-1111-111111111111"};
     identity.type_name = QualifiedName{"CatalogRef.First"};
     auto renamed = identity;
@@ -6788,6 +6814,24 @@ void test_self_contained_field_type_model() {
     expect(!document.validate().ok() &&
         !document.resolve_data_path_type(*document.find_control(ObjectId{2})->data_path),
         "an explicit leaf type must not disguise a scalar root as a metadata object");
+}
+
+void test_spreadsheet_serialization_version_model() {
+    using Version = SpreadsheetDocumentFieldSerializationVersion;
+    expect(SpreadsheetDocumentFieldPayload{}.serialization_version == Version::v18,
+        "Новое поле табличного документа должно использовать поколение18");
+    for (const auto version : {Version::v14, Version::v16, Version::v18, static_cast<Version>(15)}) {
+        Form form; form.id = ObjectId{1}; form.name = "SheetVersion";
+        form.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument document(std::move(form));
+        ControlNode control{ObjectId{2}, "Sheet", SpreadsheetDocumentFieldPayload{}};
+        std::get<SpreadsheetDocumentFieldPayload>(control.payload).serialization_version = version;
+        document.add_control(std::move(control));
+        expect(document.validate().ok() == (version != static_cast<Version>(15)),
+            "Модель должна проверять закрытый enum версии компонента");
+        if (version == static_cast<Version>(15))
+            expect(!oof::source::serialize_form_xml(document), "Неподдержанная версия должна отклоняться до записи XML");
+    }
 }
 
 }  // namespace
@@ -6857,6 +6901,7 @@ int main() {
         test_help_metamodel();
         test_shared_control_default_classifications();
         test_variant_coverage();
+        test_spreadsheet_serialization_version_model();
         test_property_default_semantics();
         test_typed_property_set();
         test_recursive_typed_values();

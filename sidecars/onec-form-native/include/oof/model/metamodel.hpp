@@ -313,6 +313,12 @@ inline constexpr TableSourceExtensionDescriptor document_list_table_extension{
     "DocumentListTableExtension",
     u8"Расширение табличного поля списка документов",
 };
+inline constexpr TableSourceExtensionDescriptor catalog_list_table_extension{
+    TableSourceExtensionKind::catalog_list,
+    "99f52caa-7b96-4bd4-a649-aedbd230a555",
+    "CatalogListTableExtension",
+    u8"Расширение табличного поля списка справочника",
+};
 inline constexpr InputFieldExtensionDescriptor input_field_extensions[]{
     {InputFieldExtensionKind::catalog, "8585207b-9ca7-425b-9385-e8fd67c4e148",
         "CatalogInputFieldExtension", u8"Расширение поля ввода справочника"},
