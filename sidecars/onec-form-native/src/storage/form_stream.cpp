@@ -925,9 +925,9 @@ void validate_localized_languages(
 }
 
 LV encode_page_record(const model::Page& page, std::string_view path) {
-    if (page.id.value() == 0 || page.name.empty()) {
-        fail("OOF1122", std::string(path), "Page with positive ID and non-empty Name",
-            page.name, "Page identity cannot be encoded");
+    if (page.id.value() == 0) {
+        fail("OOF1122", std::string(path), "Page with positive ID",
+            "zero", "Page identity cannot be encoded");
     }
     const auto& title = page.title.value();
     if (title.items.size() > std::numeric_limits<std::uint32_t>::max()) {
@@ -999,9 +999,6 @@ model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_vi
     const bool visible = bool_atom(row.items[4], child_path(path, 4));
     const bool enabled = bool_atom(row.items[5], child_path(path, 5));
     const auto name = string_atom(row.items[6], child_path(path, 6));
-    if (name.empty()) {
-        fail("OOF1115", child_path(path, 6), "non-empty Page Name", "empty", "Page Name is required");
-    }
     require_raw_constant(row.items[7], "1", child_path(path, 7));
     if (!legacy_v3) {
         for (const auto slot : {8U, 9U}) {

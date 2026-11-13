@@ -26196,12 +26196,18 @@ void test_page_table_codec() {
 
     auto empty_name = page;
     empty_name.name.clear();
-    expect_failure(form_stream::encode_page_table({empty_name}), "OOF1122", "$/Pages/0",
-        "empty Page names must fail on encode");
+    const auto empty_name_table = form_stream::encode_page_table({empty_name});
+    expect(empty_name_table.ok(), "Page with an empty Name must encode like Designer 8.5");
+    if (empty_name_table) {
+        const auto empty_name_decoded = form_stream::decode_page_table(empty_name_table.value(), 1);
+        expect(empty_name_decoded.ok() && empty_name_decoded.value()[0].name.empty(),
+            "Page with an empty Name must retain that named value");
+    }
     malformed = expected;
     malformed.items[2].items[6] = list_stream::ListValue::string_atom("");
-    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1115", "$/Pages/2/6",
-        "empty Page names must fail on decode");
+    const auto empty_name_loaded = form_stream::decode_page_table(malformed, 1);
+    expect(empty_name_loaded.ok() && empty_name_loaded.value()[0].name.empty(),
+        "Designer Page record with empty Name must decode without renaming");
 
     auto duplicate_id = edited;
     duplicate_id.id = page.id;
