@@ -6577,6 +6577,22 @@ void test_command_bar_standard_menu_action_round_trip_and_guards() {
                    remapped_payload->buttons.front().standard_action->command_bar == model::ControlRef{model::ObjectId{4}},
             "StandardAction must resolve a remapped root collection identity back to CommandBar ID 4");
 
+        auto generated_command_bar = remapped_root;
+        auto* generated_secondary = const_cast<list_stream::ListValue*>(find_control_record(generated_command_bar, 5));
+        auto& generated_action = generated_secondary->items.at(2).items.at(1).items.at(7).items.at(5).items.at(4);
+        generated_action.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1");
+        const auto generated_decoded = form_stream::decode_document(generated_command_bar, "StandardMenuActionRemapped");
+        expect(generated_decoded.ok(), "platform-generated Close must resolve its CommandBar collection");
+        const auto generated_xml = source::serialize_form_xml(generated_decoded.value());
+        const auto remapped_xml = source::serialize_form_xml(remapped_decoded.value());
+        expect(generated_xml.ok() && remapped_xml.ok() && generated_xml.value() == remapped_xml.value(),
+            "platform-generated Close must preserve the named CommandBar action");
+        const auto generated_rebuilt = form_stream::encode_document(generated_decoded.value());
+        expect(generated_rebuilt.ok() &&
+            find_control_record(generated_rebuilt.value(), 5)->items.at(2).items.at(1).items.at(7).items.at(5)
+                .items.at(4).items.at(4).items.at(4).atom == "0",
+            "platform-generated Close must rebuild with the canonical CommandBar context");
+
         const auto rejects_wire_mutation = [&](const std::function<void(list_stream::ListValue&)>& mutate,
                                                std::string_view label) {
             auto invalid = encoded.value();
@@ -6671,7 +6687,22 @@ void test_standard_menu_action_default_context_and_control_source() {
             rejects([](auto& action) { action.items.at(1) = list_stream::ListValue::raw_atom("999"); });
             rejects([](auto& action) { action.items.at(1) = list_stream::ListValue::raw_atom("2147483648"); });
             rejects([](auto& action) { action.items.at(4).items.at(1) = list_stream::ListValue::raw_atom("1"); });
-            rejects([](auto& action) { action.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1"); });
+            if (std::string_view(context) == "Form" || std::string_view(context) == "CommandBar") {
+                auto generated = encoded.value();
+                find_action(generated).items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1");
+                const auto generated_decoded = form_stream::decode_document(generated, "StandardDefault");
+                expect(generated_decoded.ok() && get_action(generated_decoded.value()) == get_action(parsed.value()),
+                    "platform-generated Close context must retain the named Form action");
+                const auto generated_xml = source::serialize_form_xml(generated_decoded.value());
+                expect(generated_xml.ok() && generated_xml.value() == xml.value(),
+                    "platform-generated Close context must retain the named XML");
+                const auto generated_rebuilt = form_stream::encode_document(generated_decoded.value());
+                expect(generated_rebuilt.ok() &&
+                    find_action(generated_rebuilt.value()).items.at(4).items.at(4).atom == "0",
+                    "platform-generated Close context must rebuild in the canonical 8.5 form");
+            } else {
+                rejects([](auto& action) { action.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1"); });
+            }
             rejects([](auto& action) { action.items.at(5) = list_stream::ListValue::raw_atom("1"); });
             if (std::string_view(context) == "Default") {
                 rejects([](auto& action) { action.items.at(4).items.at(2) = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); });

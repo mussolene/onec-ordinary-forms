@@ -5506,6 +5506,21 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
         action.source = model::StandardMenuActionSource::control;
         action.source_control = model::ControlRef{model::ObjectId{source}};
     } else fail("OOF1114", child_path(path, 1), "Form, AllSources, or positive int32 control reference", std::to_string(source), "Standard command source is unsupported");
+    if (descriptor->kind == model::StandardMenuCommand::close &&
+        raw_atom(context.items[4], child_path(context_path, 4)) == "1") {
+        require_raw_constant(context.items[1], "99", child_path(context_path, 1));
+        require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
+        const auto context_id = integer_atom<std::uint64_t>(context.items[3], child_path(context_path, 3));
+        if (context_id == 0)
+            fail("OOF1123", child_path(context_path, 3), "nonzero Form or CommandBar context",
+                "zero", "Standard command context is invalid");
+        if (context_id == 4) action.context = model::StandardMenuActionContext::form;
+        else {
+            action.context = model::StandardMenuActionContext::command_bar;
+            action.command_bar = model::ControlRef{model::ObjectId{context_id}};
+        }
+        return action;
+    }
     if (descriptor->kind != model::StandardMenuCommand::close &&
         raw_atom(context.items[4], child_path(context_path, 4)) != "0") {
         require_raw_constant(context.items[1], "99", child_path(context_path, 1));
