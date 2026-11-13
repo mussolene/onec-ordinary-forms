@@ -2302,6 +2302,42 @@ void test_captured_table_packet_rejections_and_alternate_deflate() {
     expect(form_stream::decode_document(alternate, "CapturedTable").ok(),
         "same nested InputField semantics with independent valid DEFLATE bytes must decode");
 
+    std::vector<std::uint8_t> empty_envelope(8, 0);
+    empty_envelope[0] = 3;
+    empty_envelope.insert(empty_envelope.end(), {0xef, 0xbb, 0xbf});
+    const auto empty_segment = test_raw_deflate(empty_envelope, Z_DEFAULT_COMPRESSION);
+    auto five_segment_packet = packet;
+    for (int index = 0; index < 4; ++index) {
+        five_segment_packet.insert(five_segment_packet.end(), packet.begin(), packet.begin() + 18);
+        five_segment_packet.insert(five_segment_packet.end(), empty_segment.begin(), empty_segment.end());
+    }
+    auto five_segments = captured_table_payload();
+    set_captured_packet(five_segments, five_segment_packet);
+    const auto baseline_decoded = form_stream::decode_document(baseline, "CapturedTable");
+    const auto five_decoded = form_stream::decode_document(five_segments, "CapturedTable");
+    expect(baseline_decoded.ok() && five_decoded.ok(),
+        "five platform editor segments with empty auxiliary envelopes must decode");
+    const auto baseline_xml = source::serialize_form_xml(baseline_decoded.value());
+    const auto five_xml = source::serialize_form_xml(five_decoded.value());
+    expect(baseline_xml.ok() && five_xml.ok() && baseline_xml.value() == five_xml.value(),
+        "empty auxiliary editor segments must preserve the complete named Table model");
+
+    auto nonempty_envelope = empty_envelope;
+    nonempty_envelope[0] = 4;
+    nonempty_envelope.push_back('0');
+    auto nonempty_packet = packet;
+    nonempty_packet.insert(nonempty_packet.end(), packet.begin(), packet.begin() + 18);
+    const auto nonempty_segment = test_raw_deflate(nonempty_envelope, Z_DEFAULT_COMPRESSION);
+    nonempty_packet.insert(nonempty_packet.end(), nonempty_segment.begin(), nonempty_segment.end());
+    for (int index = 0; index < 3; ++index) {
+        nonempty_packet.insert(nonempty_packet.end(), packet.begin(), packet.begin() + 18);
+        nonempty_packet.insert(nonempty_packet.end(), empty_segment.begin(), empty_segment.end());
+    }
+    auto nonempty_auxiliary = captured_table_payload();
+    set_captured_packet(nonempty_auxiliary, nonempty_packet);
+    expect_captured_table_rejected(std::move(nonempty_auxiliary),
+        "nonempty auxiliary editor data must not disappear from the named Table model");
+
     auto bad_header = captured_table_payload();
     auto changed_packet = packet;
     changed_packet[0] ^= 1;

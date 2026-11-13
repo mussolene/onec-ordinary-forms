@@ -4184,57 +4184,81 @@ std::vector<std::uint8_t> decode_table_column_editor_packet(
         encoded.append(data);
     }
     auto packet = decode_base64(encoded, child_path(path, 0));
-    if (packet.size() <= table_column_editor_header.size() || packet.size() > max_column_editor_packet_size ||
-        !std::equal(table_column_editor_header.begin(), table_column_editor_header.end(), packet.begin())) {
+    if (packet.size() <= table_column_editor_header.size() || packet.size() > max_column_editor_packet_size) {
         fail("OOF1114", std::string(path), "bounded Table Column InputField packet with version 2.1 header",
             std::to_string(packet.size()), "Table Column editor packet header or size is unsupported");
     }
-
-    InflateState state;
-    if (inflateInit2(&state.stream, -MAX_WBITS) != Z_OK) {
-        fail("OOF1124", std::string(path), "available raw DEFLATE decoder", {},
-            "Could not initialize Table Column editor decompressor");
-    }
-    state.initialized = true;
-    state.stream.next_in = packet.data() + table_column_editor_header.size();
-    state.stream.avail_in = static_cast<uInt>(packet.size() - table_column_editor_header.size());
-    std::vector<std::uint8_t> inflated;
-    std::array<std::uint8_t, 4096> chunk{};
-    int result = Z_OK;
-    while (result == Z_OK) {
-        state.stream.next_out = chunk.data();
-        state.stream.avail_out = static_cast<uInt>(chunk.size());
-        result = inflate(&state.stream, Z_NO_FLUSH);
-        const std::size_t produced = chunk.size() - state.stream.avail_out;
-        if (produced > max_column_editor_packet_size - inflated.size()) {
-            fail("OOF1114", std::string(path), "inflated Table Column editor within 1 MiB", {},
-                "Table Column editor packet exceeds the decompression limit");
-        }
-        inflated.insert(inflated.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(produced));
-        if (result != Z_OK && result != Z_STREAM_END) {
-            fail("OOF1114", std::string(path), "valid raw DEFLATE stream", std::to_string(result),
-                "Table Column editor packet is corrupt");
-        }
-        if (result == Z_OK && state.stream.avail_in == 0 && produced == 0) {
-            fail("OOF1114", std::string(path), "complete raw DEFLATE stream", {},
-                "Table Column editor packet is truncated");
-        }
-    }
-    if (state.stream.avail_in != 0 || inflated.size() < 11) {
-        fail("OOF1114", std::string(path), "single complete raw DEFLATE stream with envelope", {},
-            "Table Column editor packet has trailing bytes or a truncated envelope");
-    }
-    std::uint64_t declared_size = 0;
-    for (std::size_t index = 0; index < sizeof(declared_size); ++index) {
-        declared_size |= static_cast<std::uint64_t>(inflated[index]) << (index * 8);
-    }
+    std::vector<std::uint8_t> editor;
+    std::size_t offset = 0;
+    std::size_t segment_count = 0;
+    std::size_t remaining_inflated = max_column_editor_packet_size;
     constexpr std::array<std::uint8_t, 3> utf8_bom{0xef, 0xbb, 0xbf};
-    if (declared_size != inflated.size() - sizeof(declared_size) ||
-        !std::equal(utf8_bom.begin(), utf8_bom.end(), inflated.begin() + sizeof(declared_size))) {
-        fail("OOF1114", std::string(path), "matching uncompressed size and UTF-8 BOM", {},
-            "Table Column editor packet envelope is invalid");
+    while (offset < packet.size()) {
+        if (segment_count == 5 || packet.size() - offset <= table_column_editor_header.size() ||
+            !std::equal(table_column_editor_header.begin(), table_column_editor_header.end(),
+                packet.begin() + static_cast<std::ptrdiff_t>(offset))) {
+            fail("OOF1114", std::string(path), "one or five version 2.1 editor segments", {},
+                "Table Column editor packet has trailing bytes or a truncated envelope");
+        }
+        offset += table_column_editor_header.size();
+        InflateState state;
+        if (inflateInit2(&state.stream, -MAX_WBITS) != Z_OK) {
+            fail("OOF1124", std::string(path), "available raw DEFLATE decoder", {},
+                "Could not initialize Table Column editor decompressor");
+        }
+        state.initialized = true;
+        state.stream.next_in = packet.data() + offset;
+        state.stream.avail_in = static_cast<uInt>(packet.size() - offset);
+        const std::size_t available = state.stream.avail_in;
+        std::vector<std::uint8_t> inflated;
+        std::array<std::uint8_t, 4096> chunk{};
+        int result = Z_OK;
+        while (result == Z_OK) {
+            state.stream.next_out = chunk.data();
+            state.stream.avail_out = static_cast<uInt>(chunk.size());
+            result = inflate(&state.stream, Z_NO_FLUSH);
+            const std::size_t produced = chunk.size() - state.stream.avail_out;
+            if (produced > remaining_inflated) {
+                fail("OOF1114", std::string(path), "inflated Table Column editor within 1 MiB", {},
+                    "Table Column editor packet exceeds the decompression limit");
+            }
+            remaining_inflated -= produced;
+            inflated.insert(inflated.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(produced));
+            if (result != Z_OK && result != Z_STREAM_END) {
+                fail("OOF1114", std::string(path), "valid raw DEFLATE stream", std::to_string(result),
+                    "Table Column editor packet is corrupt");
+            }
+            if (result == Z_OK && state.stream.avail_in == 0 && produced == 0) {
+                fail("OOF1114", std::string(path), "complete raw DEFLATE stream", {},
+                    "Table Column editor packet is truncated");
+            }
+        }
+        const std::size_t consumed = available - state.stream.avail_in;
+        if (consumed == 0 || inflated.size() < sizeof(std::uint64_t) + utf8_bom.size()) {
+            fail("OOF1114", std::string(path), "complete editor segment with envelope", {},
+                "Table Column editor packet has trailing bytes or a truncated envelope");
+        }
+        offset += consumed;
+        std::uint64_t declared_size = 0;
+        for (std::size_t index = 0; index < sizeof(declared_size); ++index)
+            declared_size |= static_cast<std::uint64_t>(inflated[index]) << (index * 8);
+        if (declared_size != inflated.size() - sizeof(declared_size) ||
+            !std::equal(utf8_bom.begin(), utf8_bom.end(), inflated.begin() + sizeof(declared_size))) {
+            fail("OOF1114", std::string(path), "matching uncompressed size and UTF-8 BOM", {},
+                "Table Column editor packet envelope is invalid");
+        }
+        if (segment_count == 0) editor = std::move(inflated);
+        else if (declared_size != utf8_bom.size()) {
+            fail("OOF1114", std::string(path), "empty auxiliary editor segments", {},
+                "Table Column editor packet has unrepresented auxiliary data");
+        }
+        ++segment_count;
     }
-    return inflated;
+    if (segment_count != 1 && segment_count != 5) {
+        fail("OOF1114", std::string(path), "one or five editor segments", std::to_string(segment_count),
+            "Table Column editor packet segment count is unsupported");
+    }
+    return editor;
 }
 
 // Cell editors use a BOM-prefixed textual stream, independently of Table Column compression.
