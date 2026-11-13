@@ -4534,6 +4534,24 @@ void test_check_box_tooltip_round_trip_and_validation() {
     expect(default_check_box && !default_check_box->properties().find(model::PropertyId::from_name("ToolTip")),
         "empty CheckBox ToolTip must normalize to its implicit default");
 
+    auto version6 = default_encoded.value();
+    auto* version6_record = find_record_with_guid(
+        version6, model::metamodel::descriptor_for(model::ControlKind::check_box).guid);
+    expect(version6_record != nullptr, "CheckBox version 6 probe must locate its record");
+    if (version6_record != nullptr) {
+        version6_record->items[2].items[1].items[0].items[1] =
+            list_stream::ListValue::raw_atom("6");
+        const auto version6_decoded = form_stream::decode_document(version6, "CheckBoxVersion6");
+        expect(version6_decoded.ok() && version6_decoded.value().reconstruction_complete(),
+            "CheckBox properties version 6 must retain the complete named model");
+        if (version6_decoded.ok()) {
+            const auto rebuilt = form_stream::encode_document(version6_decoded.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                       list_stream::dump_compact(default_encoded.value()),
+                "CheckBox properties version 6 must rebuild through canonical version 7");
+        }
+    }
+
     const std::string tool_tip = "Подсказка Ω <важно> & \"цитата\"\nВторая строка";
     const auto encoded = form_stream::encode_document(make_document(tool_tip));
     expect(encoded.ok(), "CheckBox ToolTip with Unicode, punctuation, and a newline must encode");
@@ -10847,6 +10865,24 @@ void test_radio_button_basic_observed_record_and_rejections() {
     expect(default_reencoded.ok() && list_stream::dump_compact(default_reencoded.value()) ==
                list_stream::dump_compact(default_encoded.value()),
         "default RadioButton document must round-trip canonically");
+
+    auto version6 = default_encoded.value();
+    auto* version6_record = find_record_with_guid(
+        version6, model::metamodel::descriptor_for(model::ControlKind::radio_button).guid);
+    expect(version6_record != nullptr, "RadioButton version 6 probe must locate its record");
+    if (version6_record != nullptr) {
+        version6_record->items[2].items[2].items[0].items[1] =
+            list_stream::ListValue::raw_atom("6");
+        const auto version6_decoded = form_stream::decode_document(version6, "RadioButtonVersion6");
+        expect(version6_decoded.ok() && version6_decoded.value().reconstruction_complete(),
+            "RadioButton properties version 6 must retain the complete named model");
+        if (version6_decoded.ok()) {
+            const auto rebuilt = form_stream::encode_document(version6_decoded.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                       list_stream::dump_compact(default_encoded.value()),
+                "RadioButton properties version 6 must rebuild through canonical version 7");
+        }
+    }
 
     auto adjacent_defaults = make_document();
     for (const auto [id, name] : {std::pair{104ULL, "RadioDefault2"}, std::pair{105ULL, "RadioDefault3"}}) {

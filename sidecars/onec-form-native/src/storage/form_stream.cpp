@@ -7726,7 +7726,8 @@ DecodedControl decode_radio_button(
     const auto& properties = control_info.items[0];
     const auto properties_path = child_path(control_info_path, 0);
     require_arity(properties, 9, properties_path);
-    require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
+    if (raw_atom(properties.items[1], child_path(properties_path, 1)) != "6")
+        require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     auto base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base_properties, base_path, [] {
@@ -7762,6 +7763,7 @@ DecodedControl decode_radio_button(
     }
     auto normalized_info = info;
     auto normalized_properties = properties;
+    normalized_properties.items[1] = raw("7");
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized_text(tool_tip, child_path(base_path, 12));
     normalized_base.items[5] = raw("0");
@@ -10566,7 +10568,8 @@ DecodedControl decode_check_box(
     const auto& properties = info_payload.items[0];
     const auto properties_path = child_path(payload_path, 0);
     require_arity(properties, 9, properties_path);
-    require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
+    if (raw_atom(properties.items[1], child_path(properties_path, 1)) != "6")
+        require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     auto base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base_properties, base_path, [&] {
@@ -10597,6 +10600,7 @@ DecodedControl decode_check_box(
         fail("OOF1114", child_path(properties_path, 5), "VerticalAlign storage value 0, 1, or 2",
             std::to_string(vertical_align), "CheckBox.VerticalAlign storage value is unsupported");
     auto normalized_info = info;
+    normalized_info.items[1].items[0].items[1] = raw("7");
     normalized_info.items[1].items[0].items[0] = base_properties;
     normalize_control_base_appearance(normalized_info.items[1].items[0].items[0], model::ControlKind::check_box,
         child_path(child_path(child_path(info_path, 1), 0), 0));
