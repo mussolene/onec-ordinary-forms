@@ -6016,13 +6016,22 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     require_raw_constant(target.items[0], "4", child_path(target_path, 0));
                     target_marker = uuid_atom(target.items[1], child_path(target_path, 1)).canonical;
                     target_id = integer_atom<std::uint64_t>(target.items[2], child_path(target_path, 2));
-                    require_exact(target.items[3],
-                        list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)), raw("4"), raw("1")}),
-                        child_path(target_path, 3), "Generated submenu context is unsupported");
+                    const auto context_path = child_path(target_path, 3);
+                    const auto& context = target.items[3];
+                    require_arity(context, 5, context_path);
+                    require_raw_constant(context.items[0], "1", child_path(context_path, 0));
+                    require_raw_constant(context.items[1], "99", child_path(context_path, 1));
+                    require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
+                    const auto context_id = integer_atom<std::uint64_t>(context.items[3], child_path(context_path, 3));
+                    (void)bool_atom(context.items[4], child_path(context_path, 4));
+                    if (context_id == 0 || (context_id != 4 &&
+                        !groups.contains(menu_group_key(command_bar_root_marker, context_id))))
+                        fail("OOF1114", context_path, "Form or existing generated submenu context", {},
+                            "Generated submenu context is unsupported");
                     require_raw_constant(target.items[4], "0", child_path(target_path, 4));
                     require_raw_constant(target.items[5], "0", child_path(target_path, 5));
-                    if (target_marker != command_bar_root_marker || target_id == 0)
-                        fail("OOF1114", target_path, "generated CommandBar submenu collection", {},
+                    if (target_id == 0 || !groups.contains(menu_group_key(target_marker, target_id)))
+                        fail("OOF1114", target_path, "existing generated submenu collection", {},
                             "Generated submenu target is unsupported");
                     warn_incomplete_profile(warnings, reconstruction_complete, id, target_path, "GeneratedSubmenuReference");
                 } else if (type == 1) {

@@ -352,6 +352,59 @@ void test_generated_submenu_platform85_normalization() {
     expect(readback_xml.ok() && readback_xml.value() == xml.value() &&
         readback.value().module().text == document.module().text,
         "generated submenu must survive independent named rebuild with module");
+
+    const auto check_generated_variant = [&](bool alternative_marker, bool zero_context_flag,
+                                             bool existing_context_reference) {
+        auto variant_payload = payload;
+        auto& variant_menu = variant_payload.items[1].items[2].items[2].items[1].items[2].items[1].items[7];
+        const auto variant_action_count = static_cast<std::size_t>(std::stoul(variant_menu.items[4].atom));
+        auto& variant_root = variant_menu.items[6 + variant_action_count];
+        auto& variant_nested = variant_menu.items[7 + variant_action_count];
+        const auto variant_guid = variant_root.items[5].atom;
+        auto variant_record = std::find_if(variant_menu.items.begin() + 5,
+            variant_menu.items.begin() + 5 + variant_action_count,
+            [&](const auto& value) { return value.items[1].atom == variant_guid; });
+        expect(variant_record != variant_menu.items.begin() + 5 + variant_action_count,
+            "generated submenu variant must retain its action");
+        if (alternative_marker) {
+            constexpr std::string_view synthetic_marker = "12345678-1234-1234-1234-123456789abc";
+            variant_record->items[4].items[1] = oof::storage::list_stream::ListValue::raw_atom(
+                std::string(synthetic_marker));
+            variant_nested.items[1] = oof::storage::list_stream::ListValue::raw_atom(
+                std::string(synthetic_marker));
+        }
+        variant_record->items[4].items[3].items[3] = oof::storage::list_stream::ListValue::raw_atom(
+            existing_context_reference ? "55" : "4");
+        variant_record->items[4].items[3].items[4] = oof::storage::list_stream::ListValue::raw_atom(
+            zero_context_flag ? "0" : "1");
+        const auto variant_text = oof::storage::list_stream::dump_listout(variant_payload);
+        auto variant_container = container;
+        auto variant_form = std::find_if(variant_container.files.begin(), variant_container.files.end(),
+            [](const auto& file) { return file.name == "form"; });
+        expect(variant_form != variant_container.files.end(), "generated submenu variant must retain the form stream");
+        variant_form->payload.assign({0xef, 0xbb, 0xbf});
+        variant_form->payload.insert(variant_form->payload.end(), variant_text.begin(), variant_text.end());
+        const auto variant_loaded = oof::load_form_bin(formbin::serialize_container(variant_container), "GeneratedSubmenu");
+        expect(variant_loaded.ok() && variant_loaded.value().reconstruction_complete(),
+            "generated submenu variant must normalize to a complete named model");
+        const auto variant_xml = source::serialize_form_xml(variant_loaded.value());
+        expect(variant_xml.ok() && variant_xml.value() == xml.value(),
+            "generated submenu variant must retain the same named buttons and properties");
+        auto variant_parsed = source::parse_form_xml(variant_xml.value());
+        expect(variant_parsed.ok(), "generated submenu variant XML must parse independently");
+        variant_parsed.value().set_module(variant_loaded.value().module());
+        const auto variant_rebuilt = oof::save_form_bin(variant_parsed.value());
+        expect(variant_rebuilt.ok(), "generated submenu variant XML must rebuild independently");
+        const auto variant_readback = oof::load_form_bin(variant_rebuilt.value(), "GeneratedSubmenu");
+        expect(variant_readback.ok(), "generated submenu variant Form.bin must reload");
+        const auto variant_readback_xml = source::serialize_form_xml(variant_readback.value());
+        expect(variant_readback_xml.ok() && variant_readback_xml.value() == variant_xml.value() &&
+            variant_readback.value().module().text == document.module().text,
+            "generated submenu variant must retain XML and module after rebuild");
+    };
+    check_generated_variant(true, false, false);
+    check_generated_variant(false, true, false);
+    check_generated_variant(false, false, true);
 }
 
 void test_product_composition_roundtrip() {
