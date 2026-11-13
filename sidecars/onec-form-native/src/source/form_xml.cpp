@@ -2640,6 +2640,23 @@ private:
         return chart;
     }
 
+    void parse_catalog_input_extension(xmlNodePtr node, const std::string& owner,
+        model::PropertySet& properties) {
+        require_typed_container(node, owner);
+        const auto descriptors = mm::catalog_input_field_property_descriptors();
+        std::set<model::PropertyId> seen;
+        for (xmlNodePtr child : element_children(node)) {
+            const std::string name = node_name(child);
+            const auto descriptor = std::ranges::find(descriptors, name, &mm::PropertyDescriptor::xml_name);
+            if (descriptor == descriptors.end() || !seen.insert(descriptor->id).second)
+                fail("OOF2003", child, owner, name, "one declared CatalogInputFieldExtension property",
+                    name, "Unknown or duplicate CatalogInputFieldExtension property");
+            auto value = parse_property_value(child, descriptor->value_codec, owner, typed_budget_);
+            if (!equals_descriptor_default(*descriptor, value))
+                properties.set_explicit(descriptor->id, std::move(value));
+        }
+    }
+
     model::ControlRef parse_control(xmlNodePtr node) {
         const std::string type_name = node_name(node);
         const mm::ControlDescriptor* descriptor =
@@ -3085,12 +3102,18 @@ private:
                 control.data_path = parse_data_path(child, id_text);
             } else if (input_field != nullptr && std::ranges::any_of(mm::input_field_extensions,
                 [&](const auto& extension) { return extension.xml_name == name; })) {
-                if (input_field->extension || child->properties != nullptr ||
-                    !element_children(child).empty() || !trim_ascii(node_text(child)).empty())
-                    fail("OOF2003", child, id_text, name, "one empty named InputField extension", "settings or duplicate",
-                        "InputField extensions must be empty and mutually exclusive");
-                input_field->extension = std::ranges::find(mm::input_field_extensions, name,
-                    &mm::InputFieldExtensionDescriptor::xml_name)->kind;
+                const auto extension = std::ranges::find(mm::input_field_extensions, name,
+                    &mm::InputFieldExtensionDescriptor::xml_name);
+                if (input_field->extension)
+                    fail("OOF2003", child, id_text, name, "one named InputField extension", "duplicate",
+                        "InputField extensions are mutually exclusive");
+                if (extension->kind == model::InputFieldExtensionKind::catalog)
+                    parse_catalog_input_extension(child, id_text, control.properties());
+                else if (child->properties != nullptr || !element_children(child).empty() ||
+                    !trim_ascii(node_text(child)).empty())
+                    fail("OOF2003", child, id_text, name, "empty InputField extension", "settings",
+                        "This InputField extension has no named settings");
+                input_field->extension = extension->kind;
             } else if (name == "TypeLink" && input_field != nullptr) {
                 if (type_link_seen)
                     fail("OOF2003", child, id_text, name, "one TypeLink", "duplicate", "Duplicate InputField TypeLink");
@@ -3373,12 +3396,17 @@ private:
                         const auto extension = std::ranges::find(mm::input_field_extensions, property_name,
                             &mm::InputFieldExtensionDescriptor::xml_name);
                         if (extension != std::end(mm::input_field_extensions)) {
-                            if (column.control->kind != model::ControlKind::input_field || column.control->extension ||
-                                property_node->properties || !element_children(property_node).empty() ||
+                            if (column.control->kind != model::ControlKind::input_field || column.control->extension)
+                                fail("OOF2003", property_node, std::string(owner), property_name,
+                                    "one named InputField extension", "invalid owner or duplicate",
+                                    "Invalid Table Column editor extension");
+                            if (extension->kind == model::InputFieldExtensionKind::catalog)
+                                parse_catalog_input_extension(property_node, std::string(owner), column.control->properties);
+                            else if (property_node->properties || !element_children(property_node).empty() ||
                                 !trim_ascii(node_text(property_node)).empty())
                                 fail("OOF2003", property_node, std::string(owner), property_name,
-                                    "one empty named InputField extension", "invalid owner, settings or duplicate",
-                                    "Invalid Table Column editor extension");
+                                    "empty InputField extension", "settings",
+                                    "This Table Column editor extension has no named settings");
                             column.control->extension = extension->kind;
                             continue;
                         }
@@ -5547,6 +5575,31 @@ private:
         writer_.close("Values");
     }
 
+    void write_input_field_extension(model::InputFieldExtensionKind kind,
+        const model::PropertySet& properties, std::string_view owner) {
+        const auto descriptor = std::ranges::find(mm::input_field_extensions, kind,
+            &mm::InputFieldExtensionDescriptor::kind);
+        if (descriptor == std::end(mm::input_field_extensions))
+            serialization_fail(std::string(owner), "InputFieldExtension", "declared extension", "unknown kind",
+                "InputField extension is not declared");
+        if (kind == model::InputFieldExtensionKind::catalog) {
+            const auto properties_to_write = mm::catalog_input_field_property_descriptors();
+            const bool has_nondefault = std::ranges::any_of(properties_to_write, [&](const auto& property) {
+                const auto* entry = properties.find(property.id);
+                return entry != nullptr && !equals_descriptor_default(property, entry->value);
+            });
+            if (!has_nondefault) {
+                writer_.empty(descriptor->xml_name);
+                return;
+            }
+            writer_.open(descriptor->xml_name);
+            write_property_set(properties, properties_to_write, owner);
+            writer_.close(descriptor->xml_name);
+        } else {
+            writer_.empty(descriptor->xml_name);
+        }
+    }
+
     void write_control(const model::ControlNode& control) {
         const auto& descriptor = metamodel_.control(control.kind());
         const std::string id = object_id_text(control.id);
@@ -5560,14 +5613,8 @@ private:
             input_field != nullptr && input_field->type_link.has_value())
             writer_.empty("TypeLink", {{"attributeId", object_id_text(input_field->type_link->id())}});
         if (const auto* input_field = std::get_if<model::InputFieldPayload>(&control.payload);
-            input_field != nullptr && input_field->extension) {
-            const auto descriptor = std::ranges::find(mm::input_field_extensions, *input_field->extension,
-                &mm::InputFieldExtensionDescriptor::kind);
-            if (descriptor == std::end(mm::input_field_extensions))
-                serialization_fail(id, "InputFieldExtension", "declared extension", "unknown kind",
-                    "InputField extension is not declared");
-            writer_.empty(descriptor->xml_name);
-        }
+            input_field != nullptr && input_field->extension)
+            write_input_field_extension(*input_field->extension, control.properties(), id);
         write_property_set(
             control.extension_properties,
             metamodel_.control_extension_properties(),
@@ -5783,6 +5830,26 @@ private:
                             "unsupported control", "Table Column Control kind is unsupported");
                 }
                 column.control->properties.for_each_explicit([&](const model::PropertyEntry& entry) {
+                    if (column.control->kind == model::ControlKind::input_field &&
+                        column.control->extension == model::InputFieldExtensionKind::catalog) {
+                        const auto catalog_properties = mm::catalog_input_field_property_descriptors();
+                        const auto catalog_property = std::ranges::find(catalog_properties, entry.id,
+                            &mm::PropertyDescriptor::id);
+                        if (catalog_property != catalog_properties.end()) {
+                            const auto* enumeration = std::get_if<model::EnumerationValue>(&entry.value);
+                            const bool valid = catalog_property->value_codec == mm::ValueCodec::boolean
+                                ? std::holds_alternative<bool>(entry.value)
+                                : enumeration != nullptr && enumeration->type_name == catalog_property->enumeration_type &&
+                                    std::ranges::find(catalog_property->enumeration_members, enumeration->member) !=
+                                        catalog_property->enumeration_members.end();
+                            if (!valid) {
+                                serialization_fail(std::string(owner), "Column/Control/" + std::string(catalog_property->xml_name),
+                                    "compatible catalog extension value", "unsupported value",
+                                    "Table Column catalog editor property value is unsupported");
+                            }
+                            return;
+                        }
+                    }
                     const auto* descriptor = metamodel_.property(column.control->kind, entry.id);
                     const bool supported = descriptor != nullptr &&
                         ((column.control->kind == model::ControlKind::input_field &&
@@ -5842,12 +5909,8 @@ private:
                         write_type_domain("ValueType", *column.control->value_type, owner);
                 }
                 if (column.control->extension) {
-                    const auto extension = std::ranges::find(mm::input_field_extensions, *column.control->extension,
-                        &mm::InputFieldExtensionDescriptor::kind);
-                    if (extension == std::end(mm::input_field_extensions))
-                        serialization_fail(std::string(owner), "InputFieldExtension", "declared extension", "unknown",
-                            "Table Column editor extension is not declared");
-                    writer_.empty(extension->xml_name);
+                    write_input_field_extension(*column.control->extension,
+                        column.control->properties, owner);
                 }
                 const auto write_editor_property = [&](std::string_view name) {
                     const auto* descriptor = metamodel_.property(column.control->kind, name);

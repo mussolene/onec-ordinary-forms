@@ -12829,6 +12829,66 @@ void test_legacy_common_control_base10_batch() {
     expect(std::ranges::none_of(root_zero_decoded.diagnostics(), [](const auto& diagnostic) {
         return diagnostic.code == "OOF1146";
     }), "unconfirmed root zero state must not report normalization");
+    std::string form_xml = "<Form id=\"1\" name=\"LegacyFormState\" ordinaryFormVersion=\"2.1\"><ChildItems>";
+    for (unsigned id = 2; id < 14; ++id)
+        form_xml += "<Button id=\"" + std::to_string(id) + "\" name=\"Button" +
+            std::to_string(id) + "\"><Position/></Button>";
+    form_xml += "</ChildItems></Form>";
+    const auto form_document = source::parse_form_xml(form_xml);
+    expect(form_document.ok(), "12-control legacy Form fixture must parse");
+    const auto form_current = form_stream::encode_document(form_document.value());
+    expect(form_current.ok(), "12-control legacy Form fixture must encode");
+    auto form_legacy = form_current.value();
+    auto& form_base = form_legacy.items[1].items[2].items[1].items[1].items[0];
+    form_base.items.resize(18);
+    form_base.items[0] = list_stream::ListValue::raw_atom("16");
+    form_base.items[16] = list_stream::ListValue::raw_atom("0");
+    form_base.items[17] = list_stream::ListValue::raw_atom("0");
+    const auto form_decoded = form_stream::decode_document(form_legacy, "LegacyFormState");
+    expect(form_decoded.ok() && form_decoded.value().reconstruction_complete(),
+        "native-confirmed Form v16 zero state must decode as a complete named model");
+    expect(std::ranges::any_of(form_decoded.diagnostics(), [](const auto& diagnostic) {
+        return diagnostic.code == "OOF1146";
+    }), "Form v16 zero state must report native-confirmed normalization");
+    const auto form_named_xml = source::serialize_form_xml(form_decoded.value());
+    expect(form_named_xml.ok(), "Form v16 zero state must serialize to named XML");
+    const auto form_reparsed = source::parse_form_xml(form_named_xml.value());
+    expect(form_reparsed.ok(), "Form v16 zero state named XML must parse");
+    const auto form_rebuilt = form_stream::encode_document(form_reparsed.value());
+    expect(form_rebuilt.ok() && list_stream::dump_compact(form_rebuilt.value()) ==
+        list_stream::dump_compact(form_current.value()),
+        "Form v16 zero state must rebuild the canonical native stream without source payload");
+    auto form_legacy_picture = form_legacy;
+    auto& form_owner = form_legacy_picture.items[1].items[2].items[1].items[1];
+    std::size_t picture_cursor = 2;
+    for (std::size_t edge = 0; edge < 6; ++edge) {
+        const auto count = std::stoul(form_owner.items.at(picture_cursor).atom);
+        picture_cursor += 1 + count;
+    }
+    auto& root_picture = form_owner.items.at(picture_cursor);
+    expect(root_picture.items.size() == 11 && root_picture.items[0].atom == "10",
+        "current root Form Picture wrapper must have eleven fields");
+    root_picture.items[0] = list_stream::ListValue::raw_atom("8");
+    root_picture.items.resize(9);
+    const auto legacy_picture_decoded = form_stream::decode_document(form_legacy_picture, "LegacyFormState");
+    expect(legacy_picture_decoded.ok() && legacy_picture_decoded.value().reconstruction_complete(),
+        "native-confirmed root Form Picture version 8 must decode completely");
+    const auto legacy_picture_xml = source::serialize_form_xml(legacy_picture_decoded.value());
+    expect(legacy_picture_xml.ok() && legacy_picture_xml.value() == form_named_xml.value(),
+        "root Form Picture version 8 must preserve the named XML of twelve controls");
+    const auto legacy_picture_rebuilt = form_stream::encode_document(legacy_picture_decoded.value());
+    expect(legacy_picture_rebuilt.ok() && list_stream::dump_compact(legacy_picture_rebuilt.value()) ==
+        list_stream::dump_compact(form_current.value()),
+        "root Form Picture version 8 must rebuild the canonical native stream");
+    root_picture.items[6] = list_stream::ListValue::raw_atom("1");
+    const auto noncanonical_picture = form_stream::decode_document(form_legacy_picture, "LegacyFormState");
+    expect(!noncanonical_picture.ok() || !noncanonical_picture.value().reconstruction_complete(),
+        "noncanonical root Form Picture version 8 must remain guarded");
+    auto form_nonzero = form_legacy;
+    form_nonzero.items[1].items[2].items[1].items[1].items[0].items[16] = list_stream::ListValue::raw_atom("1");
+    const auto form_nonzero_decoded = form_stream::decode_document(form_nonzero, "LegacyFormState");
+    expect(!form_nonzero_decoded.ok() || !form_nonzero_decoded.value().reconstruction_complete(),
+        "unconfirmed Form v16 state must not be silently normalized");
     auto unknown_owner = root_legacy;
     unknown_owner.items[1].items[2].items[1].items[1].items[1] = list_stream::ListValue::raw_atom("99");
     expect(!form_stream::decode_document(unknown_owner, "LegacyRootCommonBase"),
@@ -27068,6 +27128,76 @@ void test_input_field_reference_extensions_round_trip_and_guards() {
     }
 }
 
+void test_catalog_input_field_named_settings_batch() {
+    std::string xml = R"XML(<Form id="1" name="CatalogInputs" ordinaryFormVersion="2.1"><ChildItems>)XML";
+    for (std::size_t index = 0; index < 12; ++index) {
+        const bool quick = index % 2 == 1;
+        const auto mode = index % 3;
+        xml += "<InputField id=\"" + std::to_string(100 + index) + "\" name=\"Catalog" +
+            std::to_string(index) + "\"><CatalogInputFieldExtension>";
+        if (quick) xml += "<QuickChoice>true</QuickChoice>";
+        if (mode != 2) {
+            xml += "<ChoiceFoldersAndItems type=\"FoldersAndItemsUse\" member=\"" +
+                std::string(mode == 0 ? "Items" : "Folders") + "\"/>";
+        }
+        xml += R"XML(</CatalogInputFieldExtension><ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><Position/></InputField>)XML";
+    }
+    xml += "</ChildItems></Form>";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& children = encoded.value().items[1].items[2].items[2];
+    for (std::size_t index = 0; index < 12; ++index) {
+        const auto& settings = children.items[index + 1].items[2].items[3].items[1].items[1];
+        expect(settings.items.size() == 5 && settings.items[1].atom == (index % 2 ? "1" : "0") &&
+            settings.items[2].atom == std::to_string(index % 3),
+            "Twelve Catalog InputFields must write native QuickChoice and ChoiceFoldersAndItems ordinals");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "CatalogInputs");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ? "" : decoded.diagnostics().front().message);
+    for (std::size_t index = 0; index < 12; ++index) {
+        const model::OrdinaryFormDocument::ObjectKey owner{model::ObjectCategory::control,
+            model::ObjectId{100 + index}};
+        const auto quick = decoded.value().get_prop_val(owner, model::PropertyId::from_name("QuickChoice"));
+        const auto mode = decoded.value().get_prop_val(owner, model::PropertyId::from_name("ChoiceFoldersAndItems"));
+        constexpr std::array<std::string_view, 3> names{"Items", "Folders", "FoldersAndItems"};
+        expect(quick.value == model::PropertyValue{index % 2 == 1} &&
+            mode.value == model::PropertyValue{model::EnumerationValue{
+                "FoldersAndItemsUse", std::string(names[index % 3])}},
+            "Catalog InputField property API must expose explicit and default named settings");
+    }
+    const auto named = source::serialize_form_xml(decoded.value());
+    expect(named.ok() && named.value().find("8585207b-9ca7-425b-9385-e8fd67c4e148") == std::string::npos,
+        "Public XML must expose named settings without storage GUIDs");
+    const auto reparsed = source::parse_form_xml(named.value());
+    expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+    const auto rebuilt = form_stream::encode_document(reparsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Twelve named Catalog InputFields must round-trip BIN to XML to BIN without drift");
+    auto edited_xml = named.value();
+    const std::string old_quick = "<QuickChoice>true</QuickChoice>";
+    const auto edit_at = edited_xml.find(old_quick);
+    expect(edit_at != std::string::npos, "Catalog InputField XML must include editable QuickChoice");
+    edited_xml.replace(edit_at, old_quick.size(), "<QuickChoice>false</QuickChoice>");
+    const auto edited = source::parse_form_xml(edited_xml);
+    expect(edited.ok(), edited ? "" : edited.diagnostics().front().message);
+    const auto edited_stream = form_stream::encode_document(edited.value());
+    expect(edited_stream.ok() &&
+        edited_stream.value().items[1].items[2].items[2].items[2].items[2].items[3].items[1].items[1].items[1].atom == "0",
+        "An XML edit must change the native QuickChoice setting on the selected control");
+    auto unknown_owner = encoded.value();
+    unknown_owner.items[1].items[2].items[2].items[1].items[2].items[3].items[1].items[1].items[3] =
+        list_stream::ListValue::raw_atom("33333333-3333-3333-3333-333333333333");
+    expect(!form_stream::decode_document(unknown_owner, "CatalogInputs"),
+        "Unmapped Catalog InputField owner GUID must remain rejected");
+    auto unknown_tail = encoded.value();
+    unknown_tail.items[1].items[2].items[2].items[1].items[2].items[3].items[1].items[1].items[4].items.push_back(
+        list_stream::ListValue::raw_atom("1"));
+    expect(!form_stream::decode_document(unknown_tail, "CatalogInputs"),
+        "Nested Catalog InputField context state must remain rejected");
+}
+
 void test_input_field_composite_reference_domains_round_trip_and_guards() {
     constexpr std::array string_entries{
         R"XML(<Entry term="string"/>)XML", R"XML(<Entry term="string" length="25"/>)XML",
@@ -28073,6 +28203,7 @@ int main() {
         test_document_form_extension_named_round_trip_and_guards();
         test_empty_form_extensions_named_round_trip_and_guards();
         test_input_field_reference_extensions_round_trip_and_guards();
+        test_catalog_input_field_named_settings_batch();
         test_input_field_composite_reference_domains_round_trip_and_guards();
         test_embedded_chart_dynamic_back_color();
         test_pivot_chart_types();

@@ -2152,11 +2152,15 @@
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
+  <xs:complexType name="CatalogInputFieldExtensionType"><xs:sequence>
+    <xs:element name="QuickChoice" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    <xs:element name="ChoiceFoldersAndItems" type="FoldersAndItemsUseValueType" minOccurs="0" maxOccurs="1"/>
+  </xs:sequence></xs:complexType>
   <xs:complexType name="TableColumnControlType">
     <xs:sequence>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:choice minOccurs="0" maxOccurs="1">
-        <xs:element name="CatalogInputFieldExtension"><xs:complexType/></xs:element>
+        <xs:element name="CatalogInputFieldExtension" type="CatalogInputFieldExtensionType"/>
         <xs:element name="ChartOfAccountsInputFieldExtension"><xs:complexType/></xs:element>
         <xs:element name="ChartOfCharacteristicTypesInputFieldExtension"><xs:complexType/></xs:element>
         <xs:element name="EnumInputFieldExtension"><xs:complexType/></xs:element>
@@ -2586,7 +2590,7 @@
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TypeLink" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="AttributeReferenceValueType" use="required"/></xs:complexType></xs:element>
       <xs:choice minOccurs="0" maxOccurs="1">
-        <xs:element name="CatalogInputFieldExtension"><xs:complexType/></xs:element>
+        <xs:element name="CatalogInputFieldExtension" type="CatalogInputFieldExtensionType"/>
         <xs:element name="ChartOfAccountsInputFieldExtension"><xs:complexType/></xs:element>
         <xs:element name="ChartOfCharacteristicTypesInputFieldExtension"><xs:complexType/></xs:element>
         <xs:element name="EnumInputFieldExtension"><xs:complexType/></xs:element>

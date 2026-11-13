@@ -1208,14 +1208,15 @@ void append_document_types(std::string& output) {
 void append_property_element(
     std::string& output,
     const PropertyDescriptor& property,
-    std::string_view indent
+    std::string_view indent,
+    bool require_named_enumeration = false
 ) {
     if (property.value_codec == ValueCodec::form_controls ||
         property.value_codec == ValueCodec::panel_pages) return;
     output.append(indent);
     output += "<xs:element";
     append_attribute(output, "name", property.xml_name);
-    append_attribute(output, "type", property.surface == PropertySurface::form_extension &&
+    append_attribute(output, "type", (require_named_enumeration || property.surface == PropertySurface::form_extension) &&
         !property.enumeration_type.empty()
             ? std::string(property.enumeration_type) + "ValueType" : std::string(xsd_type(property)));
     output += " minOccurs=\"0\" maxOccurs=\"1\"/>\n";
@@ -1513,13 +1514,24 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "      </xs:extension>\n"
         "    </xs:simpleContent>\n"
         "  </xs:complexType>\n"
+        "  <xs:complexType name=\"CatalogInputFieldExtensionType\"><xs:sequence>\n";
+    for (const auto& property : model::metamodel::catalog_input_field_property_descriptors())
+        append_property_element(output, property, "    ", true);
+    output +=
+        "  </xs:sequence></xs:complexType>\n"
         "  <xs:complexType name=\"TableColumnControlType\">\n"
         "    <xs:sequence>\n"
         "      <xs:element name=\"ValueType\" type=\"TypeDomainValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         ;
     output += "      <xs:choice minOccurs=\"0\" maxOccurs=\"1\">\n";
-    for (const auto& extension : model::metamodel::input_field_extensions)
-        output += "        <xs:element name=\"" + std::string(extension.xml_name) + "\"><xs:complexType/></xs:element>\n";
+    for (const auto& extension : model::metamodel::input_field_extensions) {
+        if (extension.kind == model::InputFieldExtensionKind::catalog)
+            output += "        <xs:element name=\"" + std::string(extension.xml_name) +
+                "\" type=\"CatalogInputFieldExtensionType\"/>\n";
+        else
+            output += "        <xs:element name=\"" + std::string(extension.xml_name) +
+                "\"><xs:complexType/></xs:element>\n";
+    }
     output += "      </xs:choice>\n";
     for (const auto name : model::metamodel::table_column_input_properties) {
         output += "      <xs:element name=\"" + std::string(name) +
@@ -1653,7 +1665,10 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             for (const auto& extension : model::metamodel::input_field_extensions) {
                 output += "        <xs:element";
                 append_attribute(output, "name", extension.xml_name);
-                output += "><xs:complexType/></xs:element>\n";
+                if (extension.kind == model::InputFieldExtensionKind::catalog)
+                    output += " type=\"CatalogInputFieldExtensionType\"/>\n";
+                else
+                    output += "><xs:complexType/></xs:element>\n";
             }
             output += "      </xs:choice>\n";
         }
@@ -1865,7 +1880,13 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         output += "        <NamedConcept";
         append_attribute(output, "name", extension.xml_name);
         append_attribute(output, "russianName", as_utf8(extension.russian_name));
-        output += "/>\n";
+        if (extension.kind == model::InputFieldExtensionKind::catalog) {
+            output += "><Properties>\n";
+            append_palette_properties(output, model::metamodel::catalog_input_field_property_descriptors(), "          ");
+            output += "        </Properties></NamedConcept>\n";
+        } else {
+            output += "/>\n";
+        }
     }
     for (const auto& extension : model::metamodel::table_source_extension_descriptors()) {
         output += "        <NamedConcept";

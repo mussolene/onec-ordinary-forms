@@ -4650,6 +4650,17 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
                 column.control->properties.for_each_explicit([&](const PropertyEntry& entry) {
+                    if (column.control->kind == ControlKind::input_field &&
+                        column.control->extension == InputFieldExtensionKind::catalog) {
+                        const auto catalog_properties = metamodel::catalog_input_field_property_descriptors();
+                        const auto catalog_property = std::ranges::find(catalog_properties, entry.id,
+                            &metamodel::PropertyDescriptor::id);
+                        if (catalog_property != catalog_properties.end()) {
+                            if (!property_value_matches(*catalog_property, entry.value))
+                                invalid_table("Table Column catalog editor property has an invalid value");
+                            return;
+                        }
+                    }
                     const auto* property = metamodel::find_property(column.control->kind, entry.id);
                     if (!table_column_editor_property_allowed(column.control->kind,
                             property == nullptr ? std::string_view{} : property->api_name) ||

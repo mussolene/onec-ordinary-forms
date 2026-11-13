@@ -2396,7 +2396,13 @@ bool is_concrete_input_reference_type(const model::TypeDomainPatternValue& type)
     });
 }
 
-LV input_field_reference_pair(model::InputFieldExtensionKind kind) {
+struct CatalogInputFieldSettings {
+    bool quick_choice = false;
+    std::int32_t choice_folders_and_items = 2;
+};
+
+LV input_field_reference_pair(model::InputFieldExtensionKind kind,
+    CatalogInputFieldSettings catalog_settings = {}) {
     const auto descriptor = std::ranges::find(model::metamodel::input_field_extensions, kind,
         &model::metamodel::InputFieldExtensionDescriptor::kind);
     if (descriptor == std::end(model::metamodel::input_field_extensions))
@@ -2405,7 +2411,10 @@ LV input_field_reference_pair(model::InputFieldExtensionKind kind) {
     LV settings;
     switch (kind) {
         case model::InputFieldExtensionKind::catalog:
-            settings = parse_constant("{5,0,2,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
+            settings = parse_constant("{5,0,2,00000000-0000-0000-0000-000000000000,{1,0}}");
+            settings.items[1] = raw(catalog_settings.quick_choice ? "1" : "0");
+            settings.items[2] = raw(std::to_string(catalog_settings.choice_folders_and_items));
+            break;
         case model::InputFieldExtensionKind::chart_of_accounts:
             settings = parse_constant("{1,0,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
         case model::InputFieldExtensionKind::chart_of_characteristic_types:
@@ -2414,6 +2423,25 @@ LV input_field_reference_pair(model::InputFieldExtensionKind kind) {
             settings = parse_constant("{1,1,00000000-0000-0000-0000-000000000000}"); break;
     }
     return list({raw(std::string(descriptor->guid)), std::move(settings)});
+}
+
+CatalogInputFieldSettings decode_input_field_reference_pair(const LV& pair,
+    model::InputFieldExtensionKind kind, std::string_view path) {
+    CatalogInputFieldSettings settings;
+    if (kind == model::InputFieldExtensionKind::catalog) {
+        const auto settings_path = child_path(path, 1);
+        const auto& stored = at(pair, 1, path);
+        require_arity(stored, 5, settings_path);
+        settings.quick_choice = bool_atom(at(stored, 1, settings_path), child_path(settings_path, 1));
+        settings.choice_folders_and_items = integer_atom<std::int32_t>(
+            at(stored, 2, settings_path), child_path(settings_path, 2));
+        if (settings.choice_folders_and_items < 0 || settings.choice_folders_and_items > 2)
+            fail("OOF1114", child_path(settings_path, 2), "Items, Folders or FoldersAndItems ordinal", {},
+                "Catalog InputField ChoiceFoldersAndItems is unsupported");
+    }
+    require_exact(pair, input_field_reference_pair(kind, settings), path,
+        "Reference InputField extension settings are not represented by the named model");
+    return settings;
 }
 
 LV canonical_input_field_scalar_pair(const InputFieldFlagValues& flags, std::string_view mask) {
@@ -2498,7 +2526,8 @@ LV canonical_input_field_info(
     const model::FontValue* font = nullptr,
     const model::ColorValue* border_color = nullptr,
     const model::ShortcutValue& shortcut = {},
-    std::optional<model::InputFieldExtensionKind> extension = {}) {
+    std::optional<model::InputFieldExtensionKind> extension = {},
+    CatalogInputFieldSettings catalog_settings = {}) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{0},{0},0,1,0,{1,0},0}
 )OOF");
@@ -2531,8 +2560,8 @@ LV canonical_input_field_info(
             fail("OOF1122", "$/InputField/ValueType", "one concrete object type UUID", "incompatible type",
                 "Reference InputField extension requires its concrete nominal type");
         value.items[3] = composite_reference
-            ? list({raw("2"), canonical_input_field_scalar_pair(flags, text_values.mask), input_field_reference_pair(*extension)})
-            : list({raw("1"), input_field_reference_pair(*extension)});
+            ? list({raw("2"), canonical_input_field_scalar_pair(flags, text_values.mask), input_field_reference_pair(*extension, catalog_settings)})
+            : list({raw("1"), input_field_reference_pair(*extension, catalog_settings)});
     }
     encode_common_control_base(value.items[2].items[0].items[0],
         CommonControlBaseFields{enabled, text_values.tool_tip,
@@ -3255,11 +3284,19 @@ DecodedOwnerPages decode_owner_pages(
         default_controls.push_back(id);
         expected.items[1].items.at(focus_start + index) = raw(std::to_string(id));
     }
+    const auto& owner_base = normalized.items[0];
+    const bool form_legacy_zero_state = !panel && owner_base.is_list && owner_base.items.size() == 18 &&
+        !owner_base.items[0].is_list && owner_base.items[0].atom_kind == LV::AtomKind::raw &&
+        owner_base.items[0].atom == "16" && std::ranges::all_of(std::array{16U, 17U}, [&](const auto slot) {
+            const auto& value = owner_base.items[slot];
+            return !value.is_list && value.atom_kind == LV::AtomKind::raw && value.atom == "0";
+        });
     read_common_control_base(normalized.items[0], child_path(child_path(path, 1), 0), [&] {
         require_exact(normalized.items[1], expected.items[1].items[1], child_path(child_path(path, 1), 1),
             "Legacy common base requires the supported current owner version");
         return expected.items[1].items[0];
-    }, {warnings, owner_id, panel ? "Panel" : "Form"});
+    }, {warnings, owner_id, panel ? "Panel" : "Form", form_legacy_zero_state ?
+        CommonControlBaseStatePolicy::strict_default_layouts : CommonControlBaseStatePolicy::preserve});
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     const auto auto_link = bool_atom(normalized.items[6], child_path(child_path(path, 1), 6 + incoming_end - 2));
@@ -3277,26 +3314,36 @@ DecodedOwnerPages decode_owner_pages(
         decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoLink"), auto_link);
     if (endless_layout)
         decoded_panel.properties.set_explicit(model::PropertyId::from_name("UseOnlyVisibleArea"), false);
+    const auto picture_path = child_path(child_path(path, 1), incoming_end);
+    auto& picture_wrapper = normalized.items[2];
+    if (picture_wrapper.is_list && picture_wrapper.items.size() == 9) {
+        if (panel) require_raw_constant(picture_wrapper.items[0], "8", child_path(picture_path, 0));
+        const bool version8 = !picture_wrapper.items[0].is_list &&
+            picture_wrapper.items[0].atom_kind == LV::AtomKind::raw && picture_wrapper.items[0].atom == "8";
+        if (version8) {
+            const auto& current_picture = expected.items[1].items[2];
+            bool canonical_fields = true;
+            for (std::size_t slot = 1; slot < 9; ++slot) {
+                if (!same_list_value(picture_wrapper.items[slot], current_picture.items[slot])) {
+                    if (panel)
+                        fail("OOF1114", child_path(picture_path, slot), "canonical Panel Picture version 8 field",
+                            "unverified legacy field", "Panel Picture version 8 field is unsupported");
+                    canonical_fields = false;
+                }
+            }
+            if (canonical_fields) {
+                // Designer 8.5 preserves the nine legacy fields and appends two zero constructor fields.
+                picture_wrapper.items[0] = raw("10");
+                picture_wrapper.items.push_back(raw("0"));
+                picture_wrapper.items.push_back(raw("0"));
+            }
+        }
+    }
     if (panel) {
         const auto base_path = child_path(child_path(path, 1), 0);
         const auto common = decode_common_control_base(normalized.items[0], base_path,
             CommonControlBaseCapabilities{true, false, {}, model::ControlKind::panel, model::ControlKind::panel});
         apply_common_control_base(decoded_panel.properties, common);
-        const auto picture_path = child_path(child_path(path, 1), incoming_end);
-        auto& picture_wrapper = normalized.items[2];
-        if (picture_wrapper.is_list && picture_wrapper.items.size() == 9) {
-            require_raw_constant(picture_wrapper.items[0], "8", child_path(picture_path, 0));
-            const auto& current_picture = expected.items[1].items[2];
-            for (std::size_t slot = 1; slot < 9; ++slot) {
-                if (!same_list_value(picture_wrapper.items[slot], current_picture.items[slot]))
-                    fail("OOF1114", child_path(picture_path, slot), "canonical Panel Picture version 8 field",
-                        "unverified legacy field", "Panel Picture version 8 field is unsupported");
-            }
-            // Designer 8.5 сохраняет эту девятипольную запись как версию 10 с двумя нулевыми полями.
-            picture_wrapper.items[0] = raw("10");
-            picture_wrapper.items.push_back(raw("0"));
-            picture_wrapper.items.push_back(raw("0"));
-        }
         require_arity(picture_wrapper, 11, picture_path);
         const auto size = integer_atom<std::int32_t>(picture_wrapper.items[1], child_path(picture_path, 1));
         if (size < 0 || size > 7 || size == 5 || size == 6)
@@ -3379,6 +3426,25 @@ std::int32_t explicit_enum_storage_value(
     const model::PropertySet& values, std::string_view owner, std::string_view name,
     std::string_view expected_type, std::int32_t default_value,
     std::initializer_list<std::pair<std::string_view, std::int32_t>> members);
+
+CatalogInputFieldSettings catalog_input_settings_from_properties(
+    const model::PropertySet& properties,
+    std::optional<model::InputFieldExtensionKind> extension,
+    std::string_view path) {
+    const bool has_quick_choice = properties.contains(model::PropertyId::from_name("QuickChoice"));
+    const bool has_folder_choice = properties.contains(model::PropertyId::from_name("ChoiceFoldersAndItems"));
+    if (extension != model::InputFieldExtensionKind::catalog) {
+        if (has_quick_choice || has_folder_choice)
+            fail("OOF1122", std::string(path), "CatalogInputFieldExtension for catalog settings", {},
+                "Catalog InputField settings require their named extension");
+        return {};
+    }
+    return CatalogInputFieldSettings{
+        explicit_bool(properties, "QuickChoice", false),
+        explicit_enum_storage_value(properties, "CatalogInputFieldExtension", "ChoiceFoldersAndItems",
+            "FoldersAndItemsUse", 2, {{"Items", 0}, {"Folders", 1}, {"FoldersAndItems", 2}}),
+    };
+}
 
 LV encode_owner_pages(
     const model::OrdinaryFormDocument& document,
@@ -4363,7 +4429,14 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control,
     if (!document && !control.events.empty())
         fail("OOF1123", std::string(path), "document context for editor events", "missing", "Editor event references require their document");
     if (control.kind == model::ControlKind::input_field) {
-        require_allowed_properties(control.properties, model::metamodel::table_column_input_properties, path);
+        std::vector<std::string_view> allowed(model::metamodel::table_column_input_properties.begin(),
+            model::metamodel::table_column_input_properties.end());
+        if (control.extension == model::InputFieldExtensionKind::catalog) {
+            allowed.push_back("QuickChoice");
+            allowed.push_back("ChoiceFoldersAndItems");
+        }
+        require_allowed_properties(control.properties, allowed, path);
+        const auto catalog_settings = catalog_input_settings_from_properties(control.properties, control.extension, path);
         InputFieldFlagValues flags{};
         for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
             const auto& mapping = input_field_flag_mappings[index];
@@ -4397,7 +4470,7 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control,
         const auto border_color = explicit_control_color(control.properties, "BorderColor");
         LV info = canonical_input_field_info(
             control.extension ? value_type : empty_type, enabled, read_only, flags, InputFieldTextValues{},
-            InputFieldLayoutValues{}, nullptr, &border_color, {}, control.extension);
+            InputFieldLayoutValues{}, nullptr, &border_color, {}, control.extension, catalog_settings);
         info.items[1] = encoded_type_domain(value_type, std::string(path) + "/ValueType");
         if (!value_type.entries.empty() && value_type.entries.size() == 1 &&
             value_type.entries.front().term == model::TypeDomainTerm::string) {
@@ -11921,6 +11994,7 @@ DecodedControl decode_input_field(
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
     const bool list_choice_mode = bool_atom(info.items[9], child_path(info_path, 9));
     std::optional<model::InputFieldExtensionKind> input_extension;
+    CatalogInputFieldSettings catalog_settings;
     const auto& pairs = info.items[3];
     require_list(pairs, child_path(info_path, 3));
     if (pairs.items.empty())
@@ -11950,8 +12024,7 @@ DecodedControl decode_input_field(
                 fail("OOF1122", pair_path, "one declared reference context", guid,
                     "InputField context is unknown or duplicated");
             input_extension = descriptor->kind;
-            require_exact(pair, input_field_reference_pair(*input_extension), pair_path,
-                "Reference InputField extension settings are not represented by the named model");
+            catalog_settings = decode_input_field_reference_pair(pair, *input_extension, pair_path);
         }
     }
     const bool supported_type = is_single_string_type_domain(control_type) || is_supported_input_numeric_type_domain(control_type) ||
@@ -12125,7 +12198,7 @@ DecodedControl decode_input_field(
         }
         expected_contexts.push_back(std::move(scalar_pair));
     }
-    if (input_extension) expected_contexts.push_back(input_field_reference_pair(*input_extension));
+    if (input_extension) expected_contexts.push_back(input_field_reference_pair(*input_extension, catalog_settings));
     if (list_choice_mode)
         expected_contexts.push_back(parse_constant("{763308b0-510d-4302-8689-9d9f2a562598,{0}}"));
     expected_contexts[0] = raw(std::to_string(expected_contexts.size() - 1));
@@ -12159,7 +12232,8 @@ DecodedControl decode_input_field(
     normalize_named_control_border(normalized_info.items[2].items[0].items[0], model::ControlKind::input_field,
         child_path(child_path(child_path(info_path, 2), 0), 0));
     const auto expected_info = canonical_input_field_info(control_type, enabled, read_only,
-        input_field_flags, text_values, layout_values, &*common.font, &*common.border_color, shortcut, input_extension);
+        input_field_flags, text_values, layout_values, &*common.font, &*common.border_color, shortcut,
+        input_extension, catalog_settings);
     normalize_input_field_runtime_state(normalized_info, expected_info, info_path);
     if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(expected_info))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
@@ -12180,6 +12254,16 @@ DecodedControl decode_input_field(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
     std::get<model::InputFieldPayload>(control.payload).type_link = type_link;
     std::get<model::InputFieldPayload>(control.payload).extension = input_extension;
+    if (input_extension == model::InputFieldExtensionKind::catalog) {
+        if (catalog_settings.quick_choice)
+            control.properties().set_explicit(model::PropertyId::from_name("QuickChoice"), true);
+        if (catalog_settings.choice_folders_and_items != 2) {
+            constexpr std::array<std::string_view, 3> members{"Items", "Folders", "FoldersAndItems"};
+            control.properties().set_explicit(model::PropertyId::from_name("ChoiceFoldersAndItems"),
+                model::EnumerationValue{"FoldersAndItemsUse",
+                    std::string(members[static_cast<std::size_t>(catalog_settings.choice_folders_and_items)])});
+        }
+    }
     decode_control_metadata(metadata, metadata_path, control);
     if (linked_attribute == nullptr)
         control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), control_type);
@@ -12409,9 +12493,22 @@ model::TableColumn decode_table_column(
                     if (!is_concrete_input_reference_type(embedded_type) || embedded_type.entries.size() != 1)
                         fail("OOF1122", paired_path, "single nominal type for reference editor", "incompatible type",
                             "Table Column reference extension requires its named type");
-                    require_exact(editor_info.items[3].items[1], input_field_reference_pair(extension->kind),
-                        child_path(paired_path, 1), "Table Column reference extension settings are unsupported");
+                    const auto catalog_settings = decode_input_field_reference_pair(
+                        editor_info.items[3].items[1], extension->kind, child_path(paired_path, 1));
                     column.control->extension = extension->kind;
+                    if (extension->kind == model::InputFieldExtensionKind::catalog) {
+                        if (catalog_settings.quick_choice)
+                            column.control->properties.set_explicit(
+                                model::PropertyId::from_name("QuickChoice"), true);
+                        if (catalog_settings.choice_folders_and_items != 2) {
+                            constexpr std::array<std::string_view, 3> members{
+                                "Items", "Folders", "FoldersAndItems"};
+                            column.control->properties.set_explicit(
+                                model::PropertyId::from_name("ChoiceFoldersAndItems"),
+                                model::EnumerationValue{"FoldersAndItemsUse",
+                                    std::string(members[static_cast<std::size_t>(catalog_settings.choice_folders_and_items)])});
+                        }
+                    }
                 } else if (embedded_type.entries.size() == 1 &&
                     embedded_type.entries.front().term == model::TypeDomainTerm::value_list) {
                     require_exact(editor_info.items[3], canonical_table_value_list_type_pair(
@@ -13848,7 +13945,7 @@ LV encode_input_field(
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "ListChoiceMode", "Transparent", "MultiLine",
         "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete", "Border", "Picture", "ChoiceButtonPicture",
-        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "BackColor", "TextColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask", "TypeLinkItem"}, "$/InputField");
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight", "ChoiceListWidth", "IncompleteChoiceMode", "Font", "BorderColor", "ButtonTextColor", "FieldTextColor", "ButtonBackColor", "FieldBackColor", "BackColor", "TextColor", "Shortcut", "TextEdit", "MinValue", "MaxValue", "Mask", "TypeLinkItem", "QuickChoice", "ChoiceFoldersAndItems"}, "$/InputField");
     const auto attribute = control.data_path ? resolve_attribute_reference(document, *control.data_path) : std::nullopt;
     if (control.data_path && !attribute) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -13867,6 +13964,8 @@ LV encode_input_field(
         fail("OOF1122", "$/InputField/ValueType", "explicit local ValueType for an unbound InputField", "absent",
             "Unbound InputField requires an explicit ValueType");
     const auto input_extension = std::get<model::InputFieldPayload>(control.payload).extension;
+    const auto catalog_settings = catalog_input_settings_from_properties(
+        control.properties(), input_extension, "$/InputField/CatalogInputFieldExtension");
     const bool list_choice_mode = explicit_bool(control.properties(), "ListChoiceMode", false);
     if ((input_extension && (list_choice_mode || !is_concrete_input_reference_type(*effective_type))) ||
         (!is_single_string_type_domain(*effective_type) && !is_supported_input_numeric_type_domain(*effective_type) &&
@@ -13907,7 +14006,7 @@ LV encode_input_field(
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     auto input_info = canonical_input_field_info(*effective_type, enabled, read_only, input_field_flags,
-        text_values, layout_values, &font, &border_color, shortcut, input_extension);
+        text_values, layout_values, &font, &border_color, shortcut, input_extension, catalog_settings);
     const auto type_link_item = explicit_integer(control.properties(), "TypeLinkItem", 1, "$/InputField/TypeLinkItem");
     if (type_link_item < 1 || type_link_item > std::numeric_limits<std::int32_t>::max())
         fail("OOF1122", "$/InputField/TypeLinkItem", "positive int32 item number", {},

@@ -724,6 +724,7 @@ inline constexpr auto table_column_input_properties = [] {
 [[nodiscard]] std::span<const TableColumnEnumerationDescriptor> table_column_enumeration_descriptors() noexcept;
 [[nodiscard]] std::span<const TableSourceExtensionDescriptor> table_source_extension_descriptors() noexcept;
 [[nodiscard]] std::span<const PropertyDescriptor> table_source_property_descriptors(TableSourceExtensionKind kind) noexcept;
+[[nodiscard]] std::span<const PropertyDescriptor> catalog_input_field_property_descriptors() noexcept;
 [[nodiscard]] std::span<const EventDescriptor> table_source_event_descriptors(TableSourceExtensionKind kind) noexcept;
 [[nodiscard]] std::span<const StandardPictureDescriptor> standard_picture_descriptors() noexcept;
 [[nodiscard]] const StandardPictureDescriptor* find_standard_picture(std::string_view runtime_name) noexcept;

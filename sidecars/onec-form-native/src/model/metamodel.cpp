@@ -3156,6 +3156,28 @@ std::span<const PropertyDescriptor> table_source_property_descriptors(TableSourc
     return {};
 }
 
+std::span<const PropertyDescriptor> catalog_input_field_property_descriptors() noexcept {
+    static constexpr std::array<std::string_view, 3> folder_modes{"Items", "Folders", "FoldersAndItems"};
+    static const auto properties = [] {
+        std::array<PropertyDescriptor, 2> result{
+            PropertyDescriptor{PropertyId::from_name("QuickChoice"), DescriptorOwner::control,
+                PropertySurface::control_payload, ControlKind::input_field, 0, "QuickChoice", "QuickChoice",
+                u8"БыстрыйВыбор", u8"Булево", ValueKind::boolean, ValueCodec::boolean,
+                ApiAccess::read_write, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+                StorageCodec::control_info, {DefaultKind::boolean, "false"}},
+            PropertyDescriptor{PropertyId::from_name("ChoiceFoldersAndItems"), DescriptorOwner::control,
+                PropertySurface::control_payload, ControlKind::input_field, 1, "ChoiceFoldersAndItems", "ChoiceFoldersAndItems",
+                u8"ВыборГруппИЭлементов", u8"ИспользованиеГруппИЭлементов", ValueKind::enumeration, ValueCodec::enumeration,
+                ApiAccess::read_write, VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+                StorageCodec::control_info, {DefaultKind::enumeration, "FoldersAndItemsUse.FoldersAndItems"}},
+        };
+        result[1].enumeration_type = "FoldersAndItemsUse";
+        result[1].enumeration_members = folder_modes;
+        return result;
+    }();
+    return properties;
+}
+
 std::span<const EventDescriptor> table_source_event_descriptors(TableSourceExtensionKind kind) noexcept {
     static const std::array document_events{
         EventDescriptor{DescriptorOwner::control, ControlKind::table, 0, "BeforeSetDeletionMark", "BeforeSetDeletionMark",
@@ -3191,6 +3213,12 @@ std::span<const EventDescriptor> table_source_event_descriptors(TableSourceExten
 }
 
 const PropertyDescriptor* find_property(const ControlNode& control, std::string_view name) noexcept {
+    if (const auto* input = std::get_if<InputFieldPayload>(&control.payload);
+        input && input->extension == InputFieldExtensionKind::catalog) {
+        const auto descriptors = catalog_input_field_property_descriptors();
+        const auto found = std::ranges::find(descriptors, name, &PropertyDescriptor::api_name);
+        if (found != descriptors.end()) return &*found;
+    }
     if (control.kind() == ControlKind::table) {
         if (const auto* table = std::get_if<TablePayload>(&control.payload); table && table->source_extension) {
             const auto descriptors = table_source_property_descriptors(*table->source_extension);
@@ -3202,6 +3230,12 @@ const PropertyDescriptor* find_property(const ControlNode& control, std::string_
 }
 
 const PropertyDescriptor* find_property(const ControlNode& control, PropertyId id) noexcept {
+    if (const auto* input = std::get_if<InputFieldPayload>(&control.payload);
+        input && input->extension == InputFieldExtensionKind::catalog) {
+        const auto descriptors = catalog_input_field_property_descriptors();
+        const auto found = std::ranges::find(descriptors, id, &PropertyDescriptor::id);
+        if (found != descriptors.end()) return &*found;
+    }
     if (control.kind() == ControlKind::table) {
         if (const auto* table = std::get_if<TablePayload>(&control.payload); table && table->source_extension) {
             const auto descriptors = table_source_property_descriptors(*table->source_extension);

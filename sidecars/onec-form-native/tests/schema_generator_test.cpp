@@ -832,6 +832,15 @@ void test_document_package_types(
                direct_children(input_choices[0], "element").size() ==
                    std::size(oof::model::metamodel::input_field_extensions),
         "InputField must expose every registered mutually exclusive named reference extension");
+    const auto catalog_input_properties = direct_children(
+        sequence_for_type(schema, "CatalogInputFieldExtensionType"), "element");
+    expect(catalog_input_properties.size() == 2,
+        "CatalogInputFieldExtension must expose exactly two named settings");
+    expect_element_shape(catalog_input_properties[0], "QuickChoice", "xs:boolean", "0", "1");
+    expect_element_shape(catalog_input_properties[1], "ChoiceFoldersAndItems", "FoldersAndItemsUseValueType", "0", "1");
+    const auto input_extensions = direct_children(input_choices.front(), "element");
+    expect(attribute(input_extensions.front(), "type") == "CatalogInputFieldExtensionType",
+        "Standalone InputField must reuse the nested catalog extension type");
     constexpr std::array form_surface_names{
         "Events",
         "Attributes",
@@ -1280,6 +1289,8 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
     for (std::size_t index = 0; index < extensions.size(); ++index)
         expect(attribute(extensions[index], "name") == oof::model::metamodel::input_field_extensions[index].xml_name,
             "column editor extension names must match standalone InputField names");
+    expect(attribute(extensions.front(), "type") == "CatalogInputFieldExtensionType",
+        "Table Column InputField must reuse the same catalog extension settings schema");
     expect_type_attribute(schema, "TableColumnControlType", "type", "TableColumnEditorKindType", "required");
 
     xmlNodePtr column_sequence = sequence_for_type(schema, "TableColumnType");
@@ -2370,6 +2381,11 @@ int main() {
                    validate_document(compiled_form.get(),
                    R"XML(<Form id="1" name="Both" ordinaryFormVersion="2.1"><CatalogItemFormExtension/><DataProcessorFormExtension/></Form>)XML") != 0,
             "generated XSD must accept named catalog enum values and reject simultaneous extensions");
+        expect(validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="CatalogInput" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Ref"><CatalogInputFieldExtension><QuickChoice>true</QuickChoice><ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Folders"/></CatalogInputFieldExtension><Position/></InputField></ChildItems></Form>)XML") == 0 &&
+                   validate_document(compiled_form.get(),
+                   R"XML(<Form id="1" name="CatalogInput" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="Ref"><CatalogInputFieldExtension><ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Unknown"/></CatalogInputFieldExtension><Position/></InputField></ChildItems></Form>)XML") != 0,
+            "CatalogInputFieldExtension XSD must accept only its named Boolean and enum settings");
         for (const auto& [type, property, members] : {
                  std::tuple<std::string_view, std::string_view, std::vector<std::string_view>>{
                      "PostingModeUse", "UsePostingMode", {"Regular", "RealTime", "Ask", "Auto"}},

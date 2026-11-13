@@ -3904,15 +3904,59 @@ void test_input_field_reference_extension_xml_contract() {
         expect(parsed.ok() && std::get<model::InputFieldPayload>(parsed.value().find_control(model::ObjectId{2})->payload).extension == extension.kind,
             "Each reference InputField family must have a named model identity");
     }
+    const auto configured = source::parse_form_xml(begin +
+        R"XML(<CatalogInputFieldExtension><QuickChoice>true</QuickChoice><ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Folders"/></CatalogInputFieldExtension>)XML" + end);
+    expect(configured.ok(), configured ? "" : configured.diagnostics().front().message);
+    const auto* field = configured.value().find_control(model::ObjectId{2});
+    const auto* quick = field->properties().find(model::PropertyId::from_name("QuickChoice"));
+    const auto* folders = field->properties().find(model::PropertyId::from_name("ChoiceFoldersAndItems"));
+    expect(quick && std::get<bool>(quick->value) && folders &&
+        std::get<model::EnumerationValue>(folders->value) == model::EnumerationValue{"FoldersAndItemsUse", "Folders"},
+        "CatalogInputFieldExtension must retain its two named nondefault settings");
+    const auto serialized = source::serialize_form_xml(configured.value());
+    expect(serialized.ok() &&
+        serialized.value().find("<CatalogInputFieldExtension>") < serialized.value().find("<QuickChoice>true</QuickChoice>") &&
+        serialized.value().find("<QuickChoice>true</QuickChoice>") < serialized.value().find(
+            R"XML(<ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Folders"/>)XML") &&
+        serialized.value().find(R"XML(<ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Folders"/>)XML") <
+            serialized.value().find("</CatalogInputFieldExtension>"),
+        "CatalogInputFieldExtension settings must remain nested and ordered in public XML");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), reparsed ? "" : reparsed.diagnostics().front().message);
+    const auto serialized_again = source::serialize_form_xml(reparsed.value());
+    expect(serialized_again.ok() && serialized_again.value() == serialized.value(),
+        "CatalogInputFieldExtension settings must survive XML serialization and parsing");
+    const auto defaulted = source::parse_form_xml(begin +
+        R"XML(<CatalogInputFieldExtension><QuickChoice>false</QuickChoice><ChoiceFoldersAndItems type="FoldersAndItemsUse" member="FoldersAndItems"/></CatalogInputFieldExtension>)XML" + end);
+    expect(defaulted.ok(), defaulted ? "" : defaulted.diagnostics().front().message);
+    const auto default_xml = source::serialize_form_xml(defaulted.value());
+    expect(defaulted.ok() && default_xml.ok() && default_xml.value().find("<CatalogInputFieldExtension/>") != std::string::npos,
+        "CatalogInputFieldExtension default settings must canonicalize to the empty extension");
+    const auto table = source::parse_form_xml(R"XML(<Form id="1" name="Rows" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes><ChildItems><Table id="2" name="Rows"><DataPath attributeId="3"/><Position/><Columns><Column name="Ref"><DataPath>Ref</DataPath><Header><Item language="en">Ref</Item></Header><Control type="InputField"><ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><CatalogInputFieldExtension><QuickChoice>true</QuickChoice><ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Items"/></CatalogInputFieldExtension></Control></Column></Columns></Table></ChildItems></Form>)XML");
+    expect(table.ok(), table ? "" : table.diagnostics().front().message);
+    const auto table_xml = source::serialize_form_xml(table.value());
+    expect(table_xml.ok() && table_xml.value().find(R"XML(<Control type="InputField">)XML") != std::string::npos &&
+        table_xml.value().find(R"XML(<Control type="InputField">)XML") < table_xml.value().find("<CatalogInputFieldExtension>") &&
+        table_xml.value().find("<CatalogInputFieldExtension>") < table_xml.value().find("<QuickChoice>true</QuickChoice>") &&
+        table_xml.value().find("<QuickChoice>true</QuickChoice>") < table_xml.value().find(
+            R"XML(<ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Items"/>)XML") &&
+        table_xml.value().find(R"XML(<ChoiceFoldersAndItems type="FoldersAndItemsUse" member="Items"/>)XML") <
+            table_xml.value().find("</CatalogInputFieldExtension>"),
+        "Table Column InputField must use the same nested Catalog extension settings");
     expect(!source::parse_form_xml(begin + "<CatalogInputFieldExtension/>" +
         R"XML(<ValueType><Entry term="object" typeUuid="22222222-2222-2222-2222-222222222222"/></ValueType><Position/><ListChoiceMode>true</ListChoiceMode></InputField></ChildItems></Form>)XML"),
         "XML must reject an authored reference family that is inactive under list-choice mode");
     for (const auto invalid : {"<CatalogInputFieldExtension/><ChartOfAccountsInputFieldExtension/>",
         "<CatalogInputFieldExtension/><CatalogInputFieldExtension/>",
         "<CatalogInputFieldExtension setting=\"0\"/>",
+        "<CatalogInputFieldExtension><QuickChoice>true</QuickChoice><QuickChoice>false</QuickChoice></CatalogInputFieldExtension>",
+        "<CatalogInputFieldExtension><Unknown>true</Unknown></CatalogInputFieldExtension>",
+        "<CatalogInputFieldExtension><ChoiceFoldersAndItems type=\"FoldersAndItemsUse\" member=\"Unknown\"/></CatalogInputFieldExtension>",
         "<ChartOfCharacteristicTypesInputFieldExtension><Settings/></ChartOfCharacteristicTypesInputFieldExtension>"})
         expect(!source::parse_form_xml(begin + invalid + end),
-            "InputField extension XML must reject settings and mutually exclusive identities");
+            "InputField extension XML must reject unknown settings and mutually exclusive identities");
+    expect(!source::parse_form_xml(begin + "<CatalogInputFieldExtension/><QuickChoice>true</QuickChoice>" + end),
+        "CatalogInputFieldExtension settings must not appear outside the named extension");
 }
 
 void test_catalog_list_form_extension_xml_contract() {
