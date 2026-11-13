@@ -3668,6 +3668,8 @@ private:
         }
         std::vector<model::CommandBarButton> result;
         std::set<std::string> names;
+        std::map<std::string, model::CommandBarButtonKind> first_named;
+        std::set<std::string> duplicate_names;
         bool has_automatic = false;
         for (xmlNodePtr child : element_children(node)) {
             if (node_name(child) == "AutomaticButtons") {
@@ -3707,7 +3709,13 @@ private:
                 continue;
             }
             auto item = parse_command_bar_button(child, owner);
-            if (!names.insert(item.name).second) fail("OOF2003", child, std::string(owner), item.name, "unique item name in collection", item.name, "Duplicate button menu item name");
+            if (item.name.empty()) fail("OOF2003", child, std::string(owner), item.name, "non-empty item name", item.name, "Empty button menu item name");
+            const auto [first, inserted] = first_named.try_emplace(item.name, item.type);
+            if (!inserted && (first->second != model::CommandBarButtonKind::separator ||
+                item.type != model::CommandBarButtonKind::action || !duplicate_names.insert(item.name).second))
+                fail("OOF2003", child, std::string(owner), item.name, "unique name or Separator followed by one Action",
+                    item.name, "Unsupported duplicate button menu item name");
+            names.insert(item.name);
             result.push_back(std::move(item));
         }
         if (state.placement && state.placement->before_button && !names.contains(*state.placement->before_button))

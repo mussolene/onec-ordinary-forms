@@ -4042,7 +4042,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 for (const auto& name : state.included_buttons)
                     if (name.empty() || !names.contains(name) || !included.insert(name).second)
                         invalid_state("AutomaticButtons ButtonRef names must be non-empty, unique sibling references");
-                names.clear();
+                std::map<std::string, CommandBarButtonKind> first_named;
+                std::set<std::string> duplicate_names;
                 for (const auto& item : items) {
                     const auto invalid = [&](std::string reason) {
                         add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
@@ -4061,7 +4062,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         *item.client_interface_theme != ClientInterfaceTheme::dark) invalid("unknown client interface theme");
                     if (item.command_control_kind != CommandControlKind::from_source &&
                         item.command_control_kind != CommandControlKind::button) invalid("unknown command control kind");
-                    if (item.name.empty() || !names.insert(item.name).second) invalid("button menu item names must be non-empty and unique within each collection");
+                    if (item.name.empty()) invalid("button menu item names must be non-empty");
+                    else {
+                        const auto [first, inserted] = first_named.try_emplace(item.name, item.type);
+                        if (!inserted && (first->second != CommandBarButtonKind::separator ||
+                            item.type != CommandBarButtonKind::action || !duplicate_names.insert(item.name).second))
+                            invalid("duplicate button menu name requires a Separator followed by one Action");
+                    }
                     if (item.action && item.standard_action) invalid("Action menu item cannot combine Action and StandardAction");
                     if (item.action && item.action->handler.empty()) invalid("Action menu item requires a handler");
                     if (item.type != CommandBarButtonKind::action && (item.action || item.standard_action)) invalid("only Action menu items may have an Action or StandardAction value");

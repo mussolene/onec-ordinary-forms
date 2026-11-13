@@ -5727,6 +5727,62 @@ void test_menu_collection_state_round_trip_and_invalid_membership() {
         "an unknown command reference cannot become an unassigned menu action");
 }
 
+void test_menu_first_match_duplicate_names() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "DuplicateMenus";
+    for (std::uint64_t index = 0; index < 12; ++index)
+        form.children.emplace_back(model::ControlRef{model::ObjectId{index + 2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        model::ControlNode control{model::ObjectId{index + 2}, "Menu" + std::to_string(index), model::CommandBarPayload{}};
+        auto& payload = std::get<model::CommandBarPayload>(control.payload);
+        model::CommandBarButton separator;
+        separator.name = "Same";
+        separator.type = model::CommandBarButtonKind::separator;
+        model::CommandBarButton action;
+        action.name = "Same";
+        action.action = model::CommandBarAction{"ExecuteDuplicate", "", {}, {}, {}};
+        model::CommandBarButton middle;
+        middle.name = "Between";
+        middle.action = model::CommandBarAction{"ExecuteMiddle", "", {}, {}, {}};
+        payload.buttons = {separator, middle, action};
+        payload.buttons_state.placement = model::AutomaticButtonsPlacement{"Same"};
+        document.add_control(std::move(control));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "twelve duplicate-name menus encode" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "DuplicateMenus");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "twelve non-adjacent Separator and Action pairs decode as a complete named model");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "duplicate-name menus serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "duplicate-name menus parse from standalone XML");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "twelve first-match menus rebuild exactly without a baseline");
+
+    const auto menu_at = [](auto& root) -> auto& {
+        return root.items[1].items[2].items[2].items[1].items[2].items[1].items[7];
+    };
+    auto later_placement = encoded.value();
+    auto& placement_menu = menu_at(later_placement);
+    auto& placement_group = placement_menu.items[6 + std::stoul(placement_menu.items[4].atom)];
+    placement_group.items.back().items[0] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(later_placement, "DuplicateMenus"),
+        "a stored placement targeting the later same-name Action must be rejected");
+
+    auto later_membership = encoded.value();
+    auto& member_menu = menu_at(later_membership);
+    auto& member_group = member_menu.items[6 + std::stoul(member_menu.items[4].atom)];
+    auto& footer = member_group.items.back();
+    footer.items[1] = list_stream::ListValue::raw_atom("1");
+    footer.items.insert(footer.items.end() - 1,
+        {member_group.items[10].items[6], member_group.items[10].items[7]});
+    expect(!form_stream::decode_document(later_membership, "DuplicateMenus"),
+        "a stored membership targeting the later same-name Action must be rejected");
+}
+
 void test_named_button_menu_round_trip_and_invalid_references() {
     model::Form form;
     form.id = model::ObjectId{1}; form.name = "Menu";
@@ -27930,6 +27986,7 @@ int main() {
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
         test_menu_collection_state_round_trip_and_invalid_membership();
+        test_menu_first_match_duplicate_names();
         test_named_button_menu_round_trip_and_invalid_references();
         test_button_menu_client_interface_variant_round_trip_and_validation();
         test_menu_action_generations_share_named_model();

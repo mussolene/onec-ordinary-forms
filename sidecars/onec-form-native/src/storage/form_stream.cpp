@@ -5735,7 +5735,9 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         std::vector<LV> submenu_refs{raw("0")};
         std::size_t submenu_count = 0;
         std::vector<model::CommandBarButton> entries;
-        std::unordered_set<std::string> names;
+        std::unordered_map<std::string, std::pair<model::CommandBarButtonKind, std::size_t>> first_named;
+        std::unordered_set<std::string> duplicate_names;
+        std::unordered_map<std::string, std::string> first_identity_by_name;
         for (std::size_t i = 0; i < count; ++i) {
             const auto guid = uuid_atom(group.items[5 + 2 * i], path).canonical;
             if (!actions.contains(guid) || !consumed_actions.insert(guid).second)
@@ -5754,7 +5756,15 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto item_owner = uuid_atom(props.items[6], child_path(path, 6)).canonical;
             model::CommandBarButton entry;
             entry.name = string_atom(props.items[1], path);
-            if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
+            const auto type = integer_atom<unsigned>(props.items[9], path);
+            if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
+            entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
+            if (entry.name.empty()) fail("OOF1114", std::string(path), "non-empty menu name", entry.name, "Menu name is empty");
+            const auto [first, inserted] = first_named.try_emplace(entry.name, entry.type, i);
+            if (!inserted && (first->second.first != model::CommandBarButtonKind::separator ||
+                entry.type != model::CommandBarButtonKind::action || !duplicate_names.insert(entry.name).second))
+                fail("OOF1114", std::string(path), "unique name or Separator followed by one Action", entry.name,
+                    "Menu name is duplicated outside the supported first-match pair");
             entry.changes_data = bool_atom(props.items[2], path);
             entry.automatic_insertion_locks = integer_atom<std::uint64_t>(props.items[3], child_path(path, 3));
             const bool text_present = bool_atom(props.items[5], path);
@@ -5779,11 +5789,9 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             if (id == 0 || (item_owner == owner && id > max_id) ||
                 id > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) || !entry_ids.insert(item_key).second)
                 fail("OOF1114", std::string(path), "positive unique item ID within maximum", std::to_string(id), "Menu identity is invalid");
+            first_identity_by_name.try_emplace(entry.name, item_key);
             current_names.push_back(entry.name);
             decoded.paths.emplace(item_key, current_names);
-            const auto type = integer_atom<unsigned>(props.items[9], path);
-            if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
-            entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
             if (entry.automatic_insertion_locks == 0 && entry.type != model::CommandBarButtonKind::submenu)
                 warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 3), "SourceGeneratedButton");
             if (default_item_id != 0 && item_key == default_item_key) {
@@ -5949,6 +5957,10 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             entries.push_back(std::move(entry));
             current_names.pop_back();
         }
+        if (automatic_position >= 0 && static_cast<std::size_t>(automatic_position) < count &&
+            first_named.at(entries[automatic_position].name).second != static_cast<std::size_t>(automatic_position))
+            fail("OOF1122", std::string(path), "first matching named button", entries[automatic_position].name,
+                "Automatic placement targets a later same-name button");
         submenu_refs[0] = raw(std::to_string(submenu_count));
         require_exact(footer.items.back(), list(std::move(submenu_refs)), path, "Menu submenu references are inconsistent");
         std::unordered_set<std::string> included;
@@ -5957,7 +5969,8 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto member = menu_group_key(uuid_atom(footer.items[2 + 2 * index], path).canonical,
                 integer_atom<std::uint64_t>(footer.items[3 + 2 * index], path));
             const auto found = names_by_identity.find(member);
-            if (found == names_by_identity.end() || !included.insert(found->second).second)
+            if (found == names_by_identity.end() || !included.insert(found->second).second ||
+                (duplicate_names.contains(found->second) && first_identity_by_name.at(found->second) != member))
                 fail("OOF1123", std::string(path), "unique named sibling buttons", {},
                     "Automatic membership cannot resolve to a named sibling button");
         }
