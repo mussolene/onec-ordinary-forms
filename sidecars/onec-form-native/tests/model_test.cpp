@@ -3289,10 +3289,10 @@ void test_help_metamodel() {
         "coverage target must explicitly exclude ActiveX without changing the help catalog");
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 430,
+        coverage.control_property_occurrences == 435,
         "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 209,
+        coverage.unique_control_property_names == 213,
         "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,

@@ -1723,7 +1723,9 @@
   </xs:sequence></xs:complexType>
   <xs:complexType name="SpreadsheetDocumentIndexedFormatType"><xs:sequence><xs:element name="Format" type="SpreadsheetDocumentFormatType"/></xs:sequence><xs:attribute name="index" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
   <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:choice><xs:element name="Text" type="LocalizedTextValueType"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/><xs:element name="Control" type="SpreadsheetDocumentCellControlType" minOccurs="0"/></xs:sequence></xs:choice><xs:element name="Format" type="SpreadsheetDocumentFormatType" minOccurs="0"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
-  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="DefaultFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="DefaultColumnFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="Row" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Column" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="height" type="xs:unsignedInt"/><xs:attribute name="width" type="xs:unsignedInt"/></xs:complexType>
+  <xs:complexType name="SpreadsheetLanguageInfoType"><xs:attribute name="id" type="xs:string" use="required"/><xs:attribute name="code" type="xs:string" use="required"/><xs:attribute name="description" type="xs:string"/></xs:complexType>
+  <xs:complexType name="SpreadsheetLanguageSettingsType"><xs:sequence><xs:element name="Language" type="SpreadsheetLanguageInfoType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="currentLanguage" type="xs:string" use="required"/><xs:attribute name="defaultLanguage" type="xs:string" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="LanguageSettings" type="SpreadsheetLanguageSettingsType" minOccurs="0"/><xs:element name="DefaultFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="DefaultColumnFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="Row" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Column" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="height" type="xs:unsignedInt"/><xs:attribute name="width" type="xs:unsignedInt"/></xs:complexType>
 
   <xs:complexType name="GanttSeriesType"><xs:sequence>
     <xs:element name="Value" type="xs:string"/><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType" minOccurs="0"/>
@@ -3063,6 +3065,11 @@
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowGrid" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowHeaders" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowGroups" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BlackAndWhiteView" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="SpreadsheetDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

@@ -3432,6 +3432,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 }
             }
         } else if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
+            check_typed_value(spreadsheet->language_settings.current_language);
+            check_typed_value(spreadsheet->language_settings.default_language);
+            for (const auto& language : spreadsheet->language_settings.languages) {
+                check_typed_value(language.id);
+                check_typed_value(language.code);
+                check_typed_value(language.description);
+            }
             const auto check_format = [&](const SpreadsheetDocumentFormat& format) {
                 check_property_values(format.properties, [](PropertyId id) -> const metamodel::PropertyDescriptor* {
                     const auto descriptors = metamodel::spreadsheet_format_properties();
@@ -4154,6 +4161,20 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 spreadsheet->serialization_version != SpreadsheetDocumentFieldSerializationVersion::v18)
                 add_violation(report, InvariantCode::invalid_property, control.id, control.id,
                     "Версия сериализации SpreadsheetDocumentField должна быть 14, 16 или 18");
+            const auto valid_language_text = [](std::string_view text) {
+                return valid_typed_utf8(text) && std::ranges::none_of(text, [](unsigned char character) {
+                    return character < 0x20 && character != '\t' && character != '\r' && character != '\n';
+                }) && text.find("\xef\xbf\xbe") == std::string_view::npos && text.find("\xef\xbf\xbf") == std::string_view::npos;
+            };
+            const auto& language_settings = spreadsheet->language_settings;
+            bool valid_languages = valid_language_text(language_settings.current_language) &&
+                valid_language_text(language_settings.default_language);
+            for (const auto& language : language_settings.languages)
+                valid_languages = valid_languages && valid_language_text(language.id) && valid_language_text(language.code) &&
+                    valid_language_text(language.description);
+            if (!valid_languages)
+                add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                    "Spreadsheet LanguageSettings must contain valid XML strings");
             const auto validate_format = [&](const SpreadsheetDocumentFormat& format) {
                 std::optional<PropertySet> referenced_properties;
                 const auto picture_id = PropertyId::from_name("Picture");

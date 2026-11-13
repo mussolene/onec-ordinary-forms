@@ -1504,6 +1504,75 @@ void test_spreadsheet_document_picture_paths() {
             "Spreadsheet Document picture paths must reject traversal, extra nesting, unknown collections and mismatched filenames");
 }
 
+void test_spreadsheet_language_settings_xml_round_trip() {
+    const auto wrap = [](std::string_view body) {
+        return std::string("<Form id=\"1\" name=\"SpreadsheetLanguages\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document>") +
+            std::string(body) + "</Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    const model::SpreadsheetLanguageSettings factory;
+    expect(factory.current_language == "ru" && factory.default_language == "ru" &&
+        factory.languages == std::vector<model::SpreadsheetLanguageInfo>{{"ru", "Русский", "Русский"}},
+        "spreadsheet language factory defaults must reflect the named native language settings");
+    const std::string factory_languages = "<Language id=\"ru\" code=\"Русский\" description=\"Русский\"/>";
+    auto defaults = source::parse_form_xml(wrap("<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\">" + factory_languages + "</LanguageSettings>"));
+    expect(defaults.ok(), "explicit factory LanguageSettings must parse");
+    auto default_output = source::serialize_form_xml(defaults.value());
+    expect(default_output.ok() && default_output.value().find("<LanguageSettings") == std::string::npos,
+        "factory language settings must be omitted from canonical public XML");
+    std::string xml = "<Form id=\"1\" name=\"SpreadsheetLanguages\" ordinaryFormVersion=\"2.1\"><ChildItems>";
+    std::vector<model::SpreadsheetLanguageSettings> expected;
+    for (unsigned index = 0; index < 12; ++index) {
+        model::SpreadsheetLanguageSettings settings;
+        settings.current_language = "current" + std::to_string(index);
+        settings.default_language = index == 7 ? "" : "default" + std::to_string(index);
+        settings.languages = {{"", "Default code", ""}, {"ru", "Русский", "Описание Ω & <текст>"}};
+        expected.push_back(settings);
+        const auto id = std::to_string(index + 2);
+        xml += "<SpreadsheetDocumentField id=\"" + id + "\" name=\"Sheet" + id + "\"><Position/><Document><LanguageSettings currentLanguage=\"" +
+            settings.current_language + "\" defaultLanguage=\"" + settings.default_language + "\">";
+        xml += "<Language id=\"\" code=\"Default code\"/><Language id=\"ru\" code=\"Русский\" description=\"Описание Ω &amp; &lt;текст&gt;\"/>"
+            "</LanguageSettings></Document></SpreadsheetDocumentField>";
+    }
+    xml += "</ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "all twelve LanguageSettings variants must parse" : parsed.diagnostics().front().message);
+    auto output = source::serialize_form_xml(parsed.value());
+    expect(output.ok() && output.value().find("<LanguageSettings") != std::string::npos &&
+        output.value().find("<DesignAlias>") == std::string::npos,
+        "public LanguageSettings must contain only platform XDTO properties");
+    auto restored = source::parse_form_xml(output.value());
+    expect(restored.ok(), "LanguageSettings must reparse after canonical serialization");
+    for (unsigned index = 0; index < 12; ++index) {
+        const auto& settings = std::get<model::SpreadsheetDocumentFieldPayload>(restored.value().find_control(model::ObjectId{index + 2})->payload).language_settings;
+        expect(settings == expected[index], "all twelve language settings must preserve strings and ordered language triplets");
+    }
+    auto repeated = source::serialize_form_xml(restored.value());
+    expect(repeated.ok() && repeated.value() == output.value(), "LanguageSettings canonical XML must be stable");
+    for (const std::string_view body : {
+        "<LanguageSettings currentLanguage=\"ru\"/>", "<LanguageSettings defaultLanguage=\"ru\"/>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\" raw=\"1\"/>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"><DesignAlias>1</DesignAlias></LanguageSettings>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"><Language id=\"ru\" code=\"Russian\"/><DesignAlias>1</DesignAlias></LanguageSettings>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"><Language code=\"Russian\"/></LanguageSettings>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"><Language id=\"ru\"/></LanguageSettings>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"><Language id=\"ru\" code=\"Russian\" raw=\"1\"/></LanguageSettings>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"><Language id=\"ru\" code=\"Russian\">text</Language></LanguageSettings>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\">text</LanguageSettings>",
+        "<LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"/><LanguageSettings currentLanguage=\"en\" defaultLanguage=\"en\"/>",
+        "<DefaultFormat/><LanguageSettings currentLanguage=\"ru\" defaultLanguage=\"ru\"/>"})
+        expect(!source::parse_form_xml(wrap(body)), "LanguageSettings must reject missing attributes, unknown fields and invalid order");
+    model::Form invalid_form;
+    invalid_form.id = model::ObjectId{1};
+    invalid_form.name = "InvalidLanguageSettings";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument invalid(std::move(invalid_form));
+    model::ControlNode invalid_control{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& invalid_settings = std::get<model::SpreadsheetDocumentFieldPayload>(invalid_control.payload).language_settings;
+    invalid_settings.languages[0].description = std::string(1, static_cast<char>(1));
+    invalid.add_control(std::move(invalid_control));
+    expect(!invalid.validate().ok(), "LanguageSettings model must reject strings that cannot be represented in public XML");
+}
+
 void test_spreadsheet_document_formats_xml_round_trip() {
     namespace mm = model::metamodel;
     std::string format_xml;
@@ -5419,6 +5488,7 @@ int main() {
         test_spreadsheet_document_formats_xml_round_trip();
         test_spreadsheet_document_localized_text_xml_round_trip();
         test_spreadsheet_document_picture_paths();
+        test_spreadsheet_language_settings_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
         test_choice_field_static_xml_profile_and_runtime_list_rejection();
         test_control_font_xml_round_trip();

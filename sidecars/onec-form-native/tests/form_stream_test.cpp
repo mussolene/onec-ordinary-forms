@@ -17877,7 +17877,7 @@ void test_spreadsheet_document_field_named_properties_and_events() {
     collection.items.at(2).items.at(0) = collection.items.at(1).items.at(0);
     expect(!form_stream::decode_document(duplicate, "DuplicateEvent"), "duplicate event must fail");
     expect(!form_stream::encode_document(make_document(true, true)), "foreign event owner must fail");
-    auto neighbor = encoded.value(); info_of(neighbor).items.at(18) = list_stream::ListValue::raw_atom("1");
+    auto neighbor = encoded.value(); info_of(neighbor).items.at(19) = list_stream::ListValue::raw_atom("1");
     const auto partial = form_stream::decode_document(neighbor, "UnknownNeighbor");
     expect(partial.ok() && !partial.value().reconstruction_complete(), "unknown neighbor must remain incomplete");
 }
@@ -17893,7 +17893,13 @@ void test_spreadsheet_format_owners_and_assets() {
     };
     for (unsigned i = 0; i < 12; ++i) {
         model::ControlNode control{model::ObjectId{i + 2}, "Sheet" + std::to_string(i), model::SpreadsheetDocumentFieldPayload{}};
+        control.position.left.set(static_cast<std::int32_t>(i * 4));
+        control.position.top.set(static_cast<std::int32_t>(i * 6));
+        control.position.width.set(static_cast<std::int32_t>(100 + i));
+        control.position.height.set(static_cast<std::int32_t>(80 + i));
         auto& sheet = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload);
+        for (const auto name : {"ReadOnly", "ShowGrid", "ShowHeaders", "ShowGroups", "BlackAndWhiteView"})
+            control.properties().set_explicit(model::PropertyId::from_name(name), i % 2 != 0);
         set(sheet.default_format, "Width", model::DecimalValue{"144"});
         set(sheet.default_column_format, "Protection", false);
         sheet.height = 20; sheet.width = 30;
@@ -17958,6 +17964,96 @@ void test_spreadsheet_format_owners_and_assets() {
     }
     auto xml = source::serialize_form_xml(decoded.value());
     expect(xml.ok(), xml ? "" : xml.diagnostics().front().message);
+    auto legacy_stream = form_stream::encode_document(document);
+    expect(legacy_stream.ok(), "legacy sheet fixtures must start from the named model");
+    const auto downgrade_view = [](list_stream::ListValue& view, unsigned version) {
+        if (version < 3) view.items.pop_back();
+        if (version < 2) view.items.resize(view.items.size() - 3);
+        if (version == 0) view.items.erase(view.items.begin() + 19, view.items.begin() + 21);
+        view.items[0] = list_stream::ListValue::raw_atom(std::to_string(version));
+    };
+    const std::array<unsigned, 12> versions{0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12};
+    for (unsigned i = 0; i < versions.size(); ++i) {
+        auto* record = const_cast<list_stream::ListValue*>(find_control_record(legacy_stream.value(), i + 2));
+        for (std::size_t j = 1; j <= 4; ++j)
+            expect(record->items[2].items[j].atom == record->items[3].items[j].atom,
+                "spreadsheet window bounds must be rebuilt from the named Position");
+        // Both a fresh uncreated window and the persisted Position must decode to the same object.
+        if (i % 2 == 0)
+            for (std::size_t j = 1; j <= 4; ++j) record->items[2].items[j] = list_stream::ListValue::raw_atom("0");
+        downgrade_view(record->items[2].items[14], i % 4);
+        // Older MoxelLangSettings omits the inactive override flag and may retain an ignored alias.
+        if (i % 3 == 0) {
+            record->items[2].items[11].items[3].items.pop_back();
+            record->items[2].items[11].items[3].items[2] = list_stream::ListValue::raw_atom("17");
+        }
+        // The earlier runtime copy cannot override the later design ReadOnly during Load.
+        record->items[2].items[18] = list_stream::ListValue::raw_atom(i % 2 == 0 ? "1" : "0");
+        auto& d = record->items[2].items[11];
+        auto original = d.items;
+        std::size_t cursor = 16;
+        const auto row_count = std::stoul(d.items[15].atom);
+        for (unsigned row = 0; row < row_count; ++row) {
+            cursor += 2; const auto cells = std::stoul(d.items[cursor++].atom);
+            for (unsigned cell = 0; cell < cells; ++cell) {
+                ++cursor; auto& value = d.items[cursor++];
+                if (value.items[0].atom == "16") value.items.pop_back();
+            }
+        }
+        cursor += 2 + 25;
+        for (unsigned registry = 0; registry < 7; ++registry) {
+            const auto count = std::stoul(d.items[cursor++].atom); cursor += count;
+        }
+        const auto tail = cursor;
+        const auto version = versions[i];
+        downgrade_view(original[tail + 4], i % 4);
+        expect(d.items[tail + 6].atom == "0", "legacy fixture must have no mask resources");
+        std::vector<list_stream::ListValue> fields(d.items.begin(), d.items.begin() + tail + 1);
+        if (version == 3) { fields.push_back(original[tail + 3]); fields.push_back(original[tail + 4]); }
+        fields.push_back(original[tail + 1]);
+        if (version >= 2) fields.push_back(original[tail + 2]);
+        if (version >= 4) { fields.push_back(original[tail + 3]); fields.push_back(original[tail + 4]); }
+        if (version >= 5) fields.push_back(original[tail + 5]);
+        if (version >= 6) fields.push_back(original[tail + 6]);
+        if (version >= 9) fields.push_back(original[tail + 7]);
+        if (i % 2) fields.insert(fields.end(), original.begin() + tail + 8, original.end());
+        d.items = std::move(fields);
+        d.items[2] = list_stream::ListValue::raw_atom(std::to_string(version));
+    }
+    auto legacy_decoded = form_stream::decode_document(legacy_stream.value(), "FormatOwners");
+    expect(legacy_decoded.ok(), legacy_decoded ? "" : legacy_decoded.diagnostics().front().message);
+    expect(legacy_decoded.value().reconstruction_complete(), "all twelve old Sheet variants must retain complete named state");
+    auto legacy_xml = source::serialize_form_xml(legacy_decoded.value());
+    expect(legacy_xml && legacy_xml.value() == xml.value(),
+        "conditional Sheet Load must normalize omitted default sections without changing named values or resources");
+    auto nondefault_alias = form_stream::encode_document(document);
+    auto* first_sheet = const_cast<list_stream::ListValue*>(find_control_record(nondefault_alias.value(), 2));
+    auto& language_info = first_sheet->items[2].items[11].items[3];
+    language_info.items[2] = list_stream::ListValue::raw_atom("17");
+    auto incomplete_alias = form_stream::decode_document(nondefault_alias.value(), "NondefaultDesignAlias");
+    expect(incomplete_alias && !incomplete_alias.value().reconstruction_complete(),
+        "an active process-local design alias cannot be silently dropped from twelve-control XML");
+    language_info.items.back() = list_stream::ListValue::raw_atom("0");
+    auto inactive_alias = form_stream::decode_document(nondefault_alias.value(), "InactiveDesignAlias");
+    expect(inactive_alias && inactive_alias.value().reconstruction_complete(),
+        "an inactive design alias must use process defaults without losing named language settings");
+    for (unsigned variant = 0; variant < 12; ++variant) {
+        auto invalid = form_stream::encode_document(document);
+        auto* record = const_cast<list_stream::ListValue*>(find_control_record(invalid.value(), 2));
+        auto& d = record->items[2].items[11];
+        std::size_t cursor = 16;
+        const auto rows = std::stoul(d.items[15].atom);
+        for (unsigned row = 0; row < rows; ++row) {
+            cursor += 2; const auto count = std::stoul(d.items[cursor++].atom); cursor += count * 2;
+        }
+        cursor += 2;
+        constexpr std::array<unsigned, 9> offsets{0,1,3,4,5,6,7,19,20};
+        d.items[cursor + offsets[variant % offsets.size()]] = list_stream::ListValue::raw_atom("1");
+        const auto rejected = form_stream::decode_document(invalid.value(), "UnsupportedCollection");
+        expect(!rejected && rejected.diagnostics().front().code == "OOF1114" &&
+            rejected.diagnostics().front().message.starts_with("Spreadsheet "),
+            "unsupported variable collections must reject before interpreting their contents as Font resources");
+    }
     auto parsed = source::parse_form_xml(xml.value());
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
     for (const auto& asset : decoded.value().assets()) parsed.value().set_asset_bytes(asset.id, asset.bytes);
@@ -18240,7 +18336,7 @@ void test_spreadsheet_document_field_round_trip() {
         "SpreadsheetDocumentField must reject an unknown typed-value reference marker");
     auto unknown_document_tail = encoded.value();
     auto& unknown_tail_info = unknown_document_tail.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
-    unknown_tail_info.items.at(57) = list_stream::ListValue::raw_atom("9");
+    unknown_tail_info.items.at(59) = list_stream::ListValue::raw_atom("9");
     expect_partial_view_profile(unknown_document_tail,
         "SpreadsheetDocumentField unknown document-tail profile value must warn and preserve known cells");
     auto excessive_typed_count = encoded.value();

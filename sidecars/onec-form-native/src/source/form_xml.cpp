@@ -2755,15 +2755,50 @@ private:
                 };
                 std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
                 std::set<std::uint32_t> row_indices, column_indices;
+                bool language_settings_seen = false;
                 bool default_format_seen = false, default_column_format_seen = false;
                 unsigned document_stage = 0;
                 for (xmlNodePtr cell_node : element_children(child)) {
                     const auto item_name = node_name(cell_node);
-                    const unsigned item_stage = item_name == "DefaultFormat" ? 0 : item_name == "DefaultColumnFormat" ? 1 :
-                        item_name == "Row" ? 2 : item_name == "Column" ? 3 : item_name == "Cell" ? 4 : 5;
-                    if (item_stage == 5 || item_stage < document_stage)
-                        fail("OOF2003", cell_node, id_text, item_name, "DefaultFormat, DefaultColumnFormat, Row, Column, Cell sequence", "unknown or out of order", "Invalid spreadsheet Document item");
+                    const unsigned item_stage = item_name == "LanguageSettings" ? 0 : item_name == "DefaultFormat" ? 1 :
+                        item_name == "DefaultColumnFormat" ? 2 : item_name == "Row" ? 3 : item_name == "Column" ? 4 : item_name == "Cell" ? 5 : 6;
+                    if (item_stage == 6 || item_stage < document_stage)
+                        fail("OOF2003", cell_node, id_text, item_name, "LanguageSettings, DefaultFormat, DefaultColumnFormat, Row, Column, Cell sequence", "unknown or out of order", "Invalid spreadsheet Document item");
                     document_stage = item_stage;
+                    if (item_name == "LanguageSettings") {
+                        if (language_settings_seen)
+                            fail("OOF2003", cell_node, id_text, item_name, "one LanguageSettings", "duplicate", "Duplicate spreadsheet LanguageSettings");
+                        language_settings_seen = true;
+                        for (xmlAttrPtr attribute = cell_node->properties; attribute; attribute = attribute->next) {
+                            const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+                            if (attribute->ns != nullptr || (name != "currentLanguage" && name != "defaultLanguage"))
+                                fail("OOF2003", cell_node, id_text, item_name, "currentLanguage and defaultLanguage attributes", std::string(name), "Unsupported spreadsheet LanguageSettings attribute");
+                        }
+                        model::SpreadsheetLanguageSettings settings;
+                        settings.current_language = required_attribute(cell_node, "currentLanguage", id_text);
+                        settings.default_language = required_attribute(cell_node, "defaultLanguage", id_text);
+                        settings.languages.clear();
+                        for (xmlNodePtr entry : element_children(cell_node)) {
+                            const auto name = node_name(entry);
+                            if (name == "Language") {
+                                for (xmlAttrPtr attribute = entry->properties; attribute; attribute = attribute->next) {
+                                    const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+                                    if (attribute->ns != nullptr || (name != "id" && name != "code" && name != "description"))
+                                        fail("OOF2003", entry, id_text, std::string(name), "id, code and description attributes", "unsupported", "Unsupported spreadsheet Language attribute");
+                                }
+                                if (!element_children(entry).empty() || !trim_ascii(node_text(entry)).empty())
+                                    fail("OOF2003", entry, id_text, name, "attributes only", "content", "Spreadsheet Language cannot contain text or children");
+                                settings.languages.push_back({required_attribute(entry, "id", id_text),
+                                    required_attribute(entry, "code", id_text), optional_attribute(entry, "description").value_or("")});
+                            } else fail("OOF2003", entry, id_text, name, "Language", "unknown", "Unknown spreadsheet LanguageSettings item");
+                        }
+                        for (xmlNodePtr text = cell_node->children; text; text = text->next)
+                            if ((text->type == XML_TEXT_NODE || text->type == XML_CDATA_SECTION_NODE) && text->content &&
+                                !trim_ascii(reinterpret_cast<const char*>(text->content)).empty())
+                                fail("OOF2003", cell_node, id_text, item_name, "named language children", "text", "Spreadsheet LanguageSettings cannot contain direct text");
+                        spreadsheet.language_settings = std::move(settings);
+                        continue;
+                    }
                     if (item_name == "DefaultFormat" || item_name == "DefaultColumnFormat") {
                         auto& seen = item_name == "DefaultFormat" ? default_format_seen : default_column_format_seen;
                         if (seen) fail("OOF2003", cell_node, id_text, item_name, "at most one format", "duplicate", "Duplicate spreadsheet default format");
@@ -5517,7 +5552,8 @@ private:
         if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
             spreadsheet != nullptr && (!spreadsheet->cells.empty() || !spreadsheet->rows.empty() ||
                 !spreadsheet->columns.empty() || spreadsheet->default_format.properties.size() != 0 ||
-                spreadsheet->default_column_format.properties.size() != 0 || spreadsheet->height || spreadsheet->width)) {
+                spreadsheet->default_column_format.properties.size() != 0 || spreadsheet->height || spreadsheet->width ||
+                spreadsheet->language_settings != model::SpreadsheetLanguageSettings{})) {
             const auto write_format = [&](std::string_view name, const model::SpreadsheetDocumentFormat& format) {
                 writer_.open(name);
                 for (const auto& property : mm::spreadsheet_format_properties()) {
@@ -5534,6 +5570,13 @@ private:
             if (spreadsheet->height) document_attributes.emplace_back("height", std::to_string(*spreadsheet->height));
             if (spreadsheet->width) document_attributes.emplace_back("width", std::to_string(*spreadsheet->width));
             writer_.open("Document", document_attributes);
+            if (spreadsheet->language_settings != model::SpreadsheetLanguageSettings{}) {
+                const auto& settings = spreadsheet->language_settings;
+                writer_.open("LanguageSettings", {{"currentLanguage", settings.current_language}, {"defaultLanguage", settings.default_language}});
+                for (const auto& language : settings.languages)
+                    writer_.empty("Language", {{"id", language.id}, {"code", language.code}, {"description", language.description}});
+                writer_.close("LanguageSettings");
+            }
             if (spreadsheet->default_format.properties.size() != 0) write_format("DefaultFormat", spreadsheet->default_format);
             if (spreadsheet->default_column_format.properties.size() != 0) write_format("DefaultColumnFormat", spreadsheet->default_column_format);
             const auto write_indexed_formats = [&](std::string_view name, const auto& items) {

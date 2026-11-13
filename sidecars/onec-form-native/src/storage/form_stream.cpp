@@ -11155,6 +11155,35 @@ struct SpreadsheetSections {
 };
 
 
+LV normalize_spreadsheet_view(LV view, std::string_view path) {
+    const auto version = integer_atom<unsigned>(at(view, 0, path), path);
+    if (version > 3) fail("OOF1106", std::string(path), "ViewSettings versions 0 through 3", {},
+        "Spreadsheet view version is unsupported");
+    if (version == 0) {
+        if (view.items.size() < 23) fail("OOF1102", std::string(path), "complete ViewSettings", {},
+            "Spreadsheet view is incomplete");
+        view.items.insert(view.items.begin() + 19, {raw("0"), raw("0")});
+    }
+    const auto areas = integer_atom<std::uint32_t>(at(view, 23, path), path);
+    if (areas > view.items.size() - 24) fail("OOF1114", std::string(path), "bounded selection area count", {},
+        "Spreadsheet view area count exceeds its record");
+    std::size_t cursor = 24;
+    for (std::uint32_t i = 0; i < areas; ++i) require_list(view.items[cursor++], path);
+    const auto selected = integer_atom<std::uint32_t>(at(view, cursor++, path), path);
+    if (selected > view.items.size() - cursor) fail("OOF1114", std::string(path), "bounded selected object count", {},
+        "Spreadsheet view object count exceeds its record");
+    for (std::uint32_t i = 0; i < selected; ++i)
+        (void)integer_atom<std::uint64_t>(view.items[cursor++], path);
+    const auto suffix = (version >= 2 ? 3U : 0U) + (version >= 3 ? 1U : 0U);
+    require_arity(view, cursor + suffix, path);
+    for (unsigned i = 0; version >= 2 && i < 3; ++i) (void)bool_atom(view.items[cursor++], path);
+    if (version >= 3) (void)integer_atom<std::int64_t>(view.items[cursor], path);
+    if (version < 2) view.items.insert(view.items.end(), {raw("0"), raw("0"), raw("0")});
+    if (version < 3) view.items.push_back(raw("0"));
+    view.items[0] = raw("3");
+    return view;
+}
+
 LV canonical_spreadsheet_field_info(const model::SpreadsheetDocumentFieldPayload& payload,
     bool fresh_add_default = false, std::span<const model::PictureAsset> assets = {},
     SpreadsheetSections* sections = nullptr) {
@@ -11162,6 +11191,16 @@ LV canonical_spreadsheet_field_info(const model::SpreadsheetDocumentFieldPayload
 
     auto& document_info = info.items.at(11);
     auto& view_info = info.items.at(14);
+    const auto& language = payload.language_settings;
+    std::vector<LV> language_info{string_value(language.current_language), string_value(language.default_language),
+        raw("1"), raw(std::to_string(language.languages.size()))};
+    for (const auto& item : language.languages) {
+        language_info.push_back(string_value(item.id));
+        language_info.push_back(string_value(item.code));
+        language_info.push_back(string_value(item.description));
+    }
+    language_info.push_back(raw("1"));
+    document_info.items[3] = list(std::move(language_info));
     switch (payload.serialization_version) {
         case model::SpreadsheetDocumentFieldSerializationVersion::v14:
             info.items.resize(29);
@@ -11322,14 +11361,41 @@ DecodedControl decode_spreadsheet_document_field(
             fail("OOF1106", child_path(info_path, 0), "14, 16 or 18", std::to_string(serialization_version),
                 "Версия сериализации SpreadsheetDocumentField не поддерживается");
     }
-    const auto& document_info = at(info, 11, info_path);
+    LV document_info = at(info, 11, info_path);
     const auto document_path = child_path(info_path, 11);
     require_list(document_info, document_path);
-    if (document_info.items.size() < 65) fail("OOF1102", document_path, "complete SpreadsheetDocumentField info", describe(document_info), "Document info is incomplete");
+    if (document_info.items.size() < 16) fail("OOF1102", document_path, "complete SpreadsheetDocumentField header", describe(document_info), "Document info is incomplete");
+    require_raw_constant(document_info.items[0], "8", child_path(document_path, 0));
+    require_raw_constant(document_info.items[1], "1", child_path(document_path, 1));
+    const auto document_version = integer_atom<unsigned>(document_info.items[2], child_path(document_path, 2));
+    if (document_version > 12) fail("OOF1106", document_path, "Spreadsheet document 8.1.0 through 8.1.12", {},
+        "Spreadsheet document version is unsupported");
     require_raw_constant(document_info.items[14], "2", child_path(document_path, 14));
     const auto row_count = integer_atom<std::uint32_t>(document_info.items[15], child_path(document_path, 15));
     model::SpreadsheetDocumentFieldPayload payload;
     payload.serialization_version = static_cast<model::SpreadsheetDocumentFieldSerializationVersion>(serialization_version);
+    const auto& language_info = document_info.items[3];
+    const auto language_path = child_path(document_path, 3);
+    const auto language_count = integer_atom<std::uint32_t>(at(language_info, 3, language_path), language_path);
+    if (language_count > (language_info.items.size() - 4) / 3)
+        fail("OOF1114", language_path, "bounded language count", {}, "Spreadsheet language count exceeds its settings");
+    const auto language_end = 4 + static_cast<std::size_t>(language_count) * 3;
+    if (language_info.items.size() != language_end && language_info.items.size() != language_end + 1)
+        fail("OOF1102", language_path, "language settings with optional design alias override", {}, "Spreadsheet language settings are malformed");
+    auto& language = payload.language_settings;
+    language.current_language = string_atom(language_info.items[0], language_path);
+    language.default_language = string_atom(language_info.items[1], language_path);
+    const auto design_alias = integer_atom<std::int32_t>(language_info.items[2], language_path);
+    const bool use_design_alias = language_info.items.size() > language_end &&
+        bool_atom(language_info.items[language_end], language_path);
+    // XDTO omits this process-local setting. A nondefault explicit value cannot be rebuilt from public XML.
+    if (use_design_alias && design_alias != 1)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
+            child_path(language_path, 2), "SpreadsheetDocumentField");
+    language.languages.clear();
+    for (std::size_t i = 4; i < language_end; i += 3)
+        language.languages.push_back({string_atom(language_info.items[i], language_path),
+            string_atom(language_info.items[i + 1], language_path), string_atom(language_info.items[i + 2], language_path)});
     value_codec::SpreadsheetFormatResources resources;
     std::vector<model::PictureAsset> format_assets;
     const auto& embedded = at(document_info, 5, document_path);
@@ -11371,9 +11437,16 @@ DecodedControl decode_spreadsheet_document_field(
             cell_references.push_back(integer_atom<std::uint32_t>(at(value, 1, document_path), document_path));
             model::SpreadsheetDocumentCell cell{row_index + 1, column + 1, std::string{}, std::nullopt};
             if (flags == 16) {
-                require_arity(value, 4, document_path);
+                if (value.items.size() != 3 && value.items.size() != 4)
+                    fail("OOF1114", document_path, "text cell with optional formatted text footer", {},
+                        "Spreadsheet formatted cell text is unsupported");
                 cell.text = decoded_localized_text(value.items[2], document_path);
-                require_raw_constant(value.items[3], "0", document_path);
+                if (value.items.size() == 4) {
+                    if (document_version < 10)
+                        fail("OOF1114", document_path, "named formatted cell text", {},
+                            "Spreadsheet formatted cell text is unsupported");
+                    require_raw_constant(value.items[3], "0", document_path);
+                }
             } else if (flags <= 3) {
                 require_arity(value, 2 + ((flags & 1) ? 2 : 0) + ((flags & 2) ? 1 : 0), document_path);
                 if (flags & 1) require_raw_constant(value.items[2], "1", document_path);
@@ -11399,20 +11472,42 @@ DecodedControl decode_spreadsheet_document_field(
     }
     const auto height = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
     const auto tail_start = cursor;
+    for (const auto& [offset, name] : std::array{
+        std::pair{0U, "additional column sets"}, std::pair{1U, "row column-set bindings"},
+        std::pair{3U, "drawings"}, std::pair{4U, "horizontal groups"},
+        std::pair{5U, "vertical groups"}, std::pair{6U, "horizontal page breaks"},
+        std::pair{7U, "vertical page breaks"}}) {
+        const auto count = integer_atom<std::uint32_t>(at(document_info, cursor + offset, document_path), document_path);
+        if (count != 0) fail("OOF1114", child_path(document_path, cursor + offset),
+            "named spreadsheet collection", {}, "Spreadsheet " + std::string(name) + " are unsupported");
+    }
+    if (bool_atom(at(document_info, cursor + 19, document_path), document_path))
+        fail("OOF1114", child_path(document_path, cursor + 19), "named print column-set binding", {},
+            "Spreadsheet print column-set binding is unsupported");
+    if (integer_atom<std::uint32_t>(at(document_info, cursor + 20, document_path), document_path) != 0)
+        fail("OOF1114", child_path(document_path, cursor + 20), "named drawing data sources", {},
+            "Spreadsheet drawing data sources are unsupported");
     cursor += 25;
     std::vector<LV> format_records;
-    const auto read_resources = [&](auto& destination, auto decode) {
+    const auto read_resources = [&](auto& destination, auto decode, std::string_view name) {
         const auto count = integer_atom<std::uint32_t>(at(document_info, cursor++, document_path), document_path);
         if (cursor > document_info.items.size() || count > document_info.items.size() - cursor)
             fail("OOF1114", document_path, "bounded resource count", {}, "Spreadsheet resource count exceeds its document");
-        for (std::uint32_t i = 0; i < count; ++i) destination.push_back(decode(document_info.items[cursor++]));
+        for (std::uint32_t i = 0; i < count; ++i) {
+            try { destination.push_back(decode(document_info.items[cursor++])); }
+            catch (const DecodeFailure&) { throw; }
+            catch (const std::exception& error) {
+                fail("OOF1100", child_path(document_path, cursor - 1), std::string(name), {},
+                    "Spreadsheet " + std::string(name) + " resource: " + error.what());
+            }
+        }
     };
-    read_resources(format_records, [](const LV& v) { return v; });
-    read_resources(resources.fonts, [](const LV& v) { return value_codec::decode_font(list_stream::dump_compact(v)); });
-    read_resources(resources.strings, [](const LV& v) { return value_codec::decode_localized_string(list_stream::dump_compact(v)); });
-    read_resources(resources.types, [](const LV& v) { return value_codec::decode_type_domain(list_stream::dump_compact(v)); });
-    read_resources(resources.control_types, [&](const LV& v) { return uuid_atom(v, document_path); });
-    read_resources(resources.colors, [&](const LV& v) { return decode_control_color(v, document_path); });
+    read_resources(format_records, [](const LV& v) { return v; }, "Format");
+    read_resources(resources.fonts, [](const LV& v) { return value_codec::decode_font(list_stream::dump_compact(v)); }, "Font");
+    read_resources(resources.strings, [](const LV& v) { return value_codec::decode_localized_string(list_stream::dump_compact(v)); }, "String");
+    read_resources(resources.types, [](const LV& v) { return value_codec::decode_type_domain(list_stream::dump_compact(v)); }, "ValueType");
+    read_resources(resources.control_types, [&](const LV& v) { return uuid_atom(v, document_path); }, "ControlType");
+    read_resources(resources.colors, [&](const LV& v) { return decode_control_color(v, document_path); }, "Color");
     read_resources(resources.pictures, [&](const LV& v) {
         const auto picture = decode_button_picture(v, document_path);
         if (!picture) return model::PictureRef{};
@@ -11420,11 +11515,49 @@ DecodedControl decode_spreadsheet_document_field(
         const auto asset_id = model::ObjectId{format_assets.size() + 1};
         format_assets.push_back({asset_id, "Items/" + string_atom(record.items[4].items[1], document_path) + "/Document/Picture" + std::to_string(asset_id.value()) + "/Picture." + std::string(picture_format_extension(picture->format)), picture->format, picture->bytes, picture->transparent, picture->transparent_x, picture->transparent_y, picture->uuid});
         return model::PictureRef{model::PictureAssetRef{asset_id}};
-    });
+    }, "Picture");
     const auto pictures_end = cursor;
-    cursor += 6;
-    read_resources(resources.masks, [](const LV& v) { return value_codec::decode_localized_string(list_stream::dump_compact(v)); });
-    const auto masks_end = cursor;
+    const auto take = [&]() { return at(document_info, cursor++, document_path); };
+    const bool save_view = bool_atom(take(), document_path);
+    if (save_view) fail("OOF1114", document_path, "named saved spreadsheet view", {},
+        "Spreadsheet saved view is unsupported");
+    SpreadsheetSections factory_sections;
+    const auto factory = canonical_spreadsheet_field_info(model::SpreadsheetDocumentFieldPayload{}, false, {}, &factory_sections);
+    const auto& factory_document = factory.items[11].items;
+    // Sheet.Load relocates the default view in 8.1.4; absent sections retain constructor defaults.
+    LV view_flag = raw("0");
+    LV view = factory_document[factory_sections.pictures_end + 4];
+    if (document_version == 3) { view_flag = take(); view = take(); }
+    const auto objects = take();
+    require_raw_constant(objects, "0", document_path);
+    const auto used_file_name = document_version >= 2 ? take() : string_value("");
+    if (document_version >= 4) { view_flag = take(); view = take(); }
+    view = normalize_spreadsheet_view(std::move(view), document_path + "/ViewSettings");
+    const auto indexed_objects = document_version >= 5 ? take() : list({raw("0")});
+    if (document_version >= 6)
+        read_resources(resources.masks, [](const LV& v) { return value_codec::decode_localized_string(list_stream::dump_compact(v)); }, "Mask");
+    const auto compact_mode = document_version >= 9 ? take() : raw("0");
+    const auto optional_scalar = [&](std::string_view default_value) {
+        return cursor < document_info.items.size() ? take() : raw(std::string(default_value));
+    };
+    const auto base_sheet = optional_scalar("0");
+    require_raw_constant(base_sheet, "0", document_path);
+    const auto extension_method = optional_scalar("1");
+    const auto original_sheet = optional_scalar("0");
+    require_raw_constant(original_sheet, "0", document_path);
+    const auto text_direction = optional_scalar("0");
+    const auto pictures_density = optional_scalar("0");
+    std::vector<LV> normalized_tail{raw("0"), objects, used_file_name, view_flag, view, indexed_objects,
+        raw(std::to_string(resources.masks.size()))};
+    for (const auto& mask : resources.masks)
+        normalized_tail.push_back(list_stream::parse(value_codec::encode_localized_string(mask)));
+    const auto masks_end = pictures_end + normalized_tail.size();
+    for (const auto* field : {&compact_mode, &base_sheet, &extension_method, &original_sheet, &text_direction, &pictures_density})
+        normalized_tail.push_back(*field);
+    normalized_tail.insert(normalized_tail.end(), document_info.items.begin() + static_cast<std::ptrdiff_t>(cursor), document_info.items.end());
+    document_info.items.resize(pictures_end);
+    document_info.items.insert(document_info.items.end(), normalized_tail.begin(), normalized_tail.end());
+    document_info.items[2] = raw("12");
     std::vector<model::SpreadsheetDocumentFormat> formats(1);
     for (const auto& value : format_records) formats.push_back(value_codec::decode_spreadsheet_format(value, resources));
     const auto resolve = [&](std::uint32_t index) -> const model::SpreadsheetDocumentFormat& {
@@ -11488,8 +11621,7 @@ DecodedControl decode_spreadsheet_document_field(
     if (height != derived_height) payload.height = height;
     if (width != derived_width) payload.width = width;
     const auto view_path = child_path(info_path, 14);
-    const auto& view_info = at(info, 14, info_path);
-    require_list(view_info, view_path);
+    const auto view_info = normalize_spreadsheet_view(at(info, 14, info_path), view_path);
     if (view_info.items.size() != 29 && view_info.items.size() != 30)
         fail("OOF1114", view_path, "fresh Add or normalized R1C1 default envelope", describe(view_info),
             "SpreadsheetDocumentField cannot persist nondefault view settings");
@@ -11508,6 +11640,14 @@ DecodedControl decode_spreadsheet_document_field(
         std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U},
         std::pair{"VerticalScrollBar", 16U}, std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}};
     model::PropertySet sheet_properties;
+    const bool read_only = bool_atom(info.items.at(20), child_path(info_path, 20));
+    if (read_only) sheet_properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    for (const auto& [name, slot, default_value] : std::array{
+        std::tuple{"ShowGrid", 4U, false}, std::tuple{"ShowHeaders", 5U, false},
+        std::tuple{"ShowGroups", 7U, true}, std::tuple{"BlackAndWhiteView", 10U, false}}) {
+        const bool value = bool_atom(view_info.items.at(slot), child_path(view_path, slot));
+        if (value != default_value) sheet_properties.set_explicit(model::PropertyId::from_name(name), value);
+    }
     for (const auto& [name, slot] : spreadsheet_bool_slots) {
         const bool value = bool_atom(info.items.at(slot), child_path(info_path, slot));
         if (!value) sheet_properties.set_explicit(model::PropertyId::from_name(name), false);
@@ -11538,12 +11678,40 @@ DecodedControl decode_spreadsheet_document_field(
     SpreadsheetSections expected_sections;
     const LV expected_info = canonical_spreadsheet_field_info(payload, fresh_add_default, format_assets, &expected_sections);
     LV normalized_info = info;
+    normalized_info.items[11] = document_info;
+    normalized_info.items[14] = view_info;
+    // Load applies the design ReadOnly after both Sheet and the earlier runtime copy.
+    // The final value is represented once by the control property.
+    (void)bool_atom(info.items.at(18), child_path(info_path, 18));
+    normalized_info.items[18] = expected_info.items[18];
+    normalized_info.items[20] = expected_info.items[20];
+    // Native Save mirrors the effective ReadOnly into the document view flag.
+    normalized_info.items[11].items[pictures_end + 3] =
+        expected_info.items[11].items[expected_sections.pictures_end + 3];
+    for (const auto slot : {4U, 5U, 10U})
+        normalized_info.items[14].items[slot] = expected_info.items[14].items[slot];
+    if (bool_atom(view_info.items[7], view_path) == bool_atom(view_info.items[8], view_path)) {
+        normalized_info.items[14].items[7] = expected_info.items[14].items[7];
+        normalized_info.items[14].items[8] = expected_info.items[14].items[8];
+    }
+    // MoxelLayouter saves its window rectangle separately from the form geometry.
+    // An uncreated window has zero bounds; otherwise the same Position owns both records.
+    bool empty_window = true, position_window = true;
+    for (std::size_t i = 1; i <= 4; ++i) {
+        const auto coordinate = integer_atom<std::int64_t>(info.items[i], child_path(info_path, i));
+        empty_window = empty_window && coordinate == 0;
+        position_window = position_window && coordinate ==
+            integer_atom<std::int32_t>(at(record.items[3], i, path), path);
+    }
+    if (empty_window || position_window)
+        for (std::size_t i = 1; i <= 4; ++i) normalized_info.items[i] = expected_info.items[i];
     for (const auto slot : {8U, 9U, 10U, 15U, 16U, 17U, 25U, 26U, 27U})
         normalized_info.items.at(slot) = expected_info.items.at(slot);
     if (serialization_version == 18) { normalized_info.items[31] = expected_info.items[31]; normalized_info.items[32] = expected_info.items[32]; }
     auto& normalized = normalized_info.items.at(11).items;
     const auto& expected = expected_info.items.at(11).items;
     std::vector<LV> named_projection(normalized.begin(), normalized.begin() + 15);
+    named_projection[3] = expected[3];
     named_projection[4] = expected[4]; named_projection[5] = expected[5];
     named_projection.insert(named_projection.end(), expected.begin() + 15, expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.tail));
     named_projection.insert(named_projection.end(), normalized.begin() + static_cast<std::ptrdiff_t>(tail_start), normalized.begin() + static_cast<std::ptrdiff_t>(tail_start + 25));
@@ -11552,8 +11720,31 @@ DecodedControl decode_spreadsheet_document_field(
     named_projection.insert(named_projection.end(), expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.pictures_end + 6), expected.begin() + static_cast<std::ptrdiff_t>(expected_sections.masks_end));
     named_projection.insert(named_projection.end(), normalized.begin() + static_cast<std::ptrdiff_t>(masks_end), normalized.end());
     normalized = std::move(named_projection);
-    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(expected_info))
-        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "SpreadsheetDocumentField");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(expected_info)) {
+        const auto first_difference = [&](auto&& self, const LV& actual, const LV& expected,
+            std::string current_path) -> std::string {
+            if (actual.is_list != expected.is_list) return current_path;
+            if (!actual.is_list)
+                return actual.atom_kind == expected.atom_kind && actual.atom == expected.atom ? std::string{} : current_path;
+            if (actual.items.size() != expected.items.size()) return current_path;
+            for (std::size_t i = 0; i < actual.items.size(); ++i) {
+                auto difference = self(self, actual.items[i], expected.items[i], child_path(current_path, i));
+                if (!difference.empty()) return difference;
+            }
+            return {};
+        };
+        if (normalized_info.items.size() != expected_info.items.size()) {
+            warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "SpreadsheetDocumentField");
+        } else {
+            // Report independent unrepresented sections together, without exposing their values.
+            for (std::size_t i = 0; i < normalized_info.items.size(); ++i) {
+                const auto difference = first_difference(first_difference, normalized_info.items[i],
+                    expected_info.items[i], child_path(info_path, i));
+                if (!difference.empty())
+                    warn_incomplete_profile(warnings, reconstruction_complete, raw_id, difference, "SpreadsheetDocumentField");
+            }
+        }
+    }
 
     auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -11584,9 +11775,19 @@ LV encode_spreadsheet_document_field(
         fail("OOF1122", "$", "SpreadsheetDocumentField without binding or children",
             control.name, "Control uses an unsupported storage concept");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Border", "ShowSelection", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}, "$/SpreadsheetDocumentField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Border", "ShowSelection", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag", "ReadOnly", "ShowGrid", "ShowHeaders", "ShowGroups", "BlackAndWhiteView"}, "$/SpreadsheetDocumentField");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
-    auto info = canonical_spreadsheet_field_info(std::get<model::SpreadsheetDocumentFieldPayload>(control.payload), false, document.assets());
+    SpreadsheetSections sections;
+    auto info = canonical_spreadsheet_field_info(std::get<model::SpreadsheetDocumentFieldPayload>(control.payload), false, document.assets(), &sections);
+    const auto read_only = raw(explicit_bool(control.properties(), "ReadOnly", false) ? "1" : "0");
+    info.items[18] = read_only;
+    info.items[20] = read_only;
+    info.items[11].items[sections.pictures_end + 3] = read_only;
+    for (const auto& [name, slot, default_value] : std::array{
+        std::tuple{"ShowGrid", 4U, false}, std::tuple{"ShowHeaders", 5U, false},
+        std::tuple{"ShowGroups", 7U, true}, std::tuple{"BlackAndWhiteView", 10U, false}})
+        info.items[14].items[slot] = raw(explicit_bool(control.properties(), name, default_value) ? "1" : "0");
+    info.items[14].items[8] = info.items[14].items[7];
     for (const auto& [name, slot] : std::array{
         std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U}, std::pair{"VerticalScrollBar", 16U},
         std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}}) {
@@ -11612,8 +11813,10 @@ LV encode_spreadsheet_document_field(
     }
     info.items.at(17) = encode_control_event_collection(document, control, "$/SpreadsheetDocumentField/Events");
     const auto metadata = encode_control_metadata(control, "$/" + std::string(model::metamodel::descriptor_for(control.kind()).public_name));
+    auto geometry = encode_geometry(control.position, context, IncomingAnchorLists{});
+    for (std::size_t i = 1; i <= 4; ++i) info.items[i] = geometry.items[i];
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())), info,
-        encode_geometry(control.position, context, IncomingAnchorLists{}), metadata, list({raw("0")})});
+        std::move(geometry), metadata, list({raw("0")})});
 }
 
 DecodedControl decode_input_field(

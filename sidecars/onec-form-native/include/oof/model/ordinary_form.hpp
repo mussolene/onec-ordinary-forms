@@ -1378,6 +1378,19 @@ enum class SpreadsheetDocumentFieldSerializationVersion : std::uint8_t {
     v18 = 18,
 };
 
+struct SpreadsheetLanguageInfo final {
+    std::string id;
+    std::string code;
+    std::string description;
+    friend bool operator==(const SpreadsheetLanguageInfo&, const SpreadsheetLanguageInfo&) = default;
+};
+struct SpreadsheetLanguageSettings final {
+    std::string current_language = "ru";
+    std::string default_language = "ru";
+    std::vector<SpreadsheetLanguageInfo> languages{{"ru", "Русский", "Русский"}};
+    friend bool operator==(const SpreadsheetLanguageSettings&, const SpreadsheetLanguageSettings&) = default;
+};
+
 struct SpreadsheetDocumentFieldPayload final
     : TypedControlPayload<ControlKind::spreadsheet_document_field> {
     std::vector<SpreadsheetDocumentCell> cells;
@@ -1387,6 +1400,7 @@ struct SpreadsheetDocumentFieldPayload final
     SpreadsheetDocumentFormat default_column_format;
     std::optional<std::uint32_t> height;
     std::optional<std::uint32_t> width;
+    SpreadsheetLanguageSettings language_settings;
     [[nodiscard]] const PropertyEntry* inherited_cell_property(
         const SpreadsheetDocumentCell& cell, PropertyId id) const;
     SpreadsheetDocumentFieldSerializationVersion serialization_version =

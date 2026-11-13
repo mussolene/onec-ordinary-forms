@@ -772,6 +772,11 @@
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ShowGrid" apiName="ShowGrid" russianName="ОтображатьСетку" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ShowHeaders" apiName="ShowHeaders" russianName="ОтображатьЗаголовки" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ShowGroups" apiName="ShowGroups" russianName="ОтображатьГруппировки" russianType="Булево" valueCodec="boolean"/>
+              <Property name="BlackAndWhiteView" apiName="BlackAndWhiteView" russianName="ЧерноБелыйПросмотр" russianType="Булево" valueCodec="boolean"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>
@@ -1495,6 +1500,12 @@
           <Property name="BottomMargin" apiName="BottomMargin" russianName="ОтступСнизу" russianType="" valueCodec="decimal"/>
           <Property name="HighlightMode" apiName="HighlightMode" russianName="РежимПодсветки" russianType="" valueCodec="enumeration"/>
           <Property name="ShowEditMode" apiName="ShowEditMode" russianName="ТипОтображенияРедактируемойЯчейки" russianType="" valueCodec="enumeration"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="SpreadsheetLanguageSettings" russianName="ЯзыковыеНастройкиТабличногоДокумента"><Properties>
+          <Property name="currentLanguage" russianName="ТекущийЯзык"/><Property name="defaultLanguage" russianName="ЯзыкПоУмолчанию"/><Property name="Language" russianName="Язык"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="SpreadsheetLanguageInfo" russianName="ОписаниеЯзыкаТабличногоДокумента"><Properties>
+          <Property name="id" russianName="Идентификатор"/><Property name="code" russianName="Код"/><Property name="description" russianName="Описание"/>
         </Properties></NamedConcept>
         <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/>

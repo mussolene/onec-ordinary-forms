@@ -1338,12 +1338,13 @@ void test_spreadsheet_document_schema(xmlNodePtr schema) {
     expect(schema_component(schema, "complexType", "SpreadsheetDocumentCellType") != nullptr,
         "named SpreadsheetDocument Cell type must exist");
     const auto cells = direct_children(sequence_for_type(schema, "SpreadsheetDocumentType"), "element");
-    expect(cells.size() == 5, "Spreadsheet Document must expose default, row, column and cell formats");
-    expect_element_shape(cells.at(0), "DefaultFormat", "SpreadsheetDocumentFormatType", "0", "");
-    expect_element_shape(cells.at(1), "DefaultColumnFormat", "SpreadsheetDocumentFormatType", "0", "");
-    expect_element_shape(cells.at(2), "Row", "SpreadsheetDocumentIndexedFormatType", "0", "unbounded");
-    expect_element_shape(cells.at(3), "Column", "SpreadsheetDocumentIndexedFormatType", "0", "unbounded");
-    expect_element_shape(cells.at(4), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
+    expect(cells.size() == 6, "Spreadsheet Document must expose default, row, column and cell formats");
+    expect_element_shape(cells.at(0), "LanguageSettings", "SpreadsheetLanguageSettingsType", "0", "");
+    expect_element_shape(cells.at(1), "DefaultFormat", "SpreadsheetDocumentFormatType", "0", "");
+    expect_element_shape(cells.at(2), "DefaultColumnFormat", "SpreadsheetDocumentFormatType", "0", "");
+    expect_element_shape(cells.at(3), "Row", "SpreadsheetDocumentIndexedFormatType", "0", "unbounded");
+    expect_element_shape(cells.at(4), "Column", "SpreadsheetDocumentIndexedFormatType", "0", "unbounded");
+    expect_element_shape(cells.at(5), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
     const auto formats = direct_children(sequence_for_type(schema, "SpreadsheetDocumentFormatType"), "element");
     const auto properties = oof::model::metamodel::spreadsheet_format_properties();
     expect(formats.size() == properties.size(), "Spreadsheet format schema must enumerate exact descriptor properties");

@@ -1397,7 +1397,9 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     output += R"XSD(  </xs:sequence></xs:complexType>
   <xs:complexType name="SpreadsheetDocumentIndexedFormatType"><xs:sequence><xs:element name="Format" type="SpreadsheetDocumentFormatType"/></xs:sequence><xs:attribute name="index" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
   <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:choice><xs:element name="Text" type="LocalizedTextValueType"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/><xs:element name="Control" type="SpreadsheetDocumentCellControlType" minOccurs="0"/></xs:sequence></xs:choice><xs:element name="Format" type="SpreadsheetDocumentFormatType" minOccurs="0"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
-  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="DefaultFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="DefaultColumnFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="Row" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Column" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="height" type="xs:unsignedInt"/><xs:attribute name="width" type="xs:unsignedInt"/></xs:complexType>
+  <xs:complexType name="SpreadsheetLanguageInfoType"><xs:attribute name="id" type="xs:string" use="required"/><xs:attribute name="code" type="xs:string" use="required"/><xs:attribute name="description" type="xs:string"/></xs:complexType>
+  <xs:complexType name="SpreadsheetLanguageSettingsType"><xs:sequence><xs:element name="Language" type="SpreadsheetLanguageInfoType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="currentLanguage" type="xs:string" use="required"/><xs:attribute name="defaultLanguage" type="xs:string" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="LanguageSettings" type="SpreadsheetLanguageSettingsType" minOccurs="0"/><xs:element name="DefaultFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="DefaultColumnFormat" type="SpreadsheetDocumentFormatType" minOccurs="0"/><xs:element name="Row" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Column" type="SpreadsheetDocumentIndexedFormatType" minOccurs="0" maxOccurs="unbounded"/><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence><xs:attribute name="height" type="xs:unsignedInt"/><xs:attribute name="width" type="xs:unsignedInt"/></xs:complexType>
 
 )XSD";
 
@@ -2081,6 +2083,12 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        <NamedConcept name=\"SpreadsheetDocumentFormat\" russianName=\"ФорматЯчейкиТабличногоДокумента\"><Properties>\n";
     append_palette_properties(output, model::metamodel::spreadsheet_format_properties(), "          ");
     output +=
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"SpreadsheetLanguageSettings\" russianName=\"ЯзыковыеНастройкиТабличногоДокумента\"><Properties>\n"
+        "          <Property name=\"currentLanguage\" russianName=\"ТекущийЯзык\"/><Property name=\"defaultLanguage\" russianName=\"ЯзыкПоУмолчанию\"/><Property name=\"Language\" russianName=\"Язык\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"SpreadsheetLanguageInfo\" russianName=\"ОписаниеЯзыкаТабличногоДокумента\"><Properties>\n"
+        "          <Property name=\"id\" russianName=\"Идентификатор\"/><Property name=\"code\" russianName=\"Код\"/><Property name=\"description\" russianName=\"Описание\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"SpreadsheetDocumentCellControl\" russianName=\"ЭлементУправленияЯчейкиТабличногоДокумента\"><Properties>\n"
         "          <Property name=\"ReadOnly\" russianName=\"ТолькоПросмотр\"/>\n"

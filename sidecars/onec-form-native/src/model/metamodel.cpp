@@ -886,6 +886,21 @@ void apply_proven_storage_overrides(
     };
 
     auto& spreadsheet_properties = properties[static_cast<std::size_t>(ControlKind::spreadsheet_document_field)];
+    // SpreadsheetDocumentField inherits the document API; these members are absent from its own help list.
+    for (const auto& [name, russian, default_value] : std::array{
+        std::tuple{"ReadOnly", u8"ТолькоПросмотр", "false"},
+        std::tuple{"ShowGrid", u8"ОтображатьСетку", "false"},
+        std::tuple{"ShowHeaders", u8"ОтображатьЗаголовки", "false"},
+        std::tuple{"ShowGroups", u8"ОтображатьГруппировки", "true"},
+        std::tuple{"BlackAndWhiteView", u8"ЧерноБелыйПросмотр", "false"}}) {
+        spreadsheet_properties.push_back(PropertyDescriptor{
+            PropertyId::from_name(name), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::spreadsheet_document_field,
+            static_cast<std::uint32_t>(spreadsheet_properties.size()), name, name, russian, u8"Булево",
+            ValueKind::boolean, ValueCodec::boolean, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::control_info, {DefaultKind::boolean, default_value}});
+    }
     for (const auto name : {"Enabled", "VerticalScrollBar", "HorizontalScrollBar", "EnableStartDrag", "EnableDrag"}) {
         classify_property(spreadsheet_properties, name, StorageCodec::control_info, DefaultKind::boolean, "true");
     }
