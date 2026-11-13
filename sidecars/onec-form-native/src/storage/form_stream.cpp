@@ -4634,6 +4634,8 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
     const bool has_editor = column.control.has_value();
     auto properties = canonical_table_column_properties(has_editor);
     properties.items[1] = encoded_localized(column.header);
+    properties.items[3] = encoded_localized(column.header_tool_tip);
+    properties.items[34] = encoded_localized(column.format);
     auto flags = integer_atom<std::uint32_t>(properties.items[9], std::string(path) + "/Flags");
     for (const auto& property : model::metamodel::table_column_boolean_descriptors()) {
         const bool bit = (column.*property.member) != property.inverted;
@@ -12540,12 +12542,18 @@ model::TableColumn decode_table_column(
     } else column.data_path = string_atom(body.items[2], child_path(body_path, 2));
     // Владелец пересоздает индекс колонки при загрузке формы; DataPath хранится отдельно.
     (void)integer_atom<std::int32_t>(properties.items[6], child_path(properties_path, 6));
-    try {
-        list_stream::ListInStream localized(properties.items[1]);
-        column.header = value_codec::read_localized_string(localized);
-    } catch (const std::exception& error) {
-        fail("OOF1108", child_path(properties_path, 1), "LocalizedString Header", describe(properties.items[1]), error.what());
-    }
+    const auto read_column_text = [&](std::size_t slot, std::string_view name) {
+        try {
+            list_stream::ListInStream localized(properties.items[slot]);
+            return value_codec::read_localized_string(localized);
+        } catch (const std::exception& error) {
+            fail("OOF1108", child_path(properties_path, slot), "LocalizedString " + std::string(name),
+                describe(properties.items[slot]), error.what());
+        }
+    };
+    column.header = read_column_text(1, "Header");
+    column.header_tool_tip = read_column_text(3, "HeaderToolTip");
+    column.format = read_column_text(34, "Format");
     const auto column_type = type_domain(properties.items[35], child_path(properties_path, 35));
     if (!has_editor) {
         column.control.reset();

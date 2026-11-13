@@ -1435,6 +1435,8 @@
         <NamedConcept name="TableColumn" russianName="КолонкаТабличногоПоля"><Properties>
           <Property name="Name" russianName="Имя"/><Property name="DataPath" russianName="Данные"/>
           <Property name="Header" russianName="ТекстШапки"/>
+          <Property name="HeaderToolTip" russianName="ПодсказкаВШапке"/>
+          <Property name="Format" russianName="Формат"/>
           <Property name="Width" russianName="Ширина" russianType="Число" unit="form"/><Property name="TextFont" russianName="ШрифтТекста" russianType="Шрифт"/>
           <Property name="Visible" apiName="Visible" russianName="Видимость" russianType="Булево" valueCodec="boolean"/>
           <Property name="ChangeVisible" apiName="ChangeVisible" russianName="ИзменятьВидимость" russianType="Булево" valueCodec="boolean"/>

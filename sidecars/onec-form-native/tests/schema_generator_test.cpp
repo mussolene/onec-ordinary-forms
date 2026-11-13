@@ -1302,13 +1302,15 @@ void test_table_column_editor_schema(xmlNodePtr schema, xmlSchemaPtr compiled) {
 
     xmlNodePtr column_sequence = sequence_for_type(schema, "TableColumnType");
     const auto column_fields = direct_children(column_sequence, "element");
-    expect(column_fields.size() == 3 + oof::model::metamodel::table_column_boolean_descriptors().size() +
+    expect(column_fields.size() == 5 + oof::model::metamodel::table_column_boolean_descriptors().size() +
         oof::model::metamodel::table_column_enumeration_descriptors().size(),
         "Table Column properties must follow their shared descriptor tables");
     expect_element_shape(column_fields[0], "Header", "LocalizedStringValueType", "1", "1");
-    expect_element_shape(column_fields[1], "Width", "TableColumnWidthType", "0", "1");
-    expect_element_shape(column_fields[2], "TextFont", "FontValueType", "0", "1");
-    std::size_t property_cursor = 3;
+    expect_element_shape(column_fields[1], "HeaderToolTip", "LocalizedStringValueType", "0", "1");
+    expect_element_shape(column_fields[2], "Format", "LocalizedStringValueType", "0", "1");
+    expect_element_shape(column_fields[3], "Width", "TableColumnWidthType", "0", "1");
+    expect_element_shape(column_fields[4], "TextFont", "FontValueType", "0", "1");
+    std::size_t property_cursor = 5;
     for (const auto& property : oof::model::metamodel::table_column_boolean_descriptors())
         expect_element_shape(column_fields[property_cursor++], property.name, "xs:boolean", "0", "1");
     for (const auto& property : oof::model::metamodel::table_column_enumeration_descriptors())

@@ -3351,6 +3351,10 @@ private:
                 } else if (field_name == "Header") {
                     column.header = parse_localized_string(field);
                     header_seen = true;
+                } else if (field_name == "HeaderToolTip") {
+                    column.header_tool_tip = parse_localized_string(field);
+                } else if (field_name == "Format") {
+                    column.format = parse_localized_string(field);
                 } else if (field_name == "Width") {
                     for (xmlAttrPtr attr = field->properties; attr != nullptr; attr = attr->next) {
                         const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
@@ -5909,6 +5913,10 @@ private:
                 writer_.close("Source");
             } else writer_.text("DataPath", column.data_path);
             write_localized("Header", column.header, owner);
+            if (!column.header_tool_tip.items.empty())
+                write_localized("HeaderToolTip", column.header_tool_tip, owner);
+            if (!column.format.items.empty())
+                write_localized("Format", column.format, owner);
             if (column.layout_width) {
                 const std::string width = canonical_decimal(column.layout_width->canonical, nullptr, "Width", owner);
                 if (width.front() == '-') {

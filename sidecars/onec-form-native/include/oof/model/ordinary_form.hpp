@@ -1332,6 +1332,8 @@ struct TableColumn {
     std::string data_path;
     std::optional<TableColumnSource> source;
     LocalizedStringValue header;
+    LocalizedStringValue header_tool_tip;
+    LocalizedStringValue format;
     std::optional<TableColumnControl> control = TableColumnControl{};
     // Собственный тип колонки хранится здесь только при отсутствии редактора.
     std::optional<TypeDomainPatternValue> value_type;

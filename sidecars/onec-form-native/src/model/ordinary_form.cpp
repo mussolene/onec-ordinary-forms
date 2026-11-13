@@ -4610,10 +4610,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 if (!column.source && column.header.items.empty()) {
                     invalid_table("Table Column Header must contain localized text");
                 }
-                std::set<std::string> languages;
-                for (const auto& item : column.header.items) {
-                    if (item.language.empty() || !languages.insert(item.language).second) {
-                        invalid_table("Table Column Header languages must be non-empty and unique");
+                for (const auto* localized : {&column.header, &column.header_tool_tip, &column.format}) {
+                    std::set<std::string> languages;
+                    for (const auto& item : localized->items) {
+                        if (item.language.empty() || !languages.insert(item.language).second)
+                            invalid_table("Table Column localized languages must be non-empty and unique");
                     }
                 }
                 if (column.value_type) {

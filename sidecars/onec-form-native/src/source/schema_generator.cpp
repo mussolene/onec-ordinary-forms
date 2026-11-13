@@ -1562,6 +1562,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "        </xs:choice></xs:complexType></xs:element>\n"
         "      </xs:choice>\n"
         "      <xs:element name=\"Header\" type=\"LocalizedStringValueType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"HeaderToolTip\" type=\"LocalizedStringValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"Format\" type=\"LocalizedStringValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Width\" type=\"TableColumnWidthType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"TextFont\" type=\"FontValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         ;
@@ -2090,6 +2092,8 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        <NamedConcept name=\"TableColumn\" russianName=\"КолонкаТабличногоПоля\"><Properties>\n"
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"DataPath\" russianName=\"Данные\"/>\n"
         "          <Property name=\"Header\" russianName=\"ТекстШапки\"/>\n"
+        "          <Property name=\"HeaderToolTip\" russianName=\"ПодсказкаВШапке\"/>\n"
+        "          <Property name=\"Format\" russianName=\"Формат\"/>\n"
         "          <Property name=\"Width\" russianName=\"Ширина\" russianType=\"Число\" unit=\"form\"/><Property name=\"TextFont\" russianName=\"ШрифтТекста\" russianType=\"Шрифт\"/>\n"
         ;
     for (const auto& property : model::metamodel::table_column_boolean_descriptors()) {
