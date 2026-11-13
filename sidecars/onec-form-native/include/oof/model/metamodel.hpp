@@ -350,6 +350,11 @@ inline constexpr std::array standard_menu_commands{
     StandardMenuCommandDescriptor{StandardMenuCommand::delete_item, "Delete", u8"Удалить", 89},
     StandardMenuCommandDescriptor{StandardMenuCommand::add, "Add", u8"Добавить", 94},
     StandardMenuCommandDescriptor{StandardMenuCommand::help, "Help", u8"Справка", 300},
+    StandardMenuCommandDescriptor{StandardMenuCommand::copy, "Copy", u8"Скопировать", 82},
+    StandardMenuCommandDescriptor{StandardMenuCommand::select, "Select", u8"Выбрать", 95},
+    StandardMenuCommandDescriptor{StandardMenuCommand::find_in_list, "FindInList", u8"Найти в списке", 147},
+    StandardMenuCommandDescriptor{StandardMenuCommand::write_and_close, "WriteAndClose", u8"Записать и закрыть", 141},
+    StandardMenuCommandDescriptor{StandardMenuCommand::back, "Back", u8"Назад", 320},
 };
 inline constexpr StandardMenuCommandDescriptor standard_menu_close = standard_menu_commands[0];
 

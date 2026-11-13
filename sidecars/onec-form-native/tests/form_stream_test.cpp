@@ -6959,6 +6959,57 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     expect(reparsed.ok() && rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
         "batch named XML must rebuild canonical runtime command storage");
 
+    model::Form additional_form;
+    additional_form.id = model::ObjectId{1};
+    additional_form.name = "AdditionalStandardActions";
+    for (std::uint64_t id = 2; id <= 11; ++id)
+        additional_form.children.push_back(model::ControlRef{model::ObjectId{id}});
+    additional_form.children.push_back(model::ControlRef{model::ObjectId{12}});
+    model::OrdinaryFormDocument additional_document(std::move(additional_form));
+    for (std::uint64_t id = 2; id <= 11; ++id)
+        additional_document.add_control(model::ControlNode{model::ObjectId{id},
+            "Button" + std::to_string(id), model::ButtonPayload{}});
+    model::ControlNode additional_bar{model::ObjectId{12}, "ActionBar", model::CommandBarPayload{}};
+    auto& additional_buttons = std::get<model::CommandBarPayload>(additional_bar.payload).buttons;
+    for (const auto command : {model::StandardMenuCommand::copy, model::StandardMenuCommand::select,
+             model::StandardMenuCommand::find_in_list, model::StandardMenuCommand::write_and_close,
+             model::StandardMenuCommand::back}) {
+        model::CommandBarButton item;
+        item.name = std::string(model::metamodel::find_standard_menu_command(command)->public_name);
+        item.standard_action = model::StandardMenuAction{command, {}, model::StandardMenuActionSource::form,
+            model::StandardMenuActionContext::default_context, {}};
+        additional_buttons.push_back(std::move(item));
+    }
+    additional_document.add_control(std::move(additional_bar));
+    const auto additional_validation = additional_document.validate();
+    expect(additional_validation.ok(), additional_validation.ok() ?
+        "native-confirmed standard actions must satisfy the object model" :
+        additional_validation.violations.front().message);
+    const auto additional_encoded = form_stream::encode_document(additional_document);
+    expect(additional_encoded.ok(), additional_encoded ?
+        "native-confirmed standard actions must encode through the shared registry" :
+        additional_encoded.diagnostics().front().code + ": " + additional_encoded.diagnostics().front().message);
+    if (additional_encoded) {
+        const auto additional_decoded = form_stream::decode_document(additional_encoded.value(), "AdditionalStandardActions");
+        expect(additional_decoded.ok() && additional_decoded.value().reconstruction_complete(),
+            "native-confirmed standard actions must decode completely");
+        if (additional_decoded) {
+            const auto additional_xml = source::serialize_form_xml(additional_decoded.value());
+            expect(additional_xml.ok(), "native-confirmed standard actions must serialize to named XML");
+            if (additional_xml) {
+                for (const auto name : {"Copy", "Select", "FindInList", "WriteAndClose", "Back"})
+                    expect(additional_xml.value().find(std::string("command=\"") + name + "\"") != std::string::npos,
+                        "native-confirmed action must retain its public name in XML");
+                const auto additional_parsed = source::parse_form_xml(additional_xml.value());
+                const auto additional_rebuilt = additional_parsed ? form_stream::encode_document(additional_parsed.value()) :
+                    oof::Result<list_stream::ListValue>::failure({});
+                expect(additional_rebuilt.ok() && list_stream::dump_compact(additional_rebuilt.value()) ==
+                    list_stream::dump_compact(additional_encoded.value()),
+                    "new standard action names must rebuild the original storage IDs from XML");
+            }
+        }
+    }
+
     // ControlCommandHandler keeps the explicit context independently of the command ID.
     for (const auto context : {model::StandardMenuActionContext::form, model::StandardMenuActionContext::command_bar}) {
         for (const auto source : {model::StandardMenuActionSource::form,

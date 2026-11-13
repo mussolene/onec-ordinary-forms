@@ -569,7 +569,8 @@ enum class ClientInterfaceTheme : std::uint8_t { light, dark };
 enum class CommandControlKind : std::uint8_t { from_source, button };
 enum class StandardMenuCommand : std::uint8_t {
     close, save_values, restore_values, finish_editing, sort_descending, sort_ascending,
-    move_down, move_up, change, delete_item, add, help,
+    move_down, move_up, change, delete_item, add, help, copy, select, find_in_list,
+    write_and_close, back,
 };
 enum class StandardMenuActionSource : std::uint8_t { form, all_sources, control };
 enum class StandardMenuActionContext : std::uint8_t { command_bar, default_context, form };
