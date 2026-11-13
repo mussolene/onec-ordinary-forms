@@ -16,6 +16,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -127,9 +128,14 @@ struct ResolvedBinding {
     }
 };
 
-// These standard members are verified for CatalogItem object context only.
-constexpr std::array<std::pair<std::string_view, std::int64_t>, 3> catalog_standard_members{{
+using StandardMemberDescriptor = std::pair<std::string_view, std::int64_t>;
+
+// A numeric member identity depends on the main object's form extension.
+constexpr std::array<StandardMemberDescriptor, 3> catalog_standard_members{{
     {"Code", -2}, {"Description", -3}, {"Parent", -4},
+}};
+constexpr std::array<StandardMemberDescriptor, 2> document_standard_members{{
+    {"Number", -2}, {"Date", -3},
 }};
 
 bool catalog_member_root(const model::Form& form, const model::DataPath& path) {
@@ -137,26 +143,37 @@ bool catalog_member_root(const model::Form& form, const model::DataPath& path) {
         form.main_attribute.has_value() && path.attribute == form.main_attribute;
 }
 
+bool document_member_root(const model::Form& form, const model::DataPath& path) {
+    return form.extension == model::FormExtensionKind::document &&
+        form.main_attribute.has_value() && path.attribute == form.main_attribute;
+}
+
 std::vector<MetadataMemberKey> encode_binding_members(
     const model::Form& form, const model::DataPath& path) {
     std::vector<MetadataMemberKey> keys;
     bool catalog_family = catalog_member_root(form, path);
+    bool document_family = document_member_root(form, path);
     for (std::size_t index = 0; index < path.members.size(); ++index) {
         const auto& member = path.members[index];
         if (member.uuid) {
             keys.emplace_back(*member.uuid);
             catalog_family = false;
+            document_family = false;
             continue;
         }
-        const auto standard = std::ranges::find(catalog_standard_members, member.name,
-            &decltype(catalog_standard_members)::value_type::first);
-        if (!catalog_family || standard == catalog_standard_members.end())
-            fail("OOF1123", "$/DataPath/Member", "metadata member UUID or known CatalogItem standard member",
+        const std::span<const StandardMemberDescriptor> standard_members = catalog_family
+            ? std::span<const StandardMemberDescriptor>{catalog_standard_members}
+            : document_family ? std::span<const StandardMemberDescriptor>{document_standard_members}
+                              : std::span<const StandardMemberDescriptor>{};
+        const auto standard = std::ranges::find(standard_members, member.name,
+            &StandardMemberDescriptor::first);
+        if (standard == standard_members.end())
+            fail("OOF1123", "$/DataPath/Member", "metadata member UUID or known standard member for this object",
                 member.name, "Named metadata member has no supported serialized identity");
         keys.emplace_back(standard->second);
-        if (member.name != "Parent" && index + 1 != path.members.size())
-            fail("OOF1123", "$/DataPath/Member", "terminal Code or Description member", member.name,
-                "Only Parent preserves the CatalogItem member family for further segments");
+        if (!(catalog_family && member.name == "Parent") && index + 1 != path.members.size())
+            fail("OOF1123", "$/DataPath/Member", "terminal standard member or CatalogItem.Parent", member.name,
+                "Only CatalogItem.Parent can precede another standard member");
     }
     return keys;
 }
@@ -2359,6 +2376,10 @@ bool is_single_date_time_type_domain(const model::TypeDomainPatternValue& value)
     return value.entries.size() == 1 && value.entries.front() == expected;
 }
 
+bool is_supported_input_date_type_domain(const model::TypeDomainPatternValue& value) {
+    return is_single_date_only_type_domain(value) || is_single_date_time_type_domain(value);
+}
+
 bool is_single_track_bar_type_domain(const model::TypeDomainPatternValue& value) {
     model::TypeDomainEntry expected;
     expected.term = model::TypeDomainTerm::numeric;
@@ -2533,7 +2554,7 @@ LV canonical_input_field_info(
     } else if (is_supported_input_numeric_type_domain(type)) {
         value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().numeric.length));
         value.items[2].items[0].items[15] = raw(std::to_string(type.entries.front().numeric.length == 0 ? 0 : type.entries.front().numeric.precision));
-    } else if (is_single_date_only_type_domain(type) || is_concrete_input_reference_type(type)) {
+    } else if (is_supported_input_date_type_domain(type) || is_concrete_input_reference_type(type)) {
         value.items[2].items[0].items[14] = raw("0");
     } else {
         throw std::logic_error("canonical InputField profile requires an empty, supported scalar, or concrete nominal reference TypeDomain");
@@ -11934,7 +11955,7 @@ DecodedControl decode_input_field(
         }
     }
     const bool supported_type = is_single_string_type_domain(control_type) || is_supported_input_numeric_type_domain(control_type) ||
-        is_single_date_only_type_domain(control_type) ||
+        is_supported_input_date_type_domain(control_type) ||
         ((input_extension || list_choice_mode) && is_concrete_input_reference_type(control_type));
     if ((input_extension && !is_concrete_input_reference_type(control_type)) ||
         !supported_type || (linked_attribute != nullptr && control_type != linked_attribute->required_type())) {
@@ -11972,9 +11993,10 @@ DecodedControl decode_input_field(
         fail("OOF1114", info_path, "String length matching the named ValueType", {},
             "InputField payload length differs from its named String type");
     }
-    if (is_single_date_only_type_domain(control_type) && stored_length != 0) {
-        fail("OOF1114", child_path(payload_path, 14), "zero Date-only InputField payload value",
-            std::to_string(stored_length), "Date-only InputField payload slot must be zero");
+    if (is_supported_input_date_type_domain(control_type) &&
+        (stored_length != 0 || integer_atom<std::uint32_t>(payload.items[15], child_path(payload_path, 15)) != 0)) {
+        fail("OOF1114", payload_path, "zero Date InputField payload slots 14 and 15", {},
+            "Date InputField payload qualifiers must be zero");
     }
     if (is_single_numeric_type_domain(control_type)) {
         const auto stored_precision = integer_atom<std::uint32_t>(payload.items[15], child_path(payload_path, 15));
@@ -13848,7 +13870,7 @@ LV encode_input_field(
     const bool list_choice_mode = explicit_bool(control.properties(), "ListChoiceMode", false);
     if ((input_extension && (list_choice_mode || !is_concrete_input_reference_type(*effective_type))) ||
         (!is_single_string_type_domain(*effective_type) && !is_supported_input_numeric_type_domain(*effective_type) &&
-        !is_single_date_only_type_domain(*effective_type) &&
+        !is_supported_input_date_type_domain(*effective_type) &&
         !((input_extension || list_choice_mode) && is_concrete_input_reference_type(*effective_type)))) {
         fail("OOF1122", attribute.has_value() ? "$/InputField/DataPath" : "$/InputField/ValueType",
             "supported scalar or concrete nominal reference TypeDomainPattern", {},
@@ -15386,23 +15408,29 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 }
                                 binding->type.reset();
                                 bool catalog_family = catalog_member_root(document.form(), binding->data_path);
+                                bool document_family = document_member_root(document.form(), binding->data_path);
                                 for (std::size_t index = 0; index < link.member_keys.size(); ++index) {
                                     const auto* uuid = std::get_if<model::UuidValue>(&link.member_keys[index]);
                                     std::string name;
                                     if (uuid) {
                                         if (resolved) name = resolved->members.at(index);
                                         catalog_family = false;
+                                        document_family = false;
                                     } else {
                                         const auto key = std::get<std::int64_t>(link.member_keys[index]);
-                                        const auto standard = std::ranges::find(catalog_standard_members, key,
-                                            &decltype(catalog_standard_members)::value_type::second);
-                                        if (!catalog_family || standard == catalog_standard_members.end())
-                                            fail("OOF1123", "$/2/3", "known CatalogItem standard member", "unsupported numeric member key",
+                                        const std::span<const StandardMemberDescriptor> standard_members = catalog_family
+                                            ? std::span<const StandardMemberDescriptor>{catalog_standard_members}
+                                            : document_family ? std::span<const StandardMemberDescriptor>{document_standard_members}
+                                                              : std::span<const StandardMemberDescriptor>{};
+                                        const auto standard = std::ranges::find(standard_members, key,
+                                            &StandardMemberDescriptor::second);
+                                        if (standard == standard_members.end())
+                                            fail("OOF1123", "$/2/3", "known standard member for this object", "unsupported numeric member key",
                                                 "Numeric metadata member has no supported named descriptor");
                                         name = standard->first;
-                                        if (name != "Parent" && index + 1 != link.member_keys.size())
-                                            fail("OOF1123", "$/2/3", "terminal Code or Description member", name,
-                                                "Only Parent preserves the CatalogItem member family for further segments");
+                                        if (!(catalog_family && name == "Parent") && index + 1 != link.member_keys.size())
+                                            fail("OOF1123", "$/2/3", "terminal standard member or CatalogItem.Parent", name,
+                                                "Only CatalogItem.Parent can precede another standard member");
                                     }
                                     binding->data_path.members.emplace_back(name,
                                         uuid ? std::optional<model::UuidValue>{*uuid} : std::nullopt);

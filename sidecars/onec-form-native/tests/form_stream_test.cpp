@@ -16390,7 +16390,7 @@ void test_button_label_input_field_round_trip() {
         "verified explicit TextEdit=false must encode");
 }
 
-void test_input_field_date_only_type_domain_round_trip() {
+void test_input_field_date_type_domain_round_trip() {
     const auto make_type = [](model::TypeDomainTerm term, model::DateQualifiers date = {true, false}) {
         model::TypeDomainEntry entry;
         entry.term = term;
@@ -16430,7 +16430,7 @@ void test_input_field_date_only_type_domain_round_trip() {
     nonzero_date_payload.items[1].items[2].items[2].items[1]
         .items[2].items[2].items[0].items[14] = list_stream::ListValue::raw_atom("1");
     expect_failure(form_stream::decode_document(nonzero_date_payload, "DateInput"), "OOF1114",
-        "$/1/2/2/1/2/2/0/14", "Date-only InputField reader must require payload slot 14 to be zero");
+        "$/1/2/2/1/2/2/0", "Date InputField reader must require payload slot 14 to be zero");
 
     const auto decoded = form_stream::decode_document(encoded.value(), "DateInput");
     expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ?
@@ -16470,8 +16470,34 @@ void test_input_field_date_only_type_domain_round_trip() {
                list_stream::dump_compact(encoded.value()),
         "Date-only InputField must survive public XML and native reconstruction");
 
+    const auto date_time = make_type(model::TypeDomainTerm::date, {true, true});
+    const auto date_time_encoded = form_stream::encode_document(make_document(date_time));
+    expect(date_time_encoded.ok(), date_time_encoded ? "" : date_time_encoded.diagnostics().front().message);
+    const auto& date_time_info = date_time_encoded.value().items[1].items[2].items[2].items[1].items[2];
+    const auto& date_time_payload = date_time_info.items[2].items[0];
+    expect(list_stream::dump_compact(date_time_info.items[1]) == value_codec::encode_type_domain(date_time) &&
+               date_time_payload.items[14].atom == "0" && date_time_payload.items[15].atom == "0" &&
+               list_stream::dump_compact(date_time_info.items[3]) == list_stream::dump_compact(input_info.items[3]),
+        "DateTime InputField must use the same scalar context and zero payload qualifiers as Date-only");
+    const auto date_time_decoded = form_stream::decode_document(date_time_encoded.value(), "DateTimeInput");
+    expect(date_time_decoded.ok() && date_time_decoded.value().reconstruction_complete() &&
+               date_time_decoded.value().find_attribute(model::ObjectId{3})->type == date_time,
+        "DateTime InputField must decode completely with its distinct date qualifiers");
+    const auto date_time_xml = source::serialize_form_xml(date_time_decoded.value());
+    expect(date_time_xml.ok(), date_time_xml ? "" : date_time_xml.diagnostics().front().message);
+    const auto date_time_reparsed = source::parse_form_xml(date_time_xml.value());
+    expect(date_time_reparsed.ok(), date_time_reparsed ? "" : date_time_reparsed.diagnostics().front().message);
+    const auto date_time_rebuilt = form_stream::encode_document(date_time_reparsed.value());
+    expect(date_time_rebuilt.ok() && list_stream::dump_compact(date_time_rebuilt.value()) ==
+               list_stream::dump_compact(date_time_encoded.value()),
+        "DateTime InputField must rebuild the same native stream after public XML editing");
+    auto nonzero_date_time_payload = date_time_encoded.value();
+    nonzero_date_time_payload.items[1].items[2].items[2].items[1]
+        .items[2].items[2].items[0].items[15] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(nonzero_date_time_payload, "DateTimeInput"), "OOF1114",
+        "$/1/2/2/1/2/2/0", "DateTime InputField reader must require payload slot 15 to be zero");
+
     std::vector<model::TypeDomainPatternValue> unsupported_types{
-        make_type(model::TypeDomainTerm::date, {true, true}),
         make_type(model::TypeDomainTerm::date, {false, true}),
         model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::date,
             .date = {true, false}}, model::TypeDomainEntry{.term = model::TypeDomainTerm::string,
@@ -16479,7 +16505,7 @@ void test_input_field_date_only_type_domain_round_trip() {
     };
     for (const auto& unsupported_type : unsupported_types) {
         expect_failure(form_stream::encode_document(make_document(unsupported_type)), "OOF1122",
-            "$/InputField/DataPath", "InputField must reject DateTime, time-only, and mixed domains");
+            "$/InputField/DataPath", "InputField must reject time-only and mixed domains");
 
         auto unsupported_stream = encoded.value();
         const auto serialized_type = list_stream::parse(value_codec::encode_type_domain(unsupported_type));
@@ -18627,7 +18653,6 @@ void test_canonical_unbound_input_fields_round_trip() {
         "a local type must not override a bound Attribute type");
     for (const auto& unsupported : {model::TypeDomainPatternValue{},
             model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::boolean}}},
-            model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::date, .date = {true, true}}}},
             model::TypeDomainPatternValue{{make_type(0).entries.front(), make_type(1).entries.front()}}}) {
         expect(!form_stream::encode_document(make_standalone(unsupported)),
             "unbound InputField must retain the existing supported-domain boundary");
@@ -27189,6 +27214,7 @@ void test_document_form_extension_named_round_trip_and_guards() {
         else if (kind == "ListBox") prefix += "<DataPath attributeId=\"31\"/>";
         prefix += "<Position/></" + kind + ">";
     }
+    prefix += R"XML(<InputField id="14" name="Number"><DataPath attributeId="0"><Member name="Number"><TypeDomain><Entry term="string" length="11"/></TypeDomain></Member></DataPath><Position/></InputField><InputField id="15" name="Date"><DataPath attributeId="0"><Member name="Date"><TypeDomain><Entry term="date" date="true" time="true"/></TypeDomain></Member></DataPath><Position/></InputField>)XML";
     prefix += "</ChildItems></Form>";
 
     model::OrdinaryFormDocument::ObjectKey form_owner{model::ObjectCategory::form, model::ObjectId{1}};
@@ -27210,14 +27236,31 @@ void test_document_form_extension_named_round_trip_and_guards() {
             std::to_string(sample.autonumeration_ordinal) + "}}";
         expect(list_stream::dump_compact(encoded.value().items[3]) == expected,
             "DocumentFormExtension must write its exact current version, event table, boolean, and library ordinals");
+        const auto links = form_stream::decode_attributes(encoded.value().items[2]);
+        expect(links.ok(), links ? "" : links.diagnostics().front().message);
+        bool number_key = false, date_key = false;
+        for (const auto& link : links.value().links) {
+            if (link.control_id == 14) number_key = link.member_keys == std::vector<oof::MetadataMemberKey>{std::int64_t{-2}};
+            if (link.control_id == 15) date_key = link.member_keys == std::vector<oof::MetadataMemberKey>{std::int64_t{-3}};
+        }
+        expect(number_key && date_key, "DocumentObject Number and Date must use their native numeric member identities");
         const auto decoded = form_stream::decode_document(encoded.value(), "Document");
         expect(decoded.ok() && decoded.value().reconstruction_complete() &&
                    decoded.value().form().extension == model::FormExtensionKind::document &&
                    decoded.value().form().main_attribute.id() == model::ObjectId{0} &&
-                   decoded.value().collections().controls.size() == kinds.size() &&
+                   decoded.value().collections().controls.size() == kinds.size() + 2 &&
                    decoded.value().find_attribute(model::ObjectId{30}) != nullptr &&
                    decoded.value().find_attribute(model::ObjectId{31}) != nullptr,
             "DocumentFormExtension must decode with its concrete MainAttribute, attributes, DataPaths, and controls");
+        for (const auto& [id, name] : std::array{
+                 std::pair{model::ObjectId{14}, std::string_view{"Number"}},
+                 std::pair{model::ObjectId{15}, std::string_view{"Date"}}}) {
+            const auto* control = decoded.value().find_control(id);
+            expect(control && control->data_path && control->data_path->attribute == model::AttributeRef{model::ObjectId{0}} &&
+                       control->data_path->members.size() == 1 && control->data_path->members.front().name == name &&
+                       !control->data_path->members.front().uuid,
+                "DocumentObject standard members must decode as named bindings on the main Attribute");
+        }
         const std::array expected_properties{
             std::pair<std::string_view, model::PropertyValue>{"RepostOnWrite", sample.repost},
             std::pair<std::string_view, model::PropertyValue>{"UsePostingMode", model::EnumerationValue{"PostingModeUse", std::string(sample.posting)}},
@@ -27245,6 +27288,24 @@ void test_document_form_extension_named_round_trip_and_guards() {
     expect(base.ok(), base ? "" : base.diagnostics().front().message);
     const auto current = form_stream::encode_document(base.value());
     expect(current.ok(), current ? "" : current.diagnostics().front().message);
+    auto wrong_family = base.value();
+    auto* number = const_cast<model::ControlNode*>(wrong_family.find_control(model::ObjectId{14}));
+    number->data_path->members.front().name = "Code";
+    expect_failure(form_stream::encode_document(wrong_family), "OOF1123", "$/DataPath/Member",
+        "CatalogItem.Code must not be accepted as a DocumentObject standard member");
+    auto other_root = base.value();
+    other_root.add_attribute(model::Attribute{model::ObjectId{40}, "OtherObject",
+        other_root.find_attribute(model::ObjectId{0})->type});
+    number = const_cast<model::ControlNode*>(other_root.find_control(model::ObjectId{14}));
+    number->data_path->attribute = model::AttributeRef{model::ObjectId{40}};
+    expect_failure(form_stream::encode_document(other_root), "OOF1123", "$/DataPath/Member",
+        "DocumentObject numeric members are valid only below its main Attribute");
+    auto unknown_number = current.value();
+    for (auto& row : unknown_number.items[2].items[3].items)
+        if (row.is_list && row.items.size() == 2 && row.items[0].atom == "14")
+            row.items[1].items[2] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("-5")});
+    expect_failure(form_stream::decode_document(unknown_number, "DocumentUnknownMember"), "OOF1123", "$/2/3",
+        "unknown numeric DocumentObject members must be rejected");
     constexpr std::array historical{
         std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{0,{0}}}"},
         std::string_view{"{4b7f5926-3927-48c8-a955-c1b03658f9c4,1,{1,{0},0}}"},
@@ -28169,7 +28230,7 @@ int main() {
         test_progress_data_path_mixed_with_existing_links();
         test_calendar_track_bar_optional_data_path_links();
         test_button_label_input_field_round_trip();
-        test_input_field_date_only_type_domain_round_trip();
+        test_input_field_date_type_domain_round_trip();
         test_input_field_numeric_type_domain_round_trip();
         test_input_field_typed_bounds();
         test_shared_recursive_typed_values();
