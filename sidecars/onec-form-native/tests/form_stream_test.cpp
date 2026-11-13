@@ -17975,6 +17975,14 @@ void test_spreadsheet_format_owners_and_assets() {
     const std::array<unsigned, 12> versions{0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12};
     for (unsigned i = 0; i < versions.size(); ++i) {
         auto* record = const_cast<list_stream::ListValue*>(find_control_record(legacy_stream.value(), i + 2));
+        expect(record->items[2].items[14].items[4].atom == record->items[2].items[21].atom,
+            "all twelve spreadsheet fields must capture ShowGrid consistently in the owner and outer view");
+        expect(record->items[2].items[14].items[5].atom == record->items[2].items[22].atom &&
+            record->items[2].items[14].items[10].atom == record->items[2].items[24].atom,
+            "all twelve spreadsheet fields must capture headers and black-white view from their design owners");
+        expect(record->items[2].items[14].items[7].atom == record->items[2].items[23].atom &&
+            record->items[2].items[14].items[8].atom == record->items[2].items[23].atom,
+            "all twelve spreadsheet fields must capture both group directions from their design owner");
         for (std::size_t j = 1; j <= 4; ++j)
             expect(record->items[2].items[j].atom == record->items[3].items[j].atom,
                 "spreadsheet window bounds must be rebuilt from the named Position");
@@ -17982,6 +17990,10 @@ void test_spreadsheet_format_owners_and_assets() {
         if (i % 2 == 0)
             for (std::size_t j = 1; j <= 4; ++j) record->items[2].items[j] = list_stream::ListValue::raw_atom("0");
         downgrade_view(record->items[2].items[14], i % 4);
+        if (i == 11) {
+            record->items[2].items[14].items[7] = list_stream::ListValue::raw_atom("0");
+            record->items[2].items[14].items[8] = list_stream::ListValue::raw_atom("1");
+        }
         // Older MoxelLangSettings omits the inactive override flag and may retain an ignored alias.
         if (i % 3 == 0) {
             record->items[2].items[11].items[3].items.pop_back();

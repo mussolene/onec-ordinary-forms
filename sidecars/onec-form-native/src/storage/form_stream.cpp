@@ -11642,12 +11642,14 @@ DecodedControl decode_spreadsheet_document_field(
     model::PropertySet sheet_properties;
     const bool read_only = bool_atom(info.items.at(20), child_path(info_path, 20));
     if (read_only) sheet_properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
-    for (const auto& [name, slot, default_value] : std::array{
-        std::tuple{"ShowGrid", 4U, false}, std::tuple{"ShowHeaders", 5U, false},
-        std::tuple{"ShowGroups", 7U, true}, std::tuple{"BlackAndWhiteView", 10U, false}}) {
-        const bool value = bool_atom(view_info.items.at(slot), child_path(view_path, slot));
-        if (value != default_value) sheet_properties.set_explicit(model::PropertyId::from_name(name), value);
-    }
+    const bool show_grid = bool_atom(info.items.at(21), child_path(info_path, 21));
+    if (show_grid) sheet_properties.set_explicit(model::PropertyId::from_name("ShowGrid"), true);
+    const bool show_headers = bool_atom(info.items.at(22), child_path(info_path, 22));
+    if (show_headers) sheet_properties.set_explicit(model::PropertyId::from_name("ShowHeaders"), true);
+    const bool show_groups = bool_atom(info.items.at(23), child_path(info_path, 23));
+    if (!show_groups) sheet_properties.set_explicit(model::PropertyId::from_name("ShowGroups"), false);
+    const bool black_and_white = bool_atom(info.items.at(24), child_path(info_path, 24));
+    if (black_and_white) sheet_properties.set_explicit(model::PropertyId::from_name("BlackAndWhiteView"), true);
     for (const auto& [name, slot] : spreadsheet_bool_slots) {
         const bool value = bool_atom(info.items.at(slot), child_path(info_path, slot));
         if (!value) sheet_properties.set_explicit(model::PropertyId::from_name(name), false);
@@ -11685,15 +11687,16 @@ DecodedControl decode_spreadsheet_document_field(
     (void)bool_atom(info.items.at(18), child_path(info_path, 18));
     normalized_info.items[18] = expected_info.items[18];
     normalized_info.items[20] = expected_info.items[20];
+    normalized_info.items[21] = expected_info.items[21];
+    normalized_info.items[22] = expected_info.items[22];
+    normalized_info.items[23] = expected_info.items[23];
+    normalized_info.items[24] = expected_info.items[24];
     // Native Save mirrors the effective ReadOnly into the document view flag.
     normalized_info.items[11].items[pictures_end + 3] =
         expected_info.items[11].items[expected_sections.pictures_end + 3];
-    for (const auto slot : {4U, 5U, 10U})
+    // Load overwrites these runtime flags from the design owner; Save captures them into ViewSettings.
+    for (const auto slot : {4U, 5U, 7U, 8U, 10U})
         normalized_info.items[14].items[slot] = expected_info.items[14].items[slot];
-    if (bool_atom(view_info.items[7], view_path) == bool_atom(view_info.items[8], view_path)) {
-        normalized_info.items[14].items[7] = expected_info.items[14].items[7];
-        normalized_info.items[14].items[8] = expected_info.items[14].items[8];
-    }
     // MoxelLayouter saves its window rectangle separately from the form geometry.
     // An uncreated window has zero bounds; otherwise the same Position owns both records.
     bool empty_window = true, position_window = true;
@@ -11782,12 +11785,16 @@ LV encode_spreadsheet_document_field(
     const auto read_only = raw(explicit_bool(control.properties(), "ReadOnly", false) ? "1" : "0");
     info.items[18] = read_only;
     info.items[20] = read_only;
+    info.items[21] = raw(explicit_bool(control.properties(), "ShowGrid", false) ? "1" : "0");
+    info.items[22] = raw(explicit_bool(control.properties(), "ShowHeaders", false) ? "1" : "0");
+    info.items[23] = raw(explicit_bool(control.properties(), "ShowGroups", true) ? "1" : "0");
+    info.items[24] = raw(explicit_bool(control.properties(), "BlackAndWhiteView", false) ? "1" : "0");
     info.items[11].items[sections.pictures_end + 3] = read_only;
-    for (const auto& [name, slot, default_value] : std::array{
-        std::tuple{"ShowGrid", 4U, false}, std::tuple{"ShowHeaders", 5U, false},
-        std::tuple{"ShowGroups", 7U, true}, std::tuple{"BlackAndWhiteView", 10U, false}})
-        info.items[14].items[slot] = raw(explicit_bool(control.properties(), name, default_value) ? "1" : "0");
-    info.items[14].items[8] = info.items[14].items[7];
+    info.items[14].items[4] = info.items[21];
+    info.items[14].items[5] = info.items[22];
+    info.items[14].items[7] = info.items[23];
+    info.items[14].items[8] = info.items[23];
+    info.items[14].items[10] = info.items[24];
     for (const auto& [name, slot] : std::array{
         std::pair{"Enabled", 8U}, std::pair{"HorizontalScrollBar", 15U}, std::pair{"VerticalScrollBar", 16U},
         std::pair{"EnableStartDrag", 25U}, std::pair{"EnableDrag", 26U}}) {
