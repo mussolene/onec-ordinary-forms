@@ -4434,9 +4434,13 @@ void test_standard_save_restore_action_xml_contract() {
             std::get<model::CommandBarPayload>(explicit_source.value().find_control(model::ObjectId{42})->payload)
                 .buttons.front().standard_action->source_control.id().value() == 42,
             "explicit command context and source references must remain independent");
-        auto invalid_source = invalid_context;
-        invalid_source.replace(invalid_source.find("source=\"Form\""), std::string("source=\"Form\"").size(), "source=\"AllSources\"");
-        expect(!source::parse_form_xml(invalid_source), "runtime standard command must reject non-Form source");
+        auto default_source = invalid_context;
+        default_source.replace(default_source.find("source=\"Form\""), std::string("source=\"Form\"").size(), "source=\"AllSources\"");
+        const auto default_all_sources = source::parse_form_xml(default_source);
+        expect(default_all_sources.ok() &&
+            std::get<model::CommandBarPayload>(default_all_sources.value().find_control(model::ObjectId{42})->payload)
+                .buttons.front().standard_action->source == model::StandardMenuActionSource::all_sources,
+            "runtime standard command must retain AllSources in Default context");
     }
 }
 

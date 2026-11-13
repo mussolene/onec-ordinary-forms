@@ -2431,10 +2431,10 @@ void test_standard_menu_command_registry_and_runtime_contracts() {
 
     invalid = OrdinaryFormDocument(document.form());
     invalid_bar = *document.find_control(ObjectId{42});
-    auto& restore_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons.back().standard_action;
+    auto& restore_action = *std::get<CommandBarPayload>(invalid_bar.payload).buttons[1].standard_action;
     restore_action.source = StandardMenuActionSource::all_sources;
     invalid.add_control(std::move(invalid_bar));
-    expect(invalid.validate().has(InvariantCode::invalid_property), "runtime standard command must reject non-Form sources");
+    expect(invalid.validate().ok(), "Default standard command must retain the named AllSources source");
 }
 
 void test_standard_picture_descriptor_catalog() {

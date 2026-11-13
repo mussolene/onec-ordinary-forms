@@ -6730,6 +6730,24 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     const auto decoded = form_stream::decode_document(encoded.value(), "RuntimeStandardActions");
     expect(decoded.ok() && decoded.value().reconstruction_complete(),
         "canonical standard command families must decode without losing completeness");
+    auto all_sources_stream = encoded.value();
+    auto* action_owner = const_cast<list_stream::ListValue*>(find_control_record(all_sources_stream, 100));
+    expect(action_owner != nullptr, "thirty-control batch must contain its first CommandBar");
+    action_owner->items[2].items[1].items[7].items[5].items[4].items[1] =
+        list_stream::ListValue::raw_atom("0");
+    const auto all_sources = form_stream::decode_document(all_sources_stream, "RuntimeStandardActions");
+    expect(all_sources.ok() && all_sources.value().reconstruction_complete(),
+        "Default standard action with AllSources must decode in the thirty-control batch");
+    const auto all_sources_xml = source::serialize_form_xml(all_sources.value());
+    expect(all_sources_xml.ok() && all_sources_xml.value().find(
+        "command=\"SaveValues\" context=\"Default\" source=\"AllSources\"") != std::string::npos,
+        "AllSources must be explicit in named XML");
+    const auto all_sources_parsed = source::parse_form_xml(all_sources_xml.value());
+    const auto all_sources_rebuilt = all_sources_parsed ? form_stream::encode_document(all_sources_parsed.value()) :
+        oof::Result<list_stream::ListValue>::failure({});
+    expect(all_sources_parsed.ok() && all_sources_rebuilt.ok() &&
+        list_stream::dump_compact(all_sources_rebuilt.value()) == list_stream::dump_compact(all_sources_stream),
+        "Default AllSources standard action must rebuild from named XML");
     const auto xml = source::serialize_form_xml(decoded.value());
     expect(xml.ok() && xml.value().find("command=\"SaveValues\" context=\"Default\" source=\"Form\"") != std::string::npos &&
         xml.value().find("command=\"RestoreValues\" context=\"Default\" source=\"Form\"") != std::string::npos &&
@@ -6852,8 +6870,8 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     };
     rejects([](auto& payload) { payload.items.at(3) = list_stream::ListValue::raw_atom("145"); },
         "unknown standard command ID must reject");
-    rejects([](auto& payload) { payload.items.at(1) = list_stream::ListValue::raw_atom("0"); },
-        "runtime standard commands must reject non-Form source IDs");
+    rejects([](auto& payload) { payload.items.at(1) = list_stream::ListValue::raw_atom("2147483648"); },
+        "runtime standard commands must reject source IDs outside the named domain");
     rejects([](auto& payload) { payload.items.at(4).items.at(1) = list_stream::ListValue::raw_atom("1"); },
         "runtime standard commands must reject unknown context kinds");
     rejects([](auto& payload) { payload.items.at(4).items.at(2) = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); },

@@ -273,6 +273,87 @@ void test_twelve_button_platform85_normalization() {
         "twelve Button identities, named properties and module must survive the independent rebuild");
 }
 
+void test_generated_submenu_platform85_normalization() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "GeneratedSubmenu";
+    for (std::uint64_t id = 2; id < 14; ++id)
+        form.children.push_back(model::ControlRef{model::ObjectId{id}});
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode command_bar{model::ObjectId{2}, "Tools", model::CommandBarPayload{}};
+    model::CommandBarButton submenu;
+    submenu.name = "Actions";
+    submenu.type = model::CommandBarButtonKind::submenu;
+    model::CommandBarButton action;
+    action.name = "Run";
+    action.action = model::CommandBarAction{"RunClick", "", {}, {}, {}};
+    submenu.buttons.push_back(std::move(action));
+    std::get<model::CommandBarPayload>(command_bar.payload).buttons.push_back(std::move(submenu));
+    document.add_control(std::move(command_bar));
+    for (std::uint64_t id = 3; id < 14; ++id) {
+        model::ControlNode button{model::ObjectId{id}, "Button" + std::to_string(id), model::ButtonPayload{}};
+        button.position.left.set(static_cast<std::int32_t>(id * 10));
+        document.add_control(std::move(button));
+    }
+    document.set_module(model::FormModule{"procedure RunClick()\nendprocedure\n"});
+    const auto original = oof::save_form_bin(document);
+    expect(original.ok(), "twelve-control menu baseline must build");
+    auto container = formbin::parse_container(original.value());
+    auto form_file = std::find_if(container.files.begin(), container.files.end(),
+        [](const auto& file) { return file.name == "form"; });
+    expect(form_file != container.files.end() && form_file->payload.size() >= 3,
+        "twelve-control form stream must exist");
+    const std::string text(form_file->payload.begin() + 3, form_file->payload.end());
+    auto payload = oof::storage::list_stream::parse(text);
+    auto& records = payload.items[1].items[2].items[2].items;
+    expect(records.size() == 13, "baseline must contain twelve control records");
+    auto& menu = records[1].items[2].items[1].items[7];
+    const auto action_count = static_cast<std::size_t>(std::stoul(menu.items[4].atom));
+    expect(action_count == 2 && menu.items[5 + action_count].atom == "2",
+        "menu must contain a submenu action, nested action and two collections");
+    auto& root_group = menu.items[6 + action_count];
+    auto& nested_group = menu.items[7 + action_count];
+    const auto action_guid = root_group.items[5].atom;
+    auto record = std::find_if(menu.items.begin() + 5, menu.items.begin() + 5 + action_count,
+        [&](const auto& value) { return value.items[1].atom == action_guid; });
+    expect(record != menu.items.begin() + 5 + action_count, "submenu action must be present");
+    record->items[3] = oof::storage::list_stream::ListValue::raw_atom(
+        "c93a51ed-b2d1-47f1-948d-38373f8710af");
+    record->items[4] = oof::storage::list_stream::parse(
+        "{4,b78f2e80-ec68-11d4-9dcf-0050bae2bc79,55,"
+        "{1,99,b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,1},0,0}");
+    nested_group.items[1] = oof::storage::list_stream::ListValue::raw_atom(
+        "b78f2e80-ec68-11d4-9dcf-0050bae2bc79");
+    nested_group.items[2] = oof::storage::list_stream::ListValue::raw_atom("55");
+    root_group.items[6].items[4] = oof::storage::list_stream::parse(
+        "{1,1,{\"ru\",\"Действия\"}}");
+    root_group.items[6].items[5] = oof::storage::list_stream::ListValue::raw_atom("0");
+    root_group.items[6].items[8] = oof::storage::list_stream::ListValue::raw_atom("99");
+    const auto changed = oof::storage::list_stream::dump_listout(payload);
+    form_file->payload.assign({0xef, 0xbb, 0xbf});
+    form_file->payload.insert(form_file->payload.end(), changed.begin(), changed.end());
+
+    const auto loaded = oof::load_form_bin(formbin::serialize_container(container), "GeneratedSubmenu");
+    expect(loaded.ok() && loaded.value().reconstruction_complete() &&
+        loaded.value().collections().controls.size() == 12,
+        "generated submenu source must normalize with all twelve controls");
+    const auto xml = source::serialize_form_xml(loaded.value());
+    expect(xml.ok() && xml.value().find("<Text>Действия</Text>") != std::string::npos &&
+        xml.value().find("<CommandBarButton name=\"Run\" type=\"Action\"") != std::string::npos,
+        "named XML must retain submenu text and nested action");
+    auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "generated submenu XML must parse without source Form.bin");
+    parsed.value().set_module(loaded.value().module());
+    const auto rebuilt = oof::save_form_bin(parsed.value());
+    expect(rebuilt.ok(), "generated submenu XML must build independently");
+    const auto readback = oof::load_form_bin(rebuilt.value(), "GeneratedSubmenu");
+    expect(readback.ok(), "rebuilt generated submenu Form.bin must reload");
+    const auto readback_xml = source::serialize_form_xml(readback.value());
+    expect(readback_xml.ok() && readback_xml.value() == xml.value() &&
+        readback.value().module().text == document.module().text,
+        "generated submenu must survive independent named rebuild with module");
+}
+
 void test_product_composition_roundtrip() {
     const auto document = button_document();
     const auto encoded = oof::save_form_bin(document);
@@ -414,6 +495,7 @@ void test_module_utf8_validation() {
 int main() {
     try {
         test_twelve_button_platform85_normalization();
+        test_generated_submenu_platform85_normalization();
         test_product_composition_roundtrip();
         test_label_pictures_roundtrip();
         test_button_base_state_normalization();

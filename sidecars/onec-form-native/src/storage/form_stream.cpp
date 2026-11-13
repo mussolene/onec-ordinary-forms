@@ -5396,6 +5396,7 @@ LV encode_named_control_picture(
 constexpr std::string_view menu_owner_guid = "31946946-0a9b-40a2-95cf-82f200778341";
 constexpr std::string_view menu_action_guid = "e1692cc2-605b-4535-84dd-28440238746c";
 constexpr std::string_view menu_reference_guid = "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6";
+constexpr std::string_view generated_submenu_reference_guid = "c93a51ed-b2d1-47f1-948d-38373f8710af";
 
 // frame.so stores this default-context GUID followed by INT32_MAX in .rodata.
 constexpr std::string_view standard_menu_default_context_marker = "357c6a54-357d-425d-a2bd-22f4f6e86c87";
@@ -5405,12 +5406,25 @@ LV encode_standard_menu_action(const model::StandardMenuAction& action,
     const auto* descriptor = model::metamodel::find_standard_menu_command(action.command);
     if (descriptor == nullptr)
         fail("OOF1122", std::string(path), "known standard menu command", "unknown", "Standard command is unsupported");
+    std::uint32_t source;
+    switch (action.source) {
+        case model::StandardMenuActionSource::form: source = std::numeric_limits<std::uint32_t>::max(); break;
+        case model::StandardMenuActionSource::all_sources: source = 0; break;
+        case model::StandardMenuActionSource::control: {
+            const auto id = action.source_control.id().value();
+            if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) ||
+                !document.find_control(action.source_control.id()))
+                fail("OOF1123", std::string(path), "positive int32 control reference", "missing or invalid", "Standard command source is invalid");
+            source = static_cast<std::uint32_t>(id);
+            break;
+        }
+        default: fail("OOF1122", std::string(path), "Form, AllSources, or Control", "unknown", "Standard command source is unsupported");
+    }
     if (action.command != model::StandardMenuCommand::close &&
         action.context == model::StandardMenuActionContext::default_context) {
-        if (action.command_bar.id().value() != 0 || action.source != model::StandardMenuActionSource::form ||
-            action.source_control.id().value() != 0)
-            fail("OOF1123", std::string(path), "Default context and Form source", "inconsistent", "Standard command contract is invalid");
-        return list({raw("6"), raw(std::to_string(std::numeric_limits<std::uint32_t>::max())),
+        if (action.command_bar.id().value() != 0)
+            fail("OOF1123", std::string(path), "Default context without CommandBar reference", "commandBarId", "Standard command context is invalid");
+        return list({raw("6"), raw(std::to_string(source)),
             raw(std::string(null_uuid)), raw(std::to_string(descriptor->storage_id)),
             list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)), raw("4"), raw("1")}),
             raw("0"), raw("1")});
@@ -5438,20 +5452,6 @@ LV encode_standard_menu_action(const model::StandardMenuAction& action,
         }
         default: fail("OOF1122", std::string(path), "Default or CommandBar", "unknown", "Standard command context is unsupported");
     }
-    std::uint32_t source;
-    switch (action.source) {
-        case model::StandardMenuActionSource::form: source = std::numeric_limits<std::uint32_t>::max(); break;
-        case model::StandardMenuActionSource::all_sources: source = 0; break;
-        case model::StandardMenuActionSource::control: {
-            const auto id = action.source_control.id().value();
-            if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) ||
-                !document.find_control(action.source_control.id()))
-                fail("OOF1123", std::string(path), "positive int32 control reference", "missing or invalid", "Standard command source is invalid");
-            source = static_cast<std::uint32_t>(id);
-            break;
-        }
-        default: fail("OOF1122", std::string(path), "Form, AllSources, or Control", "unknown", "Standard command source is unsupported");
-    }
     return list({raw("6"), raw(std::to_string(source)), raw(std::string(null_uuid)), raw(std::to_string(descriptor->storage_id)),
         std::move(context), raw("0"), raw("1")});
 }
@@ -5476,9 +5476,14 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
     require_raw_constant(value.items[6], "1", child_path(path, 6));
     model::StandardMenuAction action;
     action.command = descriptor->kind;
+    if (source == std::numeric_limits<std::uint32_t>::max()) action.source = model::StandardMenuActionSource::form;
+    else if (source == 0) action.source = model::StandardMenuActionSource::all_sources;
+    else if (source <= static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
+        action.source = model::StandardMenuActionSource::control;
+        action.source_control = model::ControlRef{model::ObjectId{source}};
+    } else fail("OOF1114", child_path(path, 1), "Form, AllSources, or positive int32 control reference", std::to_string(source), "Standard command source is unsupported");
     if (descriptor->kind != model::StandardMenuCommand::close &&
         raw_atom(context.items[4], child_path(context_path, 4)) != "0") {
-        require_raw_constant(value.items[1], std::to_string(std::numeric_limits<std::uint32_t>::max()), child_path(path, 1));
         require_raw_constant(context.items[1], "99", child_path(context_path, 1));
         require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
         const auto target = raw_atom(context.items[3], child_path(context_path, 3));
@@ -5490,7 +5495,6 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
             fail("OOF1123", context_path, "canonical Default factory tuple", describe(context), "Standard command context is unsupported");
         save_values_alias = save_alias;
         action.context = model::StandardMenuActionContext::default_context;
-        action.source = model::StandardMenuActionSource::form;
         return action;
     }
     require_raw_constant(context.items[4], "0", child_path(context_path, 4));
@@ -5515,12 +5519,6 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
             action.command_bar = model::ControlRef{model::ObjectId{context_id}};
         }
     } else fail("OOF1114", child_path(context_path, 1), "Default or CommandBar context", std::to_string(kind), "Standard command context is unsupported");
-    if (source == std::numeric_limits<std::uint32_t>::max()) action.source = model::StandardMenuActionSource::form;
-    else if (source == 0) action.source = model::StandardMenuActionSource::all_sources;
-    else if (source <= static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
-        action.source = model::StandardMenuActionSource::control;
-        action.source_control = model::ControlRef{model::ObjectId{source}};
-    } else fail("OOF1114", child_path(path, 1), "Form, AllSources, or positive int32 control reference", std::to_string(source), "Standard command source is unsupported");
     return action;
 }
 
@@ -5939,10 +5937,13 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     "Inactive Separator Representation is normalized to the named model default."});
                 normalized.items[10] = raw("0");
             }
-            normalized.items[8] = raw("1e2");
             if (!text_present) normalized.items[4] = encoded_localized(std::string_view{});
-            if (raw_atom(props.items[8], path) != "1e2" && raw_atom(props.items[8], path) != "100")
+            const auto stored_scale = raw_atom(props.items[8], child_path(path, 8));
+            if (stored_scale == "99")
+                warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 8), "MenuScale");
+            else if (stored_scale != "1e2" && stored_scale != "100")
                 fail("OOF1114", std::string(path), "scale 100", describe(props.items[8]), "Menu scale is unsupported");
+            normalized.items[8] = raw("1e2");
             const auto& action_record = actions.at(guid);
             const auto& action = *action_record.value;
             const auto& action_path = action_record.path;
@@ -5969,25 +5970,51 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
                 }
             } else {
-                require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
-                if (type == 1) {
+                const auto action_kind = raw_atom(action.items[3], child_path(action_path, 3));
+                if (type == 1 && action_kind == generated_submenu_reference_guid) {
+                    const auto& target = action.items[4];
+                    const auto target_path = child_path(action_path, 4);
+                    require_arity(target, 6, target_path);
+                    require_raw_constant(target.items[0], "4", child_path(target_path, 0));
+                    target_marker = uuid_atom(target.items[1], child_path(target_path, 1)).canonical;
+                    target_id = integer_atom<std::uint64_t>(target.items[2], child_path(target_path, 2));
+                    require_exact(target.items[3],
+                        list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)), raw("4"), raw("1")}),
+                        child_path(target_path, 3), "Generated submenu context is unsupported");
+                    require_raw_constant(target.items[4], "0", child_path(target_path, 4));
+                    require_raw_constant(target.items[5], "0", child_path(target_path, 5));
+                    if (target_marker != command_bar_root_marker || target_id == 0)
+                        fail("OOF1114", target_path, "generated CommandBar submenu collection", {},
+                            "Generated submenu target is unsupported");
+                    warn_incomplete_profile(warnings, reconstruction_complete, id, target_path, "GeneratedSubmenuReference");
+                } else if (type == 1) {
+                    require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
                     const auto& target = action.items[4];
                     require_arity(target, 3, child_path(action_path, 4));
                     require_raw_constant(target.items[0], "1", child_path(action_path, 4));
                     target_marker = uuid_atom(target.items[1], child_path(action_path, 4)).canonical;
                     target_id = integer_atom<std::uint64_t>(target.items[2], child_path(action_path, 4));
-                } else require_exact(action.items[4],
-                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
-                    child_path(action_path, 4), "Menu action target is unsupported");
+                } else {
+                    require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
+                    require_exact(action.items[4],
+                        parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
+                        child_path(action_path, 4), "Menu action target is unsupported");
+                }
             }
             // У действия с обработчиком подпись вычисляется независимо от этого
             // значения. У подменю переводы могут влиять на отображаемый Text.
             if (!text_present && !entry.action && entry.type != model::CommandBarButtonKind::separator &&
-                (automatic_text.items.size() > 1 ||
-                 (!automatic_text.items.empty() &&
-                  (automatic_text.items.front().language != "#" || automatic_text.items.front().text.empty())))) {
-                fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
-                    describe(props.items[4]), "Automatic button Text needs a named localized representation for this action kind");
+                !automatic_text.items.empty()) {
+                if (automatic_text.items.size() == 1 && automatic_text.items.front().language == "ru") {
+                    entry.text = normalize_model_line_endings(automatic_text.items.front().text);
+                    warn_incomplete_profile(warnings, reconstruction_complete, id,
+                        child_path(path, 4), "AutomaticMenuText");
+                } else if (automatic_text.items.size() > 1 ||
+                           automatic_text.items.front().language != "#" ||
+                           automatic_text.items.front().text.empty()) {
+                    fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
+                        describe(props.items[4]), "Automatic button Text needs a named localized representation for this action kind");
+                }
             }
             const auto command_control_kind = integer_atom<std::int32_t>(normalized.items[13], child_path(path, 13));
             switch (command_control_kind) {
