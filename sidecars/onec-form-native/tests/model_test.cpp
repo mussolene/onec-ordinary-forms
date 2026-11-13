@@ -2408,7 +2408,7 @@ void test_command_bar_action_source_model() {
 void test_standard_menu_command_registry_and_runtime_contracts() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
-    expect(standard_menu_commands.size() == 17 &&
+    expect(standard_menu_commands.size() == 18 &&
         find_standard_menu_command(StandardMenuCommand::close) == &standard_menu_commands[0] &&
         find_standard_menu_command("SaveValues") == &standard_menu_commands[1] &&
         find_standard_menu_command(144) == &standard_menu_commands[2] &&
@@ -2417,6 +2417,7 @@ void test_standard_menu_command_registry_and_runtime_contracts() {
         find_standard_menu_command(95)->kind == StandardMenuCommand::select &&
         find_standard_menu_command(147)->kind == StandardMenuCommand::find_in_list &&
         find_standard_menu_command(141)->kind == StandardMenuCommand::write_and_close &&
+        find_standard_menu_command(140)->kind == StandardMenuCommand::write &&
         find_standard_menu_command(320)->kind == StandardMenuCommand::back &&
         standard_menu_close.kind == standard_menu_commands[0].kind &&
         standard_menu_close.public_name == standard_menu_commands[0].public_name &&

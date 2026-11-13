@@ -355,6 +355,7 @@ inline constexpr std::array standard_menu_commands{
     StandardMenuCommandDescriptor{StandardMenuCommand::find_in_list, "FindInList", u8"Найти в списке", 147},
     StandardMenuCommandDescriptor{StandardMenuCommand::write_and_close, "WriteAndClose", u8"Записать и закрыть", 141},
     StandardMenuCommandDescriptor{StandardMenuCommand::back, "Back", u8"Назад", 320},
+    StandardMenuCommandDescriptor{StandardMenuCommand::write, "Write", u8"Записать", 140},
 };
 inline constexpr StandardMenuCommandDescriptor standard_menu_close = standard_menu_commands[0];
 

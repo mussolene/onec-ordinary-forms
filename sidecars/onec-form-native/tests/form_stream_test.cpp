@@ -27229,6 +27229,36 @@ void test_catalog_item_form_extension_named_round_trip_and_guards() {
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
     const auto encoded = form_stream::encode_document(parsed.value());
     expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    auto write_document = parsed.value();
+    auto write_form = write_document.form();
+    for (std::uint64_t id = 10; id < 20; ++id) {
+        write_form.children.emplace_back(model::ControlRef{model::ObjectId{id}});
+        write_document.add_control(model::ControlNode{model::ObjectId{id},
+            "Button" + std::to_string(id), model::ButtonPayload{}});
+    }
+    write_form.children.emplace_back(model::ControlRef{model::ObjectId{20}});
+    model::ControlNode write_bar{model::ObjectId{20}, "Actions", model::CommandBarPayload{}};
+    model::CommandBarButton write_item;
+    write_item.name = "Write";
+    write_item.standard_action = model::StandardMenuAction{model::StandardMenuCommand::write, {},
+        model::StandardMenuActionSource::form, model::StandardMenuActionContext::default_context, {}};
+    std::get<model::CommandBarPayload>(write_bar.payload).buttons.push_back(std::move(write_item));
+    write_document.add_control(std::move(write_bar));
+    write_document.set_form(std::move(write_form));
+    const auto write_encoded = form_stream::encode_document(write_document);
+    expect(write_encoded.ok(), write_encoded ? "" : write_encoded.diagnostics().front().message);
+    const auto write_decoded = form_stream::decode_document(write_encoded.value(), "CatalogWrite");
+    expect(write_decoded.ok() && write_decoded.value().reconstruction_complete(),
+        "CatalogItem Write must retain ten Buttons and its standard command");
+    const auto write_xml = source::serialize_form_xml(write_decoded.value());
+    expect(write_xml.ok() && write_xml.value().find("command=\"Write\"") != std::string::npos,
+        "native-confirmed Write must appear by public name in CatalogItem XML");
+    const auto write_parsed = source::parse_form_xml(write_xml.value());
+    const auto write_rebuilt = write_parsed ? form_stream::encode_document(write_parsed.value()) :
+        oof::Result<list_stream::ListValue>::failure({});
+    expect(write_rebuilt.ok() && list_stream::dump_compact(write_rebuilt.value()) ==
+        list_stream::dump_compact(write_encoded.value()),
+        "CatalogItem Write must rebuild its native storage ID from named XML");
     auto corrupt = encoded.value();
     corrupt.items[3].items[2].items[1] = list_stream::ListValue::raw_atom("3");
     expect_failure(form_stream::decode_document(corrupt, "Catalog"), "OOF1114", "$/3/2/1",
