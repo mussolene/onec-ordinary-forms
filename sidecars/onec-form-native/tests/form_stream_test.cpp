@@ -4830,6 +4830,25 @@ void test_choice_field_static_profile_round_trip_and_validation() {
                    list_stream::dump_compact(empty_type_encoded.value()),
             "ChoiceField version 30 must rebuild through canonical version 31");
     }
+    {
+        auto legacy = empty_type_encoded.value();
+        auto& properties = legacy.items[1].items[2].items[2].items[1].items[2].items[1];
+        properties.items[1] = list_stream::ListValue::raw_atom("30");
+        properties.items.pop_back();
+        properties.items.pop_back();
+        const auto decoded = form_stream::decode_document(legacy, "ChoiceFieldEmptyType");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "bound ChoiceField version 30 with 44 slots must decode completely");
+        if (decoded) {
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok() && xml.value() == empty_type_xml.value(),
+                "ChoiceField version 30 with 44 slots must preserve named XML");
+            const auto rebuilt = form_stream::encode_document(decoded.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                list_stream::dump_compact(empty_type_encoded.value()),
+                "ChoiceField version 30 with 44 slots must rebuild through canonical version 31");
+        }
+    }
     auto unsupported_legacy = empty_type_encoded.value();
     auto& unsupported_properties = unsupported_legacy.items[1].items[2].items[2].items[1].items[2].items[1];
     unsupported_properties.items[1] = list_stream::ListValue::raw_atom("30");
