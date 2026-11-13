@@ -2307,21 +2307,32 @@ void test_captured_table_packet_rejections_and_alternate_deflate() {
     empty_envelope[0] = 3;
     empty_envelope.insert(empty_envelope.end(), {0xef, 0xbb, 0xbf});
     const auto empty_segment = test_raw_deflate(empty_envelope, Z_DEFAULT_COMPRESSION);
-    auto five_segment_packet = packet;
-    for (int index = 0; index < 4; ++index) {
-        five_segment_packet.insert(five_segment_packet.end(), packet.begin(), packet.begin() + 18);
-        five_segment_packet.insert(five_segment_packet.end(), empty_segment.begin(), empty_segment.end());
-    }
-    auto five_segments = captured_table_payload();
-    set_captured_packet(five_segments, five_segment_packet);
     const auto baseline_decoded = form_stream::decode_document(baseline, "CapturedTable");
-    const auto five_decoded = form_stream::decode_document(five_segments, "CapturedTable");
-    expect(baseline_decoded.ok() && five_decoded.ok(),
-        "five platform editor segments with empty auxiliary envelopes must decode");
+    expect(baseline_decoded.ok(), "captured Table with one editor segment must decode");
+    if (!baseline_decoded) return;
     const auto baseline_xml = source::serialize_form_xml(baseline_decoded.value());
-    const auto five_xml = source::serialize_form_xml(five_decoded.value());
-    expect(baseline_xml.ok() && five_xml.ok() && baseline_xml.value() == five_xml.value(),
-        "empty auxiliary editor segments must preserve the complete named Table model");
+    expect(baseline_xml.ok(), "captured Table must have named XML");
+    if (!baseline_xml) return;
+    auto segmented_packet = packet;
+    for (int segment_count = 2; segment_count <= 5; ++segment_count) {
+        segmented_packet.insert(segmented_packet.end(), packet.begin(), packet.begin() + 18);
+        segmented_packet.insert(segmented_packet.end(), empty_segment.begin(), empty_segment.end());
+        auto segmented_table = captured_table_payload();
+        set_captured_packet(segmented_table, segmented_packet);
+        const auto decoded = form_stream::decode_document(segmented_table, "CapturedTable");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "one to five editor segments with empty auxiliary envelopes must decode completely");
+        if (!decoded) continue;
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value() == baseline_xml.value(),
+            "empty auxiliary editor segments must preserve the complete named Table model");
+    }
+    segmented_packet.insert(segmented_packet.end(), packet.begin(), packet.begin() + 18);
+    segmented_packet.insert(segmented_packet.end(), empty_segment.begin(), empty_segment.end());
+    auto too_many_segments = captured_table_payload();
+    set_captured_packet(too_many_segments, segmented_packet);
+    expect_captured_table_rejected(std::move(too_many_segments),
+        "a sixth editor segment must remain outside the bounded packet format");
 
     auto nonempty_envelope = empty_envelope;
     nonempty_envelope[0] = 4;

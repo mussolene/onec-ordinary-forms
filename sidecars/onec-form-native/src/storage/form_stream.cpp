@@ -4255,10 +4255,6 @@ std::vector<std::uint8_t> decode_table_column_editor_packet(
         }
         ++segment_count;
     }
-    if (segment_count != 1 && segment_count != 5) {
-        fail("OOF1114", std::string(path), "one or five editor segments", std::to_string(segment_count),
-            "Table Column editor packet segment count is unsupported");
-    }
     return editor;
 }
 
