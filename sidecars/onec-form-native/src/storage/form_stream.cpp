@@ -10675,6 +10675,15 @@ DecodedControl decode_choice_field(
     require_raw_constant(info.items[0], "2", child_path(info_path, 0));
     auto& info_properties = info.items[1];
     const auto info_properties_path = child_path(info_path, 1);
+    const bool legacy_v21 = info_properties.is_list && info_properties.items.size() == 39 &&
+        !info_properties.items[1].is_list && info_properties.items[1].atom_kind == LV::AtomKind::raw &&
+        info_properties.items[1].atom == "21";
+    if (legacy_v21) {
+        const auto current = canonical_choice_field_info(true, std::string{}, {}).items[1];
+        info_properties.items[1] = raw("31");
+        info_properties.items.insert(info_properties.items.end(), current.items.begin() + 39,
+            current.items.end());
+    }
     const bool legacy_v30 = info_properties.is_list &&
         (info_properties.items.size() == 44 || info_properties.items.size() == 45) &&
         !info_properties.items[1].is_list && info_properties.items[1].atom_kind == LV::AtomKind::raw &&
