@@ -7152,9 +7152,20 @@ void test_save_restore_standard_actions_batch_aliases_and_guards() {
     restore_payload.items.at(4).items.at(3) = list_stream::ListValue::raw_atom("55");
     expect(!form_stream::decode_document(restore_alias, "InvalidRestoreValuesAlias"),
         "RestoreValues must reject the SaveValues-only 55/1 alias");
-    rejects([](auto& payload) {
+    const auto old_default = mutate_first_action([](auto& payload) {
         payload.items.at(4) = list_stream::parse("{1,0,357c6a54-357d-425d-a2bd-22f4f6e86c87,2147483647,0}");
-    }, "unrepresented kind0 Default context for non-Close commands must still reject");
+    });
+    const auto old_decoded = form_stream::decode_document(old_default, "OldDefaultStandardAction");
+    expect(old_decoded.ok() && old_decoded.value().reconstruction_complete(),
+        "registered commands must accept the platform Default sentinel");
+    const auto old_xml = source::serialize_form_xml(old_decoded.value());
+    const auto old_parsed = old_xml ? source::parse_form_xml(old_xml.value()) :
+        oof::Result<model::OrdinaryFormDocument>::failure({});
+    const auto old_rebuilt = old_parsed ? form_stream::encode_document(old_parsed.value()) :
+        oof::Result<list_stream::ListValue>::failure({});
+    expect(old_xml.ok() && old_parsed.ok() && old_rebuilt.ok() &&
+        list_stream::dump_compact(old_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "old Default sentinel must normalize through named XML to the canonical 8.5 storage tuple");
     rejects([](auto& payload) { payload.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("2"); },
         "unknown command context flag must still reject");
 }

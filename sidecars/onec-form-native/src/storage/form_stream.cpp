@@ -5538,9 +5538,6 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
     require_raw_constant(context.items[4], "0", child_path(context_path, 4));
     const auto kind = integer_atom<std::uint64_t>(context.items[1], child_path(context_path, 1));
     if (kind == 0) {
-        if (descriptor->kind != model::StandardMenuCommand::close)
-            fail("OOF1123", context_path, "named Form or CommandBar context", {},
-                "Default context representation is unsupported for this command");
         require_raw_constant(context.items[2], standard_menu_default_context_marker, child_path(context_path, 2));
         require_raw_constant(context.items[3], std::to_string(std::numeric_limits<std::int32_t>::max()), child_path(context_path, 3));
         action.context = model::StandardMenuActionContext::default_context;
