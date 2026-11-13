@@ -7381,15 +7381,30 @@ DecodedControl decode_picture_decoration(
     auto picture_properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
     const auto properties_generation = raw_atom(at(picture_properties, 1, properties_path), child_path(properties_path, 1));
-    if (properties_generation == "19") {
-        require_arity(picture_properties, 14, properties_path);
+    if (properties_generation == "15" || properties_generation == "18" || properties_generation == "19") {
+        require_arity(picture_properties,
+            properties_generation == "15" ? 11 : properties_generation == "18" ? 13 : 14,
+            properties_path);
         auto current = canonical_picture_properties(true);
         std::copy(picture_properties.items.begin(), picture_properties.items.end(), current.items.begin());
         current.items[1] = raw("20");
+        if (properties_generation == "15" || properties_generation == "18")
+            current.items[13] = raw("0");
         picture_properties = std::move(current);
     } else {
         require_raw_constant(picture_properties.items[1], "20", child_path(properties_path, 1));
         require_arity(picture_properties, 15, properties_path);
+    }
+    if (properties_generation == "15") {
+        auto& direct_picture = picture_properties.items[4];
+        const auto picture_path = child_path(properties_path, 4);
+        require_raw_constant(at(direct_picture, 0, picture_path), "3", child_path(picture_path, 0));
+        const auto picture_kind = raw_atom(at(direct_picture, 1, picture_path), child_path(picture_path, 1));
+        require_arity(direct_picture, picture_kind == "3" ? 9 : 8, picture_path);
+        auto style = canonical_picture_properties(true).items[4];
+        style.items[1] = picture_properties.items[2];
+        style.items[2] = std::move(direct_picture);
+        picture_properties.items[4] = std::move(style);
     }
     const auto& old_style = picture_properties.items[4];
     const auto style_path = child_path(properties_path, 4);

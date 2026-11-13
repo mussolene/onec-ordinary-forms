@@ -8591,6 +8591,41 @@ void test_decoration_property_and_picture_generations() {
                 "known generation upgrade must not hide unrepresented PictureDecoration fields");
         }
     }
+    for (const auto old_generation : {15U, 18U}) {
+        auto stream = current_pictures.value();
+        unsigned changed = 0;
+        for (auto& record : stream.items[1].items[2].items[2].items) {
+            if (!record.is_list || record.items.size() != 6 || record.items[0].atom != picture_guid) continue;
+            auto& properties = record.items[2].items[1];
+            auto& base = properties.items[0];
+            base.items.resize(old_generation == 15 ? 13 : 18);
+            base.items[0] = list_stream::ListValue::raw_atom(old_generation == 15 ? "10" : "16");
+            if (old_generation == 15) {
+                auto picture = std::move(properties.items[4].items[2]);
+                picture.items.pop_back();
+                picture.items[0] = list_stream::ListValue::raw_atom("3");
+                properties.items[4] = std::move(picture);
+            } else {
+                auto& style = properties.items[4];
+                style.items.resize(9);
+                style.items[0] = list_stream::ListValue::raw_atom("8");
+            }
+            properties.items.resize(old_generation == 15 ? 11 : 13);
+            properties.items[1] = list_stream::ListValue::raw_atom(std::to_string(old_generation));
+            ++changed;
+        }
+        expect(changed == 12, "legacy PictureDecoration generations must cover twelve controls");
+        const auto decoded = form_stream::decode_document(stream, "LegacyPictureGenerations");
+        expect(decoded.ok() && !decoded.value().reconstruction_complete(),
+            decoded ? "native legacy PictureDecoration slot 13 must stay guarded until named" :
+                decoded.diagnostics().front().message);
+        for (unsigned i = 0; i < 12; ++i) {
+            const auto* control = decoded.value().find_control(model::ObjectId{i + 2});
+            expect(control && control->kind() == model::ControlKind::picture_decoration &&
+                   control->name == "Picture" + std::to_string(i),
+                "legacy PictureDecoration must retain every named control while incomplete");
+        }
+    }
 }
 
 void test_label_decoration_click_event_round_trip_and_guards() {
@@ -9639,8 +9674,8 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
     auto unsupported_picture_tail = implicit_default.value();
     unsupported_picture_tail.items[1].items[2].items[2].items[1].items[2].items[1].items[1] =
         list_stream::ListValue::raw_atom("18");
-    expect_failure(form_stream::decode_document(unsupported_picture_tail, "PictureDecorationCodec"), "OOF1106",
-        "$/1/2/2/1/2/1/1", "PictureDecoration properties version header must remain strict");
+    expect_failure(form_stream::decode_document(unsupported_picture_tail, "PictureDecorationCodec"), "OOF1102",
+        "$/1/2/2/1/2/1", "known PictureDecoration version must reject the wrong record length");
 
     auto picture_property_document = make_document(false, true, "");
     const_cast<model::ControlNode*>(picture_property_document.find_control(model::ObjectId{2}))
