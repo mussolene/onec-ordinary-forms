@@ -742,13 +742,20 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
     const auto height = scaled_integer(value.height, 10.0, "height");
     const auto scale = scaled_integer(value.scale, 1.0, "scale");
     if (value.kind != model::FontKind::absolute) {
+        const auto* composite_style = value.kind == model::FontKind::style_reference
+            ? std::get_if<model::CompositeIdValue>(&value.style) : nullptr;
         if (value.kind == model::FontKind::windows_font) {
             if (!value.windows_font || has_style || static_cast<std::uint32_t>(*value.windows_font) > 4)
                 throw std::runtime_error("Windows font requires a known named selector");
         } else if (value.kind == model::FontKind::style_reference) {
             const auto* style = std::get_if<model::QualifiedName>(&value.style);
-            if (!style || !model::metamodel::find_named_font(style->value))
-                throw std::runtime_error("Font requires a known named platform style reference");
+            if (style) {
+                if (!model::metamodel::find_named_font(style->value))
+                    throw std::runtime_error("Font requires a known named platform style reference");
+            } else if (!composite_style || composite_style->is_null ||
+                is_null_uuid(composite_style->uuid)) {
+                throw std::runtime_error("Font requires a non-null composite style reference");
+            }
         } else if (value.kind != model::FontKind::automatic || has_style) {
             throw std::runtime_error("unsupported Font kind or style reference");
         }
@@ -756,8 +763,15 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value) 
         if (value.kind == model::FontKind::windows_font) {
             out.begin_list(); out.write_uint32(static_cast<std::uint32_t>(*value.windows_font)); out.end_list();
         } else if (value.kind == model::FontKind::style_reference) {
-            const auto& name = std::get<model::QualifiedName>(value.style).value;
-            out.begin_list(); out.write_int64(model::metamodel::find_named_font(name)->native_id); out.end_list();
+            out.begin_list();
+            if (composite_style) {
+                out.write_int64(composite_style->object_id);
+                out.write_guid(composite_style->uuid.canonical);
+            } else {
+                const auto& name = std::get<model::QualifiedName>(value.style).value;
+                out.write_int64(model::metamodel::find_named_font(name)->native_id);
+            }
+            out.end_list();
         }
         if (value.height) out.write_uint32(height);
         if (value.bold) out.write_uint32(*value.bold ? 700 : 400);
@@ -806,9 +820,18 @@ model::FontValue read_font(list_stream::ListInStream& in) {
             in.end_list(); value.windows_font = static_cast<model::WindowsFont>(selector);
         } else if (value.kind == model::FontKind::style_reference) {
             in.begin_list();
-            const auto* style = model::metamodel::find_named_font(in.read_int64());
-            if (!style || in.has_next()) throw std::runtime_error("Font style identifier is unsupported");
-            in.end_list(); value.style = model::QualifiedName{std::string(style->name)};
+            const auto style_id = in.read_int64();
+            if (in.has_next()) {
+                model::UuidValue uuid{in.read_guid()};
+                if (in.has_next() || is_null_uuid(uuid))
+                    throw std::runtime_error("Font composite style reference is malformed");
+                value.style = model::CompositeIdValue{style_id, std::move(uuid), false};
+            } else {
+                const auto* style = model::metamodel::find_named_font(style_id);
+                if (!style) throw std::runtime_error("Font style identifier is unsupported");
+                value.style = model::QualifiedName{std::string(style->name)};
+            }
+            in.end_list();
         } else if (value.kind != model::FontKind::automatic) {
             throw std::runtime_error("unsupported Font kind");
         }

@@ -1936,6 +1936,25 @@ void test_control_font_xml_round_trip() {
     expect(parsed_font && std::get<model::FontValue>(parsed_font->value) == font,
         "absolute CheckBox Font XML must round-trip as FontValue");
 
+    model::FontValue composite_font;
+    composite_font.kind = model::FontKind::style_reference;
+    composite_font.style = model::CompositeIdValue{0,
+        model::UuidValue{"12345678-1234-1234-1234-123456789abc"}, false};
+    const auto composite_xml = source::serialize_form_xml(make_document(composite_font));
+    expect(composite_xml.ok() && composite_xml.value().find(
+        "<Font kind=\"styleReference\" styleObjectId=\"0\" styleUuid=\"12345678-1234-1234-1234-123456789abc\"/>") !=
+        std::string::npos, "composite Font style must use named XML reference attributes");
+    const auto composite_parsed = source::parse_form_xml(composite_xml.value());
+    expect(composite_parsed.ok(), "composite Font style XML must parse");
+    const auto composite_stream = oof::storage::form_stream::encode_document(composite_parsed.value());
+    expect(composite_stream.ok(), "composite Font style XML must build without a baseline");
+    const auto composite_decoded = oof::storage::form_stream::decode_document(composite_stream.value(), "CheckBoxFont");
+    expect(composite_decoded.ok(), "composite Font style stream must decode");
+    const auto composite_roundtrip_xml = source::serialize_form_xml(composite_decoded.value());
+    expect(composite_roundtrip_xml.ok() &&
+        composite_roundtrip_xml.value() == composite_xml.value(),
+        "composite Font style must retain XML across independent Form.bin rebuild");
+
     constexpr std::array kinds{"Button", "LabelDecoration", "PictureDecoration", "InputField", "CheckBox",
         "ChoiceField", "CommandBar", "RadioButton", "CalendarField", "UsualGroup", "ProgressBar",
         "TextDocumentField", "Button", "LabelDecoration", "InputField"};

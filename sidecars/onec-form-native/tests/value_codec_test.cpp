@@ -508,6 +508,17 @@ void test_font() {
                legacy_style.style == model::StyleReference{model::QualifiedName{"StyleFonts.TextFont"}} &&
                codec::encode_font(legacy_style) == "{8,2,0,{-20},1,100}",
         "observed legacy style Font6 must preserve its named font reference and append default scale");
+    const std::string composite_record = "{6,2,0,{0,12345678-1234-1234-1234-123456789abc},1}";
+    const auto composite_style = codec::decode_font(composite_record);
+    expect(composite_style.kind == model::FontKind::style_reference &&
+               composite_style.style == model::StyleReference{model::CompositeIdValue{0,
+                   model::UuidValue{"12345678-1234-1234-1234-123456789abc"}, false}} &&
+               codec::encode_font(composite_style) ==
+                   "{8,2,0,{0,12345678-1234-1234-1234-123456789abc},1,100}",
+        "Font6 must normalize to platform Font8 while retaining its typed composite style reference");
+    expect_rejected([] { static_cast<void>(codec::decode_font(
+        "{6,2,0,{0,00000000-0000-0000-0000-000000000000},1}")); },
+        "Font6 null composite style must reject");
     for (const auto weight : {400, 700}) {
         const auto legacy_bold = codec::decode_font("{6,3,4," + std::to_string(weight) + ",1}");
         expect(legacy_bold.bold == std::optional<bool>{weight == 700} && legacy_bold.scale == 100 &&
