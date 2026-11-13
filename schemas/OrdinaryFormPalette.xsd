@@ -224,6 +224,7 @@
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="ActionSource" apiName="ActionSource" russianName="ИсточникДействий" russianType="" valueCodec="action-source-reference"/>
             </Properties>
             <Events>
               <Event name="Click" apiName="Click" russianName="Нажатие"/>

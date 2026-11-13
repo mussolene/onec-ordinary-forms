@@ -2260,6 +2260,16 @@ struct Metamodel::Impl {
             }
         }
 
+        const auto action_source = std::ranges::find(control_extension_properties,
+            std::string_view{"ActionSource"}, &PropertyDescriptor::api_name);
+        if (action_source == control_extension_properties.end())
+            throw std::logic_error("missing shared ActionSource descriptor");
+        auto& button_properties = properties[static_cast<std::size_t>(ControlKind::button)];
+        auto button_action_source = *action_source;
+        button_action_source.control_kind = ControlKind::button;
+        button_action_source.order = std::ranges::max_element(button_properties, {}, &PropertyDescriptor::order)->order + 1;
+        button_properties.push_back(std::move(button_action_source));
+
         for (std::size_t index = 0; index < control_kind_count; ++index) {
             sort_and_validate_order(properties[index], controls[index].public_name);
             sort_and_validate_order(events[index], controls[index].public_name);

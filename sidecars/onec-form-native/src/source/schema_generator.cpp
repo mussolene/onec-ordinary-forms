@@ -269,13 +269,15 @@ void validate_property_group(
     std::string_view owner,
     DescriptorOwner descriptor_owner,
     PropertySurface surface,
-    bool allow_panel_placement = false
+    bool allow_panel_placement = false,
+    bool allow_control_extension = false
 ) {
     validate_ordered_descriptors(descriptors, owner);
     for (const auto& descriptor : descriptors) {
         if (descriptor.owner != descriptor_owner ||
             (descriptor.surface != surface &&
-             !(allow_panel_placement && descriptor.surface == PropertySurface::panel_placement))) {
+             !(allow_panel_placement && descriptor.surface == PropertySurface::panel_placement) &&
+             !(allow_control_extension && descriptor.surface == PropertySurface::control_extension))) {
             throw std::logic_error(
                 "ordinary-form property surface mismatch for " + std::string(owner));
         }
@@ -316,7 +318,8 @@ void validate_metamodel(const Metamodel& metamodel) {
             control.public_name,
             DescriptorOwner::control,
             PropertySurface::control_payload,
-            true);
+            true,
+            control.kind == model::ControlKind::button);
         for (const auto& property : properties) {
             if (property.control_kind != control.kind) {
                 throw std::logic_error("ordinary-form property owner mismatch");
@@ -1676,6 +1679,11 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             output,
             metamodel.control_extension_properties(),
             control.kind);
+        if (control.kind == model::ControlKind::button) {
+            const auto* action_source = metamodel.property(model::ControlKind::button, "ActionSource");
+            if (action_source == nullptr) throw std::logic_error("Button ActionSource descriptor is missing");
+            append_property_element(output, *action_source, "      ");
+        }
         output +=
             "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
         if (control.kind == model::ControlKind::chart) {
@@ -1691,7 +1699,9 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
                     "      <xs:element name=\"Document\" type=\"SpreadsheetDocumentType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
             }
             for (const auto& property : metamodel.properties_for(control.kind)) {
-                if (control.kind == model::ControlKind::table && property.api_name == "Columns") {
+                if (control.kind == model::ControlKind::button && property.api_name == "ActionSource") {
+                    continue;
+                } else if (control.kind == model::ControlKind::table && property.api_name == "Columns") {
                     output +=
                         "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
                 } else if (property.persistence == model::metamodel::PersistenceClass::runtime_only ||

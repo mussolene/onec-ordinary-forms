@@ -6456,6 +6456,41 @@ void test_command_bar_named_action_source_references() {
     expect(!form_stream::decode_document(tree, "ActionSources"), "metadata Boolean fields remain strict");
 }
 
+void test_button_form_action_source_batch() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "ButtonActionSources";
+    for (std::uint64_t id = 2; id < 14; ++id)
+        form.children.push_back(model::ControlRef{model::ObjectId{id}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t id = 2; id < 14; ++id) {
+        model::ControlNode button{model::ObjectId{id}, "Button" + std::to_string(id), model::ButtonPayload{}};
+        if (id == 2)
+            button.extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"),
+                model::FormRef{model::ObjectId{1}});
+        document.add_control(std::move(button));
+    }
+    const auto xml = source::serialize_form_xml(document);
+    expect(xml.ok() && xml.value().find("<ActionSource formId=\"1\"/>") != std::string::npos,
+        "twelve-button XML must name its Form ActionSource");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "Button Form ActionSource XML must parse without a source stream");
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "twelve-button Form ActionSource must encode without a baseline");
+    const auto* stored = find_control_record(encoded.value(), 2);
+    expect(stored != nullptr && stored->items[4].items[2].atom == "0",
+        "Button Form ActionSource must use the platform-observed metadata value zero");
+    const auto decoded = form_stream::decode_document(encoded.value(), "ButtonActionSources");
+    expect(decoded.ok() && decoded.value().collections().controls.size() == 12,
+        "all twelve Buttons must survive the named ActionSource stream");
+    const auto repeated = source::serialize_form_xml(decoded.value());
+    expect(repeated.ok() && repeated.value() == xml.value(),
+        "Button Form ActionSource must survive a full named XML cycle");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Button Form ActionSource must rebuild the canonical 8.5 stream");
+}
+
 void test_command_bar_standard_menu_action_round_trip_and_guards() {
     const auto make_document = [](model::StandardMenuActionSource source,
                                   model::ObjectId command_bar_id = model::ObjectId{4}) {
@@ -28329,6 +28364,7 @@ int main() {
         test_command_bar_owner_pair_and_strict_profile();
         test_command_bar_five_named_properties_and_invalid_variants();
         test_command_bar_named_action_source_references();
+        test_button_form_action_source_batch();
         test_command_bar_standard_menu_action_round_trip_and_guards();
         test_standard_menu_action_default_context_and_control_source();
         test_save_restore_standard_actions_batch_aliases_and_guards();

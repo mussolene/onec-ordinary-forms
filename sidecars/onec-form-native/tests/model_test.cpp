@@ -2354,14 +2354,16 @@ void test_command_bar_action_source_model() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
     const auto* descriptor = find_property(ControlKind::command_bar, "ActionSource");
+    const auto* button_descriptor = find_property(ControlKind::button, "ActionSource");
     expect(descriptor && descriptor->value_codec == ValueCodec::action_source_reference &&
                descriptor->value_kind == ValueKind::object &&
                descriptor->default_value.kind == DefaultKind::undefined &&
                descriptor->default_value.canonical == "undefined" &&
                descriptor->persistence == PersistenceClass::persisted_editable &&
                descriptor->storage_codec == StorageCodec::control_info &&
-               find_property(ControlKind::button, "ActionSource") == nullptr,
-        "ActionSource must be typed, Undefined by default, and declared only for CommandBar");
+               button_descriptor && button_descriptor->value_codec == ValueCodec::action_source_reference &&
+               button_descriptor->control_kind == ControlKind::button,
+        "ActionSource must be typed and declared for CommandBar and Button");
 
     const auto validate = [](PropertyValue value) {
         Form form;
@@ -2385,6 +2387,22 @@ void test_command_bar_action_source_model() {
         "ActionSource must reject a resolved control that is not a supported source kind");
     expect(validate(ControlRef{ObjectId{99}}).has(InvariantCode::dangling_reference),
         "ActionSource must reject a dangling ControlRef");
+
+    const auto validate_button = [](PropertyValue value) {
+        Form form;
+        form.id = ObjectId{1};
+        form.name = "ButtonActionSource";
+        form.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument document(std::move(form));
+        ControlNode button{ObjectId{2}, "Run", ButtonPayload{}};
+        button.extension_properties.set_explicit(PropertyId::from_name("ActionSource"), std::move(value));
+        document.add_control(std::move(button));
+        return document.validate();
+    };
+    expect(validate_button(UndefinedValue{}).ok() && validate_button(FormRef{ObjectId{1}}).ok(),
+        "Button ActionSource must accept the platform-observed Undefined and Form states");
+    expect(validate_button(ControlRef{ObjectId{2}}).has(InvariantCode::invalid_property),
+        "Button ActionSource must reject an unverified control source");
 }
 
 void test_standard_menu_command_registry_and_runtime_contracts() {
@@ -3289,11 +3307,11 @@ void test_help_metamodel() {
         "coverage target must explicitly exclude ActiveX without changing the help catalog");
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 435,
+        coverage.control_property_occurrences == 436,
         "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 213,
-        "type-specific metamodel must exclude the inherited property duplicate");
+        coverage.unique_control_property_names == 214,
+        "Button ActionSource must count once among unique concrete control properties");
     expect(
         coverage.control_event_occurrences == 79,
         "help catalog must retain 79 control event occurrences");

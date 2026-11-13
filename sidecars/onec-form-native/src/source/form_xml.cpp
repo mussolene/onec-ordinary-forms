@@ -5621,6 +5621,15 @@ private:
             id,
             true,
             control.kind());
+        if (control.kind() == model::ControlKind::button) {
+            const auto* action_source = metamodel_.property(model::ControlKind::button, "ActionSource");
+            if (action_source == nullptr)
+                serialization_fail(id, "ActionSource", "Button ActionSource descriptor", "missing descriptor",
+                    "Button ActionSource property is not declared");
+            if (const auto* entry = control.extension_properties.find(action_source->id);
+                entry != nullptr && !equals_descriptor_default(*action_source, entry->value))
+                write_property(*action_source, entry->value, id);
+        }
         write_position(control.position, id);
         if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
             spreadsheet != nullptr && (!spreadsheet->cells.empty() || !spreadsheet->rows.empty() ||

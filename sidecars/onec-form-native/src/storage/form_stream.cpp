@@ -3060,7 +3060,7 @@ LV encode_control_metadata(const model::ControlNode& control, std::string_view p
     else if (control.kind() == model::ControlKind::radio_button || control.kind() == model::ControlKind::input_field)
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "ValueType"}, path);
     else if (control.kind() == model::ControlKind::button)
-        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "DefaultButton"}, path);
+        require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu", "DefaultButton", "ActionSource"}, path);
     else
         require_allowed_properties(control.extension_properties, {"ModifiesData", "SkipOnInput", "FirstInGroup", "AutoContextMenu", "ContextMenu"}, path);
     return list({raw("14"), string_value(control.name), raw(std::to_string(action_source)),
@@ -7201,6 +7201,7 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
 }
 
 DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context,
+    model::ObjectId form_id,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
@@ -7339,7 +7340,13 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         name,
         model::ButtonPayload{},
     };
-    decode_control_metadata(metadata, metadata_path, control);
+    decode_control_metadata(metadata, metadata_path, control, true);
+    const auto action_source = integer_atom<std::uint32_t>(metadata.items[2], child_path(metadata_path, 2));
+    if (action_source == 0)
+        control.extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"), model::FormRef{form_id});
+    else if (action_source != std::numeric_limits<std::uint32_t>::max())
+        fail("OOF1122", child_path(metadata_path, 2), "Button Form or Undefined ActionSource",
+            std::to_string(action_source), "Button ActionSource control reference is unsupported");
     if (default_button)
         control.extension_properties.set_explicit(model::PropertyId::from_name("DefaultButton"), true);
     if (caption != model::PropertyValue{std::string{}}) {
@@ -13111,6 +13118,17 @@ LV encode_button(
         button_properties.items[12] = encode_button_menu(menu_entries, document, control.id.value(), menu_owner_guid, 0, menu_state);
     }
 
+    std::uint32_t action_source = std::numeric_limits<std::uint32_t>::max();
+    if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("ActionSource"))) {
+        if (const auto* form = std::get_if<model::FormRef>(&entry->value)) {
+            if (form->id() != document.form().id)
+                fail("OOF1122", "$/Button/ActionSource", "reference to this Form", "unknown Form", "Button ActionSource is invalid");
+            action_source = 0;
+        } else if (!std::holds_alternative<model::UndefinedValue>(entry->value)) {
+            fail("OOF1122", "$/Button/ActionSource", "Form or Undefined", "different value type", "Button ActionSource is unsupported");
+        }
+    }
+
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
@@ -13120,7 +13138,7 @@ LV encode_button(
             canonical_event_table(handler, document),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        encode_control_metadata(control, "$/Button"),
+        encode_control_metadata(control, "$/Button", action_source),
         list({raw("0")}),
     });
 }
@@ -15497,7 +15515,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
                     if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context, warnings, reconstruction_complete, decoded_chart_collection_items);
-                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context, warnings, reconstruction_complete);
+                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context, document.form().id, warnings, reconstruction_complete);
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id, default_owner_id, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
                         child = decode_usual_group(record, record_path, context, warnings, reconstruction_complete);

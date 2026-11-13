@@ -2983,6 +2983,9 @@ PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
             }
         }
     }
+    if (descriptor->api_name == "ActionSource" && descriptor->control_kind == ControlKind::button &&
+        !std::holds_alternative<FormRef>(value) && !std::holds_alternative<UndefinedValue>(value))
+        return PropertyMutationStatus::invalid_value;
 
     if (owner.category == ObjectCategory::control && descriptor->control_kind == ControlKind::input_field &&
         descriptor->api_name == "Mask" && !std::get<std::string>(value).empty())
@@ -3765,6 +3768,12 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     }
                 }
             }
+            if (descriptor != nullptr && descriptor->api_name == "ActionSource" &&
+                descriptor->control_kind == ControlKind::button &&
+                !std::holds_alternative<FormRef>(property.value) &&
+                !std::holds_alternative<UndefinedValue>(property.value))
+                add_violation(report, InvariantCode::invalid_property, source, {},
+                    "Button ActionSource supports only Form or Undefined");
             if (descriptor != nullptr && descriptor->value_codec == metamodel::ValueCodec::context_menu_reference) {
                 if (const auto* target = std::get_if<ControlRef>(&property.value)) {
                     const auto* control = find_control(target->id());

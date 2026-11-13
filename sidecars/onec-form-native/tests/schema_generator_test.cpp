@@ -1067,6 +1067,11 @@ void test_control_surfaces_and_property_order(
                 expect_property_element(descriptor, elements[cursor++]);
             }
         }
+        if (control.kind == oof::model::ControlKind::button) {
+            const auto* action_source = metamodel.property(control.kind, "ActionSource");
+            expect(action_source != nullptr, "Button ActionSource descriptor must exist");
+            expect_property_element(*action_source, elements[cursor++]);
+        }
         expect_element_shape(elements[cursor++], "Position", "PositionType", "1", "1");
         if (control.kind == oof::model::ControlKind::chart) {
             const auto chart_properties = metamodel.properties_for(control.kind);
@@ -1184,7 +1189,9 @@ void test_control_surfaces_and_property_order(
                 expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");
             }
             for (const auto& descriptor : metamodel.properties_for(control.kind)) {
-                if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
+                if (control.kind == oof::model::ControlKind::button && descriptor.api_name == "ActionSource") {
+                    continue;
+                } else if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
                     expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
                 } else if (descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only ||
                            descriptor.persistence == oof::model::metamodel::PersistenceClass::unsupported_by_platform ||

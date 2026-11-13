@@ -4455,6 +4455,7 @@ void test_command_bar_action_source_xml_contract() {
     <Table id="6" name="Rows"><DataPath attributeId="10"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns></Table>
     <HTMLDocumentField id="7" name="Html"><Position/></HTMLDocumentField>
     <InputField id="8" name="Input"><Position/></InputField>
+    <Button id="9" name="ButtonSource"><ActionSource formId="1"/><Position/></Button>
   </ChildItems>
 </Form>)XML";
     auto parsed = source::parse_form_xml(xml);
@@ -4463,6 +4464,9 @@ void test_command_bar_action_source_xml_contract() {
     expect(std::get<model::FormRef>(parsed.value().find_control(model::ObjectId{2})->extension_properties.find(action_source_id)->value) ==
                model::FormRef{model::ObjectId{1}},
         "ActionSource formId must parse as a FormRef");
+    expect(std::get<model::FormRef>(parsed.value().find_control(model::ObjectId{9})->extension_properties.find(action_source_id)->value) ==
+               model::FormRef{model::ObjectId{1}},
+        "Button ActionSource formId must parse as a FormRef");
     expect(std::get<model::ControlRef>(parsed.value().find_control(model::ObjectId{3})->extension_properties.find(action_source_id)->value) ==
                model::ControlRef{model::ObjectId{6}} &&
                std::get<model::ControlRef>(parsed.value().find_control(model::ObjectId{4})->extension_properties.find(action_source_id)->value) ==
@@ -4476,7 +4480,10 @@ void test_command_bar_action_source_xml_contract() {
                serialized.value().find("<ActionSource controlId=\"7\"/>") != std::string::npos &&
                serialized.value().find("<ActionSource/>") == std::string::npos,
         "ActionSource references must use named XML attributes and omit Undefined");
-    expect(source::parse_form_xml(serialized.value()).ok(), "serialized ActionSource references must reparse");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() &&
+        reparsed.value().find_control(model::ObjectId{9})->extension_properties.find(action_source_id) != nullptr,
+        "serialized Button ActionSource must remain on its named control");
 
     const auto replace_once = [](std::string text, std::string_view from, std::string_view to) {
         const std::size_t position = text.find(from);
@@ -4490,6 +4497,10 @@ void test_command_bar_action_source_xml_contract() {
         "OOF2004", "ActionSource must reject a dangling control reference");
     expect_code(source::parse_form_xml(replace_once(std::string(xml), "controlId=\"6\"", "controlId=\"8\"")),
         "OOF2004", "ActionSource must reject an unsupported control source kind");
+    expect_code(source::parse_form_xml(replace_once(std::string(xml),
+        "<Button id=\"9\" name=\"ButtonSource\"><ActionSource formId=\"1\"/>",
+        "<Button id=\"9\" name=\"ButtonSource\"><ActionSource controlId=\"6\"/>")),
+        "OOF2004", "Button ActionSource must reject an unverified control source");
     expect_code(source::parse_form_xml(replace_once(std::string(xml), "formId=\"1\"", "formId=\"1\" controlId=\"6\"")),
         "OOF2003", "ActionSource must reject two reference attributes");
     expect_code(source::parse_form_xml(replace_once(std::string(xml), "<ActionSource/>", "<ActionSource>text</ActionSource>")),
