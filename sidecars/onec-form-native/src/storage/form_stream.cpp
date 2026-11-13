@@ -3291,6 +3291,8 @@ DecodedOwnerPages decode_owner_pages(
             const auto& value = owner_base.items[slot];
             return !value.is_list && value.atom_kind == LV::AtomKind::raw && value.atom == "0";
         });
+    const bool form_legacy_auto_back_color = form_legacy_zero_state &&
+        same_list_value(owner_base.items[2], parse_constant("{3,4,{0}}"));
     read_common_control_base(normalized.items[0], child_path(child_path(path, 1), 0), [&] {
         require_exact(normalized.items[1], expected.items[1].items[1], child_path(child_path(path, 1), 1),
             "Legacy common base requires the supported current owner version");
@@ -3401,6 +3403,13 @@ DecodedOwnerPages decode_owner_pages(
                     child_path(child_path(path, 1), repeat_index + incoming_end - 2), "BackColor",
                     "native-confirmed automatic background mirror", "named BackColor",
                     "Panel automatic background mirror is normalized to its named BackColor."});
+            } else if (form_legacy_auto_back_color && color == model::ColorValue{} &&
+                       same_list_value(normalized.items[repeat_index], parse_constant("{3,4,{0}}"))) {
+                normalized.items[repeat_index] = expected.items[1].items[repeat_index];
+                warnings.push_back({"OOF1146", DiagnosticSeverity::info, std::to_string(owner_id),
+                    child_path(child_path(path, 1), repeat_index + incoming_end - 2), "BackColor",
+                    "native-confirmed legacy automatic background mirror", "named BackColor",
+                    "Form legacy automatic BackColor mirror is normalized after native Save."});
             }
         }
     }

@@ -12884,6 +12884,32 @@ void test_legacy_common_control_base10_batch() {
     const auto noncanonical_picture = form_stream::decode_document(form_legacy_picture, "LegacyFormState");
     expect(!noncanonical_picture.ok() || !noncanonical_picture.value().reconstruction_complete(),
         "noncanonical root Form Picture version 8 must remain guarded");
+    auto form_legacy_mirror = form_legacy;
+    auto& mirror_owner = form_legacy_mirror.items[1].items[2].items[1].items[1];
+    mirror_owner.items[0].items[2] = list_stream::parse("{3,4,{0}}");
+    mirror_owner.items[mirror_owner.items.size() - 6] = list_stream::parse("{3,4,{0}}");
+    std::size_t mirror_picture_cursor = 2;
+    for (std::size_t edge = 0; edge < 6; ++edge) {
+        const auto count = std::stoul(mirror_owner.items.at(mirror_picture_cursor).atom);
+        mirror_picture_cursor += 1 + count;
+    }
+    auto& mirror_picture = mirror_owner.items.at(mirror_picture_cursor);
+    mirror_picture.items[0] = list_stream::ListValue::raw_atom("8");
+    mirror_picture.items.resize(9);
+    const auto mirror_decoded = form_stream::decode_document(form_legacy_mirror, "LegacyFormState");
+    expect(mirror_decoded.ok() && mirror_decoded.value().reconstruction_complete(),
+        "native-confirmed legacy automatic Form BackColor mirrors must decode completely");
+    const auto mirror_xml = source::serialize_form_xml(mirror_decoded.value());
+    expect(mirror_xml.ok() && mirror_xml.value() == form_named_xml.value(),
+        "automatic Form BackColor mirror must preserve named XML");
+    const auto mirror_rebuilt = form_stream::encode_document(mirror_decoded.value());
+    expect(mirror_rebuilt.ok() && list_stream::dump_compact(mirror_rebuilt.value()) ==
+        list_stream::dump_compact(form_current.value()),
+        "automatic Form BackColor mirror must rebuild the canonical stream");
+    mirror_owner.items[mirror_owner.items.size() - 6] = list_stream::parse("{3,4,{1}}");
+    const auto unverified_mirror = form_stream::decode_document(form_legacy_mirror, "LegacyFormState");
+    expect(!unverified_mirror.ok() || !unverified_mirror.value().reconstruction_complete(),
+        "unverified legacy automatic Form BackColor payload must remain guarded");
     auto form_nonzero = form_legacy;
     form_nonzero.items[1].items[2].items[1].items[1].items[0].items[16] = list_stream::ListValue::raw_atom("1");
     const auto form_nonzero_decoded = form_stream::decode_document(form_nonzero, "LegacyFormState");
