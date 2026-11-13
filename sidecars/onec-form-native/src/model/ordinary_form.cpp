@@ -827,6 +827,8 @@ bool table_column_editor_property_value_supported(
     }
     if (kind == ControlKind::input_field && name == "BorderColor")
         return std::holds_alternative<ColorValue>(value);
+    if (kind == ControlKind::input_field && name == "Font")
+        return std::holds_alternative<FontValue>(value);
     if (kind == ControlKind::input_field && table_column_editor_property_allowed(kind, name))
         return std::holds_alternative<bool>(value);
     if (name == "Caption" || name == "ToolTip") {

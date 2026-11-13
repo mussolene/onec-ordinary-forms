@@ -1748,15 +1748,18 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     const auto editor = direct_child_with_attribute(palette, "NamedConcept", "name", "TableColumnControl");
     const auto editor_properties = direct_child(editor, "Properties");
     const auto editor_fields = direct_children(editor_properties, "Property");
-    constexpr std::array other_editor_fields{"Type", "ValueType", "Caption", "ToolTip", "Font"};
+    constexpr std::array other_editor_fields{"Type", "ValueType", "Caption", "ToolTip"};
     expect(editor_fields.size() == oof::model::metamodel::table_column_input_properties.size() + other_editor_fields.size(),
-        "editor palette must describe the full shared InputField editor contract and five named editor fields");
+        "editor palette must describe the full shared InputField editor contract and four additional named fields");
     for (const auto name : other_editor_fields)
         expect(std::ranges::count_if(editor_fields, [&](xmlNodePtr property) { return attribute(property, "name") == name; }) == 1,
             "editor palette must expose each named editor field exactly once");
     const auto editor_border = direct_child_with_attribute(editor_properties, "Property", "name", "BorderColor");
     expect(editor_border && attribute(editor_border, "valueCodec") == "color",
         "editor palette must retain the shared BorderColor descriptor");
+    const auto editor_font = direct_child_with_attribute(editor_properties, "Property", "name", "Font");
+    expect(editor_font && attribute(editor_font, "valueCodec") == "font",
+        "editor palette must expose the typed InputField Font descriptor");
     for (const auto name : oof::model::metamodel::table_column_input_boolean_properties) {
         const auto* descriptor = metamodel.property(oof::model::ControlKind::input_field, name);
         const auto property = direct_child_with_attribute(editor_properties, "Property", "name", name);

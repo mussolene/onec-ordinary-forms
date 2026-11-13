@@ -1671,8 +1671,11 @@ bool valid_table_column_editor_property(
     }
     if (kind == model::ControlKind::input_field &&
         std::ranges::find(mm::table_column_input_properties, descriptor.api_name) !=
-            mm::table_column_input_properties.end())
-        return descriptor.api_name == "BorderColor" ? std::holds_alternative<model::ColorValue>(value) : std::holds_alternative<bool>(value);
+            mm::table_column_input_properties.end()) {
+        if (descriptor.api_name == "BorderColor") return std::holds_alternative<model::ColorValue>(value);
+        if (descriptor.api_name == "Font") return std::holds_alternative<model::FontValue>(value);
+        return std::holds_alternative<bool>(value);
+    }
     if (kind == model::ControlKind::input_field) return false;
     return equals_descriptor_default(descriptor, value);
 }

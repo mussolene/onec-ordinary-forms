@@ -1988,6 +1988,11 @@ void test_table_input_field_value_type_round_trip() {
         model::TypeDomainTerm::date, model::TypeDomainTerm::boolean, model::TypeDomainTerm::value_list};
     std::array<model::TypeDomainPatternValue, 15> expected_types;
     std::array<std::optional<model::InputFieldExtensionKind>, 15> expected_extensions;
+    model::FontValue editor_font;
+    editor_font.kind = model::FontKind::absolute;
+    editor_font.face_name = "Arial";
+    editor_font.height = 12;
+    editor_font.bold = true;
     for (std::size_t index = 0; index < expected_types.size(); ++index) {
         model::TypeDomainEntry entry;
         entry.term = terms[index % terms.size()];
@@ -2009,6 +2014,7 @@ void test_table_input_field_value_type_round_trip() {
         if (index == 0) column.control->properties.set_explicit(model::PropertyId::from_name("BorderColor"),
             model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
                 model::QualifiedName{"StyleColors.BorderColor"}});
+        if (index == 0) column.control->properties.set_explicit(model::PropertyId::from_name("Font"), editor_font);
         column.control->value_type = model::TypeDomainPatternValue{{entry}};
         if (index >= 10 && index <= 12) {
             constexpr std::array extensions{model::InputFieldExtensionKind::catalog,
@@ -2099,6 +2105,9 @@ void test_table_input_field_value_type_round_trip() {
     const auto* border = decoded_columns[0].control->properties.find(model::PropertyId::from_name("BorderColor"));
     expect(border && std::get<model::ColorValue>(border->value).kind == model::ColorKind::style_reference,
         "embedded editor BorderColor must survive the named XML and stream cycle");
+    const auto* decoded_font = decoded_columns[0].control->properties.find(model::PropertyId::from_name("Font"));
+    expect(decoded_font && std::get<model::FontValue>(decoded_font->value) == editor_font,
+        "embedded editor Font must survive the named XML and stream cycle");
     for (const auto [version, arity] : {std::pair{"21", 39U}, std::pair{"30", 44U}}) {
         auto old_record = encoded.value();
         auto old_editor = table_column_editor_info(old_record, 0);

@@ -1537,6 +1537,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     }
     output += "      </xs:choice>\n";
     for (const auto name : model::metamodel::table_column_input_properties) {
+        if (name == "Font") continue;
         output += "      <xs:element name=\"" + std::string(name) +
             "\" type=\"" + (name == "BorderColor" ? "ColorValueType" : "xs:boolean") + "\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
     }
@@ -2136,7 +2137,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     }
     output +=
         "          <Property name=\"Caption\" russianName=\"Заголовок\"/>\n"
-        "          <Property name=\"ToolTip\" russianName=\"Подсказка\"/><Property name=\"Font\" russianName=\"Шрифт\"/>\n"
+        "          <Property name=\"ToolTip\" russianName=\"Подсказка\"/>\n"
         "        </Properties></NamedConcept>\n"
         "      </Palette>\n"
         "    </xs:appinfo>\n"

@@ -718,10 +718,11 @@ inline constexpr std::initializer_list<std::string_view> table_column_input_bool
     "ListChoiceMode", "MultiLine", "ExtendedEdit", "PasswordMode", "TextEdit"};
 
 inline constexpr auto table_column_input_properties = [] {
-    std::array<std::string_view, table_column_input_boolean_properties.size() + 1> names{};
+    std::array<std::string_view, table_column_input_boolean_properties.size() + 2> names{};
     std::size_t index = 0;
     for (const auto name : table_column_input_boolean_properties) names[index++] = name;
-    names.back() = "BorderColor";
+    names[index++] = "BorderColor";
+    names[index++] = "Font";
     return names;
 }();
 

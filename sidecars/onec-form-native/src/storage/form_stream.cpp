@@ -4498,9 +4498,10 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control,
         const bool enabled = explicit_bool(control.properties, "Enabled", true);
         const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
         const auto border_color = explicit_control_color(control.properties, "BorderColor");
+        const auto font = explicit_control_font(control.properties, std::string(path) + "/Font");
         LV info = canonical_input_field_info(
             control.extension ? value_type : empty_type, enabled, read_only, flags, InputFieldTextValues{},
-            InputFieldLayoutValues{}, nullptr, &border_color, {}, control.extension, catalog_settings);
+            InputFieldLayoutValues{}, &font, &border_color, {}, control.extension, catalog_settings);
         info.items[1] = encoded_type_domain(value_type, std::string(path) + "/ValueType");
         if (!value_type.entries.empty() && value_type.entries.size() == 1 &&
             value_type.entries.front().term == model::TypeDomainTerm::string) {
@@ -12594,6 +12595,9 @@ model::TableColumn decode_table_column(
             read_common_control_base(base, base_path, [&] {
                 return canonical_input_field_info({}, true, false, {}, {}, {}).items[2].items[0].items[0];
             }, {warnings, table_id, "TableColumn.InputField", CommonControlBaseStatePolicy::strict_default_layouts});
+            const auto font = decode_control_font(base.items[4], child_path(base_path, 4));
+            if (font != model::FontValue{})
+                column.control->properties.set_explicit(model::PropertyId::from_name("Font"), font);
             const auto border_color = decode_control_color(base.items[6], child_path(base_path, 6));
             if (border_color != model::ColorValue{})
                 column.control->properties.set_explicit(model::PropertyId::from_name("BorderColor"), border_color);

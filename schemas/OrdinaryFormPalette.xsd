@@ -1539,8 +1539,9 @@
           <Property name="PasswordMode" apiName="PasswordMode" russianName="РежимПароля" russianType="Булево" valueCodec="boolean"/>
           <Property name="TextEdit" apiName="TextEdit" russianName="РедактированиеТекста" russianType="Булево" valueCodec="boolean"/>
           <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+          <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
           <Property name="Caption" russianName="Заголовок"/>
-          <Property name="ToolTip" russianName="Подсказка"/><Property name="Font" russianName="Шрифт"/>
+          <Property name="ToolTip" russianName="Подсказка"/>
         </Properties></NamedConcept>
       </Palette>
     </xs:appinfo>
