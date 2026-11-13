@@ -966,9 +966,11 @@ model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_vi
     const bool legacy_v3 = version == "3";
     const bool legacy_v4 = version == "4";
     const bool legacy_v5 = version == "5";
-    require_arity(row, legacy_v3 ? 8 : legacy_v4 ? 10 : legacy_v5 ? 11 : 12, path);
-    require_raw_constant(row.items[0], legacy_v3 ? "3" : legacy_v4 ? "4" : legacy_v5 ? "5" : "6",
+    const bool current_v7 = version == "7";
+    require_arity(row, legacy_v3 ? 8 : legacy_v4 ? 10 : legacy_v5 ? 11 : current_v7 ? 13 : 12, path);
+    require_raw_constant(row.items[0], legacy_v3 ? "3" : legacy_v4 ? "4" : legacy_v5 ? "5" : current_v7 ? "7" : "6",
         child_path(path, 0));
+    if (current_v7) require_raw_constant(row.items[12], "0", child_path(path, 12));
     model::LocalizedStringValue title;
     try {
         list_stream::ListInStream in(row.items[1]);

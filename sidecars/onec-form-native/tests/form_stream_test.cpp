@@ -26052,6 +26052,18 @@ void test_page_table_codec() {
         "Page rows with wrong arity must fail");
     malformed = expected;
     malformed.items[2].items[0] = list_stream::ListValue::raw_atom("7");
+    malformed.items[2].items.push_back(list_stream::ListValue::raw_atom("0"));
+    const auto page_v7 = form_stream::decode_page_table(malformed, 1);
+    expect(page_v7.ok() && page_v7.value().size() == 1 && page_v7.value()[0].name == page.name,
+        "Page version 7 with a zero tail must retain its named fields");
+    const auto normalized_v7 = form_stream::encode_page_table(page_v7.value());
+    expect(normalized_v7.ok() && list_stream::dump_compact(normalized_v7.value()) ==
+        list_stream::dump_compact(expected), "Page version 7 must rebuild in the canonical 8.5 format");
+    malformed.items[2].items[12] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1106", "$/Pages/2/12",
+        "Page version 7 with a nonzero tail must reject");
+    malformed = expected;
+    malformed.items[2].items[0] = list_stream::ListValue::raw_atom("8");
     expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1106", "$/Pages/2/0",
         "unknown Page record versions must fail");
     malformed = expected;
