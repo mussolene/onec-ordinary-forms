@@ -4584,6 +4584,7 @@ struct TableColumnLayout {
 };
 constexpr std::array table_column_layouts{
     TableColumnLayout{{"16", 40}, false}, TableColumnLayout{{"17", 43}, false},
+    TableColumnLayout{{"18", 45}, false},
     TableColumnLayout{{"19", 46}, true}, TableColumnLayout{{"23", 52}, true},
 };
 

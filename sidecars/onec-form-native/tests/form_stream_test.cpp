@@ -580,7 +580,8 @@ void test_legacy_table_property_layouts() {
 
 void test_table_column_generation_prototypes() {
     struct Layout { std::string_view version; std::size_t arity; };
-    constexpr std::array layouts{Layout{"16", 40}, Layout{"17", 43}, Layout{"19", 46}, Layout{"23", 52}};
+    constexpr std::array layouts{Layout{"16", 40}, Layout{"17", 43}, Layout{"18", 45},
+        Layout{"19", 46}, Layout{"23", 52}};
     const auto properties = [](auto& stream) -> auto& {
         auto* record = find_record_with_guid(stream, model::metamodel::descriptor_for(model::ControlKind::table).guid);
         return record->items.at(2).items.at(2).items.at(1).items.at(23).items.at(1).items.at(1).items.at(1).items.at(1);
@@ -684,7 +685,7 @@ void test_table_column_generation_prototypes() {
             expect(!form_stream::decode_document(invalid_mode, "InvalidColumnMode"),
                 "unrecognized current edit mode must fail closed");
             auto unknown = current.value();
-            properties(unknown).items[0] = list_stream::ListValue::raw_atom("18");
+            properties(unknown).items[0] = list_stream::ListValue::raw_atom("20");
             expect(!form_stream::decode_document(unknown, "UnknownColumnGeneration"), "unknown generation must reject");
             auto unknown_profile = current.value();
             properties(unknown_profile).items[has_editor ? 40 : 39] = list_stream::ListValue::raw_atom("99");
