@@ -7174,8 +7174,11 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     require_raw_constant(info.items[0], "0", child_path(info_path, 0));
     const auto& properties = info.items[1];
     const auto properties_path = child_path(info_path, 1);
-    require_arity(properties, 5, properties_path);
-    require_raw_constant(properties.items[1], "8", child_path(properties_path, 1));
+    const bool legacy_v7 = properties.is_list && properties.items.size() == 4 &&
+        !properties.items[1].is_list && properties.items[1].atom_kind == LV::AtomKind::raw &&
+        properties.items[1].atom == "7";
+    require_arity(properties, legacy_v7 ? 4 : 5, properties_path);
+    require_raw_constant(properties.items[1], legacy_v7 ? "7" : "8", child_path(properties_path, 1));
     auto base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     read_common_control_base(base, base_path, [&] {
@@ -7192,6 +7195,10 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
         model::ControlKind::usual_group);
     const auto caption = decoded_localized_text(properties.items[2], child_path(properties_path, 2));
     auto normalized = properties;
+    if (legacy_v7) {
+        normalized.items[1] = raw("8");
+        normalized.items.push_back(raw("0"));
+    }
     auto normalized_base = base;
     normalized_base.items[12] = encoded_localized_text(tool_tip, child_path(base_path, 12));
     normalized_base.items[5] = raw("0");

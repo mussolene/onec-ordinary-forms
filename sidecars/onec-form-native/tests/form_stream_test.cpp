@@ -2850,7 +2850,29 @@ void test_usual_group_named_record_round_trip_and_rejections() {
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
         "full UsualGroup records must round-trip without drift");
 
-    for (const auto mutation : {0, 1, 2, 3, 4, 5}) {
+    auto legacy_group = encoded.value();
+    auto* legacy_record = find_usual_group_record(legacy_group);
+    expect(legacy_record != nullptr, "legacy UsualGroup probe must locate the record");
+    if (legacy_record != nullptr) {
+        auto& properties = legacy_record->items[2].items[1].items;
+        properties[1] = list_stream::ListValue::raw_atom("7");
+        properties.pop_back();
+        const auto legacy_decoded = form_stream::decode_document(legacy_group, "Main");
+        expect(legacy_decoded.ok() && legacy_decoded.value().reconstruction_complete(),
+            "UsualGroup v7 with four fields must decode completely");
+        if (legacy_decoded.ok()) {
+            const auto legacy_xml = source::serialize_form_xml(legacy_decoded.value());
+            const auto current_xml = source::serialize_form_xml(decoded.value());
+            expect(legacy_xml.ok() && current_xml.ok() && legacy_xml.value() == current_xml.value(),
+                "UsualGroup v7 must preserve the named properties of v8");
+            auto rebuilt = form_stream::encode_document(legacy_decoded.value());
+            expect(rebuilt.ok() &&
+                       list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                "UsualGroup v7 must rebuild through the canonical five-field v8 record");
+        }
+    }
+
+    for (const auto mutation : {0, 1, 2, 3, 4, 5, 6}) {
         auto invalid = encoded.value();
         auto* record = find_usual_group_record(invalid);
         expect(record != nullptr, "encoded UsualGroup record must be locatable");
@@ -2860,6 +2882,7 @@ void test_usual_group_named_record_round_trip_and_rejections() {
         if (mutation == 3) record->items[5] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
         if (mutation == 4) record->items[2].items[1].items[0].items[0] = list_stream::ListValue::raw_atom("18");
         if (mutation == 5) record->items[2].items[1].items[4] = list_stream::ListValue::raw_atom("1");
+        if (mutation == 6) record->items[2].items[1].items[1] = list_stream::ListValue::raw_atom("7");
         const auto varied = form_stream::decode_document(invalid, "Main");
         if (mutation == 5) {
             expect(varied.ok() && !varied.value().reconstruction_complete() &&
