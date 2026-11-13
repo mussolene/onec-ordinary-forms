@@ -5211,6 +5211,26 @@ void test_radio_input_list_common_font_border_color_round_trip() {
             }
         }
 
+        for (const auto& composite_color : {
+                 "{3,4,{0,12345678-1234-1234-1234-123456789abc}}",
+                 "{4,4,{0,12345678-1234-1234-1234-123456789abc},4}"}) {
+            auto composite_automatic = absent.value();
+            auto* base = common_base(composite_automatic, kind);
+            expect(base != nullptr, "composite automatic Color probe must locate the owning base record");
+            if (base == nullptr) continue;
+            base->items[6] = list_stream::parse(composite_color);
+            const auto decoded = form_stream::decode_document(composite_automatic, "CompositeAutomaticColor");
+            expect(decoded.ok() && decoded.value().reconstruction_complete() &&
+                       property(decoded.value(), "BorderColor") == nullptr,
+                "composite automatic Color must retain the named implicit default");
+            if (!decoded.ok()) continue;
+            auto rebuilt = form_stream::encode_document(decoded.value());
+            const auto* rebuilt_base = rebuilt ? common_base(rebuilt.value(), kind) : nullptr;
+            expect(rebuilt.ok() && rebuilt_base != nullptr &&
+                       list_stream::dump_compact(rebuilt_base->items[6]) == "{4,4,{0},4}",
+                "composite automatic Color must rebuild through canonical Color4");
+        }
+
         if (supports_font && kind != model::ControlKind::usual_group) {
             auto legacy_automatic_font = absent.value();
             auto* base = common_base(legacy_automatic_font, kind);

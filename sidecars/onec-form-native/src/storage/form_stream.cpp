@@ -1208,9 +1208,14 @@ model::ColorValue decode_control_color(const LV& value, std::string_view path) {
     const auto kind = integer_atom<std::int32_t>(value.items[1], child_path(path, 1));
     if (kind == 4) {
         if (!legacy_v3) require_raw_constant(value.items[3], "4", child_path(path, 3));
-        require_arity(value.items[2], 1, child_path(path, 2));
-        // Native getters return automatic kind and RGB=-1 regardless of this inactive numeric payload.
-        static_cast<void>(integer_atom<std::int32_t>(value.items[2].items[0], child_path(child_path(path, 2), 0)));
+        const auto payload_path = child_path(path, 2);
+        if (value.items[2].is_list && value.items[2].items.size() == 2) {
+            static_cast<void>(composite_id(value.items[2], payload_path));
+        } else {
+            require_arity(value.items[2], 1, payload_path);
+            static_cast<void>(integer_atom<std::int32_t>(value.items[2].items[0], child_path(payload_path, 0)));
+        }
+        // Native getters return automatic kind and RGB=-1 regardless of this inactive payload.
         return model::ColorValue{};
     }
     if (kind == 0) {
