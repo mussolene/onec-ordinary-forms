@@ -828,8 +828,10 @@ void test_document_package_types(
                    attribute(document_properties[index], "type") == expected_document_properties[index].second,
             "DocumentFormExtension XSD must preserve descriptor property names, types, and order");
     const auto input_choices = direct_children(sequence_for_type(schema, "InputFieldType"), "choice");
-    expect(input_choices.size() == 1 && direct_children(input_choices[0], "element").size() == 3,
-        "InputField must expose exactly three mutually exclusive named reference extensions");
+    expect(input_choices.size() == 1 &&
+               direct_children(input_choices[0], "element").size() ==
+                   std::size(oof::model::metamodel::input_field_extensions),
+        "InputField must expose every registered mutually exclusive named reference extension");
     constexpr std::array form_surface_names{
         "Events",
         "Attributes",
@@ -1362,16 +1364,21 @@ void test_spreadsheet_document_schema(xmlNodePtr schema) {
     expect_element_shape(cell_elements.at(0), "Format", "SpreadsheetDocumentFormatType", "0", "");
     const auto choice = direct_child(cell_sequence, "choice");
     const auto alternatives = direct_children(choice, "element");
-    expect(alternatives.size() == 1 && attribute(alternatives[0], "name") == "Text" &&
-        attribute(alternatives[0], "type") == "LocalizedTextValueType",
-        "Spreadsheet Cell must choose between text and typed value representations");
-    const auto typed_sequence = direct_child(choice, "sequence");
-    const auto typed_elements = direct_children(typed_sequence, "element");
-    expect(typed_elements.size() == 4 && attribute(typed_elements[0], "name") == "ContainsValue" &&
+    expect(alternatives.size() == 1, "Spreadsheet Cell must allow DetailParameter as standalone content");
+    expect_element_shape(alternatives.at(0), "DetailParameter", "xs:string", "", "");
+    const auto content_sequences = direct_children(choice, "sequence");
+    expect(content_sequences.size() == 2, "Spreadsheet Cell must distinguish text and typed value content");
+    const auto text_elements = direct_children(content_sequences.at(0), "element");
+    expect(text_elements.size() == 2, "text Spreadsheet Cell must allow DetailParameter");
+    expect_element_shape(text_elements.at(0), "Text", "LocalizedTextValueType", "", "");
+    expect_element_shape(text_elements.at(1), "DetailParameter", "xs:string", "0", "");
+    const auto typed_elements = direct_children(content_sequences.at(1), "element");
+    expect(typed_elements.size() == 5 && attribute(typed_elements[0], "name") == "ContainsValue" &&
         attribute(typed_elements[0], "fixed") == "true" && attribute(typed_elements[1], "name") == "ValueType" &&
         attribute(typed_elements[1], "type") == "TypeDomainValueType" && attribute(typed_elements[2], "name") == "Value",
         "typed Spreadsheet Cell must expose named ContainsValue, ValueType, and Value");
     expect_element_shape(typed_elements.at(3), "Control", "SpreadsheetDocumentCellControlType", "0", "");
+    expect_element_shape(typed_elements.at(4), "DetailParameter", "xs:string", "0", "");
     expect_type_attribute(schema, "SpreadsheetDocumentCellControlType", "type", "SpreadsheetDocumentCellControlKindType", "required");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "row", "SpreadsheetCoordinateType", "required");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "column", "SpreadsheetCoordinateType", "required");

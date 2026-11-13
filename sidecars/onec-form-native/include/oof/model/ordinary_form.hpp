@@ -1063,6 +1063,7 @@ enum class InputFieldExtensionKind : std::uint8_t {
     catalog,
     chart_of_accounts,
     chart_of_characteristic_types,
+    enumeration,
 };
 struct InputFieldPayload final : TypedControlPayload<ControlKind::input_field> {
     std::optional<InputFieldExtensionKind> extension;
@@ -1302,6 +1303,8 @@ struct SpreadsheetDocumentCell final {
     std::optional<SpreadsheetDocumentCellValue> typed_value;
     std::optional<SpreadsheetDocumentCellControl> control{};
     SpreadsheetDocumentFormat format{};
+    std::optional<std::string> detail_parameter{};
+    bool text_present = true;
     friend bool operator==(const SpreadsheetDocumentCell&, const SpreadsheetDocumentCell&) = default;
 };
 struct TableColumnControl {

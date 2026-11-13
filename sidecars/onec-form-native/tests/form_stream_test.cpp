@@ -17722,6 +17722,83 @@ R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
     }
 }
 
+void test_spreadsheet_cell_detail_parameter_batch() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "CellDetails";
+    for (std::uint64_t index = 0; index < 12; ++index)
+        form.children.emplace_back(model::ControlRef{model::ObjectId{index + 2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        model::ControlNode field{model::ObjectId{index + 2}, "Sheet" + std::to_string(index),
+            model::SpreadsheetDocumentFieldPayload{}};
+        model::SpreadsheetDocumentCell cell{1, 1, std::string{}, std::nullopt};
+        cell.detail_parameter = index == 0 ? "" : "Detail" + std::to_string(index);
+        if (index % 4 == 0) cell.text_present = false;
+        if (index % 4 == 1) cell.text = std::string{"Text"};
+        if (index % 4 >= 2) {
+            model::TypeDomainEntry type;
+            type.term = model::TypeDomainTerm::string;
+            type.string = {100, true};
+            cell.typed_value = model::SpreadsheetDocumentCellValue{
+                model::TypeDomainPatternValue{{type}}, std::string{index >= 8 ? "" : "Value"}};
+            if (index % 4 == 3) {
+                cell.control.emplace();
+                cell.control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+            }
+        }
+        std::get<model::SpreadsheetDocumentFieldPayload>(field.payload).cells.push_back(std::move(cell));
+        document.add_control(std::move(field));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "twelve DetailParameter cells encode" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "CellDetails");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(),
+        "twelve DetailParameter cells decode completely");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "DetailParameter cells serialize to named XML");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "DetailParameter cells parse from standalone XML");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "all twelve DetailParameter cells rebuild exactly without a baseline");
+    auto with_absent_lines = encoded.value();
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        auto* record = const_cast<list_stream::ListValue*>(find_control_record(with_absent_lines, index + 2));
+        auto& lines = record->items[2].items[11].items[5];
+        expect(lines.items.size() == 1 && lines.items[0].atom == "0",
+            "the twelve DetailParameter fixtures start without line resources");
+        lines.items[0] = list_stream::ListValue::raw_atom("1");
+        lines.items.insert(lines.items.end(), {
+            list_stream::ListValue::raw_atom("1"),
+            list_stream::parse("{4,0,{0},0,0,0,00000000-0000-0000-0000-000000000000,0}"),
+            list_stream::ListValue::raw_atom("0")});
+    }
+    const auto absent_decoded = form_stream::decode_document(with_absent_lines, "CellDetails");
+    expect(absent_decoded.ok() && absent_decoded.value().reconstruction_complete(),
+        "twelve unreferenced empty line resources must preserve all cell content");
+    const auto absent_xml = source::serialize_form_xml(absent_decoded.value());
+    expect(absent_xml.ok() && absent_xml.value() == xml.value(),
+        "empty line resources must not appear in the named XML");
+    auto malformed_line = with_absent_lines;
+    auto* malformed_record = const_cast<list_stream::ListValue*>(find_control_record(malformed_line, 2));
+    malformed_record->items[2].items[11].items[5].items[2].items[3] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(malformed_line, "CellDetails"),
+        "a noncanonical zero-GUID line must remain unsupported");
+    for (std::uint64_t index = 0; index < 12; ++index) {
+        const auto* control = parsed.value().find_control(model::ObjectId{index + 2});
+        const auto& cell = std::get<model::SpreadsheetDocumentFieldPayload>(control->payload).cells.front();
+        expect(cell.detail_parameter.has_value() && cell.text_present == (index % 4 != 0),
+            "DetailParameter and Text presence survive XML on every control");
+    }
+    for (const unsigned unsupported : {32U, 34U, 48U}) {
+        auto invalid = encoded.value();
+        auto& first_cell = invalid.items[1].items[2].items[2].items[1].items[2].items[11].items[20];
+        first_cell.items[0] = list_stream::ListValue::raw_atom(std::to_string(unsupported));
+        expect(!form_stream::decode_document(invalid, "CellDetails"),
+            "a note bit without a named drawing must remain unsupported");
+    }
+}
+
 void test_spreadsheet_document_field_serialization_versions() {
     using Version = model::SpreadsheetDocumentFieldSerializationVersion;
     constexpr std::array versions{Version::v14, Version::v16, Version::v18};
@@ -19642,6 +19719,36 @@ void test_owned_panel_common_properties_and_page_event() {
         expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
         const auto decoded = form_stream::decode_document(encoded.value(), "PanelCommon");
         expect(decoded.ok() && decoded.value().reconstruction_complete(), "Panel common fields must decode completely");
+        if (!nondefault) {
+            auto legacy = encoded.value();
+            auto* legacy_panel = find_record_with_guid(legacy,
+                model::metamodel::descriptor_for(model::ControlKind::panel).guid);
+            expect(legacy_panel != nullptr, "encoded Panel record must exist");
+            auto& owner = legacy_panel->items.at(2).items.at(1);
+            std::size_t picture_cursor = 2;
+            for (std::size_t edge = 0; edge < 6; ++edge) {
+                const auto count = std::stoul(owner.items.at(picture_cursor).atom);
+                picture_cursor += 1 + count;
+            }
+            auto& picture = owner.items.at(picture_cursor);
+            expect(picture.items.size() == 11 && picture.items[0].atom == "10",
+                "current Panel Picture wrapper must have eleven fields");
+            picture.items[0] = list_stream::ListValue::raw_atom("8");
+            picture.items.resize(9);
+            const auto legacy_decoded = form_stream::decode_document(legacy, "PanelCommon");
+            expect(legacy_decoded.ok() && legacy_decoded.value().reconstruction_complete(),
+                "legacy Panel Picture wrapper must normalize to a complete named model");
+            const auto current_xml = source::serialize_form_xml(decoded.value());
+            const auto legacy_xml = source::serialize_form_xml(legacy_decoded.value());
+            expect(current_xml.ok() && legacy_xml.ok() && current_xml.value() == legacy_xml.value(),
+                "legacy Panel Picture wrapper must preserve all named XML properties");
+            const auto rebuilt_legacy = form_stream::encode_document(legacy_decoded.value());
+            expect(rebuilt_legacy.ok() && list_stream::dump_compact(rebuilt_legacy.value()) ==
+                list_stream::dump_compact(encoded.value()), "legacy Panel Picture must rebuild in the current generation");
+            picture.items[6] = list_stream::ListValue::raw_atom("1");
+            expect(!form_stream::decode_document(legacy, "PanelCommon"),
+                "noncanonical legacy Panel Picture fields must not be normalized silently");
+        }
         const auto* found = decoded.value().find_control(model::ObjectId{2});
         expect(found && found->children.size() == 2 && decoded.value().find_control(model::ObjectId{5}),
             "Panel pages and nested controls must survive");
@@ -28074,6 +28181,7 @@ int main() {
         test_input_list_choice_mode_round_trip();
         test_single_input_field_round_trip();
         test_spreadsheet_cell_controls();
+        test_spreadsheet_cell_detail_parameter_batch();
         test_spreadsheet_document_field_serialization_versions();
         test_spreadsheet_document_field_named_properties_and_events();
         test_spreadsheet_document_field_round_trip();

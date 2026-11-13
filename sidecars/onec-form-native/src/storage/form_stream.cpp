@@ -2389,6 +2389,8 @@ LV input_field_reference_pair(model::InputFieldExtensionKind kind) {
             settings = parse_constant("{1,0,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
         case model::InputFieldExtensionKind::chart_of_characteristic_types:
             settings = parse_constant("{0,0,2,00000000-0000-0000-0000-000000000000,{1,0}}"); break;
+        case model::InputFieldExtensionKind::enumeration:
+            settings = parse_constant("{1,1,00000000-0000-0000-0000-000000000000}"); break;
     }
     return list({raw(std::string(descriptor->guid)), std::move(settings)});
 }
@@ -3260,7 +3262,20 @@ DecodedOwnerPages decode_owner_pages(
             CommonControlBaseCapabilities{true, false, {}, model::ControlKind::panel, model::ControlKind::panel});
         apply_common_control_base(decoded_panel.properties, common);
         const auto picture_path = child_path(child_path(path, 1), incoming_end);
-        const auto& picture_wrapper = normalized.items[2];
+        auto& picture_wrapper = normalized.items[2];
+        if (picture_wrapper.is_list && picture_wrapper.items.size() == 9) {
+            require_raw_constant(picture_wrapper.items[0], "8", child_path(picture_path, 0));
+            const auto& current_picture = expected.items[1].items[2];
+            for (std::size_t slot = 1; slot < 9; ++slot) {
+                if (!same_list_value(picture_wrapper.items[slot], current_picture.items[slot]))
+                    fail("OOF1114", child_path(picture_path, slot), "canonical Panel Picture version 8 field",
+                        "unverified legacy field", "Panel Picture version 8 field is unsupported");
+            }
+            // Designer 8.5 сохраняет эту девятипольную запись как версию 10 с двумя нулевыми полями.
+            picture_wrapper.items[0] = raw("10");
+            picture_wrapper.items.push_back(raw("0"));
+            picture_wrapper.items.push_back(raw("0"));
+        }
         require_arity(picture_wrapper, 11, picture_path);
         const auto size = integer_atom<std::int32_t>(picture_wrapper.items[1], child_path(picture_path, 1));
         if (size < 0 || size > 7 || size == 5 || size == 6)
@@ -11273,16 +11288,28 @@ LV canonical_spreadsheet_field_info(const model::SpreadsheetDocumentFieldPayload
             const auto reference = format_reference(format);
             if (cell->typed_value) {
                 const bool default_value = spreadsheet_cell_value_is_default(*cell->typed_value);
-                std::vector<LV> values{raw(std::to_string((default_value ? 0 : 2) + (cell->control ? 1 : 0))), raw(std::to_string(reference))};
+                const unsigned flags = (default_value ? 0U : 2U) + (cell->control ? 1U : 0U) +
+                    (cell->detail_parameter ? 8U : 0U);
+                std::vector<LV> values{raw(std::to_string(flags)), raw(std::to_string(reference))};
                 if (cell->control) {
                     values.push_back(raw("1"));
                     values.push_back(encoded_spreadsheet_cell_control(*cell, "$/SpreadsheetDocumentField/Document/Cell/Control"));
                 }
                 if (!default_value) values.push_back(encoded_spreadsheet_cell_value(cell->typed_value->value, "$/SpreadsheetDocumentField/Document/Cell/Value"));
+                if (cell->detail_parameter) values.push_back(string_value(*cell->detail_parameter));
                 row_items.push_back(list(std::move(values)));
-            } else {
+            } else if (cell->text_present) {
                 const auto text = encoded_localized_text(cell->text, "$/SpreadsheetDocumentField/Document/Cell/Text");
-                row_items.push_back(list({raw("16"), raw(std::to_string(reference)), text, raw("0")}));
+                if (cell->detail_parameter)
+                    row_items.push_back(list({raw("24"), raw(std::to_string(reference)),
+                        string_value(*cell->detail_parameter), text}));
+                else row_items.push_back(list({raw("16"), raw(std::to_string(reference)), text, raw("0")}));
+            } else if (cell->detail_parameter) {
+                row_items.push_back(list({raw("8"), raw(std::to_string(reference)),
+                    string_value(*cell->detail_parameter)}));
+            } else {
+                fail("OOF1122", "$/SpreadsheetDocumentField/Document/Cell", "named cell content", {},
+                    "Spreadsheet cell without Text requires DetailParameter");
             }
         }
     }
@@ -11414,9 +11441,16 @@ DecodedControl decode_spreadsheet_document_field(
     const auto& embedded = at(document_info, 5, document_path);
     const auto embedded_count = integer_atom<std::uint32_t>(at(embedded, 0, document_path), document_path);
     require_arity(embedded, 1 + std::size_t(embedded_count) * 3, document_path);
+    static const auto absent_line = list_stream::dump_compact(
+        parse_constant("{4,0,{0},0,0,0,00000000-0000-0000-0000-000000000000,0}"));
     for (std::size_t i = 0; i < embedded_count; ++i) {
         require_raw_constant(embedded.items[1 + i * 3], "1", document_path);
-        resources.lines.push_back(value_codec::decode_line(list_stream::dump_compact(embedded.items[2 + i * 3])));
+        const auto& stored_line = embedded.items[2 + i * 3];
+        // Пустая линия занимает место в таблице ссылок, но не является свойством
+        // формата. Если формат ссылается на нее, проверка семейства отклонит его.
+        if (list_stream::dump_compact(stored_line) == absent_line)
+            resources.lines.emplace_back();
+        else resources.lines.push_back(value_codec::decode_line(list_stream::dump_compact(stored_line)));
         require_raw_constant(embedded.items[3 + i * 3], "0", document_path);
     }
     std::vector<std::pair<std::uint32_t, std::uint32_t>> row_references;
@@ -11449,21 +11483,27 @@ DecodedControl decode_spreadsheet_document_field(
             cell_flags.push_back(flags);
             cell_references.push_back(integer_atom<std::uint32_t>(at(value, 1, document_path), document_path));
             model::SpreadsheetDocumentCell cell{row_index + 1, column + 1, std::string{}, std::nullopt};
-            if (flags == 16) {
-                if (value.items.size() != 3 && value.items.size() != 4)
+            if (flags == 16 || flags == 24) {
+                const std::size_t text_index = flags == 24 ? 3 : 2;
+                if (value.items.size() != text_index + 1 && value.items.size() != text_index + 2)
                     fail("OOF1114", document_path, "text cell with optional formatted text footer", {},
                         "Spreadsheet formatted cell text is unsupported");
-                cell.text = decoded_localized_text(value.items[2], document_path);
-                if (value.items.size() == 4) {
+                if (flags == 24) cell.detail_parameter = string_atom(value.items[2], document_path);
+                cell.text = decoded_localized_text(value.items[text_index], document_path);
+                if (value.items.size() == text_index + 2) {
                     if (document_version < 10)
                         fail("OOF1114", document_path, "named formatted cell text", {},
                             "Spreadsheet formatted cell text is unsupported");
-                    require_raw_constant(value.items[3], "0", document_path);
+                    require_raw_constant(value.items[text_index + 1], "0", document_path);
                 }
-            } else if (flags <= 3) {
-                require_arity(value, 2 + ((flags & 1) ? 2 : 0) + ((flags & 2) ? 1 : 0), document_path);
+            } else if (flags <= 3 || (flags >= 8 && flags <= 11)) {
+                require_arity(value, 2 + ((flags & 1) ? 2 : 0) + ((flags & 2) ? 1 : 0) +
+                    ((flags & 8) ? 1 : 0), document_path);
                 if (flags & 1) require_raw_constant(value.items[2], "1", document_path);
-                if (flags & 2) cell.typed_value = model::SpreadsheetDocumentCellValue{{}, decoded_spreadsheet_cell_value(value.items.back(), document_path)};
+                if (flags & 2) cell.typed_value = model::SpreadsheetDocumentCellValue{{},
+                    decoded_spreadsheet_cell_value(value.items[2 + ((flags & 1) ? 2 : 0)], document_path)};
+                if (flags & 8) cell.detail_parameter = string_atom(value.items.back(), document_path);
+                if (flags == 8) cell.text_present = false;
             } else fail("OOF1114", document_path, "named text or typed cell content", {}, "Spreadsheet cell content flags are unsupported");
             payload.cells.push_back(std::move(cell));
         }

@@ -326,6 +326,8 @@ inline constexpr InputFieldExtensionDescriptor input_field_extensions[]{
         "ChartOfAccountsInputFieldExtension", u8"Расширение поля ввода плана счетов"},
     {InputFieldExtensionKind::chart_of_characteristic_types, "5f656c99-ee3b-4bb7-92a1-e6f5a93c2c9d",
         "ChartOfCharacteristicTypesInputFieldExtension", u8"Расширение поля ввода вида характеристик"},
+    {InputFieldExtensionKind::enumeration, "30ee7b7c-8dac-4e20-b58e-e7f7742ae8d8",
+        "EnumInputFieldExtension", u8"Расширение поля ввода перечисления"},
 };
 
 struct StandardMenuCommandDescriptor {

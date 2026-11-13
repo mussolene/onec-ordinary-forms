@@ -4218,6 +4218,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 if (!property_value_matches(text_descriptor, cell.text))
                     add_violation(report, InvariantCode::invalid_property, control.id, control.id,
                         "Spreadsheet Cell Text requires a String or a valid LocalizedString value");
+                if (!cell.typed_value && !cell.text_present &&
+                    (!cell.detail_parameter || !std::holds_alternative<std::string>(cell.text) ||
+                     !std::get<std::string>(cell.text).empty()))
+                    add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                        "Spreadsheet Cell without Text requires DetailParameter and an empty Text default");
                 validate_format(cell.format);
                 if (!cell.typed_value && !cell.format.properties.contains(PropertyId::from_name("ContainsValue"))) {
                     const auto* inherited = spreadsheet->inherited_cell_property(cell, PropertyId::from_name("ContainsValue"));

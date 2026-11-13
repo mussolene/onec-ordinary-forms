@@ -2838,9 +2838,11 @@ private:
                     bool contains_value_seen = false;
                     bool value_type_seen = false;
                     bool value_seen = false;
+                    bool detail_parameter_seen = false;
                     model::PropertyValue text{std::string{}};
                     std::optional<model::TypeDomainPatternValue> value_type;
                     std::optional<model::PropertyValue> typed_value;
+                    std::optional<std::string> detail_parameter;
                     std::optional<model::SpreadsheetDocumentCellControl> cell_control;
                     model::SpreadsheetDocumentFormat format;
                     bool format_seen = false;
@@ -2848,7 +2850,7 @@ private:
                     for (xmlNodePtr value_node : element_children(cell_node)) {
                         const auto name = node_name(value_node);
                         if (name == "Format") {
-                            if (format_seen || (!text_seen && !value_type_seen))
+                            if (format_seen || (!text_seen && !value_type_seen && !detail_parameter_seen))
                                 fail("OOF2003", value_node, id_text, name, "one Format after cell content", "duplicate or out of order", "Spreadsheet Cell Format must follow its content");
                             format = parse_format(value_node);
                             format_seen = true;
@@ -2941,6 +2943,17 @@ private:
                             content_stage = 5;
                             continue;
                         }
+                        if (name == "DetailParameter") {
+                            if (detail_parameter_seen || (content_stage != 0 && content_stage != 1 &&
+                                content_stage != 3 && content_stage != 4 && content_stage != 5) ||
+                                value_node->properties != nullptr || !element_children(value_node).empty())
+                                fail("OOF2003", value_node, id_text, name, "one plain DetailParameter after cell content",
+                                    "duplicate or out of order", "Spreadsheet Cell DetailParameter is invalid");
+                            detail_parameter = node_text(value_node);
+                            detail_parameter_seen = true;
+                            content_stage = 7;
+                            continue;
+                        }
                         fail("OOF2003", value_node, id_text, name, "Text or typed-cell children", name, "Unknown Spreadsheet Cell item");
                     }
                     std::optional<model::SpreadsheetDocumentCellValue> typed;
@@ -2973,10 +2986,15 @@ private:
                             }
                         }
                         typed = model::SpreadsheetDocumentCellValue{std::move(*value_type), std::move(effective_value)};
-                    } else if (!text_seen) {
-                        fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires Text or a typed value");
+                    } else if (!text_seen && !detail_parameter_seen) {
+                        fail("OOF2003", cell_node, id_text, "Text", "Text, typed value, or DetailParameter", "missing",
+                            "Spreadsheet Cell requires named content");
                     }
-                    cells.push_back({row, column, std::move(text), std::move(typed), std::move(cell_control), std::move(format)});
+                    model::SpreadsheetDocumentCell cell{row, column, std::move(text), std::move(typed),
+                        std::move(cell_control), std::move(format)};
+                    cell.text_present = text_seen || cell.typed_value.has_value();
+                    cell.detail_parameter = std::move(detail_parameter);
+                    cells.push_back(std::move(cell));
                 }
                 std::ranges::sort(spreadsheet.rows, {}, &model::SpreadsheetDocumentRow::index);
                 std::ranges::sort(spreadsheet.columns, {}, &model::SpreadsheetDocumentColumn::index);
@@ -5601,10 +5619,10 @@ private:
             write_indexed_formats("Column", spreadsheet->columns);
             for (const auto& cell : spreadsheet->cells) {
                 writer_.open("Cell", {{"row", std::to_string(cell.row)}, {"column", std::to_string(cell.column)}});
-                if (!cell.typed_value.has_value()) {
+                if (!cell.typed_value.has_value() && cell.text_present) {
                     const mm::PropertyDescriptor text_descriptor{.xml_name = "Text", .value_codec = mm::ValueCodec::localized_text};
                     write_property(text_descriptor, cell.text, id);
-                } else {
+                } else if (cell.typed_value.has_value()) {
                     const auto* text = std::get_if<std::string>(&cell.text);
                     if (!text || !text->empty())
                         serialization_fail(id, "Document/Cell", "Text-only or typed value", "both", "Spreadsheet Cell cannot persist Text and a typed Value together");
@@ -5641,6 +5659,7 @@ private:
                     writer_.text("ReadOnly", read_only != nullptr && std::get<bool>(read_only->value) ? "true" : "false");
                     writer_.close("Control");
                 }
+                if (cell.detail_parameter) writer_.text("DetailParameter", *cell.detail_parameter);
                 if (cell.format.properties.size() != 0) write_format("Format", cell.format);
                 writer_.close("Cell");
             }

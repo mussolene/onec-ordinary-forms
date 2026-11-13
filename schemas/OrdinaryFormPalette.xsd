@@ -128,6 +128,7 @@
         <NamedConcept name="CatalogInputFieldExtension" russianName="Расширение поля ввода справочника"/>
         <NamedConcept name="ChartOfAccountsInputFieldExtension" russianName="Расширение поля ввода плана счетов"/>
         <NamedConcept name="ChartOfCharacteristicTypesInputFieldExtension" russianName="Расширение поля ввода вида характеристик"/>
+        <NamedConcept name="EnumInputFieldExtension" russianName="Расширение поля ввода перечисления"/>
         <NamedConcept name="DocumentListTableExtension" russianName="Расширение табличного поля списка документов"><Properties>
           <Property name="EnablePeriodSetting" apiName="EnablePeriodSetting" russianName="РазрешитьНастройкуПериода" russianType="Булево" valueCodec="boolean"/>
         </Properties><Events>
@@ -1506,6 +1507,9 @@
         </Properties></NamedConcept>
         <NamedConcept name="SpreadsheetLanguageInfo" russianName="ОписаниеЯзыкаТабличногоДокумента"><Properties>
           <Property name="id" russianName="Идентификатор"/><Property name="code" russianName="Код"/><Property name="description" russianName="Описание"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="SpreadsheetDocumentCell" russianName="ОбластьЯчеекТабличногоДокумента"><Properties>
+          <Property name="Text" russianName="Текст"/><Property name="DetailParameter" russianName="ПараметрРасшифровки"/>
         </Properties></NamedConcept>
         <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
