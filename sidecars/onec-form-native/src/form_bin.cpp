@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <map>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -13,6 +15,7 @@
 #include <vector>
 
 #include "oof/diagnostic.hpp"
+#include "oof/source/form_xml.hpp"
 #include "oof/storage/form_bin_container.hpp"
 #include "oof/storage/form_stream.hpp"
 #include "oof/storage/list_stream.hpp"
@@ -153,6 +156,40 @@ Result<model::OrdinaryFormDocument> load_form_bin(
         auto document = decoded.take_value();
         document.set_module(model::FormModule{
             canonical_module_newlines(module_text, false)});
+        const bool normalizable_warnings = std::any_of(decoded.diagnostics().begin(), decoded.diagnostics().end(),
+            [](const auto& item) { return item.code == "OOF1140"; }) &&
+            std::all_of(decoded.diagnostics().begin(), decoded.diagnostics().end(), [](const auto& item) {
+                return item.severity != DiagnosticSeverity::warning || item.code == "OOF1140";
+            });
+        if (!document.reconstruction_complete() && normalizable_warnings) {
+            auto normalized = document;
+            normalized.set_reconstruction_complete(true);
+            const auto encoded = storage::form_stream::encode_document(normalized);
+            if (encoded) {
+                const auto readback = storage::form_stream::decode_document(
+                    encoded.value(), form_name, normalized.metadata_context());
+                if (readback && readback.value().reconstruction_complete()) {
+                    const auto before_xml = source::serialize_form_xml(normalized);
+                    const auto after_xml = source::serialize_form_xml(readback.value());
+                    bool assets_equal = normalized.assets().size() == readback.value().assets().size();
+                    std::set<std::string> before_paths;
+                    std::map<std::string, const model::PictureAsset*> after_assets;
+                    for (const auto& asset : readback.value().assets())
+                        if (!after_assets.emplace(asset.relative_path, &asset).second) assets_equal = false;
+                    for (const auto& asset : normalized.assets()) {
+                        if (!before_paths.insert(asset.relative_path).second) assets_equal = false;
+                        const auto found = after_assets.find(asset.relative_path);
+                        if (found == after_assets.end() || found->second->format != asset.format ||
+                            found->second->bytes != asset.bytes || found->second->transparent != asset.transparent ||
+                            found->second->transparent_x != asset.transparent_x ||
+                            found->second->transparent_y != asset.transparent_y || found->second->uuid != asset.uuid)
+                            assets_equal = false;
+                    }
+                    if (before_xml && after_xml && before_xml.value() == after_xml.value() && assets_equal)
+                        document.set_reconstruction_complete(true);
+                }
+            }
+        }
         return Result<model::OrdinaryFormDocument>::success(
             std::move(document), decoded.diagnostics());
     } catch (const std::exception& error) {

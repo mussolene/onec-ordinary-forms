@@ -188,10 +188,10 @@ void test_button_base_state_normalization() {
         for (const std::string_view unsupported_state : {"0", "3"}) {
             const auto partial = oof::load_form_bin(
                 alter_button_record(unsupported_state, false), "Main");
-            expect(partial.ok() && !partial.value().reconstruction_complete() &&
+            expect(partial.ok() && partial.value().reconstruction_complete() &&
                        !partial.diagnostics().empty() && partial.diagnostics().front().code == "OOF1140" &&
                        partial.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
-                "valid unobserved Button base state must load with OOF1140 and incomplete reconstruction");
+                "valid unobserved Button base state must normalize after exact named readback");
             const auto* partial_control = partial.value().find_control(model::ObjectId{2});
             expect(partial_control != nullptr && partial_control->name == "Run",
                 "known Button identity must survive an unobserved state");
@@ -204,20 +204,73 @@ void test_button_base_state_normalization() {
                     "known Enabled=false must survive an unobserved state");
             }
             const auto partial_xml = source::serialize_form_xml(partial.value());
-            expect(partial_xml.ok(), "partial Button must serialize to named XML");
+            expect(partial_xml.ok(), "normalized Button must serialize to named XML");
             const auto partial_parsed = source::parse_form_xml(partial_xml.value());
-            expect(partial_parsed.ok() && !partial_parsed.value().reconstruction_complete(),
-                "partial Button XML must preserve incomplete reconstruction");
+            expect(partial_parsed.ok() && partial_parsed.value().reconstruction_complete(),
+                "normalized Button XML must be independently buildable");
             const auto partial_build = oof::save_form_bin(partial_parsed.value());
-            expect(!partial_build.ok() && partial_build.diagnostics().front().code == "OOF1140" &&
-                       partial_build.diagnostics().front().severity == oof::DiagnosticSeverity::error,
-                "partial Button XML must never build a Form.bin with missing properties");
+            expect(partial_build.ok(), "normalized Button XML must build through the primary writer");
         }
         const auto changed_neighbor = oof::load_form_bin(alter_button_record("2", true), "Main");
-        expect(changed_neighbor.ok() && !changed_neighbor.value().reconstruction_complete() &&
+        expect(changed_neighbor.ok() && changed_neighbor.value().reconstruction_complete() &&
                    !changed_neighbor.diagnostics().empty() && changed_neighbor.diagnostics().front().code == "OOF1140",
-            "valid unknown Button base profile variation must warn and return an incomplete model");
+            "valid unknown Button base profile variation must normalize with a diagnostic");
     }
+}
+
+void test_twelve_button_platform85_normalization() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "TwelveButtons";
+    for (std::uint64_t id = 2; id < 14; ++id)
+        form.children.push_back(model::ControlRef{model::ObjectId{id}});
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::uint64_t id = 2; id < 14; ++id) {
+        model::ControlNode button{model::ObjectId{id}, "Button" + std::to_string(id), model::ButtonPayload{}};
+        button.properties().set_explicit(model::PropertyId::from_name("Caption"),
+            std::string("Caption") + std::to_string(id));
+        button.position.left.set(static_cast<std::int32_t>(id * 10));
+        button.position.top.set(static_cast<std::int32_t>(id * 5));
+        button.position.width.set(90);
+        button.position.height.set(24);
+        document.add_control(std::move(button));
+    }
+    document.set_module(model::FormModule{"procedure FormOpen()\nendprocedure\n"});
+    const auto original = oof::save_form_bin(document);
+    expect(original.ok(), "twelve Button baseline must build");
+    auto container = formbin::parse_container(original.value());
+    auto form_file = std::find_if(container.files.begin(), container.files.end(),
+        [](const auto& file) { return file.name == "form"; });
+    expect(form_file != container.files.end() && form_file->payload.size() >= 3,
+        "twelve Button form stream must exist");
+    const std::string text(form_file->payload.begin() + 3, form_file->payload.end());
+    auto payload = oof::storage::list_stream::parse(text);
+    auto& records = payload.items[1].items[2].items[2].items;
+    expect(records.size() == 13, "baseline must contain twelve Button records");
+    for (std::size_t index = 1; index < records.size(); ++index)
+        records[index].items[2].items[1].items[0].items[17] =
+            oof::storage::list_stream::ListValue::raw_atom("0");
+    const auto changed = oof::storage::list_stream::dump_listout(payload);
+    form_file->payload.assign({0xef, 0xbb, 0xbf});
+    form_file->payload.insert(form_file->payload.end(), changed.begin(), changed.end());
+
+    const auto loaded = oof::load_form_bin(formbin::serialize_container(container), "TwelveButtons");
+    expect(loaded.ok() && loaded.value().reconstruction_complete() &&
+           loaded.value().collections().controls.size() == 12,
+        "twelve Button source variations must normalize with every control present");
+    const auto xml = source::serialize_form_xml(loaded.value());
+    expect(xml.ok(), "normalized twelve Button XML must serialize");
+    auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "normalized twelve Button XML must parse");
+    parsed.value().set_module(loaded.value().module());
+    const auto rebuilt = oof::save_form_bin(parsed.value());
+    expect(rebuilt.ok(), "normalized twelve Button XML must build without source Form.bin");
+    const auto readback = oof::load_form_bin(rebuilt.value(), "TwelveButtons");
+    expect(readback.ok(), "rebuilt twelve Button Form.bin must reload");
+    const auto readback_xml = source::serialize_form_xml(readback.value());
+    expect(readback.value().reconstruction_complete() && readback_xml.ok() &&
+           readback_xml.value() == xml.value() && readback.value().module().text == document.module().text,
+        "twelve Button identities, named properties and module must survive the independent rebuild");
 }
 
 void test_product_composition_roundtrip() {
@@ -360,6 +413,7 @@ void test_module_utf8_validation() {
 
 int main() {
     try {
+        test_twelve_button_platform85_normalization();
         test_product_composition_roundtrip();
         test_label_pictures_roundtrip();
         test_button_base_state_normalization();
