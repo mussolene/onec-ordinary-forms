@@ -7284,6 +7284,25 @@ void test_command_bar_border_named_round_trip_and_guards() {
     const auto style_decoded = form_stream::decode_document(style_encoded.value(), "StyleBorder");
     expect(style_decoded.ok() && std::get<model::BorderValue>(style_decoded.value().find_control(model::ObjectId{2})->properties().find(
         model::PropertyId::from_name("Border"))->value) == style, "named style reference must survive decode");
+    style.border_type = model::ControlBorderType::single;
+    style.width = 1;
+    const auto styled_single = form_stream::encode_document(make_document(style));
+    expect(styled_single.ok() && list_stream::dump_compact(border_at(styled_single.value())) == "{3,1,{-18},1,1,0}",
+        "styled Single Border with width 1 must retain its platform type and width");
+    const auto styled_single_decoded = form_stream::decode_document(styled_single.value(), "StyledSingleBorder");
+    expect(styled_single_decoded.ok() && std::get<model::BorderValue>(styled_single_decoded.value().find_control(
+        model::ObjectId{2})->properties().find(model::PropertyId::from_name("Border"))->value) == style,
+        "styled Single Border must retain named type and width");
+    const auto styled_single_xml = source::serialize_form_xml(styled_single_decoded.value());
+    expect(styled_single_xml.ok() && styled_single_xml.value().find(
+        "<Border kind=\"styleReference\" borderType=\"Single\" width=\"1\" styleName=\"StyleBorders.ControlBorder\"/>") !=
+        std::string::npos, "styled Single Border must expose named XML fields");
+    const auto styled_single_reparsed = source::parse_form_xml(styled_single_xml.value());
+    expect(styled_single_reparsed.ok(), "styled Single Border XML must parse");
+    const auto styled_single_rebuilt = form_stream::encode_document(styled_single_reparsed.value());
+    expect(styled_single_rebuilt.ok() &&
+        list_stream::dump_compact(styled_single_rebuilt.value()) == list_stream::dump_compact(styled_single.value()),
+        "styled Single Border XML must rebuild the same Form.bin record");
     style.style = model::QualifiedName{"StyleBorders.Unknown"};
     expect(!form_stream::encode_document(make_document(style)), "unknown style name must reject");
     model::BorderValue rounded; rounded.border_type = model::ControlBorderType::rounded; rounded.width = 1;

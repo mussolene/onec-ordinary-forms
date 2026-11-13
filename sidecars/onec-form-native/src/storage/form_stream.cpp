@@ -1347,15 +1347,19 @@ model::BorderValue control_border_default(std::optional<model::ControlKind> owne
 
 LV encode_control_border(const model::BorderValue& border, std::string_view path,
     std::optional<model::ControlKind> owner = std::nullopt) {
+    const auto type = std::ranges::find(native_border_types, border.border_type, [](const auto& entry) { return entry.first; });
     if (border.kind == model::BorderKind::style_reference) {
         const auto* name = std::get_if<model::QualifiedName>(&border.style);
         if (name == nullptr || name->value != "StyleBorders.ControlBorder" ||
-            border.border_type != model::ControlBorderType::without_border || border.width != 0)
-            fail("OOF1122", std::string(path), "named StyleBorders.ControlBorder without absolute fields",
+            type == native_border_types.end() || border.width > 5 ||
+            (border.border_type == model::ControlBorderType::without_border && border.width > 1) ||
+            (border.border_type == model::ControlBorderType::rounded &&
+                ((owner != model::ControlKind::usual_group && owner != model::ControlKind::chart) || border.width != 1)))
+            fail("OOF1122", std::string(path), "named StyleBorders.ControlBorder with supported Border type and width",
                 "unsupported style border", "Border style is unsupported");
-        return parse_constant("{3,1,{-18},0,0,0}");
+        return list({raw("3"), raw("1"), list({raw("-18")}), raw(std::to_string(type->second)),
+            raw(std::to_string(border.width)), raw("0")});
     }
-    const auto type = std::ranges::find(native_border_types, border.border_type, [](const auto& entry) { return entry.first; });
     if (border.kind != model::BorderKind::absolute || type == native_border_types.end() ||
         !std::holds_alternative<std::monostate>(border.style) || border.width > 5 ||
         (border.border_type == model::ControlBorderType::without_border && border.width > 1) ||
@@ -1377,9 +1381,17 @@ model::BorderValue decode_control_border(const LV& value, std::string_view path,
     const auto kind = integer_atom<unsigned>(at(value, 1, path), child_path(path, 1));
     model::BorderValue border;
     if (kind == 1) {
-        require_exact(value, parse_constant("{3,1,{-18},0,0,0}"), path, "Unsupported named Border style");
+        require_arity(value, 6, path);
+        const auto type_code = integer_atom<std::uint32_t>(value.items[3], child_path(path, 3));
+        const auto type = std::ranges::find(native_border_types, type_code, [](const auto& entry) { return entry.second; });
+        if (type == native_border_types.end())
+            fail("OOF1114", child_path(path, 3), "supported Border type", std::to_string(type_code),
+                "Unsupported named Border type");
         border.kind = model::BorderKind::style_reference;
+        border.border_type = type->first;
+        border.width = integer_atom<std::uint32_t>(value.items[4], child_path(path, 4));
         border.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+        require_exact(value, encode_control_border(border, path, owner), path, "Unsupported named Border style");
         return border;
     }
     if (kind != 0) fail("OOF1114", child_path(path, 1), "absolute or known style Border", std::to_string(kind), "Unsupported Border kind");

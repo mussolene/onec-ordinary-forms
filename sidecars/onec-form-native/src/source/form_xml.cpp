@@ -886,9 +886,20 @@ model::BorderValue parse_border(xmlNodePtr node) {
         value.width = parse_integer<std::uint32_t>(required_attribute(node, "width"), node, "width");
     } else if (kind == "styleReference") {
         value.kind = model::BorderKind::style_reference;
-        if (seen.contains("borderType") || seen.contains("width")) {
-            fail("OOF2003", node, {}, "Border", "style border without absolute attributes", "absolute fields",
-                "Style Border must not carry borderType or width");
+        if (seen.contains("borderType") != seen.contains("width")) {
+            fail("OOF2003", node, {}, "Border", "borderType and width together", "incomplete fields",
+                "Style Border type and width must be specified together");
+        }
+        if (seen.contains("borderType")) {
+            const auto type_name = required_attribute(node, "borderType");
+            const auto type = std::ranges::find(border_type_names, type_name,
+                &std::pair<model::ControlBorderType, std::string_view>::second);
+            if (type == border_type_names.end()) {
+                fail("OOF2003", node, {}, "borderType", "ControlBorderType name", type_name,
+                    "Border contains an unknown ControlBorderType");
+            }
+            value.border_type = type->first;
+            value.width = parse_integer<std::uint32_t>(required_attribute(node, "width"), node, "width");
         }
         value.style = parse_style_reference(node);
     } else {
@@ -4212,6 +4223,12 @@ private:
             attributes.emplace_back("width", std::to_string(value.width));
         } else {
             attributes.emplace_back("kind", "styleReference");
+            if (value.border_type != model::ControlBorderType::without_border || value.width != 0) {
+                const auto type = std::ranges::find(border_type_names, value.border_type,
+                    &std::pair<model::ControlBorderType, std::string_view>::first);
+                attributes.emplace_back("borderType", std::string(type->second));
+                attributes.emplace_back("width", std::to_string(value.width));
+            }
             append_style_attributes(attributes, value.style, object_id, name);
         }
         writer_.empty(name, attributes);

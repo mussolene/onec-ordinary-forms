@@ -6099,9 +6099,12 @@ void test_border_value_invariants() {
     value.kind = BorderKind::style_reference;
     expect(validate(value).ok(), "named style Border must validate");
     value.width = 1;
-    expect(!validate(value).ok(), "style Border must reject unused absolute width");
-    value.width = 0; value.border_type = ControlBorderType::single;
-    expect(!validate(value).ok(), "style Border must reject unused absolute type");
+    expect(validate(value).ok(), "style Border may retain its platform width");
+    value.border_type = ControlBorderType::single;
+    expect(validate(value).ok(), "style Border may retain Single type and width 1");
+    value.width = 6;
+    expect(!validate(value).ok(), "style Border width above 5 must reject");
+    value.width = 0;
     value.border_type = ControlBorderType::without_border; value.style = QualifiedName{};
     expect(!validate(value).ok(), "style Border must reject empty name");
     value.style = std::monostate{};

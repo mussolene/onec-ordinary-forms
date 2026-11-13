@@ -64,7 +64,8 @@ bool valid_border_value(const BorderValue& value) noexcept {
                 (value.border_type != ControlBorderType::without_border || value.width <= 1) &&
                 (value.border_type != ControlBorderType::rounded || value.width == 1);
         case BorderKind::style_reference:
-            if (value.border_type != ControlBorderType::without_border || value.width != 0) return false;
+            if ((value.border_type == ControlBorderType::without_border && value.width > 1) ||
+                (value.border_type == ControlBorderType::rounded && value.width != 1)) return false;
             if (const auto* name = std::get_if<QualifiedName>(&value.style)) return !name->value.empty();
             if (const auto* composite = std::get_if<CompositeIdValue>(&value.style)) {
                 const auto& uuid = composite->uuid.canonical;

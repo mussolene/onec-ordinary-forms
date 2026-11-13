@@ -4631,6 +4631,11 @@ void test_command_bar_border_xml_contract() {
     model::BorderValue style; style.kind = model::BorderKind::style_reference;
     style.style = model::QualifiedName{"StyleBorders.ControlBorder"};
     round_trip("<Border kind=\"styleReference\" styleName=\"StyleBorders.ControlBorder\"/>", style);
+    style.border_type = model::ControlBorderType::single;
+    style.width = 1;
+    round_trip("<Border kind=\"styleReference\" borderType=\"Single\" width=\"1\" styleName=\"StyleBorders.ControlBorder\"/>", style);
+    style.border_type = model::ControlBorderType::without_border;
+    style.width = 0;
     style.style = model::CompositeIdValue{5, model::UuidValue{"12345678-1234-1234-1234-123456789abc"}, false};
     round_trip("<Border kind=\"styleReference\" styleObjectId=\"5\" styleUuid=\"12345678-1234-1234-1234-123456789abc\"/>", style);
     auto default_document = source::parse_form_xml(xml_for("<Border kind=\"absolute\" borderType=\"WithoutBorder\" width=\"0\"/>"));
