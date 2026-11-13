@@ -10675,12 +10675,28 @@ DecodedControl decode_choice_field(
             "ChoiceField DataPath must target an empty TypeDomain or single String attribute");
     }
 
-    const auto& info = record.items[2];
+    auto info = record.items[2];
     const auto info_path = child_path(path, 2);
     require_arity(info, 3, info_path);
     require_raw_constant(info.items[0], "2", child_path(info_path, 0));
-    const auto& info_properties = info.items[1];
+    auto& info_properties = info.items[1];
     const auto info_properties_path = child_path(info_path, 1);
+    const bool legacy_v30 = info_properties.is_list && info_properties.items.size() == 45 &&
+        !info_properties.items[1].is_list && info_properties.items[1].atom_kind == LV::AtomKind::raw &&
+        info_properties.items[1].atom == "30";
+    if (legacy_v30) {
+        if (linked_attribute == nullptr || !linked_attribute->type)
+            fail("OOF1122", info_properties_path, "bound ChoiceField with empty or String TypeDomain", {},
+                "ChoiceField version 30 requires a resolved attribute type");
+        const auto inactive = integer_atom<std::uint32_t>(info_properties.items[44],
+            child_path(info_properties_path, 44));
+        if (inactive > 2)
+            fail("OOF1114", child_path(info_properties_path, 44), "legacy inactive value 0, 1, or 2",
+                std::to_string(inactive), "ChoiceField version 30 tail value is unsupported");
+        info_properties.items[1] = raw("31");
+        info_properties.items[44] = raw("0");
+        info_properties.items.push_back(raw("0"));
+    }
     require_arity(info_properties, 46, info_properties_path);
     require_raw_constant(info_properties.items[1], "31", child_path(info_properties_path, 1));
     auto base_properties = info_properties.items[0];

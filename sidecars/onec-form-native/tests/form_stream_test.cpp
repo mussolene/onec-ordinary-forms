@@ -4791,6 +4791,32 @@ void test_choice_field_static_profile_round_trip_and_validation() {
                list_stream::dump_compact(empty_type_encoded.value()),
         "named empty-TypeDomain XML must preserve the ChoiceField link through native encoding");
 
+    for (const auto inactive : {0U, 1U, 2U}) {
+        auto legacy = empty_type_encoded.value();
+        auto& properties = legacy.items[1].items[2].items[2].items[1].items[2].items[1];
+        properties.items[1] = list_stream::ListValue::raw_atom("30");
+        properties.items[44] = list_stream::ListValue::raw_atom(std::to_string(inactive));
+        properties.items.pop_back();
+        const auto legacy_decoded = form_stream::decode_document(legacy, "ChoiceFieldEmptyType");
+        expect(legacy_decoded.ok() && legacy_decoded.value().reconstruction_complete(),
+            "bound empty-TypeDomain ChoiceField version 30 must decode completely");
+        if (!legacy_decoded.ok()) continue;
+        const auto legacy_xml = source::serialize_form_xml(legacy_decoded.value());
+        expect(legacy_xml.ok() && legacy_xml.value() == empty_type_xml.value(),
+            "ChoiceField version 30 inactive tail must retain the named XML");
+        const auto rebuilt = form_stream::encode_document(legacy_decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                   list_stream::dump_compact(empty_type_encoded.value()),
+            "ChoiceField version 30 must rebuild through canonical version 31");
+    }
+    auto unsupported_legacy = empty_type_encoded.value();
+    auto& unsupported_properties = unsupported_legacy.items[1].items[2].items[2].items[1].items[2].items[1];
+    unsupported_properties.items[1] = list_stream::ListValue::raw_atom("30");
+    unsupported_properties.items[44] = list_stream::ListValue::raw_atom("3");
+    unsupported_properties.items.pop_back();
+    expect(!form_stream::decode_document(unsupported_legacy, "ChoiceFieldVersion30"),
+        "unobserved ChoiceField version 30 tail value must reject");
+
     auto unbound_encoded = form_stream::encode_document(make_document(std::nullopt, true, false, false));
     expect(unbound_encoded.ok(), "unbound ChoiceField default profile must encode");
     auto independent_unbound = unbound_encoded.value();
