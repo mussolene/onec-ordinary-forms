@@ -3095,7 +3095,6 @@ constexpr std::array<std::string_view, 13> panel_show_tabs_members{
 
 struct DecodedOwnerPages {
     std::vector<model::Page> pages;
-    IncomingAnchorLists incoming;
     model::PanelPayload panel;
     std::optional<LV> picture;
     std::vector<std::uint32_t> default_controls;
@@ -3117,7 +3116,7 @@ DecodedOwnerPages decode_owner_pages(
         "Owner page envelope trailer is unsupported");
     const auto& payload = envelope.items[1];
     std::size_t incoming_end = 2;
-    auto incoming = decode_incoming_anchor_lists(payload, incoming_end, path);
+    decode_incoming_anchor_lists(payload, incoming_end, path);
     auto normalized = payload;
     normalized.items.erase(normalized.items.begin() + 2,
         normalized.items.begin() + static_cast<std::ptrdiff_t>(incoming_end));
@@ -3428,7 +3427,7 @@ DecodedOwnerPages decode_owner_pages(
             "Page ID allocation overflows uint64");
     }
     next_page_id += pages.size();
-    return DecodedOwnerPages{std::move(pages), std::move(incoming), std::move(decoded_panel), std::move(panel_picture), std::move(default_controls)};
+    return DecodedOwnerPages{std::move(pages), std::move(decoded_panel), std::move(panel_picture), std::move(default_controls)};
 }
 
 std::int32_t explicit_enum_storage_value(
@@ -3541,20 +3540,6 @@ LV encode_owner_pages(
     return envelope;
 }
 
-
-void require_incoming_graph(
-    const IncomingAnchorLists& observed,
-    IncomingAnchorLists expected,
-    std::string_view path) {
-    for (std::size_t edge = 0; edge < observed.size(); ++edge) {
-        auto actual = sorted_incoming(observed[edge]);
-        auto wanted = sorted_incoming(std::move(expected[edge]));
-        if (actual != wanted) {
-            fail("OOF1114", child_path(path, edge), "incoming tuples matching primary bindings", "stale or dangling tuples",
-                "Incoming anchor fanout disagrees with the control binding graph");
-        }
-    }
-}
 
 bool is_single_string_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::string;
@@ -15325,7 +15310,6 @@ Result<model::OrdinaryFormDocument> decode_document(
         auto root_owner = decode_owner_pages(root_panel_envelope, layout.value(), next_page_id, std::nullopt, false,
             1, warnings, reconstruction_complete, "$/1/2/1");
         auto root_pages = std::move(root_owner.pages);
-        const auto& root_incoming = root_owner.incoming;
         const model::LocalizedStringValue canonical_page_title{{{"ru", "Страница1"}}};
         bool implicit_default_page = root_pages.size() == 1 && root_pages[0].name == "Страница1" &&
             root_pages[0].title.value() == canonical_page_title && root_pages[0].visible.value() &&
@@ -15458,11 +15442,11 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
         std::unordered_map<std::uint64_t, std::vector<model::ObjectId>> command_bar_contexts;
         using DecodeChildTable = std::function<void(
-            const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&,
+            const LV&, std::vector<model::Page>&, GeometryOwner,
             const std::vector<std::uint32_t>&, std::string_view)>;
         DecodeChildTable decode_child_table;
         decode_child_table = [&](const LV& child_table, std::vector<model::Page>& pages,
-                                 GeometryOwner owner, const IncomingAnchorLists& owner_incoming,
+                                 GeometryOwner owner,
                                  const std::vector<std::uint32_t>& default_controls, std::string_view path) {
             require_list(child_table, path);
             if (child_table.items.empty()) fail("OOF1103", child_path(path, 0), "control count", "missing", "Control table has no count");
@@ -15717,7 +15701,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         panel.payload = std::move(panel_owner.panel);
                         for (const auto& page : panel_owner.pages) panel.children.push_back(model::PageRef{page.id});
                         decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
-                            panel_owner.incoming, panel_owner.default_controls, child_path(record_path, 5));
+                            panel_owner.default_controls, child_path(record_path, 5));
                         for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
                         const auto picture = decode_button_picture(*panel_owner.picture, child_path(record_path, 2) + "/Picture");
                         if (picture && picture->reference)
@@ -15751,38 +15735,31 @@ Result<model::OrdinaryFormDocument> decode_document(
             for (std::size_t index = 0; index < default_controls.size(); ++index)
                 if (default_controls[index] != std::numeric_limits<std::uint32_t>::max() && !found_default[index])
                     fail("OOF1114", std::string(path), "DefaultControl in its immediate owner page", std::to_string(default_controls[index]), "DefaultControl reference is missing or belongs to another page");
-            IncomingAnchorLists expected_owner_incoming;
-            std::unordered_map<std::uint64_t, IncomingAnchorLists> expected_sibling_incoming;
             for (const auto& page_controls : decoded) for (const auto& child : page_controls) {
-                const auto source_id = child.control.id.value();
                 for (const auto& binding : child.control.position.bindings.anchors) {
-                    const auto source_edge = source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
-                    const auto append_target = [&](const std::optional<model::ControlRef>& target, model::BindingCoordinate coordinate) {
-                        const auto target_edge = target_dependency_bucket(
-                            target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
+                    (void)source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
+                    (void)target_dependency_bucket(
+                        target_platform_edge(binding.target_coordinate, "$/Position/Bindings/targetCoordinate"),
+                        "$/Position/Bindings/targetCoordinate");
+                    if (binding.proportional)
+                        (void)target_dependency_bucket(
+                            target_platform_edge(binding.proportional->coordinate, "$/Position/Bindings/targetCoordinate"),
                             "$/Position/Bindings/targetCoordinate");
+                    const auto validate_target = [&](const std::optional<model::ControlRef>& target) {
                         const bool is_form_owner = std::holds_alternative<FormGeometryOwner>(owner) && !target;
                         const auto* panel_owner = std::get_if<model::ControlRef>(&owner);
                         const bool is_panel_owner = panel_owner && target && target->id() == panel_owner->id();
-                        if (is_form_owner || is_panel_owner) {
-                            expected_owner_incoming[target_edge].push_back({source_id, source_edge});
-                            return;
-                        }
+                        if (is_form_owner || is_panel_owner) return;
                         if (!target || !owner_child_ids.contains(target->id().value())) {
                             fail("OOF1114", std::string(path), "binding target in the same owner child graph",
                                 target ? std::to_string(target->id().value()) : "Form target", "Binding target is dangling or outside its owner");
                         }
-                        expected_sibling_incoming[target->id().value()][target_edge].push_back({source_id, source_edge});
                     };
-                    append_target(binding.target, binding.target_coordinate);
-                    if (binding.proportional) append_target(binding.proportional->target, binding.proportional->coordinate);
+                    validate_target(binding.target);
+                    if (binding.proportional) validate_target(binding.proportional->target);
                 }
             }
-            require_incoming_graph(owner_incoming, std::move(expected_owner_incoming), path);
             for (const auto& page_controls : decoded) for (const auto& child : page_controls) {
-                const auto found = expected_sibling_incoming.find(child.control.id.value());
-                const IncomingAnchorLists empty;
-                auto observed = child.incoming;
                 const auto geometry_path = child_path(child_record_paths.at(child.control.id.value()),
                     control_geometry_slot(model::metamodel::descriptor_for(child.control.kind()).guid));
                 bool unrepresented_self_dependency = false;
@@ -15794,23 +15771,19 @@ Result<model::OrdinaryFormDocument> decode_document(
                             binding.target_coordinate == model::BindingCoordinate::bottom && !binding.proportional;
                     });
                     const GeometryIncomingAnchor self_bottom{child.control.id.value(), 1};
-                    auto& top = observed[0];
+                    const auto& top = child.incoming[0];
                     // Designer preserves this extra CommandBar dependency while GetLink still
                     // returns Form.Bottom. Its unrepresented state must not imply exact recovery.
-                    if (bottom_to_form && std::count(top.begin(), top.end(), self_bottom) == 1) {
-                        std::erase(top, self_bottom);
+                    if (bottom_to_form && std::count(top.begin(), top.end(), self_bottom) != 0)
                         unrepresented_self_dependency = true;
-                    }
                 }
-                require_incoming_graph(observed, found == expected_sibling_incoming.end() ? empty : found->second,
-                    geometry_path);
                 if (unrepresented_self_dependency)
                     warn_incomplete_profile(warnings, reconstruction_complete, child.control.id.value(),
                         child_path(geometry_path, 0), "CommandBar");
                 pending_controls.push_back(child);
             }
         };
-        decode_child_table(root_panel.items[2], root_pages, GeometryOwner{FormGeometryOwner{}}, root_incoming, root_owner.default_controls, "$/1/2/2");
+        decode_child_table(root_panel.items[2], root_pages, GeometryOwner{FormGeometryOwner{}}, root_owner.default_controls, "$/1/2/2");
         if (consumed_link_ids.size() != links_by_control.size()) {
             fail("OOF1122", "$/2/3", "one matching link per decoded DataPath control", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }

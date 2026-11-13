@@ -20605,9 +20605,17 @@ void test_recursive_panel_pages_keep_owner_geometry_separate() {
         }
         cursor += count + 1;
     }
-    expect(removed, "Panel owner incoming tuple must be locatable for the forged-transfer negative case");
-    expect(!form_stream::decode_document(moved_incoming, "NestedPanels"),
-        "moving a Panel owner tuple into outer geometry must be rejected");
+    expect(removed, "Panel owner incoming tuple must be locatable for normalization");
+    const auto moved_decoded = form_stream::decode_document(moved_incoming, "NestedPanels");
+    expect(moved_decoded.ok(), "moved derived incoming tuple must retain nested Panel bindings");
+    const auto original_xml = source::serialize_form_xml(decoded.value());
+    const auto moved_xml = source::serialize_form_xml(moved_decoded.value());
+    expect(original_xml.ok() && moved_xml.ok() && original_xml.value() == moved_xml.value(),
+        "nested Panel XML must follow outgoing bindings independently of derived incoming tuples");
+    const auto moved_rebuilt = form_stream::encode_document(moved_decoded.value());
+    expect(moved_rebuilt.ok() && list_stream::dump_compact(moved_rebuilt.value()) ==
+        list_stream::dump_compact(encoded.value()),
+        "writer must restore nested Panel incoming tuples from named bindings");
 
     auto unknown_property = encoded.value();
     auto& unknown_root_children = unknown_property.items[1].items[2].items[2];
@@ -20901,22 +20909,40 @@ void test_command_bar_unrepresented_self_dependency() {
         auto& root_record = corrupt.items[1].items[2].items[2].items[1];
         auto& geometry = nested ? root_record.items[5].items[1].items[3] : root_record.items[3];
         add_incoming(geometry, 0, 2, 1);
-        expect(!form_stream::decode_document(corrupt, "SelfDependency"),
-            "other control kinds, owners, primary targets and proportional bindings must stay strict");
+        const auto normalized = form_stream::decode_document(corrupt, "SelfDependency");
+        const auto canonical = form_stream::decode_document(variant.value(), "SelfDependency");
+        expect(normalized.ok() && normalized.value().reconstruction_complete() && canonical.ok(),
+            "derived incoming tuples must normalize for other controls, owners and bindings");
+        const auto normalized_xml = source::serialize_form_xml(normalized.value());
+        const auto canonical_xml = source::serialize_form_xml(canonical.value());
+        const auto normalized_bin = form_stream::encode_document(normalized.value());
+        expect(normalized_xml.ok() && canonical_xml.ok() && normalized_xml.value() == canonical_xml.value() &&
+            normalized_bin.ok() && list_stream::dump_compact(normalized_bin.value()) ==
+                list_stream::dump_compact(variant.value()),
+            "named bindings must restore canonical incoming tuples");
     }
     for (const auto [bucket, source, edge] : {
              std::tuple{1U, 2U, 1U}, std::tuple{0U, 2U, 0U}, std::tuple{0U, 99U, 1U}}) {
         auto corrupt = encoded.value();
         add_incoming(corrupt.items[1].items[2].items[2].items[1].items[3], bucket, source, edge);
-        expect(!form_stream::decode_document(corrupt, "SelfDependency"),
-            "changed coordinates and dangling incoming sources must be rejected");
+        const auto normalized = form_stream::decode_document(corrupt, "SelfDependency");
+        expect(normalized.ok() && normalized.value().reconstruction_complete(),
+            "well-formed derived tuples must not replace named primary bindings");
+        const auto normalized_bin = form_stream::encode_document(normalized.value());
+        expect(normalized_bin.ok() && list_stream::dump_compact(normalized_bin.value()) ==
+            list_stream::dump_compact(encoded.value()),
+            "extra derived tuples must be removed on rebuild");
     }
     auto duplicate = extra;
     add_incoming(duplicate.items[1].items[2].items[2].items[1].items[3], 0, 2, 1);
-    expect(!form_stream::decode_document(duplicate, "SelfDependency"), "duplicate self tuples must be rejected");
+    const auto duplicate_decoded = form_stream::decode_document(duplicate, "SelfDependency");
+    expect(duplicate_decoded.ok() && !duplicate_decoded.value().reconstruction_complete(),
+        "duplicate unrepresented self tuples must remain partial");
     auto unrelated = extra;
     add_incoming(unrelated.items[1].items[2].items[2].items[1].items[3], 1, 2, 1);
-    expect(!form_stream::decode_document(unrelated, "SelfDependency"), "additional mismatches must be rejected");
+    const auto unrelated_decoded = form_stream::decode_document(unrelated, "SelfDependency");
+    expect(unrelated_decoded.ok() && !unrelated_decoded.value().reconstruction_complete(),
+        "extra derived tuples must not hide an unrepresented self dependency");
     auto bad_count = extra;
     bad_count.items[1].items[2].items[2].items[1].items[3].items[12] = list_stream::ListValue::raw_atom("2");
     expect(!form_stream::decode_document(bad_count, "SelfDependency"), "inconsistent incoming counts must be rejected");
@@ -20927,8 +20953,9 @@ void test_command_bar_unrepresented_self_dependency() {
     auto& owner = missing_owner_tuple.items[1].items[2].items[1].items[1];
     owner.items[3] = list_stream::ListValue::raw_atom("0");
     owner.items.erase(owner.items.begin() + 4);
-    expect(!form_stream::decode_document(missing_owner_tuple, "SelfDependency"),
-        "the extra self tuple must never replace the required owner incoming tuple");
+    const auto missing_owner_decoded = form_stream::decode_document(missing_owner_tuple, "SelfDependency");
+    expect(missing_owner_decoded.ok() && !missing_owner_decoded.value().reconstruction_complete(),
+        "the missing derived owner tuple must not hide an unrepresented self dependency");
 }
 
 void test_anchor_bindings_round_trip_and_fanout() {
@@ -21035,8 +21062,16 @@ void test_anchor_bindings_round_trip_and_fanout() {
 
     auto stale_root = encoded.value();
     stale_root.items[1].items[2].items[1].items[1].items[6].items[1] = list_stream::ListValue::raw_atom("7");
-    expect(!form_stream::decode_document(stale_root, "Bindings"),
-        "root incoming tuples must be checked against the outgoing graph");
+    const auto normalized_root = form_stream::decode_document(stale_root, "Bindings");
+    expect(normalized_root.ok(), "stale incoming tuples must retain the named outgoing bindings");
+    const auto original_xml = source::serialize_form_xml(decoded.value());
+    const auto normalized_xml = source::serialize_form_xml(normalized_root.value());
+    expect(original_xml.ok() && normalized_xml.ok() && original_xml.value() == normalized_xml.value(),
+        "stale incoming tuples must not change Position or Bindings in named XML");
+    const auto normalized_rebuilt = form_stream::encode_document(normalized_root.value());
+    expect(normalized_rebuilt.ok() && list_stream::dump_compact(normalized_rebuilt.value()) ==
+        list_stream::dump_compact(encoded.value()),
+        "writer must derive incoming tuples from named outgoing bindings");
     auto unsupported_root_marker = encoded.value();
     unsupported_root_marker.items[1].items[2].items[1].items[0] = list_stream::ListValue::raw_atom("2");
     expect_failure(form_stream::decode_document(unsupported_root_marker, "Bindings"), "OOF1114", "$/1/2/1/0",
@@ -27811,8 +27846,17 @@ void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
     map_geometry.items[15] = list_stream::ListValue::raw_atom("0");
     map_geometry.items.erase(map_geometry.items.begin() + 16);
     const auto missing_result = form_stream::decode_document(missing_incoming, "DefaultSchemas");
-    expect(!missing_result && missing_result.diagnostics().front().path == "$/1/2/2/1/4/3",
-        "Map incoming graph error must point to geometry slot4, not its separate document slot3");
+    const auto complete_result = form_stream::decode_document(sibling_encoded.value(), "DefaultSchemas");
+    expect(missing_result.ok() && complete_result.ok(),
+        "missing derived incoming tuples must not discard schema fields or their outgoing binding");
+    const auto missing_xml = source::serialize_form_xml(missing_result.value());
+    const auto complete_xml = source::serialize_form_xml(complete_result.value());
+    expect(missing_xml.ok() && complete_xml.ok() && missing_xml.value() == complete_xml.value(),
+        "schema field XML must follow the named outgoing binding");
+    const auto normalized_incoming = form_stream::encode_document(missing_result.value());
+    expect(normalized_incoming.ok() && list_stream::dump_compact(normalized_incoming.value()) ==
+        list_stream::dump_compact(sibling_encoded.value()),
+        "schema field incoming tuples must be reconstructed from the named binding");
     for (const auto record_index : {1u, 2u}) {
         auto nondefault = encoded.value();
         auto& record = nondefault.items[1].items[2].items[2].items[record_index];
